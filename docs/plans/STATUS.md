@@ -59,5 +59,5 @@ git push
 | `04-curriculum-and-standards` | `done` | `platform-b` | `ai/04-curriculum-and-standards` | `2026-03-30 16:15 PDT` | `Merged curriculum library UI, tree model, standards browsing, mock adapters.` |
 | `05-planning-and-daily-workspace` | `done` | `platform-c` | `ai/05-planning-and-daily-workspace` | `2026-03-30 16:42 PDT` | `Merged weekly planning, day planning, and the daily workspace.` |
 | `06-learner-activity-engine` | `done` | `platform-b` | `ai/06-learner-activity-engine` | `2026-03-30 16:30 PDT` | `Merged learner layout, 6 activity renderers, attempt capture, autosave, and API routes.` |
-| `07-tracking-and-reporting` | `in_progress` | `platform-a` | `ai/07-tracking-and-reporting` | `2026-03-30 16:01 PDT` | `Claimed for tracking dashboards, reporting views, and export helpers.` |
+| `07-tracking-and-reporting` | `done` | `platform-a` | `ai/07-tracking-and-reporting` | `2026-03-30 16:21 PDT` | `Merged tracking overview, reporting views, standards and goal summaries, and export shaping helpers.` |
 | `08-ai-platform-and-copilot` | `in_progress` | `platform-b` | `ai/08-ai-platform-and-copilot` | `2026-03-30 16:35 PDT` | `Claimed for AI task registry, provider adapter, streaming chat UI, and copilot actions.` |
