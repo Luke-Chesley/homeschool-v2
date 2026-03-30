@@ -5,9 +5,15 @@
   "packageManager": "pnpm@10.0.0",
   "scripts": {
     "dev": "next dev",
+    "dev:app": "next dev",
+    "dev:stack": "bash ./scripts/supabase.sh start",
+    "dev:stack:stop": "bash ./scripts/supabase.sh stop",
+    "dev:stack:status": "bash ./scripts/supabase.sh status",
+    "dev:db:reset": "bash ./scripts/supabase.sh db-reset",
+    "inngest:dev": "bash ./scripts/inngest-dev.sh",
+    "check:tools": "bash ./scripts/check-local-tools.sh",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
