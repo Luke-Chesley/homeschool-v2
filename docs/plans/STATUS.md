@@ -57,7 +57,7 @@ git push
 | `02-data-model-and-repositories` | `in_progress` | `platform-a` | `ai/02-data-model-and-repositories` | `2026-03-30 15:37 PDT` | `Claimed for canonical schema and repository layer.` |
 | `03-parent-workspace-shell` | `not_started` |  |  |  |  |
 | `04-curriculum-and-standards` | `in_progress` | `platform-b` | `ai/04-curriculum-and-standards` | `2026-03-30 16:00 PDT` | `Claimed for curriculum library UI, tree model helpers, and standards mapping.` |
-| `05-planning-and-daily-workspace` | `not_started` |  |  |  |  |
+| `05-planning-and-daily-workspace` | `in_progress` | `platform-c` | `ai/05-planning-and-daily-workspace` | `2026-03-30 16:05 PDT` | `Claimed for planning views and the daily workspace.` |
 | `06-learner-activity-engine` | `not_started` |  |  |  |  |
 | `07-tracking-and-reporting` | `not_started` |  |  |  |  |
 | `08-ai-platform-and-copilot` | `not_started` |  |  |  |  |
