@@ -6,7 +6,14 @@
       "Bash(git commit:*)",
       "Bash(pnpm typecheck:*)",
       "Bash(npx tsc:*)",
-      "Bash(git merge:*)"
+      "Bash(git merge:*)",
+      "Bash(ls app/api/activities/attempts/[attemptId]/)",
+      "Bash(ls \"app/\\(learner\\)/activity/\\\\[sessionId\\\\]/\")",
+      "Bash(ls \"app/\\(learner\\)/activity/[sessionId]/\")",
+      "Bash(ls app/api/activities/sessions/[sessionId]/)",
+      "Bash(ls app/api/activities/attempts/[attemptId]/autosave/)",
+      "Bash(ls app/api/activities/attempts/[attemptId]/submit/)",
+      "Bash(find \"app/\\(learner\\)\" -type f)"
     ]
   }
 }
