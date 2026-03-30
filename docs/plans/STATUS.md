@@ -57,7 +57,7 @@ git push
 | `02-data-model-and-repositories` | `done` | `platform-a` | `ai/02-data-model-and-repositories` | `2026-03-30 15:48 PDT` | `Merged canonical Drizzle schema, repositories, and initial migration.` |
 | `03-parent-workspace-shell` | `in_progress` | `platform-a` | `ai/03-parent-workspace-shell` | `2026-03-30 15:49 PDT` | `Claimed for shared parent shell, navigation, and route-group layout.` |
 | `04-curriculum-and-standards` | `done` | `platform-b` | `ai/04-curriculum-and-standards` | `2026-03-30 16:15 PDT` | `Merged curriculum library UI, tree model, standards browsing, mock adapters.` |
-| `05-planning-and-daily-workspace` | `in_progress` | `platform-c` | `ai/05-planning-and-daily-workspace` | `2026-03-30 16:07 PDT` | `Claimed for planning views and the daily workspace.` |
+| `05-planning-and-daily-workspace` | `done` | `platform-c` | `ai/05-planning-and-daily-workspace` | `2026-03-30 16:42 PDT` | `Merged weekly planning, day planning, and the daily workspace. Full verification is currently blocked by unrelated learner-activity type errors.` |
 | `06-learner-activity-engine` | `in_progress` | `platform-b` | `ai/06-learner-activity-engine` | `2026-03-30 16:20 PDT` | `Claimed for learner route group, activity renderer, and attempt capture.` |
 | `07-tracking-and-reporting` | `not_started` |  |  |  |  |
 | `08-ai-platform-and-copilot` | `not_started` |  |  |  |  |
