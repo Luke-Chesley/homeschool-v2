@@ -58,6 +58,6 @@ git push
 | `03-parent-workspace-shell` | `not_started` |  |  |  |  |
 | `04-curriculum-and-standards` | `done` | `platform-b` | `ai/04-curriculum-and-standards` | `2026-03-30 16:15 PDT` | `Merged curriculum library UI, tree model, standards browsing, mock adapters.` |
 | `05-planning-and-daily-workspace` | `in_progress` | `platform-c` | `ai/05-planning-and-daily-workspace` | `2026-03-30 16:07 PDT` | `Claimed for planning views and the daily workspace.` |
-| `06-learner-activity-engine` | `not_started` |  |  |  |  |
+| `06-learner-activity-engine` | `in_progress` | `platform-b` | `ai/06-learner-activity-engine` | `2026-03-30 16:20 PDT` | `Claimed for learner route group, activity renderer, and attempt capture.` |
 | `07-tracking-and-reporting` | `not_started` |  |  |  |  |
 | `08-ai-platform-and-copilot` | `not_started` |  |  |  |  |
