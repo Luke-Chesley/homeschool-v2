@@ -54,7 +54,7 @@ git push
 | Workstream | Status | Owner | Branch | Last Updated | Notes |
 | --- | --- | --- | --- | --- | --- |
 | `01-platform-and-local-dev` | `done` | `platform-a` | `ai/01-platform-and-local-dev` | `2026-03-30 15:36 PDT` | `Merged local Supabase, env, auth, storage, and Inngest foundation.` |
-| `02-data-model-and-repositories` | `not_started` |  |  |  |  |
+| `02-data-model-and-repositories` | `in_progress` | `platform-a` | `ai/02-data-model-and-repositories` | `2026-03-30 15:37 PDT` | `Claimed for canonical schema and repository layer.` |
 | `03-parent-workspace-shell` | `not_started` |  |  |  |  |
 | `04-curriculum-and-standards` | `not_started` |  |  |  |  |
 | `05-planning-and-daily-workspace` | `not_started` |  |  |  |  |
