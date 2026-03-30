@@ -56,7 +56,7 @@ git push
 | `01-platform-and-local-dev` | `done` | `platform-a` | `ai/01-platform-and-local-dev` | `2026-03-30 15:36 PDT` | `Merged local Supabase, env, auth, storage, and Inngest foundation.` |
 | `02-data-model-and-repositories` | `in_progress` | `platform-a` | `ai/02-data-model-and-repositories` | `2026-03-30 15:37 PDT` | `Claimed for canonical schema and repository layer.` |
 | `03-parent-workspace-shell` | `not_started` |  |  |  |  |
-| `04-curriculum-and-standards` | `not_started` |  |  |  |  |
+| `04-curriculum-and-standards` | `in_progress` | `platform-b` | `ai/04-curriculum-and-standards` | `2026-03-30 16:00 PDT` | `Claimed for curriculum library UI, tree model helpers, and standards mapping.` |
 | `05-planning-and-daily-workspace` | `not_started` |  |  |  |  |
 | `06-learner-activity-engine` | `not_started` |  |  |  |  |
 | `07-tracking-and-reporting` | `not_started` |  |  |  |  |
