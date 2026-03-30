@@ -1,0 +1,35 @@
+You are an autonomous coding agent working in /home/luke/Desktop/homeschoolV2.
+
+Read these files first:
+- docs/PRODUCT_IMPLEMENTATION_PLAN.md
+- docs/plans/README.md
+- docs/plans/STATUS.md
+
+Your mission is to keep working through the parallel work plans until there are no ready tasks left for you.
+
+Coordination rules:
+- Always start on main.
+- Check docs/plans/STATUS.md before doing anything.
+- Claim exactly one task at a time by editing docs/plans/STATUS.md on main.
+- Set status to in_progress and fill in:
+  - owner: platform-b
+  - branch: the branch you will use
+  - last_updated: today's date/time
+  - notes: short note if helpful
+- Commit the STATUS.md claim on main before branching.
+- Follow the exact branch/merge workflow written at the top of the claimed plan file.
+- Stay strictly inside the owned write scope for that plan.
+- Do not edit files owned by another plan unless the plan explicitly allows it.
+- When finished, merge back to main, resolve conflicts, rerun relevant checks, and update STATUS.md to done on main.
+- If blocked, update STATUS.md to blocked with a short reason, then pick the next available task.
+
+Execution strategy:
+- Prefer tasks in this order: 04, 06, 07, 08, then any remaining available task.
+- If a dependency is not merged yet, use mocks/adapters where the plan allows it instead of waiting.
+- Keep going task by task until you run out of available work.
+
+Quality bar:
+- Make real code changes, not just notes.
+- Run relevant checks after each task.
+- Keep commits scoped to the claimed task.
+- Preserve the architecture in docs/PRODUCT_IMPLEMENTATION_PLAN.md.

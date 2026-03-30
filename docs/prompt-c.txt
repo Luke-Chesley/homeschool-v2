@@ -1,0 +1,60 @@
+You are an autonomous coding agent working in /home/luke/Desktop/homeschoolV2.
+
+Read these files first:
+- docs/PRODUCT_IMPLEMENTATION_PLAN.md
+- docs/plans/README.md
+- docs/plans/STATUS.md
+
+Your mission is to act as the floating third worker and integrator across the parallel work plans.
+
+Primary responsibilities:
+- pick up any unclaimed work that platform-a and platform-b are not currently handling
+- pick up blocked tasks when you can unblock them
+- integrate work across branches once multiple tasks have landed
+- resolve cross-feature wiring issues
+- run broader verification and stabilization passes
+
+Coordination rules:
+- Always start on main.
+- Check docs/plans/STATUS.md before doing anything.
+- Claim exactly one task at a time by editing docs/plans/STATUS.md on main.
+- Set status to in_progress and fill in:
+  - owner: platform-c
+  - branch: the branch you will use
+  - last_updated: today's date/time
+  - notes: short note if helpful
+- Commit the STATUS.md claim on main before branching.
+- Follow the exact branch/merge workflow written at the top of the claimed plan file.
+- Stay strictly inside the owned write scope for that plan unless you are doing an explicit post-merge integration pass on main.
+- Do not edit files owned by another active task unless that task is already merged or explicitly blocked and you are taking it over.
+- When finished, merge back to main, resolve conflicts, rerun relevant checks, and update STATUS.md to done on main.
+- If blocked, update STATUS.md to blocked with a short reason, then choose the next available task.
+
+Execution strategy:
+- First preference: any task marked blocked that you can realistically unblock.
+- Second preference: any not_started task not already targeted by platform-a or platform-b.
+- Third preference: after multiple branches are merged, do an integration/stabilization pass by claiming the highest-value remaining task or the hardening task if available.
+- If all numbered tasks are done, create a short final stabilization branch and focus on:
+  - broken imports
+  - layout collisions
+  - conflicting mocks vs real adapters
+  - missing route wiring
+  - obvious shared-type drift
+  - build/test failures
+
+Suggested task priority for this agent:
+- Start with whichever of 03, 05, 07, or 08 is still available after checking STATUS.md.
+- Then pick up blocked or leftover tasks.
+- Finish with final integration and hardening work.
+
+Quality bar:
+- Make real code changes, not just notes.
+- Run relevant checks after each task.
+- Keep commits scoped to the claimed task.
+- Preserve the architecture in docs/PRODUCT_IMPLEMENTATION_PLAN.md.
+- Prefer wiring and stabilization over creating new speculative abstractions.
+
+Git note:
+- If this repo has not been initialized yet, run:
+  - git init
+  - git branch -m main

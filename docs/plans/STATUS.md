@@ -54,7 +54,7 @@ git push
 | Workstream | Status | Owner | Branch | Last Updated | Notes |
 | --- | --- | --- | --- | --- | --- |
 | `01-platform-and-local-dev` | `done` | `platform-a` | `ai/01-platform-and-local-dev` | `2026-03-30 15:36 PDT` | `Merged local Supabase, env, auth, storage, and Inngest foundation.` |
-| `02-data-model-and-repositories` | `in_progress` | `platform-a` | `ai/02-data-model-and-repositories` | `2026-03-30 15:37 PDT` | `Claimed for canonical schema and repository layer.` |
+| `02-data-model-and-repositories` | `done` | `platform-a` | `ai/02-data-model-and-repositories` | `2026-03-30 15:48 PDT` | `Merged canonical Drizzle schema, repositories, and initial migration. Full repo typecheck is blocked by an out-of-scope curriculum component prop conflict.` |
 | `03-parent-workspace-shell` | `not_started` |  |  |  |  |
 | `04-curriculum-and-standards` | `in_progress` | `platform-b` | `ai/04-curriculum-and-standards` | `2026-03-30 16:00 PDT` | `Claimed for curriculum library UI, tree model helpers, and standards mapping.` |
 | `05-planning-and-daily-workspace` | `in_progress` | `platform-c` | `ai/05-planning-and-daily-workspace` | `2026-03-30 16:07 PDT` | `Claimed for planning views and the daily workspace.` |
