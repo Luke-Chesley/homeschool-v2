@@ -14,6 +14,10 @@ import { getAdapterForTask } from "./registry";
 import { getModelForTask } from "./provider-adapter";
 import { getAiRoutingConfig } from "./routing";
 import { resolvePrompt } from "@/lib/prompts/store";
+import {
+  buildLessonDraftUserPrompt,
+  LESSON_DRAFT_PROMPT_VERSION,
+} from "@/lib/prompts/lesson-draft";
 import type { AiTaskName, CopilotContext, ArtifactLineage, GenerationJob } from "./types";
 import type { ChatMessage } from "./types";
 import { z } from "zod";
@@ -32,6 +36,16 @@ export interface LessonDraftInput {
   gradeLevel?: string;
   standardIds?: string[];
   estimatedMinutes?: number;
+  objectives?: string[];
+  routeItems?: Array<{
+    title: string;
+    subject: string;
+    estimatedMinutes: number;
+    objective: string;
+    lessonLabel: string;
+    note?: string;
+  }>;
+  materials?: string[];
   context?: CopilotContext;
 }
 
@@ -165,9 +179,64 @@ export async function answerChatMessage(
  * Integration point: replace stub with `inngest.send("ai/generation.requested", job)`
  */
 export async function dispatchLessonDraft(input: LessonDraftInput): Promise<GenerationJob> {
-  const job = buildJob("lesson.draft", input);
+  const job = buildJob("lesson.draft", input, LESSON_DRAFT_PROMPT_VERSION);
   await sendGenerationJob(job);
   return job;
+}
+
+export async function generateLessonDraft(
+  input: LessonDraftInput,
+): Promise<TaskResult<string>> {
+  const { adapter, model } = getTaskRuntime("lesson.draft");
+  const prompt = resolvePrompt("lesson.draft", LESSON_DRAFT_PROMPT_VERSION);
+  const routeItems = input.routeItems ?? [];
+  const objectives = input.objectives ?? [];
+  const totalMinutes = input.estimatedMinutes ?? routeItems.reduce((sum, item) => sum + item.estimatedMinutes, 0);
+
+  const userPrompt = `${buildLessonDraftUserPrompt({
+    learnerName: input.context?.learnerName ?? "the learner",
+    sourceTitle: input.title ?? input.topic,
+    dateLabel: input.context?.dailyWorkspaceSnapshot?.date ?? "today",
+    itemCount: routeItems.length,
+    totalMinutes,
+    objectiveCount: objectives.length,
+    objectives,
+    leadItemTitle: routeItems[0]?.title ?? input.topic,
+    leadItemObjective: routeItems[0]?.objective ?? input.topic,
+    routeItems: routeItems.map((item) => ({
+      title: item.title,
+      subject: item.subject,
+      estimatedMinutes: item.estimatedMinutes,
+      objective: item.objective,
+      lessonLabel: item.lessonLabel,
+      note: item.note,
+    })),
+    materials: input.materials ?? [],
+  })}
+
+Context:
+${input.context ? JSON.stringify(input.context, null, 2) : "No additional context provided."}`;
+
+  const result = await adapter.complete({
+    model,
+    messages: [
+      { role: "system", content: prompt.systemPrompt },
+      {
+        role: "user",
+        content: userPrompt,
+      },
+    ],
+  });
+
+  return {
+    output: result.content,
+    lineage: buildLineage(
+      "lesson.draft",
+      adapter.providerId,
+      result.model ?? model,
+      LESSON_DRAFT_PROMPT_VERSION,
+    ),
+  };
 }
 
 export async function dispatchWorksheetGeneration(input: WorksheetInput): Promise<GenerationJob> {
@@ -218,11 +287,16 @@ export async function* streamChatAnswer(
 // Helpers
 // ---------------------------------------------------------------------------
 
-function buildLineage(taskName: AiTaskName, providerId: string, modelId: string): ArtifactLineage {
+function buildLineage(
+  taskName: AiTaskName,
+  providerId: string,
+  modelId: string,
+  promptVersion = "1.0.0",
+): ArtifactLineage {
   return {
     id: randomUUID(),
     taskName,
-    promptRef: { task: taskName, version: "1.0.0" },
+    promptRef: { task: taskName, version: promptVersion },
     providerId: providerId as import("./types").ProviderId,
     modelId,
     inputHash: "stub",
@@ -241,13 +315,14 @@ function getTaskRuntime(taskName: AiTaskName) {
 
 function buildJob(
   taskName: AiTaskName,
-  inputs: unknown
+  inputs: unknown,
+  promptVersion = "1.0.0",
 ): GenerationJob {
   return {
     jobId: randomUUID(),
     taskName,
     inputs,
-    promptRef: { task: taskName, version: "1.0.0" },
+    promptRef: { task: taskName, version: promptVersion },
     requestedAt: new Date().toISOString(),
   };
 }
