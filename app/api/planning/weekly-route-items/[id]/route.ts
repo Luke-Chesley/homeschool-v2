@@ -24,7 +24,12 @@ export async function PATCH(req: NextRequest, { params }: RouteProps) {
   try {
     const session = await requireAppSession();
     const { id } = await params;
-    const body = await req.json();
+    const rawBody = await req.text();
+    if (!rawBody.trim()) {
+      return NextResponse.json({ error: "Request body is required" }, { status: 400 });
+    }
+
+    const body = JSON.parse(rawBody);
     const parsed = UpdateWeeklyRouteItemSchema.safeParse(body);
 
     if (!parsed.success) {
