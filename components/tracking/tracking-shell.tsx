@@ -3,7 +3,6 @@ import { ChartColumnIncreasing, FileSpreadsheet, ListChecks } from "lucide-react
 import type { ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
-import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
@@ -42,7 +41,7 @@ export function TrackingShell({
         <div className="absolute left-0 top-0 size-56 -translate-x-1/3 -translate-y-1/3 rounded-full bg-secondary/25 blur-3xl" />
         <div className="absolute bottom-0 right-0 size-64 translate-x-1/3 translate-y-1/3 rounded-full bg-primary/15 blur-3xl" />
 
-        <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+        <div className="relative flex flex-col gap-6">
           <div className="max-w-3xl">
             <Badge className="mb-4">Tracking And Reporting</Badge>
             <h1 className="font-serif text-4xl leading-[0.95] tracking-[-0.04em] sm:text-5xl lg:text-6xl">
@@ -53,30 +52,41 @@ export function TrackingShell({
             </p>
           </div>
 
-          <Card className="w-full max-w-xl border-primary/15 bg-background/88">
+          <Card className="w-full max-w-5xl border-primary/15 bg-background/88">
             <CardContent className="grid gap-3 p-4 md:grid-cols-3">
               {navItems.map(({ href, label, view, icon: Icon }) => (
                 <Link
                   key={href}
                   href={href}
                   className={cn(
-                    buttonVariants({
-                      variant: currentView === view ? "default" : "outline",
-                    }),
-                    "min-h-24 w-full items-start justify-start rounded-3xl px-4 py-4 text-left text-sm leading-5 whitespace-normal",
+                    "group flex min-h-28 w-full flex-col items-start justify-between gap-6 rounded-[1.75rem] border px-5 py-5 text-left transition-colors",
+                    currentView === view
+                      ? "border-primary/25 bg-primary text-primary-foreground shadow-sm"
+                      : "border-border bg-card/70 text-foreground hover:bg-card",
                   )}
                 >
-                  <Icon className="mt-0.5 size-4 shrink-0" />
-                  <span className="min-w-0 text-balance">{label}</span>
+                  <span
+                    className={cn(
+                      "inline-flex size-10 items-center justify-center rounded-2xl border transition-colors",
+                      currentView === view
+                        ? "border-primary-foreground/20 bg-primary-foreground/10"
+                        : "border-border/70 bg-background/80",
+                    )}
+                  >
+                    <Icon className="size-4 shrink-0" />
+                  </span>
+                  <span className="min-w-0 text-base font-semibold leading-6">{label}</span>
                 </Link>
               ))}
-              <div className="flex min-h-24 items-start gap-3 rounded-3xl border border-border bg-card/70 px-4 py-4 text-left">
-                <div className="flex size-9 items-center justify-center rounded-2xl bg-secondary/20">
+              <div className="flex min-h-28 flex-col justify-between gap-6 rounded-[1.75rem] border border-border bg-card/70 px-5 py-5 text-left">
+                <div className="flex size-10 items-center justify-center rounded-2xl border border-border/70 bg-secondary/20">
                   <ChartColumnIncreasing className="size-4" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold">Evidence-first records</p>
-                  <p className="text-xs text-muted-foreground">Built for exports, audits, and future adaptation.</p>
+                  <p className="text-base font-semibold leading-6">Evidence-first records</p>
+                  <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                    Built for exports, audits, and future adaptation.
+                  </p>
                 </div>
               </div>
             </CardContent>
