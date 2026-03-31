@@ -1,4 +1,7 @@
+import Link from "next/link";
+
 import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -68,14 +71,14 @@ export function TodayWorkspaceView({ workspace }: TodayWorkspaceViewProps) {
           </CardHeader>
           <CardContent className="space-y-4">
             {workspace.items.map((item) => (
-              <div
-                key={item.id}
-                className="rounded-3xl border border-border/70 bg-background/75 p-5"
-              >
+              <div key={item.id} className="rounded-3xl border border-border/70 bg-background/75 p-5">
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="secondary">{item.subject}</Badge>
                   <Badge variant="outline">{item.status.replace("_", " ")}</Badge>
                   <Badge variant="outline">{item.lessonLabel}</Badge>
+                  {item.curriculum ? (
+                    <Badge variant="outline">route {item.curriculum.weeklyRouteItemId}</Badge>
+                  ) : null}
                 </div>
                 <div className="mt-4 flex items-start justify-between gap-4">
                   <div>
@@ -106,6 +109,36 @@ export function TodayWorkspaceView({ workspace }: TodayWorkspaceViewProps) {
                     </p>
                   </div>
                 </div>
+                {item.curriculum ? (
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <Link
+                      href={`/today?date=${workspace.date}&action=complete&planItemId=${item.id}`}
+                      className={buttonVariants({ variant: "default", size: "sm" })}
+                    >
+                      Mark complete
+                    </Link>
+                    <Link
+                      href={`/today?date=${workspace.date}&action=push_to_tomorrow&planItemId=${item.id}`}
+                      className={buttonVariants({ variant: "outline", size: "sm" })}
+                    >
+                      Push to tomorrow
+                    </Link>
+                    {workspace.alternatesByPlanItemId[item.id]?.[0] ? (
+                      <Link
+                        href={`/today?date=${workspace.date}&action=swap_with_alternate&planItemId=${item.id}&alternateWeeklyRouteItemId=${workspace.alternatesByPlanItemId[item.id][0].id}`}
+                        className={buttonVariants({ variant: "outline", size: "sm" })}
+                      >
+                        Swap with {workspace.alternatesByPlanItemId[item.id][0].skillTitle}
+                      </Link>
+                    ) : null}
+                    <Link
+                      href={`/today?date=${workspace.date}&action=remove_today&planItemId=${item.id}`}
+                      className={buttonVariants({ variant: "ghost", size: "sm" })}
+                    >
+                      Remove from today
+                    </Link>
+                  </div>
+                ) : null}
               </div>
             ))}
           </CardContent>

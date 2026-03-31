@@ -105,6 +105,9 @@ function DayCard({ day }: { day: PlanDay }) {
                 <Badge variant="secondary">{item.subject}</Badge>
                 <Badge variant="outline">{item.kind}</Badge>
                 <Badge variant="outline">{item.status.replace("_", " ")}</Badge>
+                {item.curriculum ? (
+                  <Badge variant="outline">route {item.curriculum.weeklyRouteItemId}</Badge>
+                ) : null}
               </div>
               <div className="mt-3 flex items-start justify-between gap-4">
                 <div>
@@ -119,6 +122,39 @@ function DayCard({ day }: { day: PlanDay }) {
               </div>
             </div>
           ))}
+        </div>
+
+        <div className="space-y-3">
+          <p className="text-xs font-semibold tracking-[0.16em] text-muted-foreground uppercase">
+            Route queue for this day
+          </p>
+          {day.selectableRouteItems.length === 0 ? (
+            <div className="rounded-3xl border border-border/70 bg-background/70 p-4 text-sm leading-7 text-muted-foreground">
+              No queued weekly route items for this date.
+            </div>
+          ) : (
+            day.selectableRouteItems.map((routeItem) => (
+              <div
+                key={routeItem.id}
+                className="rounded-3xl border border-border/70 bg-background/70 p-4"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="secondary">{routeItem.subject}</Badge>
+                  <Badge variant="outline">position {routeItem.currentPosition}</Badge>
+                </div>
+                <p className="mt-3 font-semibold">{routeItem.skillTitle}</p>
+                <p className="mt-2 text-sm leading-7 text-muted-foreground">
+                  {routeItem.skillDescription}
+                </p>
+                <Link
+                  href={`/planning/day/${day.date}?selectRouteItemId=${routeItem.id}`}
+                  className={buttonVariants({ variant: "outline", size: "sm" })}
+                >
+                  Select for day
+                </Link>
+              </div>
+            ))
+          )}
         </div>
 
         <div className="flex flex-wrap gap-3">

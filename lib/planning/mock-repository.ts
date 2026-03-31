@@ -3,9 +3,11 @@ import type {
   DayLoad,
   PlanDay,
   PlanItem,
+  PlanItemOrigin,
   RecoveryOption,
   RecoveryPreview,
   ScheduleConstraint,
+  WeeklyRouteItem,
   WeeklyPlan,
 } from "@/lib/planning/types";
 
@@ -60,7 +62,7 @@ const constraints: ScheduleConstraint[] = [
   },
 ];
 
-const planItems: PlanItem[] = [
+const seedPlanItems: PlanItem[] = [
   {
     id: "plan-1",
     date: "2026-03-30",
@@ -334,6 +336,233 @@ const planItems: PlanItem[] = [
   },
 ];
 
+const DEMO_WEEKLY_ROUTE_ID = "wroute-demo-2026-03-30";
+const DEMO_CURRICULUM_SOURCE_ID = "csource-demo-math-4a";
+
+const seedWeeklyRouteItems: WeeklyRouteItem[] = [
+  {
+    id: "wrouteitem-1",
+    weeklyRouteId: DEMO_WEEKLY_ROUTE_ID,
+    sourceId: DEMO_CURRICULUM_SOURCE_ID,
+    skillNodeId: "cnode-skill-fractions-number-line",
+    skillTitle: "Fractions on a Number Line",
+    skillDescription: "Place benchmark fractions and justify the intervals between them.",
+    subject: "Math",
+    estimatedMinutes: 70,
+    recommendedPosition: 1,
+    currentPosition: 1,
+    scheduledDate: "2026-03-30",
+    manualOverrideKind: "none",
+    state: "scheduled",
+  },
+  {
+    id: "wrouteitem-2",
+    weeklyRouteId: DEMO_WEEKLY_ROUTE_ID,
+    sourceId: DEMO_CURRICULUM_SOURCE_ID,
+    skillNodeId: "cnode-skill-long-division-area-model",
+    skillTitle: "Long Division Practice Set",
+    skillDescription: "Apply the area model before moving to the standard algorithm.",
+    subject: "Math",
+    estimatedMinutes: 65,
+    recommendedPosition: 2,
+    currentPosition: 2,
+    scheduledDate: "2026-03-31",
+    manualOverrideKind: "none",
+    state: "scheduled",
+  },
+  {
+    id: "wrouteitem-3",
+    weeklyRouteId: DEMO_WEEKLY_ROUTE_ID,
+    sourceId: DEMO_CURRICULUM_SOURCE_ID,
+    skillNodeId: "cnode-skill-biome-classification",
+    skillTitle: "Biome Card Sort",
+    skillDescription: "Sort plants and animals into biome families using evidence.",
+    subject: "Science",
+    estimatedMinutes: 55,
+    recommendedPosition: 3,
+    currentPosition: 3,
+    scheduledDate: "2026-03-31",
+    manualOverrideKind: "none",
+    state: "scheduled",
+  },
+  {
+    id: "wrouteitem-4",
+    weeklyRouteId: DEMO_WEEKLY_ROUTE_ID,
+    sourceId: DEMO_CURRICULUM_SOURCE_ID,
+    skillNodeId: "cnode-skill-fraction-recipe-application",
+    skillTitle: "Fractions Recipe Lab",
+    skillDescription: "Double and halve ingredient amounts while explaining each change.",
+    subject: "Math",
+    estimatedMinutes: 80,
+    recommendedPosition: 4,
+    currentPosition: 4,
+    scheduledDate: "2026-04-01",
+    manualOverrideKind: "none",
+    state: "scheduled",
+  },
+  {
+    id: "wrouteitem-5",
+    weeklyRouteId: DEMO_WEEKLY_ROUTE_ID,
+    sourceId: DEMO_CURRICULUM_SOURCE_ID,
+    skillNodeId: "cnode-skill-geometry-pattern-warmup",
+    skillTitle: "Geometry Pattern Warmup",
+    skillDescription: "Identify rotational and reflective patterns in tiled figures.",
+    subject: "Math",
+    estimatedMinutes: 30,
+    recommendedPosition: 5,
+    currentPosition: 5,
+    scheduledDate: "2026-03-31",
+    manualOverrideKind: "none",
+    state: "queued",
+  },
+  {
+    id: "wrouteitem-6",
+    weeklyRouteId: DEMO_WEEKLY_ROUTE_ID,
+    sourceId: DEMO_CURRICULUM_SOURCE_ID,
+    skillNodeId: "cnode-skill-biome-reflection",
+    skillTitle: "Biome Reflection Writeup",
+    skillDescription: "Explain one placement decision from the card sort with evidence.",
+    subject: "Science",
+    estimatedMinutes: 25,
+    recommendedPosition: 6,
+    currentPosition: 6,
+    scheduledDate: "2026-03-31",
+    manualOverrideKind: "none",
+    state: "queued",
+  },
+  {
+    id: "wrouteitem-7",
+    weeklyRouteId: DEMO_WEEKLY_ROUTE_ID,
+    sourceId: DEMO_CURRICULUM_SOURCE_ID,
+    skillNodeId: "cnode-skill-reading-conference",
+    skillTitle: "Independent Reading Conference",
+    skillDescription: "Discuss character motivation with evidence from the text.",
+    subject: "Reading",
+    estimatedMinutes: 35,
+    recommendedPosition: 7,
+    currentPosition: 7,
+    scheduledDate: "2026-04-01",
+    manualOverrideKind: "none",
+    state: "queued",
+  },
+  {
+    id: "wrouteitem-8",
+    weeklyRouteId: DEMO_WEEKLY_ROUTE_ID,
+    sourceId: DEMO_CURRICULUM_SOURCE_ID,
+    skillNodeId: "cnode-skill-mapmaking-routes",
+    skillTitle: "Mapmaking Studio",
+    skillDescription: "Label trade routes and key terrain features from recall first.",
+    subject: "Geography",
+    estimatedMinutes: 60,
+    recommendedPosition: 8,
+    currentPosition: 8,
+    scheduledDate: "2026-04-01",
+    manualOverrideKind: "none",
+    state: "queued",
+  },
+];
+
+const seedPlanItemCurriculumLinks = [
+  {
+    planItemId: "plan-1",
+    sourceId: DEMO_CURRICULUM_SOURCE_ID,
+    skillNodeId: "cnode-skill-fractions-number-line",
+    weeklyRouteItemId: "wrouteitem-1",
+    origin: "curriculum_route" as const,
+  },
+  {
+    planItemId: "plan-5",
+    sourceId: DEMO_CURRICULUM_SOURCE_ID,
+    skillNodeId: "cnode-skill-long-division-area-model",
+    weeklyRouteItemId: "wrouteitem-2",
+    origin: "curriculum_route" as const,
+  },
+  {
+    planItemId: "plan-7",
+    sourceId: DEMO_CURRICULUM_SOURCE_ID,
+    skillNodeId: "cnode-skill-biome-classification",
+    weeklyRouteItemId: "wrouteitem-3",
+    origin: "curriculum_route" as const,
+  },
+  {
+    planItemId: "plan-8",
+    sourceId: DEMO_CURRICULUM_SOURCE_ID,
+    skillNodeId: "cnode-skill-fraction-recipe-application",
+    weeklyRouteItemId: "wrouteitem-4",
+    origin: "curriculum_route" as const,
+  },
+];
+
+type RouteOverrideEventType =
+  | "reorder"
+  | "pin"
+  | "defer"
+  | "skip_acknowledged"
+  | "repair_applied"
+  | "remove_from_week";
+
+interface RouteOverrideEvent {
+  id: string;
+  weeklyRouteItemId: string;
+  eventType: RouteOverrideEventType;
+  payload: Record<string, unknown>;
+  createdAt: string;
+}
+
+interface PlanningStore {
+  planItems: PlanItem[];
+  weeklyRouteItems: WeeklyRouteItem[];
+  routeOverrideEvents: RouteOverrideEvent[];
+}
+
+declare global {
+  var __planningStore: PlanningStore | undefined;
+}
+
+function clonePlanItem(item: PlanItem): PlanItem {
+  return {
+    ...item,
+    standards: [...item.standards],
+    goals: [...item.goals],
+    materials: [...item.materials],
+    artifactSlots: [...item.artifactSlots],
+    copilotPrompts: [...item.copilotPrompts],
+    curriculum: item.curriculum ? { ...item.curriculum } : undefined,
+  };
+}
+
+function initializePlanningStore(): PlanningStore {
+  const curriculumLinksByPlanItemId = new Map(
+    seedPlanItemCurriculumLinks.map((link) => [link.planItemId, link]),
+  );
+
+  return {
+    planItems: seedPlanItems.map((item) => {
+      const link = curriculumLinksByPlanItemId.get(item.id);
+      const planOrigin: PlanItemOrigin = link ? link.origin : "manual";
+      return {
+        ...clonePlanItem(item),
+        planOrigin,
+        curriculum: link
+          ? {
+              sourceId: link.sourceId,
+              skillNodeId: link.skillNodeId,
+              weeklyRouteItemId: link.weeklyRouteItemId,
+              origin: link.origin,
+            }
+          : undefined,
+      };
+    }),
+    weeklyRouteItems: seedWeeklyRouteItems.map((item) => ({ ...item })),
+    routeOverrideEvents: [],
+  };
+}
+
+function getPlanningStore(): PlanningStore {
+  globalThis.__planningStore ??= initializePlanningStore();
+  return globalThis.__planningStore;
+}
+
 function getConstraint(date: string) {
   const constraint = constraints.find((item) => item.date === date);
 
@@ -345,7 +574,134 @@ function getConstraint(date: string) {
 }
 
 function getItemsForDate(date: string) {
-  return planItems.filter((item) => item.date === date);
+  return getPlanningStore()
+    .planItems
+    .filter((item) => item.date === date)
+    .sort((left, right) => {
+      if (left.startTime && right.startTime) {
+        return left.startTime.localeCompare(right.startTime);
+      }
+      if (left.startTime) {
+        return -1;
+      }
+      if (right.startTime) {
+        return 1;
+      }
+      return left.title.localeCompare(right.title);
+    });
+}
+
+function getRouteItemById(routeItemId: string) {
+  return getPlanningStore().weeklyRouteItems.find((item) => item.id === routeItemId);
+}
+
+function getLinkedPlanItemByRouteItemId(routeItemId: string) {
+  return getPlanningStore().planItems.find(
+    (item) => item.curriculum?.weeklyRouteItemId === routeItemId,
+  );
+}
+
+function getSelectableRouteItemsForDate(date: string) {
+  return getPlanningStore()
+    .weeklyRouteItems
+    .filter((item) => {
+      if (item.state === "done" || item.state === "removed") {
+        return false;
+      }
+      if (item.scheduledDate !== date) {
+        return false;
+      }
+      return !getLinkedPlanItemByRouteItemId(item.id);
+    })
+    .sort((left, right) => left.currentPosition - right.currentPosition);
+}
+
+function hasCurriculumDuplicateForDate(date: string, skillNodeId: string, excludedPlanItemId?: string) {
+  return getPlanningStore().planItems.some((item) => {
+    if (item.id === excludedPlanItemId) {
+      return false;
+    }
+    if (item.date !== date) {
+      return false;
+    }
+    return item.curriculum?.skillNodeId === skillNodeId;
+  });
+}
+
+function shiftDate(date: string, days: number) {
+  const source = new Date(`${date}T12:00:00`);
+  source.setDate(source.getDate() + days);
+  return source.toISOString().slice(0, 10);
+}
+
+function createPlanItemFromRouteItem(routeItem: WeeklyRouteItem, date: string): PlanItem {
+  const routePlanItemId = `plan-${routeItem.id}`;
+  return {
+    id: routePlanItemId,
+    date,
+    title: routeItem.skillTitle,
+    subject: routeItem.subject,
+    kind: "lesson",
+    objective:
+      routeItem.skillDescription ??
+      "Progress the next guided curriculum skill with clear completion evidence.",
+    estimatedMinutes: routeItem.estimatedMinutes,
+    status: "ready",
+    standards: [],
+    goals: [],
+    materials: ["Curriculum resource packet"],
+    artifactSlots: ["work sample"],
+    copilotPrompts: ["Generate one reteach prompt and one extension prompt"],
+    sourceLabel: "Guided curriculum route",
+    lessonLabel: `Route item ${routeItem.currentPosition}`,
+    planOrigin: "curriculum_route",
+    curriculum: {
+      sourceId: routeItem.sourceId,
+      skillNodeId: routeItem.skillNodeId,
+      weeklyRouteItemId: routeItem.id,
+      origin: "curriculum_route",
+    },
+  };
+}
+
+function getAlternatesForPlanItem(planItem: PlanItem) {
+  if (!planItem.curriculum) {
+    return [];
+  }
+
+  return getPlanningStore()
+    .weeklyRouteItems
+    .filter((routeItem) => {
+      if (routeItem.sourceId !== planItem.curriculum!.sourceId) {
+        return false;
+      }
+      if (routeItem.id === planItem.curriculum!.weeklyRouteItemId) {
+        return false;
+      }
+      if (routeItem.state === "done" || routeItem.state === "removed") {
+        return false;
+      }
+      if (routeItem.scheduledDate !== planItem.date) {
+        return false;
+      }
+      return !getLinkedPlanItemByRouteItemId(routeItem.id);
+    })
+    .sort((left, right) => left.currentPosition - right.currentPosition);
+}
+
+function appendRouteEvent(
+  weeklyRouteItemId: string,
+  eventType: RouteOverrideEventType,
+  payload: Record<string, unknown>,
+) {
+  const eventId = `routeevent-${getPlanningStore().routeOverrideEvents.length + 1}`;
+  getPlanningStore().routeOverrideEvents.push({
+    id: eventId,
+    weeklyRouteItemId,
+    eventType,
+    payload,
+    createdAt: new Date().toISOString(),
+  });
 }
 
 function getScheduledMinutes(items: PlanItem[]) {
@@ -475,6 +831,7 @@ function buildRecoveryOptions(
 function buildDay(date: string): PlanDay {
   const constraint = getConstraint(date);
   const items = getItemsForDate(date);
+  const selectableRouteItems = getSelectableRouteItemsForDate(date);
   const scheduledMinutes = getScheduledMinutes(items);
   const bufferMinutes = constraint.availableMinutes - scheduledMinutes;
 
@@ -495,6 +852,7 @@ function buildDay(date: string): PlanDay {
     load: getLoad(bufferMinutes),
     constraint,
     items,
+    selectableRouteItems,
     carryoverItems: items.filter((item) => item.status === "carried_over"),
     recoveryOptions: buildRecoveryOptions(date, items, constraint, bufferMinutes),
     alerts: getAlerts(items, bufferMinutes, constraint),
@@ -549,6 +907,10 @@ function buildDailyWorkspace(date: string): DailyWorkspace {
     throw new Error(`No plan items found for ${date}`);
   }
 
+  const alternatesByPlanItemId = Object.fromEntries(
+    day.items.map((item) => [item.id, getAlternatesForPlanItem(item)]),
+  );
+
   return {
     date,
     headline: "Run the day with enough structure to adapt in real time.",
@@ -597,7 +959,193 @@ function buildDailyWorkspace(date: string): DailyWorkspace {
       "If math runs long, move read-aloud to the couch instead of dropping it.",
     ],
     recoveryOptions: day.recoveryOptions,
+    alternatesByPlanItemId,
   };
+}
+
+function selectRouteItemForDay(date: string, weeklyRouteItemId: string) {
+  const routeItem = getRouteItemById(weeklyRouteItemId);
+  if (!routeItem) {
+    throw new Error(`Weekly route item not found: ${weeklyRouteItemId}`);
+  }
+
+  if (routeItem.state === "done" || routeItem.state === "removed") {
+    throw new Error(`Weekly route item is not schedulable: ${weeklyRouteItemId}`);
+  }
+
+  const existing = getLinkedPlanItemByRouteItemId(weeklyRouteItemId);
+  if (existing) {
+    if (existing.date !== date) {
+      if (hasCurriculumDuplicateForDate(date, routeItem.skillNodeId, existing.id)) {
+        throw new Error("Cannot move item: target date already has the same curriculum skill scheduled.");
+      }
+      existing.date = date;
+      existing.status = "carried_over";
+      existing.planOrigin = "recovery";
+      if (existing.curriculum) {
+        existing.curriculum.origin = "recovery";
+      }
+      routeItem.manualOverrideKind = "deferred";
+      appendRouteEvent(weeklyRouteItemId, "defer", {
+        fromDate: routeItem.scheduledDate ?? null,
+        toDate: date,
+        planItemId: existing.id,
+      });
+    }
+    routeItem.scheduledDate = date;
+    routeItem.state = "scheduled";
+    return existing;
+  }
+
+  if (hasCurriculumDuplicateForDate(date, routeItem.skillNodeId)) {
+    throw new Error("Cannot schedule duplicate curriculum skill for the same day.");
+  }
+
+  const planItem = createPlanItemFromRouteItem(routeItem, date);
+  getPlanningStore().planItems.push(planItem);
+  routeItem.scheduledDate = date;
+  routeItem.state = "scheduled";
+  routeItem.manualOverrideKind = "none";
+  return planItem;
+}
+
+function pushPlanItemToNextDay(planItemId: string) {
+  const item = getPlanningStore().planItems.find((candidate) => candidate.id === planItemId);
+  if (!item) {
+    throw new Error(`Plan item not found: ${planItemId}`);
+  }
+
+  const nextDate = shiftDate(item.date, 1);
+  if (!weekDates.includes(nextDate)) {
+    throw new Error(`Cannot push item beyond the active planning week: ${item.date}`);
+  }
+
+  if (item.curriculum && hasCurriculumDuplicateForDate(nextDate, item.curriculum.skillNodeId, item.id)) {
+    throw new Error("Cannot defer: target date already has this curriculum skill.");
+  }
+
+  const previousDate = item.date;
+  item.date = nextDate;
+  item.status = "carried_over";
+  item.note = `Deferred from ${previousDate} to ${nextDate}.`;
+
+  if (item.curriculum) {
+    item.planOrigin = "recovery";
+    item.curriculum.origin = "recovery";
+    const routeItem = getRouteItemById(item.curriculum.weeklyRouteItemId);
+    if (routeItem) {
+      routeItem.scheduledDate = nextDate;
+      routeItem.state = "scheduled";
+      routeItem.manualOverrideKind = "deferred";
+      appendRouteEvent(routeItem.id, "defer", {
+        fromDate: previousDate,
+        toDate: nextDate,
+        planItemId: item.id,
+      });
+    }
+  }
+
+  return item;
+}
+
+function markPlanItemComplete(planItemId: string) {
+  const item = getPlanningStore().planItems.find((candidate) => candidate.id === planItemId);
+  if (!item) {
+    throw new Error(`Plan item not found: ${planItemId}`);
+  }
+
+  item.status = "completed";
+  if (item.curriculum) {
+    const routeItem = getRouteItemById(item.curriculum.weeklyRouteItemId);
+    if (routeItem) {
+      routeItem.state = "done";
+    }
+  }
+
+  return item;
+}
+
+function removePlanItemFromDay(planItemId: string) {
+  const itemIndex = getPlanningStore().planItems.findIndex((item) => item.id === planItemId);
+  if (itemIndex < 0) {
+    throw new Error(`Plan item not found: ${planItemId}`);
+  }
+
+  const [removed] = getPlanningStore().planItems.splice(itemIndex, 1);
+  if (removed.curriculum) {
+    const routeItem = getRouteItemById(removed.curriculum.weeklyRouteItemId);
+    if (routeItem) {
+      routeItem.state = "queued";
+      routeItem.scheduledDate = undefined;
+      routeItem.manualOverrideKind = "deferred";
+      appendRouteEvent(routeItem.id, "remove_from_week", {
+        planItemId: removed.id,
+        date: removed.date,
+      });
+    }
+  }
+}
+
+function swapPlanItemWithAlternate(planItemId: string, alternateWeeklyRouteItemId: string) {
+  const item = getPlanningStore().planItems.find((candidate) => candidate.id === planItemId);
+  if (!item) {
+    throw new Error(`Plan item not found: ${planItemId}`);
+  }
+  if (!item.curriculum) {
+    throw new Error("Only curriculum-backed plan items can be swapped with alternates.");
+  }
+
+  const alternate = getRouteItemById(alternateWeeklyRouteItemId);
+  if (!alternate) {
+    throw new Error(`Alternate weekly route item not found: ${alternateWeeklyRouteItemId}`);
+  }
+  if (alternate.state === "done" || alternate.state === "removed") {
+    throw new Error("Alternate weekly route item is not schedulable.");
+  }
+  if (getLinkedPlanItemByRouteItemId(alternate.id)) {
+    throw new Error("Alternate weekly route item is already linked to another plan item.");
+  }
+  if (hasCurriculumDuplicateForDate(item.date, alternate.skillNodeId, item.id)) {
+    throw new Error("Cannot swap: target day already includes the alternate curriculum skill.");
+  }
+
+  const previousRouteItem = getRouteItemById(item.curriculum.weeklyRouteItemId);
+  const previousSkillNodeId = item.curriculum.skillNodeId;
+  const previousRouteItemId = item.curriculum.weeklyRouteItemId;
+
+  if (previousRouteItem) {
+    previousRouteItem.state = "queued";
+    previousRouteItem.scheduledDate = item.date;
+    previousRouteItem.manualOverrideKind = "deferred";
+  }
+
+  alternate.state = "scheduled";
+  alternate.scheduledDate = item.date;
+  alternate.manualOverrideKind = "reordered";
+
+  item.title = alternate.skillTitle;
+  item.subject = alternate.subject;
+  item.objective =
+    alternate.skillDescription ??
+    "Progress the next guided curriculum skill with clear completion evidence.";
+  item.estimatedMinutes = alternate.estimatedMinutes;
+  item.lessonLabel = `Route item ${alternate.currentPosition}`;
+  item.planOrigin = "curriculum_route";
+  item.curriculum = {
+    sourceId: alternate.sourceId,
+    skillNodeId: alternate.skillNodeId,
+    weeklyRouteItemId: alternate.id,
+    origin: "curriculum_route",
+  };
+  item.note = `Swapped from ${previousRouteItemId} (${previousSkillNodeId}) to ${alternate.id}.`;
+
+  appendRouteEvent(alternate.id, "repair_applied", {
+    planItemId: item.id,
+    swappedFromWeeklyRouteItemId: previousRouteItemId,
+    swappedToWeeklyRouteItemId: alternate.id,
+  });
+
+  return item;
 }
 
 export interface PlanningRepository {
@@ -605,6 +1153,11 @@ export interface PlanningRepository {
   getPlanningDay(date: string): PlanDay | null;
   getRecoveryPreview(): RecoveryPreview;
   getDailyWorkspace(date: string): DailyWorkspace | null;
+  selectRouteItemForDay(date: string, weeklyRouteItemId: string): PlanItem;
+  pushPlanItemToNextDay(planItemId: string): PlanItem;
+  markPlanItemComplete(planItemId: string): PlanItem;
+  removePlanItemFromDay(planItemId: string): void;
+  swapPlanItemWithAlternate(planItemId: string, alternateWeeklyRouteItemId: string): PlanItem;
 }
 
 class MockPlanningRepository implements PlanningRepository {
@@ -630,6 +1183,29 @@ class MockPlanningRepository implements PlanningRepository {
     }
 
     return buildDailyWorkspace(date);
+  }
+
+  selectRouteItemForDay(date: string, weeklyRouteItemId: string) {
+    if (!weekDates.includes(date)) {
+      throw new Error(`Cannot select route item for unknown planning date: ${date}`);
+    }
+    return selectRouteItemForDay(date, weeklyRouteItemId);
+  }
+
+  pushPlanItemToNextDay(planItemId: string) {
+    return pushPlanItemToNextDay(planItemId);
+  }
+
+  markPlanItemComplete(planItemId: string) {
+    return markPlanItemComplete(planItemId);
+  }
+
+  removePlanItemFromDay(planItemId: string) {
+    return removePlanItemFromDay(planItemId);
+  }
+
+  swapPlanItemWithAlternate(planItemId: string, alternateWeeklyRouteItemId: string) {
+    return swapPlanItemWithAlternate(planItemId, alternateWeeklyRouteItemId);
   }
 }
 

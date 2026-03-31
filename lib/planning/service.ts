@@ -12,12 +12,32 @@ export function getPlanningDayView(date: string) {
   return repo().getPlanningDay(date);
 }
 
+export function selectRouteItemForPlanningDay(date: string, weeklyRouteItemId: string) {
+  return repo().selectRouteItemForDay(date, weeklyRouteItemId);
+}
+
 export function getRecoveryPreview() {
   return repo().getRecoveryPreview();
 }
 
-export function getTodayWorkspace(date = "2026-03-30") {
+export function getTodayWorkspace(date = "2026-03-31") {
   return repo().getDailyWorkspace(date);
+}
+
+export function completeTodayPlanItem(planItemId: string) {
+  return repo().markPlanItemComplete(planItemId);
+}
+
+export function pushTodayPlanItemToTomorrow(planItemId: string) {
+  return repo().pushPlanItemToNextDay(planItemId);
+}
+
+export function removeTodayPlanItem(planItemId: string) {
+  return repo().removePlanItemFromDay(planItemId);
+}
+
+export function swapTodayPlanItemWithAlternate(planItemId: string, alternateWeeklyRouteItemId: string) {
+  return repo().swapPlanItemWithAlternate(planItemId, alternateWeeklyRouteItemId);
 }
 
 export function formatPlannerDate(date: string) {
