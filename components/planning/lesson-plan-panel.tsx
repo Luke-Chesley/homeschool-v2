@@ -77,7 +77,7 @@ export function LessonPlanPanel({
   }
 
   return (
-    <Card className="border-border/70 bg-card/88">
+    <Card className="border-border/70 bg-card/88 shadow-sm">
       <CardHeader className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="outline">{routeItemCount} items</Badge>
@@ -87,26 +87,31 @@ export function LessonPlanPanel({
         <CardDescription>LLM lesson plan</CardDescription>
         <CardTitle className="font-serif text-2xl leading-tight">Draft from the current route</CardTitle>
         <p className="text-sm leading-7 text-muted-foreground">
-          This uses the current route items, time budget, and objectives to generate a teachable plan.
+          Uses the current route items, time budget, and objectives to generate a teachable plan.
         </p>
       </CardHeader>
 
       <CardContent className="space-y-4">
-        <div className="grid gap-2 rounded-3xl border border-border/70 bg-background/75 p-4 text-sm leading-7 text-muted-foreground">
-          <div>
-            <span className="font-semibold text-foreground">Source:</span> {sourceTitle}
+        <details className="rounded-3xl border border-border/70 bg-background/65 px-4 py-3">
+          <summary className="cursor-pointer select-none text-sm font-medium text-foreground">
+            Prompt context
+          </summary>
+          <div className="mt-3 grid gap-2 text-sm leading-6 text-muted-foreground">
+            <div>
+              <span className="font-semibold text-foreground">Source:</span> {sourceTitle}
+            </div>
+            <div>
+              <span className="font-semibold text-foreground">Lead item:</span> {leadItemTitle}
+            </div>
+            <div>
+              <span className="font-semibold text-foreground">Lead objective:</span> {leadItemObjective}
+            </div>
+            <div>
+              <span className="font-semibold text-foreground">Objectives:</span>{" "}
+              {objectives.length > 0 ? objectives.join(" · ") : "None captured"}
+            </div>
           </div>
-          <div>
-            <span className="font-semibold text-foreground">Lead item:</span> {leadItemTitle}
-          </div>
-          <div>
-            <span className="font-semibold text-foreground">Lead objective:</span> {leadItemObjective}
-          </div>
-          <div>
-            <span className="font-semibold text-foreground">Objectives in scope:</span>{" "}
-            {objectives.length > 0 ? objectives.join(" · ") : "None captured"}
-          </div>
-        </div>
+        </details>
 
         <button
           type="button"
