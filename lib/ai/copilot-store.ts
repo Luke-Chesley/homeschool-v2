@@ -115,6 +115,20 @@ function getScopeType(context?: CopilotContext): ThreadRecord["scopeType"] {
 }
 
 class DbCopilotStore {
+  private ensureThreadAccess(params: {
+    thread: ThreadRecord;
+    householdId: string;
+    learnerId?: string | null;
+  }) {
+    if (params.thread.organizationId !== params.householdId) {
+      throw new Error("Session not found.");
+    }
+
+    if (params.learnerId && params.thread.learnerId && params.thread.learnerId !== params.learnerId) {
+      throw new Error("Session not found.");
+    }
+  }
+
   private async hydrateSession(thread: ThreadRecord): Promise<CopilotSession> {
     const [messages, actions] = await Promise.all([
       getCopilotRepo().listMessagesForThread(thread.id),
@@ -156,10 +170,23 @@ class DbCopilotStore {
     return this.hydrateSession(thread);
   }
 
-  async getSession(id: string): Promise<CopilotSession | null> {
+  async getSession(
+    id: string,
+    options: { householdId: string; learnerId?: string | null },
+  ): Promise<CopilotSession | null> {
     await ensureLocalDemoData();
 
     const thread = await getCopilotRepo().findThreadById(id);
+    if (!thread) {
+      return null;
+    }
+
+    this.ensureThreadAccess({
+      thread,
+      householdId: options.householdId,
+      learnerId: options.learnerId,
+    });
+
     return thread ? this.hydrateSession(thread) : null;
   }
 
@@ -170,13 +197,22 @@ class DbCopilotStore {
     return Promise.all(threads.map((thread) => this.hydrateSession(thread)));
   }
 
-  async appendMessage(sessionId: string, message: ChatMessage): Promise<CopilotSession> {
+  async appendMessage(
+    sessionId: string,
+    message: ChatMessage,
+    options: { householdId: string; learnerId?: string | null },
+  ): Promise<CopilotSession> {
     await ensureLocalDemoData();
 
     const thread = await getCopilotRepo().findThreadById(sessionId);
     if (!thread) {
       throw new Error(`Session not found: ${sessionId}`);
     }
+    this.ensureThreadAccess({
+      thread,
+      householdId: options.householdId,
+      learnerId: options.learnerId,
+    });
 
     await getCopilotRepo().createMessage({
       threadId: sessionId,
@@ -195,7 +231,8 @@ class DbCopilotStore {
 
   async appendAction(
     sessionId: string,
-    action: Omit<CopilotAction, "id" | "createdAt" | "status">
+    action: Omit<CopilotAction, "id" | "createdAt" | "status">,
+    options: { householdId: string; learnerId?: string | null },
   ): Promise<CopilotAction> {
     await ensureLocalDemoData();
 
@@ -203,6 +240,11 @@ class DbCopilotStore {
     if (!thread) {
       throw new Error(`Session not found: ${sessionId}`);
     }
+    this.ensureThreadAccess({
+      thread,
+      householdId: options.householdId,
+      learnerId: options.learnerId,
+    });
 
     const created = await getCopilotRepo().createAction({
       threadId: sessionId,
@@ -227,7 +269,8 @@ class DbCopilotStore {
   async updateActionStatus(
     sessionId: string,
     actionId: string,
-    status: CopilotAction["status"]
+    status: CopilotAction["status"],
+    options: { householdId: string; learnerId?: string | null },
   ): Promise<CopilotAction> {
     await ensureLocalDemoData();
 
@@ -235,6 +278,11 @@ class DbCopilotStore {
     if (!thread) {
       throw new Error(`Session not found: ${sessionId}`);
     }
+    this.ensureThreadAccess({
+      thread,
+      householdId: options.householdId,
+      learnerId: options.learnerId,
+    });
 
     const action = await getCopilotRepo().findActionById(actionId);
     if (!action || action.threadId !== sessionId) {

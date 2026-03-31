@@ -17,15 +17,18 @@ import {
 import { CreateCurriculumSourceInputSchema } from "@/lib/curriculum/types";
 
 const ImportLocalCurriculumRequestSchema = z.object({
-  householdId: z.string(),
   importPreset: z.literal("local_curriculum_json"),
 });
 
 export async function GET(req: NextRequest) {
   try {
     const session = await requireAppSession();
-    const householdId = req.nextUrl.searchParams.get("householdId") ?? session.organization.id;
-    const sources = await listCurriculumSources(householdId);
+    const requestedHouseholdId = req.nextUrl.searchParams.get("householdId");
+    if (requestedHouseholdId && requestedHouseholdId !== session.organization.id) {
+      return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+    }
+
+    const sources = await listCurriculumSources(session.organization.id);
     return NextResponse.json(sources);
   } catch (err) {
     console.error("[api/curriculum/sources GET]", err);

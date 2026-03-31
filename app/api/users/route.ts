@@ -6,10 +6,7 @@ import {
   APP_ORGANIZATION_COOKIE,
   getAppSession,
 } from "@/lib/app-session/server";
-import {
-  createLearnerForOrganization,
-  ensureAppOrganization,
-} from "@/lib/users/service";
+import { createLearnerForOrganization } from "@/lib/users/service";
 
 const CreateLearnerSchema = z.object({
   displayName: z.string().min(1).max(80),
@@ -28,7 +25,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Display name is required." }, { status: 400 });
   }
 
-  const organization = await ensureAppOrganization();
+  const session = await getAppSession();
+  const organization = session.organization;
   const learner = await createLearnerForOrganization(organization.id, {
     displayName: parsed.data.displayName,
   });

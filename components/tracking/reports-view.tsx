@@ -4,7 +4,7 @@ import { getTrackingExportPreview } from "@/lib/tracking/service";
 import type { TrackingDashboard } from "@/lib/tracking/types";
 
 export function ReportsView({ dashboard }: { dashboard: TrackingDashboard }) {
-  const exports = getTrackingExportPreview();
+  const exports = getTrackingExportPreview(dashboard);
 
   return (
     <div className="grid gap-6">

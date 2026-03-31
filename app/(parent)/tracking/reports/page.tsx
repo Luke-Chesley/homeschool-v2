@@ -1,12 +1,18 @@
 import { ReportsView, TrackingShell } from "@/components/tracking";
+import { requireAppSession } from "@/lib/app-session/server";
 import { getTrackingDashboard } from "@/lib/tracking/service";
 
 export const metadata = {
   title: "Reports And Exports",
 };
 
-export default function TrackingReportsPage() {
-  const dashboard = getTrackingDashboard();
+export default async function TrackingReportsPage() {
+  const session = await requireAppSession();
+  const dashboard = await getTrackingDashboard({
+    organizationId: session.organization.id,
+    learnerId: session.activeLearner.id,
+    learnerName: session.activeLearner.displayName,
+  });
 
   return (
     <TrackingShell

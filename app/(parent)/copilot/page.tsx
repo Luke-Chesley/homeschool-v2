@@ -12,6 +12,7 @@ import { CopilotChat } from "@/components/copilot/CopilotChat";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { getAiRoutingConfig } from "@/lib/ai/routing";
+import { requireAppSession } from "@/lib/app-session/server";
 
 export const metadata = {
   title: "Copilot",
@@ -27,13 +28,14 @@ interface Props {
 }
 
 export default async function CopilotPage({ searchParams }: Props) {
+  const session = await requireAppSession();
   const params = await searchParams;
   const routing = getAiRoutingConfig();
   const activeChatModel = routing.taskDefaults["chat.answer"] ?? routing.fallbackModel;
 
   const context = {
-    learnerId: params.learnerId,
-    learnerName: params.learnerName,
+    learnerId: session.activeLearner.id,
+    learnerName: session.activeLearner.displayName,
     curriculumSourceId: params.sourceId,
     lessonId: params.lessonId,
     standardIds: [],
