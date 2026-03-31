@@ -9,6 +9,7 @@
  */
 
 import { randomUUID } from "crypto";
+import { DEMO_HOUSEHOLD_ID } from "./constants";
 import type { CurriculumRepository } from "./repository";
 import type {
   CurriculumSource,
@@ -38,7 +39,7 @@ const SEED_LESSON_3_ID = "00000000-0000-0000-0000-000000000022";
 const seedSources: CurriculumSource[] = [
   {
     id: SEED_SOURCE_ID,
-    householdId: "household-demo",
+    householdId: DEMO_HOUSEHOLD_ID,
     title: "Singapore Math 4A",
     description: "Primary Mathematics 4A — place value through fractions.",
     kind: "manual",
@@ -130,19 +131,30 @@ const seedObjectives: CurriculumObjective[] = [
 // In-memory store
 // ---------------------------------------------------------------------------
 
+interface CurriculumStore {
+  sources: Map<string, CurriculumSource>;
+  units: Map<string, CurriculumUnit>;
+  lessons: Map<string, CurriculumLesson>;
+  objectives: Map<string, CurriculumObjective>;
+}
+
+declare global {
+  var __curriculumStore: CurriculumStore | undefined;
+}
+
+function getCurriculumStore(): CurriculumStore {
+  globalThis.__curriculumStore ??= {
+    sources: new Map<string, CurriculumSource>(seedSources.map((s) => [s.id, s])),
+    units: new Map<string, CurriculumUnit>(seedUnits.map((u) => [u.id, u])),
+    lessons: new Map<string, CurriculumLesson>(seedLessons.map((l) => [l.id, l])),
+    objectives: new Map<string, CurriculumObjective>(seedObjectives.map((o) => [o.id, o])),
+  };
+
+  return globalThis.__curriculumStore;
+}
+
 class InMemoryCurriculumRepository implements CurriculumRepository {
-  private sources = new Map<string, CurriculumSource>(
-    seedSources.map((s) => [s.id, s])
-  );
-  private units = new Map<string, CurriculumUnit>(
-    seedUnits.map((u) => [u.id, u])
-  );
-  private lessons = new Map<string, CurriculumLesson>(
-    seedLessons.map((l) => [l.id, l])
-  );
-  private objectives = new Map<string, CurriculumObjective>(
-    seedObjectives.map((o) => [o.id, o])
-  );
+  private store = getCurriculumStore();
 
   private ts() {
     return new Date().toISOString();
@@ -151,11 +163,11 @@ class InMemoryCurriculumRepository implements CurriculumRepository {
   // --- Sources ---
 
   async listSources(householdId: string): Promise<CurriculumSource[]> {
-    return [...this.sources.values()].filter((s) => s.householdId === householdId);
+    return [...this.store.sources.values()].filter((s) => s.householdId === householdId);
   }
 
   async getSource(id: string): Promise<CurriculumSource | null> {
-    return this.sources.get(id) ?? null;
+    return this.store.sources.get(id) ?? null;
   }
 
   async createSource(input: CreateCurriculumSourceInput): Promise<CurriculumSource> {
@@ -166,26 +178,26 @@ class InMemoryCurriculumRepository implements CurriculumRepository {
       createdAt: this.ts(),
       updatedAt: this.ts(),
     };
-    this.sources.set(record.id, record);
+    this.store.sources.set(record.id, record);
     return record;
   }
 
   async updateSource(id: string, patch: Partial<CreateCurriculumSourceInput>): Promise<CurriculumSource> {
-    const existing = this.sources.get(id);
+    const existing = this.store.sources.get(id);
     if (!existing) throw new Error(`CurriculumSource not found: ${id}`);
     const updated = { ...existing, ...patch, updatedAt: this.ts() };
-    this.sources.set(id, updated);
+    this.store.sources.set(id, updated);
     return updated;
   }
 
   async deleteSource(id: string): Promise<void> {
-    this.sources.delete(id);
+    this.store.sources.delete(id);
   }
 
   // --- Units ---
 
   async listUnits(sourceId: string): Promise<CurriculumUnit[]> {
-    return [...this.units.values()]
+    return [...this.store.units.values()]
       .filter((u) => u.sourceId === sourceId)
       .sort((a, b) => a.sequence - b.sequence);
   }
@@ -197,26 +209,26 @@ class InMemoryCurriculumRepository implements CurriculumRepository {
       createdAt: this.ts(),
       updatedAt: this.ts(),
     };
-    this.units.set(record.id, record);
+    this.store.units.set(record.id, record);
     return record;
   }
 
   async updateUnit(id: string, patch: Partial<CreateCurriculumUnitInput>): Promise<CurriculumUnit> {
-    const existing = this.units.get(id);
+    const existing = this.store.units.get(id);
     if (!existing) throw new Error(`CurriculumUnit not found: ${id}`);
     const updated = { ...existing, ...patch, updatedAt: this.ts() };
-    this.units.set(id, updated);
+    this.store.units.set(id, updated);
     return updated;
   }
 
   async deleteUnit(id: string): Promise<void> {
-    this.units.delete(id);
+    this.store.units.delete(id);
   }
 
   // --- Lessons ---
 
   async listLessons(unitId: string): Promise<CurriculumLesson[]> {
-    return [...this.lessons.values()]
+    return [...this.store.lessons.values()]
       .filter((l) => l.unitId === unitId)
       .sort((a, b) => a.sequence - b.sequence);
   }
@@ -228,26 +240,26 @@ class InMemoryCurriculumRepository implements CurriculumRepository {
       createdAt: this.ts(),
       updatedAt: this.ts(),
     };
-    this.lessons.set(record.id, record);
+    this.store.lessons.set(record.id, record);
     return record;
   }
 
   async updateLesson(id: string, patch: Partial<CreateCurriculumLessonInput>): Promise<CurriculumLesson> {
-    const existing = this.lessons.get(id);
+    const existing = this.store.lessons.get(id);
     if (!existing) throw new Error(`CurriculumLesson not found: ${id}`);
     const updated = { ...existing, ...patch, updatedAt: this.ts() };
-    this.lessons.set(id, updated);
+    this.store.lessons.set(id, updated);
     return updated;
   }
 
   async deleteLesson(id: string): Promise<void> {
-    this.lessons.delete(id);
+    this.store.lessons.delete(id);
   }
 
   // --- Objectives ---
 
   async listObjectives(params: { lessonId?: string; unitId?: string }): Promise<CurriculumObjective[]> {
-    return [...this.objectives.values()].filter((o) => {
+    return [...this.store.objectives.values()].filter((o) => {
       if (params.lessonId && o.lessonId === params.lessonId) return true;
       if (params.unitId && o.unitId === params.unitId) return true;
       return false;
@@ -261,26 +273,26 @@ class InMemoryCurriculumRepository implements CurriculumRepository {
       createdAt: this.ts(),
       updatedAt: this.ts(),
     };
-    this.objectives.set(record.id, record);
+    this.store.objectives.set(record.id, record);
     return record;
   }
 
   async updateObjective(id: string, patch: Partial<CreateCurriculumObjectiveInput>): Promise<CurriculumObjective> {
-    const existing = this.objectives.get(id);
+    const existing = this.store.objectives.get(id);
     if (!existing) throw new Error(`CurriculumObjective not found: ${id}`);
     const updated = { ...existing, ...patch, updatedAt: this.ts() };
-    this.objectives.set(id, updated);
+    this.store.objectives.set(id, updated);
     return updated;
   }
 
   async deleteObjective(id: string): Promise<void> {
-    this.objectives.delete(id);
+    this.store.objectives.delete(id);
   }
 
   // --- Tree ---
 
   async getTree(sourceId: string): Promise<CurriculumTree | null> {
-    const source = this.sources.get(sourceId);
+    const source = this.store.sources.get(sourceId);
     if (!source) return null;
 
     const units = await this.listUnits(sourceId);

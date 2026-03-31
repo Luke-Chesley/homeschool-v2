@@ -10,10 +10,8 @@ import Link from "next/link";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CurriculumSourceCard } from "@/components/curriculum/CurriculumSourceCard";
+import { DEMO_HOUSEHOLD_ID } from "@/lib/curriculum/constants";
 import { listCurriculumSources } from "@/lib/curriculum/service";
-
-// Demo household ID — replaced by session lookup once auth is integrated
-const DEMO_HOUSEHOLD_ID = "household-demo";
 
 export const metadata = {
   title: "Curriculum Library",

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { BookOpen, Upload, Sparkles } from "lucide-react";
+import { BookOpen, FileJson2, Upload, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -34,6 +34,12 @@ const entryPoints: {
     label: "AI draft",
     description: "Describe your course and let the AI generate a skeleton.",
     Icon: Sparkles,
+  },
+  {
+    kind: "external",
+    label: "Load curriculum.json",
+    description: "Import the local curriculum.json file from the project root.",
+    Icon: FileJson2,
   },
 ];
 
@@ -180,20 +186,66 @@ function AiDraftForm({ onCancel }: { onCancel: () => void }) {
   );
 }
 
+function LocalJsonImportForm({
+  householdId,
+  onSubmit,
+  onCancel,
+}: {
+  householdId: string;
+  onSubmit: (data: { householdId: string; importPreset: "local_curriculum_json" }) => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="rounded-xl border border-border/70 bg-muted/30 p-4">
+        <p className="text-sm font-medium">Import local curriculum file</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          This loads <code>curriculum.json</code> from the project root and creates a curriculum
+          source from its contents.
+        </p>
+      </div>
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
+          Back
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          onClick={() =>
+            onSubmit({
+              householdId,
+              importPreset: "local_curriculum_json",
+            })
+          }
+        >
+          Load curriculum.json
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Main modal content
 // ---------------------------------------------------------------------------
 
 export interface AddSourceModalContentProps {
   householdId: string;
-  onCreated: (data: {
-    title: string;
-    description: string;
-    kind: CurriculumSourceKind;
-    subjects: string[];
-    gradeLevels: string[];
-    householdId: string;
-  }) => void;
+  onCreated: (
+    data:
+      | {
+          title: string;
+          description: string;
+          kind: CurriculumSourceKind;
+          subjects: string[];
+          gradeLevels: string[];
+          householdId: string;
+        }
+      | {
+          householdId: string;
+          importPreset: "local_curriculum_json";
+        }
+  ) => void;
   onClose: () => void;
 }
 
@@ -221,6 +273,16 @@ export function AddSourceModalContent({
 
   if (selectedKind === "ai_draft") {
     return <AiDraftForm onCancel={() => setSelectedKind(null)} />;
+  }
+
+  if (selectedKind === "external") {
+    return (
+      <LocalJsonImportForm
+        householdId={householdId}
+        onCancel={() => setSelectedKind(null)}
+        onSubmit={onCreated}
+      />
+    );
   }
 
   return (

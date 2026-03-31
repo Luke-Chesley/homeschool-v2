@@ -12,6 +12,7 @@
  */
 
 import { getCurriculumRepository } from "./mock-repository";
+import { loadLocalCurriculumJson } from "./local-json-import";
 import type {
   CurriculumSource,
   CurriculumTree,
@@ -43,6 +44,52 @@ export async function createCurriculumSource(input: CreateCurriculumSourceInput)
   if (source.kind === "upload" && source.storagePath) {
     await triggerIndexing(source.id);
   }
+  return source;
+}
+
+export async function importCurriculumSourceFromLocalJson(householdId: string) {
+  const imported = await loadLocalCurriculumJson();
+  const source = await repo().createSource({
+    householdId,
+    title: imported.title,
+    description: imported.description,
+    kind: imported.kind,
+    academicYear: imported.academicYear,
+    subjects: imported.subjects,
+    gradeLevels: imported.gradeLevels,
+  });
+
+  for (const [unitIndex, unitDraft] of imported.units.entries()) {
+    const unit = await repo().createUnit({
+      sourceId: source.id,
+      title: unitDraft.title,
+      description: undefined,
+      sequence: unitIndex,
+      estimatedWeeks: undefined,
+    });
+
+    for (const [lessonIndex, lessonDraft] of unitDraft.lessons.entries()) {
+      const lesson = await repo().createLesson({
+        unitId: unit.id,
+        title: lessonDraft.title,
+        description: undefined,
+        sequence: lessonIndex,
+        estimatedMinutes: undefined,
+        materials: [],
+      });
+
+      for (const objectiveText of lessonDraft.objectives) {
+        await repo().createObjective({
+          lessonId: lesson.id,
+          unitId: undefined,
+          description: objectiveText,
+          standardIds: [],
+          customGoalIds: [],
+        });
+      }
+    }
+  }
+
   return source;
 }
 
