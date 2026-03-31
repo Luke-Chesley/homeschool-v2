@@ -13,6 +13,10 @@
  */
 
 import type { AiTaskName } from "@/lib/ai/types";
+import {
+  LESSON_DRAFT_PROMPT_VERSION,
+  LESSON_DRAFT_SYSTEM_PROMPT,
+} from "@/lib/prompts/lesson-draft";
 
 // ---------------------------------------------------------------------------
 // Prompt record type
@@ -43,18 +47,8 @@ You have access to the household's curriculum context, recent learner outcomes, 
   },
   {
     task: "lesson.draft",
-    version: "1.0.0",
-    systemPrompt: `You are an expert curriculum designer helping homeschool families plan effective lessons.
-
-When drafting lessons, always include:
-- Clear learning objectives tied to the provided standards
-- Estimated time for each section
-- Materials needed
-- A logical progression from warm-up through independent practice
-- Suggestions for how to adapt for different learning styles
-
-Output a structured lesson plan in Markdown format.`,
-    userTemplate: "Draft a lesson for {topic} targeting grade {gradeLevel}. Standards: {standardIds}. Duration: {estimatedMinutes} minutes.",
+    version: LESSON_DRAFT_PROMPT_VERSION,
+    systemPrompt: LESSON_DRAFT_SYSTEM_PROMPT,
     notes: "Lesson draft generation prompt",
   },
   {
