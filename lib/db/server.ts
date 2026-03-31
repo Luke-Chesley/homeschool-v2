@@ -4,7 +4,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
 import * as schema from "@/lib/db/schema";
-import { getServerEnv } from "@/lib/env/server";
+import { getDatabaseEnv } from "@/lib/env/server";
 
 declare global {
   var __homeschoolSql: ReturnType<typeof postgres> | undefined;
@@ -13,7 +13,7 @@ declare global {
 
 function getSqlClient() {
   if (!globalThis.__homeschoolSql) {
-    globalThis.__homeschoolSql = postgres(getServerEnv().DATABASE_URL, {
+    globalThis.__homeschoolSql = postgres(getDatabaseEnv().DATABASE_URL, {
       prepare: false,
       max: 1,
     });

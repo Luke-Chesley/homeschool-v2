@@ -4,12 +4,21 @@ import { z } from "zod";
 
 import { formatEnvIssues, publicEnvSchema } from "@/lib/env/shared";
 
+const optionalNonEmptyString = z.preprocess((value) => {
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length === 0 ? undefined : trimmed;
+}, z.string().min(1).optional());
+
 const serverEnvSchema = publicEnvSchema.extend({
   SUPABASE_PROJECT_REF: z.string().min(1).default("local"),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   DATABASE_URL: z.string().min(1),
-  OPENAI_API_KEY: z.string().min(1).optional(),
-  ANTHROPIC_API_KEY: z.string().min(1).optional(),
+  OPENAI_API_KEY: optionalNonEmptyString,
+  ANTHROPIC_API_KEY: optionalNonEmptyString,
   INNGEST_BASE_URL: z.string().url().default("http://127.0.0.1:8288"),
   INNGEST_EVENT_KEY: z.string().min(1),
   INNGEST_SIGNING_KEY: z.string().min(1),
@@ -32,4 +41,27 @@ export function getServerEnv() {
 
   cachedEnv = parsed.data;
   return cachedEnv;
+}
+
+const databaseEnvSchema = z.object({
+  DATABASE_URL: z.string().min(1),
+});
+
+let cachedDatabaseEnv: z.infer<typeof databaseEnvSchema> | undefined;
+
+export function getDatabaseEnv() {
+  if (cachedDatabaseEnv) {
+    return cachedDatabaseEnv;
+  }
+
+  const parsed = databaseEnvSchema.safeParse({
+    DATABASE_URL: process.env.DATABASE_URL,
+  });
+
+  if (!parsed.success) {
+    throw new Error(`Invalid database environment:\n${formatEnvIssues(parsed.error.issues)}`);
+  }
+
+  cachedDatabaseEnv = parsed.data;
+  return cachedDatabaseEnv;
 }
