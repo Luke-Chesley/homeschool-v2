@@ -51,7 +51,7 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
       <PlanningShell
         currentView="today"
         title={`${session.activeLearner.displayName}'s daily workspace`}
-        description="Import a curriculum source before opening the daily workspace."
+        description="Import a curriculum source to turn today into a real route."
       >
         <Card>
           <CardHeader>
@@ -110,7 +110,7 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
     <PlanningShell
       currentView="today"
       title={`${workspace.learner.name}'s daily workspace`}
-      description={`Active source: ${sourceTitle}. This surface keeps execution, prep, and tracking handoff on the same screen.`}
+      description={`Active source: ${sourceTitle}. Keep today's route visible and generate a lesson plan when you're ready.`}
     >
       <TodayWorkspaceView workspace={workspace} sourceId={selectedSourceId} />
     </PlanningShell>
