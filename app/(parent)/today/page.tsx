@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
+import { CalendarClock, CalendarDays, LayoutDashboard, Sparkles } from "lucide-react";
 
 import { PlanningShell } from "@/components/planning/planning-shell";
 import { TodayWorkspaceView } from "@/components/planning/today-workspace-view";
@@ -7,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireAppSession } from "@/lib/app-session/server";
 import { listCurriculumSources } from "@/lib/curriculum/service";
+import { toWeekStartDate } from "@/lib/curriculum-routing";
 import {
   completeTodayPlanItem,
   getTodayWorkspace,
@@ -92,6 +94,35 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
   }
 
   const todayDate = date ?? new Date().toISOString().slice(0, 10);
+  const todayWeekStartDate = toWeekStartDate(todayDate);
+  const navItems = selectedSourceId
+    ? [
+        {
+          href: `/planning/month?sourceId=${selectedSourceId}&month=${encodeURIComponent(todayDate)}`,
+          label: "Month planning",
+          view: "month" as const,
+          icon: CalendarDays,
+        },
+        {
+          href: `/planning?sourceId=${selectedSourceId}&weekStartDate=${encodeURIComponent(todayWeekStartDate)}`,
+          label: "Weekly planning",
+          view: "week" as const,
+          icon: CalendarClock,
+        },
+        {
+          href: `/planning/day/${todayWeekStartDate}`,
+          label: "Daily plan",
+          view: "day" as const,
+          icon: LayoutDashboard,
+        },
+        {
+          href: `/today?date=${encodeURIComponent(todayDate)}${selectedSourceId ? `&sourceId=${encodeURIComponent(selectedSourceId)}` : ""}`,
+          label: "Today workspace",
+          view: "today" as const,
+          icon: Sparkles,
+        },
+      ]
+    : undefined;
   const workspaceResult = await getTodayWorkspace({
     organizationId: session.organization.id,
     learnerId: session.activeLearner.id,
@@ -110,7 +141,8 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
     <PlanningShell
       currentView="today"
       title={`${workspace.learner.name}'s daily workspace`}
-      description={`Active source: ${sourceTitle}. Keep today's route visible and generate a lesson plan when you're ready.`}
+      description={`Active source: ${sourceTitle}. This surface keeps execution, prep, and tracking handoff on the same screen.`}
+      navItems={navItems}
     >
       <TodayWorkspaceView workspace={workspace} sourceId={selectedSourceId} />
     </PlanningShell>

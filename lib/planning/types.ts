@@ -1,3 +1,5 @@
+import type { WeeklyRouteBoardItem } from "@/lib/curriculum-routing/types";
+
 export type EnergyLevel = "low" | "steady" | "high";
 
 export type PlanItemKind = "lesson" | "practice" | "project" | "review";
@@ -141,6 +143,43 @@ export interface WeeklyPlan {
   standardsFocus: string[];
   goalsFocus: string[];
   summary: WeeklyPlanSummary;
+}
+
+export interface MonthlyPlanDay {
+  date: string;
+  label: string;
+  items: WeeklyRouteBoardItem[];
+  scheduledMinutes: number;
+}
+
+export interface MonthlyPlanWeek {
+  weekStartDate: string;
+  weekLabel: string;
+  days: MonthlyPlanDay[];
+  unassignedItems: WeeklyRouteBoardItem[];
+  scheduledMinutes: number;
+  scheduledCount: number;
+  overrideCount: number;
+  conflictCount: number;
+}
+
+export interface MonthlyPlanSummary {
+  weeksInView: number;
+  scheduledMinutes: number;
+  scheduledCount: number;
+  unassignedCount: number;
+  overrideCount: number;
+  conflictCount: number;
+}
+
+export interface MonthlyPlan {
+  monthStartDate: string;
+  monthLabel: string;
+  learner: LearnerSummary;
+  sourceId: string;
+  sourceTitle: string;
+  weeks: MonthlyPlanWeek[];
+  summary: MonthlyPlanSummary;
 }
 
 export interface RecoveryPreview {

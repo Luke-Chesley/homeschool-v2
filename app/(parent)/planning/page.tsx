@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { CalendarClock, CalendarDays, LayoutDashboard, Sparkles } from "lucide-react";
 
 import { CurriculumSourceSelector } from "@/components/curriculum/curriculum-source-selector";
 import { WeeklyRouteBoard } from "@/components/planning/weekly-route-board";
+import { PlanningShell } from "@/components/planning/planning-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireAppSession } from "@/lib/app-session/server";
@@ -54,15 +56,40 @@ export default async function PlanningPage({ searchParams }: PlanningPageProps) 
     weekStartDate: params.weekStartDate,
   });
 
-  return (
-    <main className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 px-6 py-8 sm:px-8 lg:px-10">
-      <header>
-        <h1 className="font-serif text-4xl leading-tight tracking-tight">Planning</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Weekly route board for {session.activeLearner.displayName}. Drag items to reorder or assign days.
-        </p>
-      </header>
+  const navItems = [
+    {
+      href: `/planning/month?sourceId=${selectedSourceId}&month=${encodeURIComponent(weekStartDate)}`,
+      label: "Month planning",
+      view: "month" as const,
+      icon: CalendarDays,
+    },
+    {
+      href: `/planning?sourceId=${selectedSourceId}&weekStartDate=${encodeURIComponent(weekStartDate)}`,
+      label: "Weekly planning",
+      view: "week" as const,
+      icon: CalendarClock,
+    },
+    {
+      href: `/planning/day/${weekStartDate}`,
+      label: "Daily plan",
+      view: "day" as const,
+      icon: LayoutDashboard,
+    },
+    {
+      href: `/today?sourceId=${selectedSourceId}`,
+      label: "Today workspace",
+      view: "today" as const,
+      icon: Sparkles,
+    },
+  ];
 
+  return (
+    <PlanningShell
+      currentView="week"
+      title={`Weekly planning for ${session.activeLearner.displayName}`}
+      description="Weekly route board for the active learner. Drag items to reorder or assign days."
+      navItems={navItems}
+    >
       <div className="grid gap-6 2xl:grid-cols-[320px_minmax(0,1fr)]">
         <CurriculumSourceSelector
           sources={sources}
@@ -72,6 +99,6 @@ export default async function PlanningPage({ searchParams }: PlanningPageProps) 
         />
         <WeeklyRouteBoard initialBoard={board} weekStartDate={weekStartDate} />
       </div>
-    </main>
+    </PlanningShell>
   );
 }

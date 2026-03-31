@@ -381,6 +381,7 @@ async function buildRouteBoard(route: WeeklyRouteRecord): Promise<WeeklyRouteBoa
       skillNodeId: item.skillNodeId,
       skillTitle: node.title,
       skillPath: node.normalizedPath,
+      estimatedMinutes: node.estimatedMinutes ?? null,
       canonicalPosition,
       recommendedPosition: item.recommendedPosition,
       currentPosition: item.currentPosition,
