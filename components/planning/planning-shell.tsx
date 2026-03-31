@@ -1,19 +1,41 @@
 import Link from "next/link";
-import { CalendarClock, LayoutDashboard, Sparkles } from "lucide-react";
+import {
+  CalendarClock,
+  CalendarDays,
+  LayoutDashboard,
+  Sparkles,
+  type LucideIcon,
+} from "lucide-react";
 import type { ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
+type PlanningView = "month" | "week" | "day" | "today";
+
+interface PlanningNavItem {
+  href: string;
+  label: string;
+  view: PlanningView;
+  icon: LucideIcon;
+}
+
 interface PlanningShellProps {
-  currentView: "week" | "day" | "today";
+  currentView: PlanningView;
   title: string;
   description: string;
   children: ReactNode;
+  navItems?: PlanningNavItem[];
 }
 
-const navItems = [
+const defaultNavItems = [
+  {
+    href: "/planning/month",
+    label: "Month planning",
+    view: "month" as const,
+    icon: CalendarDays,
+  },
   {
     href: "/planning",
     label: "Weekly planning",
@@ -39,7 +61,10 @@ export function PlanningShell({
   title,
   description,
   children,
+  navItems: navItemsOverride,
 }: PlanningShellProps) {
+  const resolvedNavItems = navItemsOverride ?? defaultNavItems;
+
   return (
     <main className="mx-auto flex min-h-full w-full max-w-7xl flex-col px-6 pb-16 pt-8 sm:px-8 lg:px-10">
       <section className="relative overflow-hidden rounded-[2rem] border border-border/70 bg-card/85 px-6 py-10 shadow-[var(--shadow-hero)] backdrop-blur sm:px-8 lg:px-10">
@@ -59,11 +84,12 @@ export function PlanningShell({
           </div>
 
           <Card className="w-full max-w-5xl border-primary/15 bg-background/88">
-            <CardContent className="grid gap-3 p-4 md:grid-cols-3">
-              {navItems.map(({ href, label, view, icon: Icon }) => (
+            <CardContent className="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-4">
+              {resolvedNavItems.map(({ href, label, view, icon: Icon }) => (
                 <Link
                   key={href}
                   href={href}
+                  aria-current={currentView === view ? "page" : undefined}
                   className={cn(
                     "group flex min-h-28 w-full flex-col items-start justify-between gap-6 rounded-[1.75rem] border px-5 py-5 text-left transition-colors",
                     currentView === view

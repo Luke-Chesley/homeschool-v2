@@ -61,6 +61,7 @@ export const WeeklyRouteBoardItemSchema = z.object({
   skillNodeId: z.string(),
   skillTitle: z.string(),
   skillPath: z.string(),
+  estimatedMinutes: z.number().int().nonnegative().nullable(),
   canonicalPosition: z.number().int().nonnegative(),
   recommendedPosition: z.number().int().nonnegative(),
   currentPosition: z.number().int().nonnegative(),

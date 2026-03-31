@@ -10,6 +10,7 @@ interface CurriculumSourceSelectorProps {
   selectedSourceId: string;
   basePath?: string;
   weekStartDate?: string;
+  month?: string;
 }
 
 export function CurriculumSourceSelector({
@@ -17,6 +18,7 @@ export function CurriculumSourceSelector({
   selectedSourceId,
   basePath = "/curriculum",
   weekStartDate,
+  month,
 }: CurriculumSourceSelectorProps) {
   return (
     <Card>
@@ -26,9 +28,14 @@ export function CurriculumSourceSelector({
       <CardContent className="space-y-2">
         {sources.map((source) => {
           const selected = source.id === selectedSourceId;
-          const href = weekStartDate
-            ? `${basePath}?sourceId=${source.id}&weekStartDate=${weekStartDate}`
-            : `${basePath}?sourceId=${source.id}`;
+          const params = new URLSearchParams({ sourceId: source.id });
+          if (weekStartDate) {
+            params.set("weekStartDate", weekStartDate);
+          }
+          if (month) {
+            params.set("month", month);
+          }
+          const href = `${basePath}?${params.toString()}`;
 
           return (
             <Link
