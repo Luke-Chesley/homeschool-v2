@@ -23,6 +23,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const session = await getAppSession();
   const body = await req.json().catch(() => null);
   const parsed = SetSessionSchema.safeParse(body);
 
@@ -30,7 +31,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid input." }, { status: 400 });
   }
 
-  const learner = await getLearnerById(parsed.data.learnerId);
+  const learner = await getLearnerById(parsed.data.learnerId, {
+    organizationId: session.organization.id,
+  });
   if (!learner) {
     return NextResponse.json({ error: "Learner not found." }, { status: 404 });
   }

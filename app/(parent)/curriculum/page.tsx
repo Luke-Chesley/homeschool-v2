@@ -36,7 +36,7 @@ export default async function CurriculumPage({ searchParams }: CurriculumPagePro
     params.sourceId && sources.some((source) => source.id === params.sourceId)
       ? params.sourceId
       : sources[0].id;
-  const tree = await getCurriculumTree(selectedSourceId);
+  const tree = await getCurriculumTree(selectedSourceId, session.organization.id);
 
   if (!tree) {
     return (

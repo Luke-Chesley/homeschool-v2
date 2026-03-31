@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CurriculumTree } from "@/components/curriculum/CurriculumTree";
+import { requireAppSession } from "@/lib/app-session/server";
 import { getCurriculumTree } from "@/lib/curriculum/service";
 
 interface Props {
@@ -14,8 +15,9 @@ interface Props {
 }
 
 export default async function CurriculumSourcePage({ params }: Props) {
+  const session = await requireAppSession();
   const { sourceId } = await params;
-  const tree = await getCurriculumTree(sourceId);
+  const tree = await getCurriculumTree(sourceId, session.organization.id);
 
   if (!tree) notFound();
 

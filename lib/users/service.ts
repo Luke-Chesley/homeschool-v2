@@ -4,8 +4,8 @@ import { and, asc, eq } from "drizzle-orm";
 
 import { FIXTURE_SESSIONS } from "@/lib/activities/fixtures";
 import { createRepositories } from "@/lib/db";
-import { getDb } from "@/lib/db/server";
-import { interactiveActivities, organizations } from "@/lib/db/schema";
+import { ensureDatabaseReady, getDb } from "@/lib/db/server";
+import { interactiveActivities, learners, organizations } from "@/lib/db/schema";
 
 export type AppLearner = {
   id: string;
@@ -65,6 +65,7 @@ function mapLearnerRecord(record: {
 }
 
 export async function ensureAppOrganization() {
+  await ensureDatabaseReady();
   const db = getDb();
   const repos = createRepositories(db);
   const existing = await db.query.organizations.findFirst({
@@ -87,6 +88,7 @@ export async function ensureAppOrganization() {
 }
 
 export async function listLearnersForOrganization(organizationId: string): Promise<AppLearner[]> {
+  await ensureDatabaseReady();
   const repos = createRepositories(getDb());
   const learners = await repos.learners.listByOrganization(organizationId);
 
@@ -130,6 +132,7 @@ export async function createLearnerForOrganization(
   organizationId: string,
   input: { displayName: string },
 ) {
+  await ensureDatabaseReady();
   const normalizedDisplayName = input.displayName.trim();
   if (!normalizedDisplayName) {
     throw new Error("Display name is required.");
@@ -155,6 +158,7 @@ export async function getWorkspaceContext(options?: {
   organizationId?: string | null;
   learnerId?: string | null;
 }): Promise<AppWorkspace> {
+  await ensureDatabaseReady();
   const organization =
     options?.organizationId != null
       ? await getDb().query.organizations.findFirst({
@@ -186,13 +190,22 @@ export async function getWorkspaceContext(options?: {
   };
 }
 
-export async function getLearnerById(learnerId: string) {
-  const repos = createRepositories(getDb());
-  const learner = await repos.learners.findLearnerById(learnerId);
+export async function getLearnerById(
+  learnerId: string,
+  options?: { organizationId?: string | null },
+) {
+  await ensureDatabaseReady();
+  const learner = await getDb().query.learners.findFirst({
+    where: and(
+      eq(learners.id, learnerId),
+      options?.organizationId ? eq(learners.organizationId, options.organizationId) : undefined,
+    ),
+  });
   return learner ? mapLearnerRecord(learner) : null;
 }
 
 export async function createDefaultOrganizationIfNeeded(name: string) {
+  await ensureDatabaseReady();
   const db = getDb();
   const existing = await db.query.organizations.findFirst({
     where: eq(organizations.slug, slugify(name)),

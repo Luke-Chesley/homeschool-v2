@@ -61,26 +61,44 @@ export async function POST(req: NextRequest) {
 
   const store = getCopilotStore();
   let activeSessionId = sessionId;
+  const scopedContext: CopilotContext = {
+    learnerId: appSession.activeLearner.id,
+    learnerName: appSession.activeLearner.displayName,
+    curriculumSourceId: context?.curriculumSourceId,
+    lessonId: context?.lessonId,
+    standardIds: context?.standardIds ?? [],
+    goalIds: context?.goalIds ?? [],
+    recentOutcomes: context?.recentOutcomes ?? [],
+  };
+
+  if (activeSessionId) {
+    const existing = await store.getSession(activeSessionId, {
+      householdId: appSession.organization.id,
+      learnerId: appSession.activeLearner.id,
+    });
+    if (!existing) {
+      return new Response(JSON.stringify({ error: "Session not found." }), {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+  }
+
   if (!activeSessionId) {
     const session = await store.createSession(
       appSession.organization.id,
       messages.find((m) => m.role === "user")?.content?.slice(0, 60) ?? "New conversation",
-      {
-        learnerId: context?.learnerId ?? appSession.activeLearner.id,
-        learnerName: context?.learnerName ?? appSession.activeLearner.displayName,
-        curriculumSourceId: context?.curriculumSourceId,
-        lessonId: context?.lessonId,
-        standardIds: context?.standardIds ?? [],
-        goalIds: context?.goalIds ?? [],
-        recentOutcomes: context?.recentOutcomes ?? [],
-      }
+      scopedContext,
     );
     activeSessionId = session.id;
   }
 
   const lastUserMessage = [...messages].reverse().find((m) => m.role === "user");
   if (lastUserMessage) {
-    await store.appendMessage(activeSessionId, lastUserMessage as ChatMessage);
+    await store.appendMessage(activeSessionId, lastUserMessage as ChatMessage, {
+      householdId: appSession.organization.id,
+      learnerId: appSession.activeLearner.id,
+    });
   }
 
   const encoder = new TextEncoder();
@@ -95,7 +113,7 @@ export async function POST(req: NextRequest) {
 
         for await (const delta of streamChatAnswer({
           messages: messages as ChatMessage[],
-          context: context as CopilotContext | undefined,
+          context: scopedContext,
         })) {
           fullResponse += delta;
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ delta })}\n\n`));
@@ -105,6 +123,9 @@ export async function POST(req: NextRequest) {
           role: "assistant",
           content: fullResponse,
           createdAt: new Date().toISOString(),
+        }, {
+          householdId: appSession.organization.id,
+          learnerId: appSession.activeLearner.id,
         });
 
         controller.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true })}\n\n`));

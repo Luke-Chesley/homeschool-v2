@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 import { requireAppSession } from "@/lib/app-session/server";
+import { getCurriculumSource } from "@/lib/curriculum/service";
 import { generateWeeklyRoute, getWeeklyRouteBoard, toWeekStartDate } from "@/lib/curriculum-routing";
 
 const WeeklyRouteQuerySchema = z.object({
@@ -30,6 +31,11 @@ export async function GET(req: NextRequest) {
     }
 
     const weekStartDate = toWeekStartDate(parsed.data.weekStartDate);
+    const source = await getCurriculumSource(parsed.data.sourceId, session.organization.id);
+    if (!source) {
+      return NextResponse.json({ error: "Curriculum source not found." }, { status: 404 });
+    }
+
     const board = await getWeeklyRouteBoard({
       learnerId: session.activeLearner.id,
       sourceId: parsed.data.sourceId,
@@ -57,6 +63,11 @@ export async function POST(req: NextRequest) {
         { error: "Invalid request body", issues: parsed.error.flatten() },
         { status: 400 },
       );
+    }
+
+    const source = await getCurriculumSource(parsed.data.sourceId, session.organization.id);
+    if (!source) {
+      return NextResponse.json({ error: "Curriculum source not found." }, { status: 404 });
     }
 
     const board = await generateWeeklyRoute({

@@ -275,9 +275,10 @@ export async function listCurriculumSources(householdId: string): Promise<Curric
   return sources.map(mapSource);
 }
 
-export async function getCurriculumSource(id: string) {
+export async function getCurriculumSource(id: string, householdId?: string) {
   const source = await getDb().query.curriculumSources.findFirst({
-    where: (table, { eq }) => eq(table.id, id),
+    where: (table, { and, eq }) =>
+      and(eq(table.id, id), householdId ? eq(table.organizationId, householdId) : undefined),
   });
 
   return source ? mapSource(source) : null;
@@ -377,8 +378,11 @@ export async function listCurriculumNodes(sourceId: string, options?: { includeI
   return records.map(mapNode);
 }
 
-export async function getCurriculumTree(sourceId: string): Promise<CurriculumTree | null> {
-  const source = await getCurriculumSource(sourceId);
+export async function getCurriculumTree(
+  sourceId: string,
+  householdId?: string,
+): Promise<CurriculumTree | null> {
+  const source = await getCurriculumSource(sourceId, householdId);
   if (!source) return null;
 
   const nodes = await listCurriculumNodes(sourceId);
