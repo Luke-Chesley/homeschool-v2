@@ -35,7 +35,7 @@ const highlights = [
 export default function HomePage() {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-6 pb-20 pt-8 sm:px-8 lg:px-10">
-      <section className="relative overflow-hidden rounded-[2rem] border border-border/70 bg-card/80 px-6 py-12 shadow-[0_36px_120px_-50px_rgba(34,42,41,0.45)] backdrop-blur sm:px-10 lg:px-14 lg:py-16">
+      <section className="relative overflow-hidden rounded-[2rem] border border-border/70 bg-card/80 px-6 py-12 shadow-[var(--shadow-hero)] backdrop-blur sm:px-10 lg:px-14 lg:py-16">
         <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent" />
         <div className="absolute right-0 top-0 size-56 translate-x-1/3 -translate-y-1/3 rounded-full bg-primary/10 blur-3xl" />
         <div className="absolute bottom-0 left-0 size-64 -translate-x-1/3 translate-y-1/3 rounded-full bg-secondary/18 blur-3xl" />

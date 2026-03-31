@@ -30,7 +30,7 @@ export function ParentNav({ className, onNavigate }: ParentNavProps) {
         const classes = cn(
           "group flex items-start gap-3 rounded-[1.35rem] border px-4 py-3 text-left transition-colors",
           active
-            ? "border-primary/25 bg-primary/10 text-foreground shadow-[0_16px_40px_-28px_rgba(176,93,45,0.6)]"
+            ? "border-primary/25 bg-primary/10 text-foreground shadow-[var(--shadow-active)]"
             : "border-transparent bg-transparent text-muted-foreground hover:border-border/70 hover:bg-card/70 hover:text-foreground",
           item.disabled && "cursor-not-allowed opacity-70",
         );

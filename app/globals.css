@@ -22,6 +22,44 @@
   --input: oklch(0.88 0.02 95.4);
   --ring: oklch(0.61 0.13 44.3);
   --radius: 1.25rem;
+  --selection: color-mix(in srgb, var(--primary) 28%, white);
+  --page-glow:
+    radial-gradient(circle at top, color-mix(in srgb, var(--primary) 24%, transparent) 0%, transparent 30%);
+  --page-gradient: linear-gradient(180deg, #fcf8f1 0%, color-mix(in srgb, var(--background) 88%, white) 100%);
+  --shadow-card: 0 24px 80px -32px rgba(36, 46, 44, 0.35);
+  --shadow-hero: 0 36px 120px -54px rgba(34, 42, 41, 0.45);
+  --shadow-active: 0 16px 40px -28px rgba(176, 93, 45, 0.6);
+}
+
+.dark,
+[data-theme="dark"] {
+  --background: oklch(0.206 0.026 224.1);
+  --foreground: oklch(0.955 0.012 95.4);
+  --card: oklch(0.255 0.022 224.5 / 0.9);
+  --card-foreground: oklch(0.955 0.012 95.4);
+  --popover: oklch(0.235 0.022 224.8);
+  --popover-foreground: oklch(0.955 0.012 95.4);
+  --primary: oklch(0.76 0.118 48.5);
+  --primary-foreground: oklch(0.205 0.025 224.1);
+  --secondary: oklch(0.53 0.075 178.2);
+  --secondary-foreground: oklch(0.97 0.01 95.4);
+  --muted: oklch(0.292 0.02 223.5);
+  --muted-foreground: oklch(0.78 0.018 205.2);
+  --accent: oklch(0.41 0.055 187.2);
+  --accent-foreground: oklch(0.96 0.01 95.4);
+  --destructive: oklch(0.69 0.18 25.8);
+  --destructive-foreground: oklch(0.97 0.01 95.4);
+  --border: oklch(0.37 0.022 223.7);
+  --input: oklch(0.37 0.022 223.7);
+  --ring: oklch(0.76 0.118 48.5);
+  --selection: color-mix(in srgb, var(--primary) 34%, black);
+  --page-glow:
+    radial-gradient(circle at top, color-mix(in srgb, var(--primary) 18%, transparent) 0%, transparent 32%);
+  --page-gradient:
+    linear-gradient(180deg, oklch(0.238 0.024 224.3) 0%, color-mix(in srgb, var(--background) 84%, black) 100%);
+  --shadow-card: 0 24px 80px -36px rgba(2, 8, 23, 0.78);
+  --shadow-hero: 0 36px 120px -54px rgba(2, 8, 23, 0.82);
+  --shadow-active: 0 18px 44px -28px rgba(247, 162, 77, 0.45);
 }
 
 @theme inline {
@@ -63,13 +101,11 @@
 
   body {
     @apply bg-background text-foreground font-sans antialiased;
-    background-image:
-      radial-gradient(circle at top, color-mix(in srgb, var(--primary) 24%, transparent) 0%, transparent 30%),
-      linear-gradient(180deg, #fcf8f1 0%, color-mix(in srgb, var(--background) 88%, white) 100%);
+    background-image: var(--page-glow), var(--page-gradient);
     min-height: 100vh;
   }
 
   ::selection {
-    background: color-mix(in srgb, var(--primary) 28%, white);
+    background: var(--selection);
   }
 }
