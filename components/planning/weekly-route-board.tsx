@@ -16,6 +16,7 @@ import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } 
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical } from "lucide-react";
 
+import { buttonVariants } from "@/components/ui/button";
 import type { WeeklyRouteBoard, WeeklyRouteBoardItem } from "@/lib/curriculum-routing";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,6 +29,14 @@ interface WeeklyRouteBoardProps {
   initialBoard: WeeklyRouteBoard;
   weekStartDate: string;
 }
+
+const STATE_OPTIONS: Array<{ value: WeeklyRouteBoardItem["state"]; label: string }> = [
+  { value: "queued", label: "Queued" },
+  { value: "scheduled", label: "Scheduled" },
+  { value: "in_progress", label: "In progress" },
+  { value: "done", label: "Done" },
+  { value: "removed", label: "Removed" },
+];
 
 function parseDateOrThrow(value: string) {
   const parsed = new Date(`${value}T12:00:00.000Z`);
@@ -94,9 +103,13 @@ function findColumnForId(id: string, columns: ColumnsState) {
 function SortableRouteItem({
   item,
   conflicted,
+  isSaving,
+  onChangeState,
 }: {
   item: WeeklyRouteBoardItem;
   conflicted: boolean;
+  isSaving: boolean;
+  onChangeState: (itemId: string, state: WeeklyRouteBoardItem["state"]) => Promise<void>;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.id,
@@ -118,10 +131,30 @@ function SortableRouteItem({
         <div className="min-w-0 flex-1 space-y-2">
           <p className="text-sm font-semibold leading-5 break-words">{item.skillTitle}</p>
           <p className="truncate text-xs text-muted-foreground">{item.skillPath}</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[10px] font-semibold tracking-[0.16em] text-muted-foreground uppercase">
+              State
+            </span>
+            {STATE_OPTIONS.map(({ value, label }) => (
+              <button
+                key={value}
+                type="button"
+                disabled={isSaving}
+                aria-pressed={item.state === value}
+                className={cn(
+                  buttonVariants({
+                    variant: item.state === value ? "default" : "outline",
+                    size: "sm",
+                  }),
+                  "h-7 px-2.5 text-[10px] uppercase tracking-[0.14em]",
+                )}
+                onClick={() => void onChangeState(item.id, value)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
           <div className="flex flex-wrap gap-1">
-            <Badge variant="outline" className="text-[10px] uppercase tracking-[0.14em]">
-              {item.state}
-            </Badge>
             {item.manualOverrideKind !== "none" ? (
               <Badge variant="secondary" className="text-[10px] uppercase tracking-[0.14em]">
                 {item.manualOverrideKind.replace("_", " ")}
@@ -153,10 +186,14 @@ function RouteColumn({
   columnId,
   items,
   conflictedItemIds,
+  isSaving,
+  onChangeState,
 }: {
   columnId: ColumnId;
   items: WeeklyRouteBoardItem[];
   conflictedItemIds: Set<string>;
+  isSaving: boolean;
+  onChangeState: (itemId: string, state: WeeklyRouteBoardItem["state"]) => Promise<void>;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: columnId });
 
@@ -181,6 +218,8 @@ function RouteColumn({
                 key={item.id}
                 item={item}
                 conflicted={conflictedItemIds.has(item.id)}
+                isSaving={isSaving}
+                onChangeState={onChangeState}
               />
             ))
           )}
@@ -218,6 +257,50 @@ export function WeeklyRouteBoard({ initialBoard, weekStartDate }: WeeklyRouteBoa
     setBoard(nextBoard);
     columnsRef.current = nextColumns;
     setColumns(nextColumns);
+  };
+
+  const persistState = async (itemId: string, nextState: WeeklyRouteBoardItem["state"]) => {
+    const item = board.items.find((entry) => entry.id === itemId);
+    if (!item || item.state === nextState) {
+      return;
+    }
+
+    try {
+      setError(null);
+      setIsSaving(true);
+      snapshotRef.current = {
+        board,
+        columns: columnsRef.current,
+      };
+
+      const response = await fetch(`/api/planning/weekly-route-items/${itemId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          weeklyRouteId: board.summary.weeklyRouteId,
+          state: nextState,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to persist weekly route state update.");
+      }
+
+      const updatedBoard = (await response.json()) as WeeklyRouteBoard;
+      resetFromServerBoard(updatedBoard);
+    } catch (updateError) {
+      console.error(updateError);
+      setError("Could not save this state change. The board was restored.");
+      if (snapshotRef.current) {
+        setBoard(snapshotRef.current.board);
+        columnsRef.current = snapshotRef.current.columns;
+        setColumns(snapshotRef.current.columns);
+      }
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const persistMove = async (itemId: string, nextColumns: ColumnsState) => {
@@ -422,6 +505,8 @@ export function WeeklyRouteBoard({ initialBoard, weekStartDate }: WeeklyRouteBoa
                 columnId={columnId}
                 items={items}
                 conflictedItemIds={conflictedItemIds}
+                isSaving={isSaving}
+                onChangeState={persistState}
               />
             );
           })}
