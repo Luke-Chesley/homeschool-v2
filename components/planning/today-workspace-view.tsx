@@ -9,14 +9,49 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { formatMinutes, formatPlannerDate } from "@/lib/planning/service";
 import type { DailyWorkspace } from "@/lib/planning/types";
 
 interface TodayWorkspaceViewProps {
   workspace: DailyWorkspace;
+  sourceId?: string;
 }
 
-export function TodayWorkspaceView({ workspace }: TodayWorkspaceViewProps) {
+function formatMinutes(minutes: number) {
+  return `${minutes} min`;
+}
+
+function formatPlannerDate(date: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  }).format(new Date(`${date}T12:00:00`));
+}
+
+export function TodayWorkspaceView({ workspace, sourceId }: TodayWorkspaceViewProps) {
+  if (workspace.items.length === 0) {
+    return (
+      <Card className="border-border/70 bg-card/88">
+        <CardHeader>
+          <div className="flex flex-wrap items-center gap-3">
+            <Badge>{formatPlannerDate(workspace.date)}</Badge>
+            <Badge variant="secondary">{workspace.learner.name}</Badge>
+          </div>
+          <CardTitle>{workspace.headline}</CardTitle>
+          <CardDescription>No route items are available for this learner and source yet.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm leading-7 text-muted-foreground">
+            Import curriculum and generate a weekly route to populate today.
+          </p>
+          <Link href="/curriculum" className={buttonVariants({ variant: "default", size: "sm" })}>
+            Open curriculum
+          </Link>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_360px]">
       <div className="grid gap-6">
@@ -75,6 +110,7 @@ export function TodayWorkspaceView({ workspace }: TodayWorkspaceViewProps) {
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="secondary">{item.subject}</Badge>
                   <Badge variant="outline">{item.status.replace("_", " ")}</Badge>
+                  <Badge variant="outline">{item.sourceLabel}</Badge>
                   <Badge variant="outline">{item.lessonLabel}</Badge>
                   {item.curriculum ? (
                     <Badge variant="outline">route {item.curriculum.weeklyRouteItemId}</Badge>
@@ -112,27 +148,27 @@ export function TodayWorkspaceView({ workspace }: TodayWorkspaceViewProps) {
                 {item.curriculum ? (
                   <div className="mt-4 flex flex-wrap gap-2">
                     <Link
-                      href={`/today?date=${workspace.date}&action=complete&planItemId=${item.id}`}
+                      href={`/today?date=${workspace.date}${sourceId ? `&sourceId=${sourceId}` : ""}&action=complete&planItemId=${item.id}`}
                       className={buttonVariants({ variant: "default", size: "sm" })}
                     >
                       Mark complete
                     </Link>
                     <Link
-                      href={`/today?date=${workspace.date}&action=push_to_tomorrow&planItemId=${item.id}`}
+                      href={`/today?date=${workspace.date}${sourceId ? `&sourceId=${sourceId}` : ""}&action=push_to_tomorrow&planItemId=${item.id}`}
                       className={buttonVariants({ variant: "outline", size: "sm" })}
                     >
                       Push to tomorrow
                     </Link>
                     {workspace.alternatesByPlanItemId[item.id]?.[0] ? (
                       <Link
-                        href={`/today?date=${workspace.date}&action=swap_with_alternate&planItemId=${item.id}&alternateWeeklyRouteItemId=${workspace.alternatesByPlanItemId[item.id][0].id}`}
+                        href={`/today?date=${workspace.date}${sourceId ? `&sourceId=${sourceId}` : ""}&action=swap_with_alternate&planItemId=${item.id}&alternateWeeklyRouteItemId=${workspace.alternatesByPlanItemId[item.id][0].id}`}
                         className={buttonVariants({ variant: "outline", size: "sm" })}
                       >
                         Swap with {workspace.alternatesByPlanItemId[item.id][0].skillTitle}
                       </Link>
                     ) : null}
                     <Link
-                      href={`/today?date=${workspace.date}&action=remove_today&planItemId=${item.id}`}
+                      href={`/today?date=${workspace.date}${sourceId ? `&sourceId=${sourceId}` : ""}&action=remove_today&planItemId=${item.id}`}
                       className={buttonVariants({ variant: "ghost", size: "sm" })}
                     >
                       Remove from today
