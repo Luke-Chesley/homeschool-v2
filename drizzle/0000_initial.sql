@@ -279,7 +279,7 @@ CREATE TABLE "learner_skill_states" (
   "last_scheduled_at" timestamp with time zone,
   "completed_at" timestamp with time zone,
   "mastered_at" timestamp with time zone,
-  "last_activity_attempt_id" text REFERENCES "activity_attempts"("id") ON DELETE SET NULL,
+  "last_activity_attempt_id" text,
   "last_outcome_summary" jsonb DEFAULT '{}'::jsonb NOT NULL,
   "metadata" jsonb DEFAULT '{}'::jsonb NOT NULL,
   "created_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -489,6 +489,12 @@ CREATE TABLE "activity_attempts" (
   "created_at" timestamp with time zone DEFAULT now() NOT NULL,
   "updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
+
+ALTER TABLE "learner_skill_states"
+  ADD CONSTRAINT "learner_skill_states_last_activity_attempt_id_fkey"
+  FOREIGN KEY ("last_activity_attempt_id")
+  REFERENCES "activity_attempts"("id")
+  ON DELETE SET NULL;
 
 CREATE TABLE "progress_records" (
   "id" text PRIMARY KEY NOT NULL,
