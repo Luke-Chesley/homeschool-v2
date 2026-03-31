@@ -1,12 +1,7 @@
-/**
- * Attempt store — in-memory implementation for local development.
- *
- * Integration point: swap for a Supabase-backed repository once plan 02 is
- * merged. The interface stays the same.
- */
+import { createRepositories } from "@/lib/db";
+import { getDb } from "@/lib/db/server";
 
-import { randomUUID } from "crypto";
-import type { ActivityAttempt, AttemptAnswer, ActivityOutcome, ActivitySession } from "./types";
+import type { ActivityAttempt, AttemptAnswer, ActivityOutcome } from "./types";
 
 // ---------------------------------------------------------------------------
 // Interface
@@ -37,29 +32,14 @@ export interface AttemptStore {
   get(attemptId: string): Promise<ActivityAttempt | null>;
 }
 
-// ---------------------------------------------------------------------------
-// In-memory implementation
-// ---------------------------------------------------------------------------
-
-class InMemoryAttemptStore implements AttemptStore {
-  private attempts = new Map<string, ActivityAttempt>();
-  private sessions = new Map<string, ActivitySession>();
-
-  registerSession(session: ActivitySession) {
-    this.sessions.set(session.id, session);
-  }
-
+class DbAttemptStore implements AttemptStore {
   async findInProgress(sessionId: string, learnerId: string): Promise<ActivityAttempt | null> {
-    for (const attempt of this.attempts.values()) {
-      if (
-        attempt.sessionId === sessionId &&
-        attempt.learnerId === learnerId &&
-        attempt.status === "in_progress"
-      ) {
-        return attempt;
-      }
-    }
-    return null;
+    const attempt = await createRepositories(getDb()).activities.findInProgressAttempt(
+      sessionId,
+      learnerId,
+    );
+
+    return attempt ? toDomainAttempt(attempt) : null;
   }
 
   async create(params: {
@@ -67,17 +47,24 @@ class InMemoryAttemptStore implements AttemptStore {
     learnerId: string;
     activityId: string;
   }): Promise<ActivityAttempt> {
-    const attempt: ActivityAttempt = {
-      id: randomUUID(),
-      sessionId: params.sessionId,
-      learnerId: params.learnerId,
+    const repos = createRepositories(getDb());
+    const priorAttempts = await repos.activities.listAttemptsForActivity(params.activityId);
+    const attempt = await repos.activities.createAttempt({
       activityId: params.activityId,
-      answers: [],
+      learnerId: params.learnerId,
       status: "in_progress",
+      attemptNumber: priorAttempts.length + 1,
+      responses: {
+        answers: [],
+      },
       startedAt: new Date().toISOString(),
-    };
-    this.attempts.set(attempt.id, attempt);
-    return attempt;
+      metadata: {
+        sessionId: params.sessionId,
+        uiState: {},
+      },
+    });
+
+    return toDomainAttempt(attempt);
   }
 
   async save(
@@ -85,77 +72,121 @@ class InMemoryAttemptStore implements AttemptStore {
     answers: AttemptAnswer[],
     uiState?: Record<string, unknown>
   ): Promise<ActivityAttempt> {
-    const attempt = this.attempts.get(attemptId);
+    const repos = createRepositories(getDb());
+    const attempt = await repos.activities.getAttempt(attemptId);
     if (!attempt) throw new Error(`Attempt not found: ${attemptId}`);
-    const updated: ActivityAttempt = {
-      ...attempt,
-      answers,
-      uiState: uiState ?? attempt.uiState,
-    };
-    this.attempts.set(attemptId, updated);
-    return updated;
+
+    const updated = await repos.activities.updateAttempt(attemptId, {
+      responses: {
+        answers,
+      },
+      metadata: {
+        ...(attempt.metadata ?? {}),
+        sessionId: (attempt.metadata?.sessionId as string | undefined) ?? attempt.activityId,
+        uiState: uiState ?? ((attempt.metadata?.uiState as Record<string, unknown> | undefined) ?? {}),
+      },
+    });
+
+    return toDomainAttempt(updated);
   }
 
   async submit(attemptId: string): Promise<ActivityOutcome> {
-    const attempt = this.attempts.get(attemptId);
+    const repos = createRepositories(getDb());
+    const attempt = await repos.activities.getAttempt(attemptId);
     if (!attempt) throw new Error(`Attempt not found: ${attemptId}`);
 
     const completedAt = new Date().toISOString();
-    const submitted: ActivityAttempt = {
-      ...attempt,
+    const updated = await repos.activities.updateAttempt(attemptId, {
       status: "submitted",
       submittedAt: completedAt,
-    };
-    this.attempts.set(attemptId, submitted);
-
-    const session = this.sessions.get(attempt.sessionId);
-    const startMs = new Date(attempt.startedAt).getTime();
+      completedAt,
+      scorePercent: computeScorePercent(extractAnswers(attempt.responses)),
+      metadata: attempt.metadata ?? {},
+    });
+    const activity = await repos.activities.getActivity(attempt.activityId);
+    const metadata = (activity?.metadata ?? {}) as Record<string, unknown>;
+    const startMs = new Date(attempt.startedAt ?? updated.startedAt ?? completedAt).getTime();
     const endMs = new Date(completedAt).getTime();
-
-    // Simple score: fraction of correct answers for graded questions
-    const gradedAnswers = attempt.answers.filter((a) => a.correct !== undefined);
+    const responses = extractAnswers(updated.responses);
     const score =
-      gradedAnswers.length > 0
-        ? gradedAnswers.filter((a) => a.correct === true).length / gradedAnswers.length
-        : undefined;
+      typeof updated.scorePercent === "number" ? updated.scorePercent / 100 : undefined;
 
     const outcome: ActivityOutcome = {
       attemptId,
-      sessionId: attempt.sessionId,
-      learnerId: attempt.learnerId,
-      activityId: attempt.activityId,
-      lessonId: session?.lessonId,
+      sessionId: ((updated.metadata?.sessionId as string | undefined) ?? updated.activityId),
+      learnerId: updated.learnerId,
+      activityId: updated.activityId,
+      lessonId: (metadata.lessonId as string | undefined) ?? undefined,
       score,
       timeSpentMs: endMs - startMs,
       completedAt,
-      standardIds: session?.standardIds ?? [],
+      standardIds: Array.isArray(metadata.standardIds) ? (metadata.standardIds as string[]) : [],
     };
 
     return outcome;
   }
 
   async get(attemptId: string): Promise<ActivityAttempt | null> {
-    return this.attempts.get(attemptId) ?? null;
+    const attempt = await createRepositories(getDb()).activities.getAttempt(attemptId);
+    return attempt ? toDomainAttempt(attempt) : null;
   }
 }
 
-// ---------------------------------------------------------------------------
-// Singleton
-// ---------------------------------------------------------------------------
+function computeScorePercent(answers: AttemptAnswer[]) {
+  const gradedAnswers = answers.filter((answer) => answer.correct !== undefined);
 
-let _store: InMemoryAttemptStore | null = null;
+  if (gradedAnswers.length === 0) {
+    return null;
+  }
 
-export function getAttemptStore(): AttemptStore & {
-  registerSession: (s: ActivitySession) => void;
-} {
+  return Math.round(
+    (gradedAnswers.filter((answer) => answer.correct === true).length / gradedAnswers.length) * 100,
+  );
+}
+
+function extractAnswers(responses: unknown): AttemptAnswer[] {
+  if (
+    typeof responses === "object" &&
+    responses !== null &&
+    Array.isArray((responses as { answers?: unknown }).answers)
+  ) {
+    return (responses as { answers: AttemptAnswer[] }).answers;
+  }
+
+  return [];
+}
+
+function toDomainAttempt(attempt: {
+  id: string;
+  activityId: string;
+  learnerId: string;
+  responses: unknown;
+  status: "in_progress" | "submitted" | "graded" | "abandoned";
+  startedAt: string | null;
+  submittedAt: string | null;
+  scorePercent: number | null;
+  metadata: Record<string, unknown>;
+}) {
+  return {
+    id: attempt.id,
+    sessionId: (attempt.metadata?.sessionId as string | undefined) ?? attempt.activityId,
+    learnerId: attempt.learnerId,
+    activityId: attempt.activityId,
+    answers: extractAnswers(attempt.responses),
+    score:
+      typeof attempt.scorePercent === "number" ? Math.max(0, attempt.scorePercent) / 100 : undefined,
+    status: attempt.status === "abandoned" ? "submitted" : attempt.status,
+    startedAt: attempt.startedAt ?? new Date().toISOString(),
+    submittedAt: attempt.submittedAt ?? undefined,
+    uiState: (attempt.metadata?.uiState as Record<string, unknown> | undefined) ?? undefined,
+  } satisfies ActivityAttempt;
+}
+
+let _store: AttemptStore | null = null;
+
+export function getAttemptStore(): AttemptStore {
   if (!_store) {
-    _store = new InMemoryAttemptStore();
-    // Register fixture sessions
-    import("./fixtures").then(({ FIXTURE_SESSIONS }) => {
-      for (const s of FIXTURE_SESSIONS) {
-        _store!.registerSession(s);
-      }
-    });
+    _store = new DbAttemptStore();
   }
   return _store;
 }

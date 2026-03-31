@@ -7,23 +7,24 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+
+import { requireAppSession } from "@/lib/app-session/server";
 import {
-  listCurriculumSources,
   createCurriculumSource,
   importCurriculumSourceFromLocalJson,
+  listCurriculumSources,
 } from "@/lib/curriculum/service";
-import { DEMO_HOUSEHOLD_ID } from "@/lib/curriculum/constants";
 import { CreateCurriculumSourceInputSchema } from "@/lib/curriculum/types";
 
 const ImportLocalCurriculumRequestSchema = z.object({
-  householdId: z.string().uuid(),
+  householdId: z.string(),
   importPreset: z.literal("local_curriculum_json"),
 });
 
 export async function GET(req: NextRequest) {
-  const householdId =
-    req.nextUrl.searchParams.get("householdId") ?? DEMO_HOUSEHOLD_ID;
   try {
+    const session = await requireAppSession();
+    const householdId = req.nextUrl.searchParams.get("householdId") ?? session.organization.id;
     const sources = await listCurriculumSources(householdId);
     return NextResponse.json(sources);
   } catch (err) {
@@ -34,6 +35,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const session = await requireAppSession();
     const body = await req.json();
     const parsed = z
       .union([CreateCurriculumSourceInputSchema, ImportLocalCurriculumRequestSchema])
@@ -47,8 +49,11 @@ export async function POST(req: NextRequest) {
 
     const source =
       "importPreset" in parsed.data
-        ? await importCurriculumSourceFromLocalJson(parsed.data.householdId)
-        : await createCurriculumSource(parsed.data);
+        ? await importCurriculumSourceFromLocalJson(session.organization.id)
+        : await createCurriculumSource({
+            ...parsed.data,
+            householdId: session.organization.id,
+          });
 
     return NextResponse.json(source, { status: 201 });
   } catch (err) {

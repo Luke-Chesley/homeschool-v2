@@ -12,6 +12,7 @@
 
 import { NextRequest } from "next/server";
 import { z } from "zod";
+import { requireAppSession } from "@/lib/app-session/server";
 import { streamChatAnswer } from "@/lib/ai/task-service";
 import { getCopilotStore } from "@/lib/ai/copilot-store";
 import type { ChatMessage, CopilotContext } from "@/lib/ai/types";
@@ -56,22 +57,31 @@ export async function POST(req: NextRequest) {
   }
 
   const { sessionId, messages, context } = parsed.data;
+  const appSession = await requireAppSession();
 
   // Persist user message to session (non-blocking)
   const store = getCopilotStore();
   let activeSessionId = sessionId;
   if (!activeSessionId) {
-    const session = store.createSession(
-      "household-demo",
+    const session = await store.createSession(
+      appSession.organization.id,
       messages.find((m) => m.role === "user")?.content?.slice(0, 60) ?? "New conversation",
-      context as CopilotContext | undefined
+      {
+        learnerId: context?.learnerId ?? appSession.activeLearner.id,
+        learnerName: context?.learnerName ?? appSession.activeLearner.displayName,
+        curriculumSourceId: context?.curriculumSourceId,
+        lessonId: context?.lessonId,
+        standardIds: context?.standardIds ?? [],
+        goalIds: context?.goalIds ?? [],
+        recentOutcomes: context?.recentOutcomes ?? [],
+      }
     );
     activeSessionId = session.id;
   }
 
   const lastUserMessage = [...messages].reverse().find((m) => m.role === "user");
   if (lastUserMessage) {
-    store.appendMessage(activeSessionId, lastUserMessage as ChatMessage);
+    await store.appendMessage(activeSessionId, lastUserMessage as ChatMessage);
   }
 
   // Create the streaming response
@@ -98,7 +108,7 @@ export async function POST(req: NextRequest) {
         }
 
         // Persist assistant message
-        store.appendMessage(activeSessionId!, {
+        await store.appendMessage(activeSessionId!, {
           role: "assistant",
           content: fullResponse,
           createdAt: new Date().toISOString(),

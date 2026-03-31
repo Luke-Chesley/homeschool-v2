@@ -7,7 +7,10 @@
  */
 
 import { ReactNode } from "react";
+import { redirect } from "next/navigation";
 import { BookOpen } from "lucide-react";
+
+import { getAppSession } from "@/lib/app-session/server";
 
 export const metadata = {
   title: {
@@ -16,14 +19,22 @@ export const metadata = {
   },
 };
 
-export default function LearnerLayout({ children }: { children: ReactNode }) {
+export default async function LearnerLayout({ children }: { children: ReactNode }) {
+  const session = await getAppSession();
+
+  if (!session.activeLearner) {
+    redirect("/users");
+  }
+
   return (
     <div className="min-h-screen flex flex-col">
       {/* Minimal learner header */}
       <header className="border-b border-border/60 bg-card/80 backdrop-blur-sm">
         <div className="mx-auto flex h-14 max-w-3xl items-center gap-2 px-4">
           <BookOpen className="size-5 text-primary" />
-          <span className="font-serif text-base font-semibold">My Learning</span>
+          <span className="font-serif text-base font-semibold">
+            {session.activeLearner.displayName}
+          </span>
         </div>
       </header>
 

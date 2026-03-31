@@ -10,7 +10,7 @@ import Link from "next/link";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CurriculumSourceCard } from "@/components/curriculum/CurriculumSourceCard";
-import { DEMO_HOUSEHOLD_ID } from "@/lib/curriculum/constants";
+import { requireAppSession } from "@/lib/app-session/server";
 import { listCurriculumSources } from "@/lib/curriculum/service";
 
 export const metadata = {
@@ -18,11 +18,11 @@ export const metadata = {
 };
 
 export default async function CurriculumLibraryPage() {
-  const sources = await listCurriculumSources(DEMO_HOUSEHOLD_ID);
+  const session = await requireAppSession();
+  const sources = await listCurriculumSources(session.organization.id);
 
   return (
     <div className="flex flex-col gap-8 px-6 py-8 max-w-5xl mx-auto">
-      {/* Header */}
       <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="font-serif text-3xl font-semibold tracking-tight">
@@ -40,7 +40,6 @@ export default async function CurriculumLibraryPage() {
         </Link>
       </div>
 
-      {/* Source list */}
       {sources.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border/70 py-16 text-center">
           <p className="text-muted-foreground text-sm">No curriculum added yet.</p>

@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import type { InferInsertModel } from "drizzle-orm";
 
 import type { HomeschoolDb } from "@/lib/db/client";
@@ -36,6 +36,20 @@ export function createActivitiesRepository(db: HomeschoolDb) {
       return attempt;
     },
 
+    async getActivity(activityId: string) {
+      return db.query.interactiveActivities.findFirst({
+        where: eq(interactiveActivities.id, activityId),
+      });
+    },
+
+    async listActivitiesForLearner(learnerId: string) {
+      return db
+        .select()
+        .from(interactiveActivities)
+        .where(eq(interactiveActivities.learnerId, learnerId))
+        .orderBy(asc(interactiveActivities.createdAt));
+    },
+
     async listActivitiesForPlanItem(planItemId: string) {
       return db
         .select()
@@ -50,6 +64,49 @@ export function createActivitiesRepository(db: HomeschoolDb) {
         .from(activityAttempts)
         .where(eq(activityAttempts.activityId, activityId))
         .orderBy(asc(activityAttempts.attemptNumber), asc(activityAttempts.createdAt));
+    },
+
+    async findInProgressAttempt(activityId: string, learnerId: string) {
+      return db.query.activityAttempts.findFirst({
+        where: and(
+          eq(activityAttempts.activityId, activityId),
+          eq(activityAttempts.learnerId, learnerId),
+          eq(activityAttempts.status, "in_progress"),
+        ),
+        orderBy: [desc(activityAttempts.createdAt)],
+      });
+    },
+
+    async getAttempt(attemptId: string) {
+      return db.query.activityAttempts.findFirst({
+        where: eq(activityAttempts.id, attemptId),
+      });
+    },
+
+    async updateAttempt(
+      attemptId: string,
+      patch: Partial<
+        Pick<
+          NewActivityAttempt,
+          | "status"
+          | "responses"
+          | "scorePercent"
+          | "submittedAt"
+          | "completedAt"
+          | "metadata"
+        >
+      >,
+    ) {
+      const [attempt] = await db
+        .update(activityAttempts)
+        .set({
+          ...patch,
+          updatedAt: new Date(),
+        })
+        .where(eq(activityAttempts.id, attemptId))
+        .returning();
+
+      return attempt;
     },
   };
 }

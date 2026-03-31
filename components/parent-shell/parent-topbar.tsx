@@ -8,10 +8,11 @@ import { Card } from "@/components/ui/card";
 import { parentPrimaryNav } from "@/components/navigation/parent-nav-config";
 
 type ParentTopbarProps = {
+  activeLearnerName: string;
   onOpenMenu: () => void;
 };
 
-export function ParentTopbar({ onOpenMenu }: ParentTopbarProps) {
+export function ParentTopbar({ activeLearnerName, onOpenMenu }: ParentTopbarProps) {
   return (
     <Card className="border-border/70 bg-card/82 px-4 py-4 sm:px-5">
       <div className="flex items-center justify-between gap-4">
@@ -19,6 +20,9 @@ export function ParentTopbar({ onOpenMenu }: ParentTopbarProps) {
           <div className="flex items-center gap-2">
             <Badge variant="outline" className="hidden rounded-full sm:inline-flex">
               Riverside homeschool
+            </Badge>
+            <Badge variant="outline" className="rounded-full">
+              {activeLearnerName}
             </Badge>
             <Badge className="rounded-full">Spring term</Badge>
           </div>

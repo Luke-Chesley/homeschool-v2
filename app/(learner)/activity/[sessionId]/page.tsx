@@ -12,8 +12,6 @@ import { Button } from "@/components/ui/button";
 import { ActivityRenderer } from "@/components/activities/ActivityRenderer";
 import type { ActivitySession, ActivityAttempt, AttemptAnswer } from "@/lib/activities/types";
 
-const DEMO_LEARNER_ID = "learner-demo";
-
 interface Props {
   params: Promise<{ sessionId: string }>;
 }
@@ -45,7 +43,7 @@ export default function ActivitySessionPage({ params }: Props) {
         const attemptRes = await fetch("/api/activities/attempts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionId, learnerId: DEMO_LEARNER_ID }),
+          body: JSON.stringify({ sessionId }),
         });
         if (!attemptRes.ok) throw new Error("Could not start attempt");
         const attemptData: ActivityAttempt = await attemptRes.json();

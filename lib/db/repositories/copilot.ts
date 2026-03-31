@@ -33,6 +33,41 @@ export function createCopilotRepository(db: HomeschoolDb) {
       return action;
     },
 
+    async getThread(threadId: string) {
+      return db.query.conversationThreads.findFirst({
+        where: eq(conversationThreads.id, threadId),
+      });
+    },
+
+    async listMessagesForThread(threadId: string) {
+      return db
+        .select()
+        .from(conversationMessages)
+        .where(eq(conversationMessages.threadId, threadId))
+        .orderBy(asc(conversationMessages.createdAt));
+    },
+
+    async listActionsForThread(threadId: string) {
+      return db
+        .select()
+        .from(copilotActions)
+        .where(eq(copilotActions.threadId, threadId))
+        .orderBy(asc(copilotActions.createdAt));
+    },
+
+    async updateActionStatus(actionId: string, status: NewCopilotAction["status"]) {
+      const [action] = await db
+        .update(copilotActions)
+        .set({
+          status,
+          updatedAt: new Date(),
+        })
+        .where(eq(copilotActions.id, actionId))
+        .returning();
+
+      return action;
+    },
+
     async createInsight(input: NewAdaptationInsight) {
       const [insight] = await db.insert(adaptationInsights).values(input).returning();
       return insight;
