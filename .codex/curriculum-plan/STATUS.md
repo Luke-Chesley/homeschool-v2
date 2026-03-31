@@ -1,0 +1,103 @@
+# Curriculum Plan Status Dashboard
+
+Update this file in every agent PR.
+
+Keep it boring and current.
+
+## Contract Freeze Status
+
+- [ ] Shared persistence contract accepted
+- [ ] Stable route-generation contract accepted
+- [ ] Daily `PlanItem` integration contract accepted
+- [ ] Tracking/feedback contract accepted
+
+## Agent Status
+
+### Agent A — Import Normalization
+
+- Scope: normalized curriculum import, hierarchy preservation, persisted route nodes
+- Branch: `agent-a/curriculum-import-normalization`
+- Depends on: shared persistence contract
+- Can start before full merge: yes
+- Status: not started
+- Blockers: none
+- PR: pending
+- Acceptance criteria complete:
+  - [ ] normalization rules implemented
+  - [ ] normalized nodes persisted
+  - [ ] source detail tree backed by normalized nodes
+  - [ ] re-import behavior defined and tested
+
+### Agent B — Weekly Route
+
+- Scope: deterministic recommendations, weekly queue, reorder persistence, conflicts, repair preview
+- Branch: `agent-b/weekly-route-board`
+- Depends on: shared persistence contract, learner-skill-state contract
+- Can start before full merge: yes, against fixtures or repository adapters
+- Status: not started
+- Blockers: shared contract freeze
+- PR: pending
+- Acceptance criteria complete:
+  - [ ] route generation deterministic
+  - [ ] weekly route persisted
+  - [ ] reorder stored as override without mutating canonical sequence
+  - [ ] conflicts and repair preview implemented
+
+### Agent C — Daily Selection And Deferral
+
+- Scope: assign weekly route items to a day, create `PlanItem`s, push to next day, today view quick actions
+- Branch: `agent-c/daily-selection-deferral`
+- Depends on: shared persistence contract, weekly-route-item contract, `PlanItem` curriculum metadata contract
+- Can start before full merge: yes, after contract freeze
+- Status: not started
+- Blockers: daily integration contract
+- PR: pending
+- Acceptance criteria complete:
+  - [ ] selecting route items creates linked `PlanItem`s
+  - [ ] push-to-next-day preserves context
+  - [ ] today view can complete, defer, and swap
+  - [ ] duplicate scheduling rules enforced
+
+### Agent D — Tracking And Feedback
+
+- Scope: completion/mastery backflow, route adaptation, review/reteach suggestions, outcome persistence
+- Branch: `agent-d/tracking-feedback-loop`
+- Depends on: shared persistence contract, daily execution contract, learner-skill-state contract
+- Can start before full merge: yes, after contract freeze
+- Status: not started
+- Blockers: stable outcome event contract
+- PR: pending
+- Acceptance criteria complete:
+  - [ ] completion updates learner skill state
+  - [ ] mastery outcomes affect recommendations
+  - [ ] unfinished work preferred before new work
+  - [ ] review/reteach flags generated deterministically
+
+## Cross-Agent Integration Checklist
+
+- [ ] Stable curriculum node IDs available to all layers
+- [ ] Stable learner-skill-state IDs and statuses available to all layers
+- [ ] Weekly route items reference canonical curriculum nodes
+- [ ] Daily `PlanItem`s reference weekly route items and curriculum nodes
+- [ ] Completion events can update both planning state and learner skill state
+- [ ] Conflicts are computed consistently across weekly and daily surfaces
+
+## Open Contract Changes
+
+Add items here before changing a shared contract:
+
+- none
+
+## Merge Order
+
+- [ ] Shared contract PR merged
+- [ ] Agent A merged
+- [ ] Agent B merged
+- [ ] Agent C merged
+- [ ] Agent D merged
+
+## Notes
+
+Use this section for short cross-agent coordination notes only.
+
+- none
