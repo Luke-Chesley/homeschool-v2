@@ -53,7 +53,7 @@ export function TodayWorkspaceView({ workspace, sourceId }: TodayWorkspaceViewPr
   }
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_360px]">
+    <div className="grid gap-6 xl:grid-cols-[minmax(0,1.4fr)_320px]">
       <div className="grid gap-6">
         <Card className="border-border/70 bg-card/88">
           <CardHeader>
@@ -63,16 +63,17 @@ export function TodayWorkspaceView({ workspace, sourceId }: TodayWorkspaceViewPr
             </div>
             <CardTitle>{workspace.headline}</CardTitle>
             <CardDescription>
-              Lead lesson: {workspace.leadItem.title} from {workspace.leadItem.lessonLabel}
+              Active source: {workspace.leadItem.sourceLabel}. This surface keeps the current route
+              visible without surfacing the internal planning panels.
             </CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-4 md:grid-cols-3">
+          <CardContent className="grid gap-4 md:grid-cols-2">
             <div className="rounded-3xl border border-border/70 bg-background/75 p-4">
               <p className="text-xs font-semibold tracking-[0.16em] text-muted-foreground uppercase">
                 Lead lesson
               </p>
-              <p className="mt-2 font-serif text-2xl">{workspace.leadItem.subject}</p>
-              <p className="mt-2 text-sm leading-7 text-muted-foreground">
+              <p className="mt-2 font-serif text-2xl">{workspace.leadItem.title}</p>
+              <p className="mt-3 text-sm leading-7 text-muted-foreground">
                 {workspace.leadItem.objective}
               </p>
             </div>
@@ -80,20 +81,9 @@ export function TodayWorkspaceView({ workspace, sourceId }: TodayWorkspaceViewPr
               <p className="text-xs font-semibold tracking-[0.16em] text-muted-foreground uppercase">
                 Estimated time
               </p>
-              <p className="mt-2 font-serif text-2xl">
-                {formatMinutes(workspace.leadItem.estimatedMinutes)}
-              </p>
-              <p className="mt-2 text-sm leading-7 text-muted-foreground">
-                Protect enough margin after this block to keep the rest of the day stable.
-              </p>
-            </div>
-            <div className="rounded-3xl border border-border/70 bg-background/75 p-4">
-              <p className="text-xs font-semibold tracking-[0.16em] text-muted-foreground uppercase">
-                Completion handoff
-              </p>
-              <p className="mt-2 font-serif text-2xl">Ready</p>
-              <p className="mt-2 text-sm leading-7 text-muted-foreground">
-                Tracking hooks are intentionally visible here for the later reporting merge.
+              <p className="mt-2 font-serif text-2xl">{formatMinutes(workspace.leadItem.estimatedMinutes)}</p>
+              <p className="mt-3 text-sm leading-7 text-muted-foreground">
+                Keep enough margin after the first block to leave the rest of the day steady.
               </p>
             </div>
           </CardContent>
@@ -109,41 +99,24 @@ export function TodayWorkspaceView({ workspace, sourceId }: TodayWorkspaceViewPr
               <div key={item.id} className="rounded-3xl border border-border/70 bg-background/75 p-5">
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="secondary">{item.subject}</Badge>
-                  <Badge variant="outline">{item.status.replace("_", " ")}</Badge>
-                  <Badge variant="outline">{item.sourceLabel}</Badge>
-                  <Badge variant="outline">{item.lessonLabel}</Badge>
-                  {item.curriculum ? (
-                    <Badge variant="outline">route {item.curriculum.weeklyRouteItemId}</Badge>
+                  {item.status !== "ready" ? (
+                    <Badge variant="outline">{item.status.replace("_", " ")}</Badge>
                   ) : null}
-                </div>
-                <div className="mt-4 flex items-start justify-between gap-4">
-                  <div>
-                    <p className="font-serif text-2xl">{item.title}</p>
-                    <p className="mt-3 text-sm leading-7 text-muted-foreground">
-                      {item.objective}
-                    </p>
-                  </div>
-                  <div className="rounded-full border border-border/70 px-3 py-2 text-sm font-semibold">
+                  <Badge variant="outline" className="ml-auto">
                     {formatMinutes(item.estimatedMinutes)}
-                  </div>
+                  </Badge>
                 </div>
-                <div className="mt-4 grid gap-3 md:grid-cols-2">
-                  <div className="rounded-2xl border border-border/70 bg-card/80 p-3">
-                    <p className="text-xs font-semibold tracking-[0.16em] text-muted-foreground uppercase">
-                      Materials
-                    </p>
-                    <p className="mt-2 text-sm leading-7 text-muted-foreground">
-                      {item.materials.join(" · ")}
-                    </p>
-                  </div>
-                  <div className="rounded-2xl border border-border/70 bg-card/80 p-3">
-                    <p className="text-xs font-semibold tracking-[0.16em] text-muted-foreground uppercase">
-                      Copilot hooks
-                    </p>
-                    <p className="mt-2 text-sm leading-7 text-muted-foreground">
-                      {item.copilotPrompts.join(" · ")}
-                    </p>
-                  </div>
+                <div className="mt-4">
+                  <p className="font-serif text-xl leading-tight sm:text-2xl">{item.title}</p>
+                  <p className="mt-3 text-sm leading-7 text-muted-foreground">{item.objective}</p>
+                </div>
+                <div className="mt-4 rounded-2xl border border-border/70 bg-card/80 p-3">
+                  <p className="text-xs font-semibold tracking-[0.16em] text-muted-foreground uppercase">
+                    Materials
+                  </p>
+                  <p className="mt-2 text-sm leading-7 text-muted-foreground">
+                    {item.materials.join(" · ")}
+                  </p>
                 </div>
                 {item.curriculum ? (
                   <div className="mt-4 flex flex-wrap gap-2">
@@ -196,64 +169,6 @@ export function TodayWorkspaceView({ workspace, sourceId }: TodayWorkspaceViewPr
                 {item}
               </div>
             ))}
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/70 bg-card/88">
-          <CardHeader>
-            <CardDescription>Reserved panels</CardDescription>
-            <CardTitle>Integration points</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {workspace.artifactSlots.map((slot) => (
-              <div
-                key={slot.label}
-                className="rounded-3xl border border-border/70 bg-background/75 p-4"
-              >
-                <div className="flex items-center gap-2">
-                  <Badge variant={slot.status === "open" ? "default" : "outline"}>
-                    {slot.status}
-                  </Badge>
-                  <p className="font-semibold">{slot.label}</p>
-                </div>
-                <p className="mt-3 text-sm leading-7 text-muted-foreground">
-                  {slot.description}
-                </p>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/70 bg-card/88">
-          <CardHeader>
-            <CardDescription>Prompts and closeout</CardDescription>
-            <CardTitle>What to capture during the day</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="rounded-3xl border border-border/70 bg-background/75 p-4">
-              <p className="text-xs font-semibold tracking-[0.16em] text-muted-foreground uppercase">
-                Session targets
-              </p>
-              <p className="mt-2 text-sm leading-7 text-muted-foreground">
-                {workspace.sessionTargets.join(" · ")}
-              </p>
-            </div>
-            <div className="rounded-3xl border border-border/70 bg-background/75 p-4">
-              <p className="text-xs font-semibold tracking-[0.16em] text-muted-foreground uppercase">
-                Completion prompts
-              </p>
-              <p className="mt-2 text-sm leading-7 text-muted-foreground">
-                {workspace.completionPrompts.join(" · ")}
-              </p>
-            </div>
-            <div className="rounded-3xl border border-border/70 bg-background/75 p-4">
-              <p className="text-xs font-semibold tracking-[0.16em] text-muted-foreground uppercase">
-                Family notes
-              </p>
-              <p className="mt-2 text-sm leading-7 text-muted-foreground">
-                {workspace.familyNotes.join(" · ")}
-              </p>
-            </div>
           </CardContent>
         </Card>
       </div>
