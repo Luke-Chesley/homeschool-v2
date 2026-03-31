@@ -122,7 +122,7 @@ export default async function CopilotPage({ searchParams }: Props) {
 
           <p className="text-xs text-muted-foreground/60 px-1">
             Copilot provider and model routing come from{" "}
-            <code className="font-mono text-[10px]">lib/ai/registry.ts</code>.
+            <code className="font-mono text-[10px]">lib/ai/routing.ts</code>.
           </p>
         </div>
       </div>

@@ -1,3 +1,5 @@
+import "server-only";
+
 /**
  * AI adapter registry.
  *
@@ -8,9 +10,10 @@
  * here when API keys are provisioned. The interface is stable.
  */
 
+import { AnthropicAdapter } from "./anthropic-adapter";
 import type { AiProviderAdapter } from "./provider-adapter";
 import { getMockAdapter } from "./mock-adapter";
-import { DEFAULT_ROUTING_CONFIG } from "./provider-adapter";
+import { getAiRoutingConfig } from "./routing";
 import type { AiTaskName } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -18,6 +21,7 @@ import type { AiTaskName } from "./types";
 // ---------------------------------------------------------------------------
 
 const adapters = new Map<string, AiProviderAdapter>();
+let anthropicAdapter: AnthropicAdapter | null = null;
 
 function registerAdapter(adapter: AiProviderAdapter) {
   adapters.set(adapter.providerId, adapter);
@@ -26,17 +30,24 @@ function registerAdapter(adapter: AiProviderAdapter) {
 // Register built-in adapters
 registerAdapter(getMockAdapter());
 
-// Integration points — uncomment and implement when providers are ready:
-// registerAdapter(new AnthropicAdapter({ apiKey: env.ANTHROPIC_API_KEY }));
-// registerAdapter(new OpenAIAdapter({ apiKey: env.OPENAI_API_KEY }));
-// registerAdapter(new GoogleAdapter({ apiKey: env.GOOGLE_AI_API_KEY }));
+function registerConfiguredAdapters() {
+  const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
+  if (!apiKey || adapters.has("anthropic")) {
+    return;
+  }
+
+  anthropicAdapter ??= new AnthropicAdapter({ apiKey });
+  registerAdapter(anthropicAdapter);
+}
 
 // ---------------------------------------------------------------------------
 // Accessor
 // ---------------------------------------------------------------------------
 
 export function getAdapter(providerId?: string): AiProviderAdapter {
-  const id = providerId ?? DEFAULT_ROUTING_CONFIG.providerId;
+  registerConfiguredAdapters();
+
+  const id = providerId ?? getAiRoutingConfig().providerId;
   const adapter = adapters.get(id);
   if (!adapter) {
     console.warn(`[ai/registry] Provider "${id}" not registered, falling back to mock.`);
@@ -46,9 +57,11 @@ export function getAdapter(providerId?: string): AiProviderAdapter {
 }
 
 export function getAdapterForTask(taskName: AiTaskName): AiProviderAdapter {
-  return getAdapter(DEFAULT_ROUTING_CONFIG.providerId);
+  const routing = getAiRoutingConfig();
+  return getAdapter(routing.providerId);
 }
 
 export function listRegisteredProviders(): string[] {
+  registerConfiguredAdapters();
   return [...adapters.keys()];
 }

@@ -11,6 +11,7 @@
  * - Long-running generation is modeled as job dispatch, not blocking calls
  */
 
+import type { ZodType } from "zod";
 import type { ChatMessage, AiTaskName } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -24,6 +25,10 @@ export interface CompletionOptions {
   maxTokens?: number;
   /** System prompt override — if omitted, use the task's prompt template */
   systemPrompt?: string;
+}
+
+export interface StructuredCompletionOptions<T = unknown> extends CompletionOptions {
+  outputSchema?: ZodType<T>;
 }
 
 export interface CompletionResult {
@@ -62,7 +67,7 @@ export interface AiProviderAdapter {
    * Attempt structured JSON output.
    * Returns parsed JSON or null if the model failed to comply.
    */
-  completeJson<T>(options: CompletionOptions): Promise<T | null>;
+  completeJson<T>(options: StructuredCompletionOptions<T>): Promise<T | null>;
 }
 
 // ---------------------------------------------------------------------------
