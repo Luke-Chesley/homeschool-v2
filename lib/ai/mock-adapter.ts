@@ -9,7 +9,13 @@
  * API keys are provisioned.
  */
 
-import type { AiProviderAdapter, CompletionOptions, CompletionResult, StreamChunk } from "./provider-adapter";
+import type {
+  AiProviderAdapter,
+  CompletionOptions,
+  CompletionResult,
+  StreamChunk,
+  StructuredCompletionOptions,
+} from "./provider-adapter";
 
 // ---------------------------------------------------------------------------
 // Mock response templates
@@ -106,10 +112,15 @@ export class MockAiAdapter implements AiProviderAdapter {
     yield { delta: "", done: true };
   }
 
-  async completeJson<T>(options: CompletionOptions): Promise<T | null> {
+  async completeJson<T>(options: StructuredCompletionOptions<T>): Promise<T | null> {
     const response = await this.complete(options);
     try {
-      return JSON.parse(response.content) as T;
+      const parsed = JSON.parse(response.content) as unknown;
+      if (!options.outputSchema) {
+        return parsed as T;
+      }
+      const validated = options.outputSchema.safeParse(parsed);
+      return validated.success ? validated.data : null;
     } catch {
       return null;
     }

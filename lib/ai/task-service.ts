@@ -11,9 +11,16 @@
 
 import { randomUUID } from "crypto";
 import { getAdapterForTask } from "./registry";
+import { getModelForTask } from "./provider-adapter";
+import { getAiRoutingConfig } from "./routing";
 import { resolvePrompt } from "@/lib/prompts/store";
 import type { AiTaskName, CopilotContext, ArtifactLineage, GenerationJob } from "./types";
 import type { ChatMessage } from "./types";
+import { z } from "zod";
+
+const StandardsSuggestOutputSchema = z.object({
+  standardIds: z.array(z.string()),
+});
 
 // ---------------------------------------------------------------------------
 // Task input/output types
@@ -80,10 +87,11 @@ export interface TaskResult<T = unknown> {
 export async function summarizeText(
   input: SummarizeInput
 ): Promise<TaskResult<string>> {
-  const adapter = getAdapterForTask("text.summarize");
+  const { adapter, model } = getTaskRuntime("text.summarize");
   const prompt = resolvePrompt("text.summarize");
 
   const result = await adapter.complete({
+    model,
     messages: [
       { role: "system", content: prompt.systemPrompt },
       {
@@ -95,17 +103,19 @@ export async function summarizeText(
 
   return {
     output: result.content,
-    lineage: buildLineage("text.summarize", adapter.providerId),
+    lineage: buildLineage("text.summarize", adapter.providerId, result.model ?? model),
   };
 }
 
 export async function suggestStandardsWithAI(
   input: StandardsSuggestInput
 ): Promise<TaskResult<string[]>> {
-  const adapter = getAdapterForTask("standards.suggest");
+  const { adapter, model } = getTaskRuntime("standards.suggest");
   const prompt = resolvePrompt("standards.suggest");
 
   const result = await adapter.completeJson<{ standardIds: string[] }>({
+    model,
+    outputSchema: StandardsSuggestOutputSchema,
     messages: [
       { role: "system", content: prompt.systemPrompt },
       {
@@ -117,14 +127,14 @@ export async function suggestStandardsWithAI(
 
   return {
     output: result?.standardIds ?? [],
-    lineage: buildLineage("standards.suggest", adapter.providerId),
+    lineage: buildLineage("standards.suggest", adapter.providerId, model),
   };
 }
 
 export async function answerChatMessage(
   input: ChatAnswerInput
 ): Promise<TaskResult<string>> {
-  const adapter = getAdapterForTask("chat.answer");
+  const { adapter, model } = getTaskRuntime("chat.answer");
   const prompt = resolvePrompt("chat.answer");
 
   const systemWithContext = input.context
@@ -132,6 +142,7 @@ export async function answerChatMessage(
     : prompt.systemPrompt;
 
   const result = await adapter.complete({
+    model,
     messages: [
       { role: "system", content: systemWithContext },
       ...input.messages,
@@ -140,7 +151,7 @@ export async function answerChatMessage(
 
   return {
     output: result.content,
-    lineage: buildLineage("chat.answer", adapter.providerId),
+    lineage: buildLineage("chat.answer", adapter.providerId, result.model ?? model),
   };
 }
 
@@ -184,7 +195,7 @@ export async function dispatchPlanAdaptation(input: PlanAdaptInput): Promise<Gen
 export async function* streamChatAnswer(
   input: ChatAnswerInput
 ): AsyncIterable<string> {
-  const adapter = getAdapterForTask("chat.answer");
+  const { adapter, model } = getTaskRuntime("chat.answer");
   const prompt = resolvePrompt("chat.answer");
 
   const systemWithContext = input.context
@@ -192,6 +203,7 @@ export async function* streamChatAnswer(
     : prompt.systemPrompt;
 
   for await (const chunk of adapter.stream({
+    model,
     messages: [
       { role: "system", content: systemWithContext },
       ...input.messages,
@@ -206,15 +218,24 @@ export async function* streamChatAnswer(
 // Helpers
 // ---------------------------------------------------------------------------
 
-function buildLineage(taskName: AiTaskName, providerId: string): ArtifactLineage {
+function buildLineage(taskName: AiTaskName, providerId: string, modelId: string): ArtifactLineage {
   return {
     id: randomUUID(),
     taskName,
     promptRef: { task: taskName, version: "1.0.0" },
     providerId: providerId as import("./types").ProviderId,
-    modelId: "mock-model-1",
+    modelId,
     inputHash: "stub",
     createdAt: new Date().toISOString(),
+  };
+}
+
+function getTaskRuntime(taskName: AiTaskName) {
+  const routing = getAiRoutingConfig();
+
+  return {
+    adapter: getAdapterForTask(taskName),
+    model: getModelForTask(taskName, routing),
   };
 }
 

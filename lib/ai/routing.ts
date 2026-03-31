@@ -31,19 +31,19 @@ export function getAiRoutingConfig(): ModelRoutingConfig {
     fallbackModel:
       env.AI_FALLBACK_MODEL ??
       (providerId === "anthropic"
-        ? "claude-sonnet-4-0"
+        ? "claude-sonnet-4-5"
         : DEFAULT_ROUTING_CONFIG.fallbackModel),
     taskDefaults: {
       ...DEFAULT_ROUTING_CONFIG.taskDefaults,
       ...(providerId === "anthropic"
         ? {
-            "chat.answer": env.AI_CHAT_MODEL ?? "claude-sonnet-4-0",
-            "lesson.draft": env.AI_GENERATION_MODEL ?? "claude-sonnet-4-0",
-            "worksheet.generate": env.AI_GENERATION_MODEL ?? "claude-sonnet-4-0",
-            "interactive.generate": env.AI_GENERATION_MODEL ?? "claude-sonnet-4-0",
-            "plan.adapt": env.AI_GENERATION_MODEL ?? "claude-sonnet-4-0",
-            "standards.suggest": env.AI_FAST_MODEL ?? "claude-3-5-haiku-latest",
-            "text.summarize": env.AI_FAST_MODEL ?? "claude-3-5-haiku-latest",
+            "chat.answer": env.AI_CHAT_MODEL ?? "claude-sonnet-4-5",
+            "lesson.draft": env.AI_GENERATION_MODEL ?? "claude-sonnet-4-5",
+            "worksheet.generate": env.AI_GENERATION_MODEL ?? "claude-sonnet-4-5",
+            "interactive.generate": env.AI_GENERATION_MODEL ?? "claude-sonnet-4-5",
+            "plan.adapt": env.AI_GENERATION_MODEL ?? "claude-sonnet-4-5",
+            "standards.suggest": env.AI_FAST_MODEL ?? "claude-haiku-4-5",
+            "text.summarize": env.AI_FAST_MODEL ?? "claude-haiku-4-5",
           }
         : {}),
     },
