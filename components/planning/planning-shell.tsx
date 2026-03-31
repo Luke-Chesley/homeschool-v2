@@ -60,7 +60,7 @@ export function PlanningShell({
           </div>
 
           <Card className="w-full max-w-xl border-primary/15 bg-background/88">
-            <CardContent className="grid gap-3 p-4 sm:grid-cols-3">
+            <CardContent className="grid gap-3 p-4 md:grid-cols-3">
               {navItems.map(({ href, label, view, icon: Icon }) => (
                 <Link
                   key={href}
@@ -69,11 +69,11 @@ export function PlanningShell({
                     buttonVariants({
                       variant: currentView === view ? "default" : "outline",
                     }),
-                    "h-auto justify-start rounded-3xl px-4 py-4 text-left whitespace-normal"
+                    "min-h-24 w-full items-start justify-start rounded-3xl px-4 py-4 text-left text-sm leading-5 whitespace-normal"
                   )}
                 >
                   <Icon className="mt-0.5 size-4 shrink-0" />
-                  <span>{label}</span>
+                  <span className="min-w-0 text-balance">{label}</span>
                 </Link>
               ))}
             </CardContent>
