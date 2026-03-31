@@ -1,5 +1,12 @@
 import Link from "next/link";
-import { ArrowRight, Clock3, Mountain, RefreshCcw, TimerReset } from "lucide-react";
+import {
+  ArrowRight,
+  CalendarPlus,
+  Clock3,
+  Mountain,
+  RefreshCcw,
+  TimerReset,
+} from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
@@ -67,6 +74,9 @@ export function DayPlanView({ day }: DayPlanViewProps) {
                   <Badge variant="secondary">{item.subject}</Badge>
                   <Badge variant="outline">{item.status.replace("_", " ")}</Badge>
                   <Badge variant="outline">{item.sourceLabel}</Badge>
+                  {item.curriculum ? (
+                    <Badge variant="outline">weekly route: {item.curriculum.weeklyRouteItemId}</Badge>
+                  ) : null}
                 </div>
                 <div className="mt-4 flex flex-wrap items-start justify-between gap-4">
                   <div className="max-w-2xl">
@@ -151,6 +161,46 @@ export function DayPlanView({ day }: DayPlanViewProps) {
                 {alert}
               </div>
             ))}
+          </CardContent>
+        </Card>
+
+        <Card className="border-border/70 bg-card/88">
+          <CardHeader>
+            <CardDescription>Route queue</CardDescription>
+            <CardTitle>Select from weekly route</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {day.selectableRouteItems.length === 0 ? (
+              <div className="rounded-3xl border border-border/70 bg-background/75 p-4 text-sm leading-7 text-muted-foreground">
+                No additional route items are waiting for this date.
+              </div>
+            ) : (
+              day.selectableRouteItems.map((routeItem) => (
+                <div
+                  key={routeItem.id}
+                  className="rounded-3xl border border-border/70 bg-background/75 p-4"
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="secondary">{routeItem.subject}</Badge>
+                    <Badge variant="outline">position {routeItem.currentPosition}</Badge>
+                    <Badge variant="outline">skill {routeItem.skillNodeId}</Badge>
+                  </div>
+                  <p className="mt-3 font-semibold">{routeItem.skillTitle}</p>
+                  <p className="mt-2 text-sm leading-7 text-muted-foreground">
+                    {routeItem.skillDescription}
+                  </p>
+                  <div className="mt-3">
+                    <Link
+                      href={`/planning/day/${day.date}?selectRouteItemId=${routeItem.id}`}
+                      className={buttonVariants({ variant: "outline", size: "sm" })}
+                    >
+                      <CalendarPlus className="size-4" />
+                      Add to day plan
+                    </Link>
+                  </div>
+                </div>
+              ))
+            )}
           </CardContent>
         </Card>
 

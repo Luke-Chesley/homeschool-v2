@@ -9,6 +9,22 @@ export type PlanItemStatus =
   | "blocked"
   | "carried_over";
 
+export type PlanItemOrigin = "manual" | "curriculum_route" | "recovery" | "review";
+
+export type WeeklyRouteItemState =
+  | "queued"
+  | "scheduled"
+  | "in_progress"
+  | "done"
+  | "removed";
+
+export type WeeklyRouteOverrideKind =
+  | "none"
+  | "reordered"
+  | "pinned"
+  | "deferred"
+  | "skip_acknowledged";
+
 export type PlanningActionKind =
   | "reschedule"
   | "compress"
@@ -51,7 +67,30 @@ export interface PlanItem {
   copilotPrompts: string[];
   sourceLabel: string;
   lessonLabel: string;
+  planOrigin?: PlanItemOrigin;
+  curriculum?: {
+    sourceId: string;
+    skillNodeId: string;
+    weeklyRouteItemId: string;
+    origin: PlanItemOrigin;
+  };
   note?: string;
+}
+
+export interface WeeklyRouteItem {
+  id: string;
+  weeklyRouteId: string;
+  sourceId: string;
+  skillNodeId: string;
+  skillTitle: string;
+  skillDescription?: string;
+  subject: string;
+  estimatedMinutes: number;
+  recommendedPosition: number;
+  currentPosition: number;
+  scheduledDate?: string;
+  manualOverrideKind: WeeklyRouteOverrideKind;
+  state: WeeklyRouteItemState;
 }
 
 export interface RecoveryAction {
@@ -80,6 +119,7 @@ export interface PlanDay {
   load: DayLoad;
   constraint: ScheduleConstraint;
   items: PlanItem[];
+  selectableRouteItems: WeeklyRouteItem[];
   carryoverItems: PlanItem[];
   recoveryOptions: RecoveryOption[];
   alerts: string[];
@@ -128,4 +168,5 @@ export interface DailyWorkspace {
   completionPrompts: string[];
   familyNotes: string[];
   recoveryOptions: RecoveryOption[];
+  alternatesByPlanItemId: Record<string, WeeklyRouteItem[]>;
 }

@@ -8,7 +8,7 @@ Keep it boring and current.
 
 - [x] Shared persistence contract accepted
 - [ ] Stable route-generation contract accepted
-- [ ] Daily `PlanItem` integration contract accepted
+- [x] Daily `PlanItem` integration contract accepted
 - [ ] Tracking/feedback contract accepted
 
 ## Agent Status
@@ -49,14 +49,14 @@ Keep it boring and current.
 - Branch: `agent-c/daily-selection-deferral`
 - Depends on: shared persistence contract, weekly-route-item contract, `PlanItem` curriculum metadata contract
 - Can start before full merge: yes, after contract freeze
-- Status: not started
-- Blockers: daily integration contract
+- Status: complete
+- Blockers: none
 - PR: pending
 - Acceptance criteria complete:
-  - [ ] selecting route items creates linked `PlanItem`s
-  - [ ] push-to-next-day preserves context
-  - [ ] today view can complete, defer, and swap
-  - [ ] duplicate scheduling rules enforced
+  - [x] selecting route items creates linked `PlanItem`s
+  - [x] push-to-next-day preserves context
+  - [x] today view can complete, defer, and swap
+  - [x] duplicate scheduling rules enforced
 
 ### Agent D — Tracking And Feedback
 
@@ -78,7 +78,7 @@ Keep it boring and current.
 - [x] Stable curriculum node IDs available to all layers
 - [ ] Stable learner-skill-state IDs and statuses available to all layers
 - [ ] Weekly route items reference canonical curriculum nodes
-- [ ] Daily `PlanItem`s reference weekly route items and curriculum nodes
+- [x] Daily `PlanItem`s reference weekly route items and curriculum nodes
 - [ ] Completion events can update both planning state and learner skill state
 - [ ] Conflicts are computed consistently across weekly and daily surfaces
 
@@ -88,11 +88,12 @@ Add items here before changing a shared contract:
 
 - Agent A: `curriculum_sources` now carries `status` and `import_version` directly instead of hiding import lifecycle only in metadata.
 - Agent A: `curriculum_nodes` now carries `is_active` so re-import can retire unmatched nodes without deleting historical identity.
+- Agent C: daily-selection read contract needs weekly-route item projections to include either (a) skill display fields (`title`, `description`, `estimated_minutes`) or (b) a guaranteed curriculum-node join path so `PlanItem` creation can stay deterministic without inventing curriculum text in UI.
 
 ## Merge Order
 
 - [ ] Shared contract PR merged
-- [ ] Agent A merged
+- [x] Agent A merged
 - [ ] Agent B merged
 - [ ] Agent C merged
 - [ ] Agent D merged
@@ -103,3 +104,4 @@ Use this section for short cross-agent coordination notes only.
 
 - Agent A contract summary: a curriculum node is one persisted row in `curriculum_nodes`; `id` is deterministic from `(source lineage id, normalized_type, normalized_path)`; parent-child structure is `parent_node_id`; canonical sibling order is `sequence_index`; cross-version retirements flip `is_active` to false rather than deleting the node row.
 - Agent A implemented source-detail reads from persisted normalized nodes. Weekly and daily routing should not read `curriculum_items` for canonical sequence.
+- Agent C implementation summary: daily route selection now creates curriculum-linked `PlanItem`s; defer/push keeps `weekly_route_item_id` and `curriculum_skill_node_id` linkage intact; today actions (`complete`, `push_to_tomorrow`, `swap_with_alternate`, `remove_today`) update daily execution state and weekly-route coherence without mutating canonical curriculum sequence.
