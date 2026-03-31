@@ -49,3 +49,7 @@
 ## Security & Configuration Tips
 - Store secrets only in `.env.local`; never commit credentials.
 - Keep `.env.example` updated when adding required configuration such as AI provider or model settings.
+
+## Documentation Maintenance
+- Keep `README.md` current when the repo structure, key control points, setup flow, or major feature surfaces change.
+- If you add, remove, or significantly reorganize top-level directories or major subsystems, update `README.md` in the same task unless the user explicitly says not to.
