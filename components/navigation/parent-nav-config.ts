@@ -44,7 +44,6 @@ export const parentPrimaryNav: ParentNavItem[] = [
     matchPrefix: "/tracking",
     description: "Progress, standards coverage, and reporting.",
     icon: ChartColumnIncreasing,
-    disabled: true,
   },
   {
     label: "Copilot",
@@ -52,6 +51,5 @@ export const parentPrimaryNav: ParentNavItem[] = [
     matchPrefix: "/copilot",
     description: "Context-aware AI assistance across the workspace.",
     icon: Bot,
-    disabled: true,
   },
 ];
