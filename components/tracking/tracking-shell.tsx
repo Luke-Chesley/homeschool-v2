@@ -54,7 +54,7 @@ export function TrackingShell({
           </div>
 
           <Card className="w-full max-w-xl border-primary/15 bg-background/88">
-            <CardContent className="grid gap-3 p-4 sm:grid-cols-3">
+            <CardContent className="grid gap-3 p-4 md:grid-cols-3">
               {navItems.map(({ href, label, view, icon: Icon }) => (
                 <Link
                   key={href}
@@ -63,18 +63,18 @@ export function TrackingShell({
                     buttonVariants({
                       variant: currentView === view ? "default" : "outline",
                     }),
-                    "h-auto justify-start rounded-3xl px-4 py-4 text-left whitespace-normal",
+                    "min-h-24 w-full items-start justify-start rounded-3xl px-4 py-4 text-left text-sm leading-5 whitespace-normal",
                   )}
                 >
                   <Icon className="mt-0.5 size-4 shrink-0" />
-                  <span>{label}</span>
+                  <span className="min-w-0 text-balance">{label}</span>
                 </Link>
               ))}
-              <div className="flex h-auto items-center gap-3 rounded-3xl border border-border bg-card/70 px-4 py-4 text-left">
+              <div className="flex min-h-24 items-start gap-3 rounded-3xl border border-border bg-card/70 px-4 py-4 text-left">
                 <div className="flex size-9 items-center justify-center rounded-2xl bg-secondary/20">
                   <ChartColumnIncreasing className="size-4" />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="text-sm font-semibold">Evidence-first records</p>
                   <p className="text-xs text-muted-foreground">Built for exports, audits, and future adaptation.</p>
                 </div>
