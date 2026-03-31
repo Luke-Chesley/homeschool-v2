@@ -9,7 +9,7 @@ Keep it boring and current.
 - [x] Shared persistence contract accepted
 - [ ] Stable route-generation contract accepted
 - [ ] Daily `PlanItem` integration contract accepted
-- [ ] Tracking/feedback contract accepted
+- [x] Tracking/feedback contract accepted
 
 ## Agent Status
 
@@ -64,22 +64,22 @@ Keep it boring and current.
 - Branch: `agent-d/tracking-feedback-loop`
 - Depends on: shared persistence contract, daily execution contract, learner-skill-state contract
 - Can start before full merge: yes, after contract freeze
-- Status: not started
-- Blockers: stable outcome event contract
+- Status: complete
+- Blockers: no blocking code issues; full end-to-end validation depends on curriculum-linked `PlanItem` rows created by Agent C flows
 - PR: pending
 - Acceptance criteria complete:
-  - [ ] completion updates learner skill state
-  - [ ] mastery outcomes affect recommendations
-  - [ ] unfinished work preferred before new work
-  - [ ] review/reteach flags generated deterministically
+  - [x] completion updates learner skill state
+  - [x] mastery outcomes affect recommendations
+  - [x] unfinished work preferred before new work
+  - [x] review/reteach flags generated deterministically
 
 ## Cross-Agent Integration Checklist
 
 - [x] Stable curriculum node IDs available to all layers
-- [ ] Stable learner-skill-state IDs and statuses available to all layers
+- [x] Stable learner-skill-state IDs and statuses available to all layers
 - [ ] Weekly route items reference canonical curriculum nodes
 - [ ] Daily `PlanItem`s reference weekly route items and curriculum nodes
-- [ ] Completion events can update both planning state and learner skill state
+- [x] Completion events can update both planning state and learner skill state
 - [ ] Conflicts are computed consistently across weekly and daily surfaces
 
 ## Open Contract Changes
@@ -88,6 +88,7 @@ Add items here before changing a shared contract:
 
 - Agent A: `curriculum_sources` now carries `status` and `import_version` directly instead of hiding import lifecycle only in metadata.
 - Agent A: `curriculum_nodes` now carries `is_active` so re-import can retire unmatched nodes without deleting historical identity.
+- Agent D: no schema expansion; downstream recommendation logic should treat `learner_skill_states.status`, `status_reason`, and `last_outcome_summary` as the canonical progress-feedback contract for routing.
 
 ## Merge Order
 
@@ -103,3 +104,7 @@ Use this section for short cross-agent coordination notes only.
 
 - Agent A contract summary: a curriculum node is one persisted row in `curriculum_nodes`; `id` is deterministic from `(source lineage id, normalized_type, normalized_path)`; parent-child structure is `parent_node_id`; canonical sibling order is `sequence_index`; cross-version retirements flip `is_active` to false rather than deleting the node row.
 - Agent A implemented source-detail reads from persisted normalized nodes. Weekly and daily routing should not read `curriculum_items` for canonical sequence.
+- Agent D contract summary:
+  - Outcome-to-skill linkage is resolved from `interactive_activities.plan_item_id -> plan_item_curriculum_links` and persisted for audit in `progress_records.metadata.curriculumLink`.
+  - `learner_skill_states` is the canonical curriculum progress summary; completion sets `completed_at`, mastery sets `mastered_at`, and weak/proficient completion routes to `status = recommended` with deterministic `status_reason` values.
+  - Deterministic recommendation priority is: unfinished scheduled (`scheduled`, `in_progress`) before out-of-sequence repair, before reteach recommendations, before review recommendations.
