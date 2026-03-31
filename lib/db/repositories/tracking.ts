@@ -15,6 +15,12 @@ export function createTrackingRepository(db: HomeschoolDb) {
       return record;
     },
 
+    async findProgressByAttemptId(activityAttemptId: string) {
+      return db.query.progressRecords.findFirst({
+        where: eq(progressRecords.activityAttemptId, activityAttemptId),
+      });
+    },
+
     async attachStandard(input: NewProgressRecordStandard) {
       const [link] = await db.insert(progressRecordStandards).values(input).returning();
       return link;

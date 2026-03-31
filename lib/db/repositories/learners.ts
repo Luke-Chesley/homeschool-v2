@@ -15,6 +15,29 @@ export function createLearnerRepository(db: HomeschoolDb) {
       return learner;
     },
 
+    async upsertLearner(input: NewLearner) {
+      const [learner] = await db
+        .insert(learners)
+        .values(input)
+        .onConflictDoUpdate({
+          target: learners.id,
+          set: {
+            organizationId: input.organizationId,
+            firstName: input.firstName,
+            lastName: input.lastName,
+            displayName: input.displayName,
+            dateOfBirth: input.dateOfBirth,
+            timezone: input.timezone,
+            status: input.status,
+            metadata: input.metadata,
+            updatedAt: new Date(),
+          },
+        })
+        .returning();
+
+      return learner;
+    },
+
     async upsertProfile(input: NewLearnerProfile) {
       const [profile] = await db
         .insert(learnerProfiles)

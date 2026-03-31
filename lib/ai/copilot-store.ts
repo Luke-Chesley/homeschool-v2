@@ -1,11 +1,12 @@
+import "server-only";
+
+import type { InferSelectModel } from "drizzle-orm";
+
 import { createRepositories } from "@/lib/db";
+import { ensureLocalDemoData } from "@/lib/db/fixtures/local-demo-persistence";
 import { getDb } from "@/lib/db/server";
-
+import { conversationThreads, conversationMessages, copilotActions } from "@/lib/db/schema";
 import type { ChatMessage, CopilotAction, CopilotContext } from "./types";
-
-// ---------------------------------------------------------------------------
-// Chat session
-// ---------------------------------------------------------------------------
 
 export interface CopilotSession {
   id: string;
@@ -18,95 +19,166 @@ export interface CopilotSession {
   updatedAt: string;
 }
 
+type ThreadRecord = InferSelectModel<typeof conversationThreads>;
+type MessageRecord = InferSelectModel<typeof conversationMessages>;
+type ActionRecord = InferSelectModel<typeof copilotActions>;
+
+function getCopilotRepo() {
+  return createRepositories(getDb()).copilot;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function toIsoString(value: Date | string) {
+  return typeof value === "string" ? value : value.toISOString();
+}
+
+function getThreadContext(thread: ThreadRecord): CopilotContext | undefined {
+  if (isRecord(thread.metadata) && isRecord(thread.metadata.context)) {
+    return thread.metadata.context as CopilotContext;
+  }
+
+  return undefined;
+}
+
+function mapMessage(message: MessageRecord): ChatMessage {
+  return {
+    role: message.role as ChatMessage["role"],
+    content: message.content,
+    createdAt: toIsoString(message.createdAt),
+  };
+}
+
+function getDomainActionStatus(action: ActionRecord): CopilotAction["status"] {
+  if (isRecord(action.metadata) && typeof action.metadata.domainStatus === "string") {
+    const domainStatus = action.metadata.domainStatus;
+    if (
+      domainStatus === "pending" ||
+      domainStatus === "applied" ||
+      domainStatus === "dismissed"
+    ) {
+      return domainStatus;
+    }
+  }
+
+  if (action.status === "completed") {
+    return "applied";
+  }
+
+  if (action.status === "failed") {
+    return "dismissed";
+  }
+
+  return "pending";
+}
+
+function mapDbActionStatus(status: CopilotAction["status"]): ActionRecord["status"] {
+  switch (status) {
+    case "applied":
+      return "completed";
+    case "dismissed":
+      return "failed";
+    default:
+      return "queued";
+  }
+}
+
+function mapAction(action: ActionRecord): CopilotAction {
+  const metadata = isRecord(action.metadata) ? action.metadata : {};
+
+  return {
+    id: action.id,
+    kind: action.actionType as CopilotAction["kind"],
+    label:
+      typeof metadata.label === "string"
+        ? metadata.label
+        : action.targetType ?? action.actionType,
+    payload: isRecord(action.input) ? action.input : {},
+    status: getDomainActionStatus(action),
+    createdAt: toIsoString(action.createdAt),
+    lineageId: typeof metadata.lineageId === "string" ? metadata.lineageId : undefined,
+  };
+}
+
+function getScopeType(context?: CopilotContext): ThreadRecord["scopeType"] {
+  if (context?.lessonId) {
+    return "lesson_session";
+  }
+
+  if (context?.learnerId) {
+    return "learner";
+  }
+
+  return "organization";
+}
+
 class DbCopilotStore {
+  private async hydrateSession(thread: ThreadRecord): Promise<CopilotSession> {
+    const [messages, actions] = await Promise.all([
+      getCopilotRepo().listMessagesForThread(thread.id),
+      getCopilotRepo().listActionsForThread(thread.id),
+    ]);
+
+    return {
+      id: thread.id,
+      householdId: thread.organizationId,
+      title: thread.title ?? "New conversation",
+      messages: messages.map(mapMessage),
+      context: getThreadContext(thread),
+      actions: actions.map(mapAction),
+      createdAt: toIsoString(thread.createdAt),
+      updatedAt: toIsoString(thread.updatedAt),
+    };
+  }
+
   async createSession(
     householdId: string,
     title: string,
     context?: CopilotContext
   ): Promise<CopilotSession> {
-    const thread = await createRepositories(getDb()).copilot.createThread({
+    await ensureLocalDemoData();
+
+    const thread = await getCopilotRepo().createThread({
       organizationId: householdId,
       learnerId: context?.learnerId ?? null,
       planId: null,
       planDayId: null,
       lessonSessionId: context?.lessonId ?? null,
-      scopeType: context?.learnerId ? "learner" : "organization",
+      scopeType: getScopeType(context),
       title,
       metadata: {
         context: context ?? {},
       },
     });
 
-    return {
-      id: thread.id,
-      householdId,
-      title: thread.title ?? title,
-      messages: [],
-      context,
-      actions: [],
-      createdAt: thread.createdAt.toISOString(),
-      updatedAt: thread.updatedAt.toISOString(),
-    };
+    return this.hydrateSession(thread);
   }
 
   async getSession(id: string): Promise<CopilotSession | null> {
-    const repos = createRepositories(getDb());
-    const thread = await repos.copilot.getThread(id);
-    if (!thread) return null;
+    await ensureLocalDemoData();
 
-    const [messages, actions] = await Promise.all([
-      repos.copilot.listMessagesForThread(id),
-      repos.copilot.listActionsForThread(id),
-    ]);
-
-    return {
-      id: thread.id,
-      householdId: thread.organizationId,
-      title: thread.title ?? "Conversation",
-      messages: messages.map((message) => ({
-        role: message.role as ChatMessage["role"],
-        content: message.content,
-        createdAt: message.createdAt.toISOString(),
-      })),
-      context: (thread.metadata?.context as CopilotContext | undefined) ?? undefined,
-      actions: actions.map((action) => ({
-        id: action.id,
-        kind: action.actionType as CopilotAction["kind"],
-        label: action.targetType ?? action.actionType,
-        payload: (action.input ?? {}) as Record<string, unknown>,
-        status:
-          action.status === "completed"
-            ? "applied"
-            : action.status === "failed"
-              ? "dismissed"
-              : "pending",
-        createdAt: action.createdAt.toISOString(),
-      })),
-      createdAt: thread.createdAt.toISOString(),
-      updatedAt: thread.updatedAt.toISOString(),
-    };
+    const thread = await getCopilotRepo().findThreadById(id);
+    return thread ? this.hydrateSession(thread) : null;
   }
 
   async listSessions(householdId: string): Promise<CopilotSession[]> {
-    const threads = await createRepositories(getDb()).copilot.listThreadsForOrganization(householdId);
-    return threads.map((thread) => ({
-      id: thread.id,
-      householdId: thread.organizationId,
-      title: thread.title ?? "Conversation",
-      messages: [],
-      context: (thread.metadata?.context as CopilotContext | undefined) ?? undefined,
-      actions: [],
-      createdAt: thread.createdAt.toISOString(),
-      updatedAt: thread.updatedAt.toISOString(),
-    }));
+    await ensureLocalDemoData();
+
+    const threads = await getCopilotRepo().listThreadsForOrganization(householdId);
+    return Promise.all(threads.map((thread) => this.hydrateSession(thread)));
   }
 
   async appendMessage(sessionId: string, message: ChatMessage): Promise<CopilotSession> {
-    const repos = createRepositories(getDb());
-    const thread = await repos.copilot.getThread(sessionId);
-    if (!thread) throw new Error(`Session not found: ${sessionId}`);
+    await ensureLocalDemoData();
 
-    await repos.copilot.createMessage({
+    const thread = await getCopilotRepo().findThreadById(sessionId);
+    if (!thread) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+
+    await getCopilotRepo().createMessage({
       threadId: sessionId,
       role: message.role,
       authorAdultUserId: null,
@@ -116,17 +188,23 @@ class DbCopilotStore {
       promptVersion: null,
       metadata: {},
     });
+    const updatedThread = await getCopilotRepo().updateThread(sessionId, {});
 
-    const session = await this.getSession(sessionId);
-    if (!session) throw new Error(`Session not found: ${sessionId}`);
-    return session;
+    return this.hydrateSession(updatedThread ?? thread);
   }
 
   async appendAction(
     sessionId: string,
     action: Omit<CopilotAction, "id" | "createdAt" | "status">
   ): Promise<CopilotAction> {
-    const created = await createRepositories(getDb()).copilot.createAction({
+    await ensureLocalDemoData();
+
+    const thread = await getCopilotRepo().findThreadById(sessionId);
+    if (!thread) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+
+    const created = await getCopilotRepo().createAction({
       threadId: sessionId,
       messageId: null,
       actionType: action.kind,
@@ -135,17 +213,15 @@ class DbCopilotStore {
       targetId: null,
       input: action.payload,
       output: {},
-      metadata: {},
+      metadata: {
+        label: action.label,
+        lineageId: action.lineageId ?? null,
+        domainStatus: "pending",
+      },
     });
+    await getCopilotRepo().updateThread(sessionId, {});
 
-    return {
-      id: created.id,
-      kind: action.kind,
-      label: action.label,
-      payload: action.payload,
-      status: "pending",
-      createdAt: created.createdAt.toISOString(),
-    };
+    return mapAction(created);
   }
 
   async updateActionStatus(
@@ -153,26 +229,42 @@ class DbCopilotStore {
     actionId: string,
     status: CopilotAction["status"]
   ): Promise<CopilotAction> {
-    await createRepositories(getDb()).copilot.getThread(sessionId);
-    const action = await createRepositories(getDb()).copilot.updateActionStatus(
-      actionId,
-      status === "applied" ? "completed" : status === "dismissed" ? "failed" : "queued",
-    );
+    await ensureLocalDemoData();
 
-    return {
-      id: action.id,
-      kind: action.actionType as CopilotAction["kind"],
-      label: action.targetType ?? action.actionType,
-      payload: (action.input ?? {}) as Record<string, unknown>,
-      status,
-      createdAt: action.createdAt.toISOString(),
-    };
+    const thread = await getCopilotRepo().findThreadById(sessionId);
+    if (!thread) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+
+    const action = await getCopilotRepo().findActionById(actionId);
+    if (!action || action.threadId !== sessionId) {
+      throw new Error(`Action not found: ${actionId}`);
+    }
+
+    const metadata = isRecord(action.metadata) ? action.metadata : {};
+    const updated = await getCopilotRepo().updateAction(actionId, {
+      status: mapDbActionStatus(status),
+      metadata: {
+        ...metadata,
+        domainStatus: status,
+      },
+    });
+    await getCopilotRepo().updateThread(sessionId, {});
+
+    if (!updated) {
+      throw new Error(`Action not found: ${actionId}`);
+    }
+
+    return mapAction(updated);
   }
 }
 
 let _store: DbCopilotStore | null = null;
 
 export function getCopilotStore(): DbCopilotStore {
-  if (!_store) _store = new DbCopilotStore();
+  if (!_store) {
+    _store = new DbCopilotStore();
+  }
+
   return _store;
 }

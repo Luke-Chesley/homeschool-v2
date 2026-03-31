@@ -1,45 +1,132 @@
+import "server-only";
+
+import type { InferSelectModel } from "drizzle-orm";
+
+import { FIXTURE_SESSIONS } from "@/lib/activities/fixtures";
 import { createRepositories } from "@/lib/db";
+import { ensureLocalDemoData } from "@/lib/db/fixtures/local-demo-persistence";
 import { getDb } from "@/lib/db/server";
-
-import type { ActivityAttempt, AttemptAnswer, ActivityOutcome } from "./types";
-
-// ---------------------------------------------------------------------------
-// Interface
-// ---------------------------------------------------------------------------
+import { activityAttempts } from "@/lib/db/schema";
+import type { ActivityAttempt, AttemptAnswer, ActivityOutcome, ActivitySession } from "./types";
 
 export interface AttemptStore {
-  /** Find an existing in-progress attempt for this session+learner */
   findInProgress(sessionId: string, learnerId: string): Promise<ActivityAttempt | null>;
-
-  /** Create a new attempt */
+  findLatest(sessionId: string, learnerId: string): Promise<ActivityAttempt | null>;
   create(params: {
     sessionId: string;
     learnerId: string;
     activityId: string;
   }): Promise<ActivityAttempt>;
-
-  /** Autosave answers and optional UI state */
   save(
     attemptId: string,
     answers: AttemptAnswer[],
     uiState?: Record<string, unknown>
   ): Promise<ActivityAttempt>;
-
-  /** Submit the attempt and produce an outcome */
   submit(attemptId: string): Promise<ActivityOutcome>;
-
-  /** Get a specific attempt */
   get(attemptId: string): Promise<ActivityAttempt | null>;
+}
+
+type PersistedAttemptRecord = InferSelectModel<typeof activityAttempts>;
+
+function getActivitiesRepo() {
+  return createRepositories(getDb()).activities;
+}
+
+function getFixtureSession(sessionId: string): ActivitySession | null {
+  return FIXTURE_SESSIONS.find((session) => session.id === sessionId) ?? null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function getAttemptAnswers(record: PersistedAttemptRecord): AttemptAnswer[] {
+  const responses = record.responses;
+  if (!isRecord(responses)) {
+    return [];
+  }
+
+  return Array.isArray(responses.answers) ? (responses.answers as AttemptAnswer[]) : [];
+}
+
+function getAttemptUiState(record: PersistedAttemptRecord): Record<string, unknown> | undefined {
+  const responses = record.responses;
+  if (!isRecord(responses) || !isRecord(responses.uiState)) {
+    return undefined;
+  }
+
+  return responses.uiState;
+}
+
+function getAttemptSessionId(record: PersistedAttemptRecord): string {
+  if (isRecord(record.metadata) && typeof record.metadata.sessionId === "string") {
+    return record.metadata.sessionId;
+  }
+
+  return record.activityId;
+}
+
+function toIsoString(value: string | Date | null | undefined, fallback: Date): string {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  return fallback.toISOString();
+}
+
+function toAttemptStatus(
+  status: PersistedAttemptRecord["status"]
+): ActivityAttempt["status"] {
+  if (status === "graded") {
+    return "graded";
+  }
+
+  if (status === "abandoned") {
+    return "submitted";
+  }
+
+  return status;
+}
+
+function mapAttempt(record: PersistedAttemptRecord): ActivityAttempt {
+  return {
+    id: record.id,
+    sessionId: getAttemptSessionId(record),
+    learnerId: record.learnerId,
+    activityId: record.activityId,
+    answers: getAttemptAnswers(record),
+    score: typeof record.scorePercent === "number" ? record.scorePercent / 100 : undefined,
+    status: toAttemptStatus(record.status),
+    startedAt: toIsoString(record.startedAt, record.createdAt),
+    submittedAt: typeof record.submittedAt === "string" ? record.submittedAt : undefined,
+    uiState: getAttemptUiState(record),
+  };
+}
+
+function computeScore(answers: AttemptAnswer[]) {
+  const gradedAnswers = answers.filter((answer) => answer.correct !== undefined);
+  if (gradedAnswers.length === 0) {
+    return undefined;
+  }
+
+  return gradedAnswers.filter((answer) => answer.correct === true).length / gradedAnswers.length;
 }
 
 class DbAttemptStore implements AttemptStore {
   async findInProgress(sessionId: string, learnerId: string): Promise<ActivityAttempt | null> {
-    const attempt = await createRepositories(getDb()).activities.findInProgressAttempt(
-      sessionId,
-      learnerId,
-    );
+    await ensureLocalDemoData();
+    const attempt = await getActivitiesRepo().findInProgressAttemptForSession(sessionId, learnerId);
+    return attempt ? mapAttempt(attempt) : null;
+  }
 
-    return attempt ? toDomainAttempt(attempt) : null;
+  async findLatest(sessionId: string, learnerId: string): Promise<ActivityAttempt | null> {
+    await ensureLocalDemoData();
+    const attempt = await getActivitiesRepo().findLatestAttemptForSession(sessionId, learnerId);
+    return attempt ? mapAttempt(attempt) : null;
   }
 
   async create(params: {
@@ -47,24 +134,27 @@ class DbAttemptStore implements AttemptStore {
     learnerId: string;
     activityId: string;
   }): Promise<ActivityAttempt> {
-    const repos = createRepositories(getDb());
-    const priorAttempts = await repos.activities.listAttemptsForActivity(params.activityId);
-    const attempt = await repos.activities.createAttempt({
+    await ensureLocalDemoData();
+    const existingAttempts = await getActivitiesRepo().listAttemptsForActivityAndLearner(
+      params.activityId,
+      params.learnerId
+    );
+    const created = await getActivitiesRepo().createAttempt({
       activityId: params.activityId,
       learnerId: params.learnerId,
+      attemptNumber: (existingAttempts[0]?.attemptNumber ?? 0) + 1,
       status: "in_progress",
-      attemptNumber: priorAttempts.length + 1,
       responses: {
         answers: [],
       },
       startedAt: new Date().toISOString(),
       metadata: {
+        source: "local-db",
         sessionId: params.sessionId,
-        uiState: {},
       },
     });
 
-    return toDomainAttempt(attempt);
+    return mapAttempt(created);
   }
 
   async save(
@@ -72,114 +162,82 @@ class DbAttemptStore implements AttemptStore {
     answers: AttemptAnswer[],
     uiState?: Record<string, unknown>
   ): Promise<ActivityAttempt> {
-    const repos = createRepositories(getDb());
-    const attempt = await repos.activities.getAttempt(attemptId);
-    if (!attempt) throw new Error(`Attempt not found: ${attemptId}`);
+    await ensureLocalDemoData();
+    const existing = await getActivitiesRepo().findAttemptById(attemptId);
+    if (!existing) {
+      throw new Error(`Attempt not found: ${attemptId}`);
+    }
 
-    const updated = await repos.activities.updateAttempt(attemptId, {
+    const updated = await getActivitiesRepo().updateAttempt(attemptId, {
       responses: {
         answers,
-      },
-      metadata: {
-        ...(attempt.metadata ?? {}),
-        sessionId: (attempt.metadata?.sessionId as string | undefined) ?? attempt.activityId,
-        uiState: uiState ?? ((attempt.metadata?.uiState as Record<string, unknown> | undefined) ?? {}),
+        uiState: uiState ?? getAttemptUiState(existing) ?? {},
       },
     });
 
-    return toDomainAttempt(updated);
+    if (!updated) {
+      throw new Error(`Attempt not found: ${attemptId}`);
+    }
+
+    return mapAttempt(updated);
   }
 
   async submit(attemptId: string): Promise<ActivityOutcome> {
-    const repos = createRepositories(getDb());
-    const attempt = await repos.activities.getAttempt(attemptId);
-    if (!attempt) throw new Error(`Attempt not found: ${attemptId}`);
+    await ensureLocalDemoData();
+    const existing = await getActivitiesRepo().findAttemptById(attemptId);
+    if (!existing) {
+      throw new Error(`Attempt not found: ${attemptId}`);
+    }
 
-    const completedAt = new Date().toISOString();
-    const updated = await repos.activities.updateAttempt(attemptId, {
-      status: "submitted",
-      submittedAt: completedAt,
-      completedAt,
-      scorePercent: computeScorePercent(extractAnswers(attempt.responses)),
-      metadata: attempt.metadata ?? {},
-    });
-    const activity = await repos.activities.getActivity(attempt.activityId);
-    const metadata = (activity?.metadata ?? {}) as Record<string, unknown>;
-    const startMs = new Date(attempt.startedAt ?? updated.startedAt ?? completedAt).getTime();
-    const endMs = new Date(completedAt).getTime();
-    const responses = extractAnswers(updated.responses);
-    const score =
-      typeof updated.scorePercent === "number" ? updated.scorePercent / 100 : undefined;
+    const answers = getAttemptAnswers(existing);
+    const completedAt =
+      typeof existing.completedAt === "string"
+        ? existing.completedAt
+        : typeof existing.submittedAt === "string"
+          ? existing.submittedAt
+          : new Date().toISOString();
+    const score = computeScore(answers);
 
-    const outcome: ActivityOutcome = {
-      attemptId,
-      sessionId: ((updated.metadata?.sessionId as string | undefined) ?? updated.activityId),
-      learnerId: updated.learnerId,
-      activityId: updated.activityId,
-      lessonId: (metadata.lessonId as string | undefined) ?? undefined,
-      score,
-      timeSpentMs: endMs - startMs,
+    const submitted =
+      existing.status === "in_progress"
+        ? await getActivitiesRepo().updateAttempt(attemptId, {
+            status: "submitted",
+            scorePercent: typeof score === "number" ? Math.round(score * 100) : null,
+            submittedAt: completedAt,
+            completedAt,
+          })
+        : existing;
+
+    if (!submitted) {
+      throw new Error(`Attempt not found: ${attemptId}`);
+    }
+
+    const mappedAttempt = mapAttempt(submitted);
+    const session = getFixtureSession(mappedAttempt.sessionId);
+    const startedAtMs = new Date(mappedAttempt.startedAt).getTime();
+    const completedAtMs = new Date(completedAt).getTime();
+
+    return {
+      attemptId: mappedAttempt.id,
+      sessionId: mappedAttempt.sessionId,
+      learnerId: mappedAttempt.learnerId,
+      activityId: mappedAttempt.activityId,
+      lessonId: session?.lessonId,
+      score: mappedAttempt.score ?? score,
+      timeSpentMs:
+        Number.isFinite(startedAtMs) && Number.isFinite(completedAtMs)
+          ? Math.max(0, completedAtMs - startedAtMs)
+          : undefined,
       completedAt,
-      standardIds: Array.isArray(metadata.standardIds) ? (metadata.standardIds as string[]) : [],
+      standardIds: session?.standardIds ?? [],
     };
-
-    return outcome;
   }
 
   async get(attemptId: string): Promise<ActivityAttempt | null> {
-    const attempt = await createRepositories(getDb()).activities.getAttempt(attemptId);
-    return attempt ? toDomainAttempt(attempt) : null;
+    await ensureLocalDemoData();
+    const attempt = await getActivitiesRepo().findAttemptById(attemptId);
+    return attempt ? mapAttempt(attempt) : null;
   }
-}
-
-function computeScorePercent(answers: AttemptAnswer[]) {
-  const gradedAnswers = answers.filter((answer) => answer.correct !== undefined);
-
-  if (gradedAnswers.length === 0) {
-    return null;
-  }
-
-  return Math.round(
-    (gradedAnswers.filter((answer) => answer.correct === true).length / gradedAnswers.length) * 100,
-  );
-}
-
-function extractAnswers(responses: unknown): AttemptAnswer[] {
-  if (
-    typeof responses === "object" &&
-    responses !== null &&
-    Array.isArray((responses as { answers?: unknown }).answers)
-  ) {
-    return (responses as { answers: AttemptAnswer[] }).answers;
-  }
-
-  return [];
-}
-
-function toDomainAttempt(attempt: {
-  id: string;
-  activityId: string;
-  learnerId: string;
-  responses: unknown;
-  status: "in_progress" | "submitted" | "graded" | "abandoned";
-  startedAt: string | null;
-  submittedAt: string | null;
-  scorePercent: number | null;
-  metadata: Record<string, unknown>;
-}) {
-  return {
-    id: attempt.id,
-    sessionId: (attempt.metadata?.sessionId as string | undefined) ?? attempt.activityId,
-    learnerId: attempt.learnerId,
-    activityId: attempt.activityId,
-    answers: extractAnswers(attempt.responses),
-    score:
-      typeof attempt.scorePercent === "number" ? Math.max(0, attempt.scorePercent) / 100 : undefined,
-    status: attempt.status === "abandoned" ? "submitted" : attempt.status,
-    startedAt: attempt.startedAt ?? new Date().toISOString(),
-    submittedAt: attempt.submittedAt ?? undefined,
-    uiState: (attempt.metadata?.uiState as Record<string, unknown> | undefined) ?? undefined,
-  } satisfies ActivityAttempt;
 }
 
 let _store: AttemptStore | null = null;
@@ -188,5 +246,6 @@ export function getAttemptStore(): AttemptStore {
   if (!_store) {
     _store = new DbAttemptStore();
   }
+
   return _store;
 }

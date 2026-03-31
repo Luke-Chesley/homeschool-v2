@@ -59,7 +59,6 @@ export async function POST(req: NextRequest) {
   const { sessionId, messages, context } = parsed.data;
   const appSession = await requireAppSession();
 
-  // Persist user message to session (non-blocking)
   const store = getCopilotStore();
   let activeSessionId = sessionId;
   if (!activeSessionId) {
@@ -84,30 +83,24 @@ export async function POST(req: NextRequest) {
     await store.appendMessage(activeSessionId, lastUserMessage as ChatMessage);
   }
 
-  // Create the streaming response
   const encoder = new TextEncoder();
   let fullResponse = "";
 
   const stream = new ReadableStream({
     async start(controller) {
       try {
-        // Send session ID as first event
         controller.enqueue(
           encoder.encode(`data: ${JSON.stringify({ sessionId: activeSessionId })}\n\n`)
         );
 
-        // Stream AI response
         for await (const delta of streamChatAnswer({
           messages: messages as ChatMessage[],
           context: context as CopilotContext | undefined,
         })) {
           fullResponse += delta;
-          controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify({ delta })}\n\n`)
-          );
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ delta })}\n\n`));
         }
 
-        // Persist assistant message
         await store.appendMessage(activeSessionId!, {
           role: "assistant",
           content: fullResponse,
