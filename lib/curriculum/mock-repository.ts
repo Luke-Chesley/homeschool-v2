@@ -43,10 +43,12 @@ const seedSources: CurriculumSource[] = [
     title: "Singapore Math 4A",
     description: "Primary Mathematics 4A — place value through fractions.",
     kind: "manual",
+    status: "active",
     academicYear: "2025-2026",
     subjects: ["math"],
     gradeLevels: ["4"],
     indexingStatus: "not_applicable",
+    importVersion: 1,
     createdAt: now,
     updatedAt: now,
   },
@@ -174,7 +176,9 @@ class InMemoryCurriculumRepository implements CurriculumRepository {
     const record: CurriculumSource = {
       ...input,
       id: randomUUID(),
+      status: "draft",
       indexingStatus: "not_applicable",
+      importVersion: 1,
       createdAt: this.ts(),
       updatedAt: this.ts(),
     };
@@ -295,29 +299,13 @@ class InMemoryCurriculumRepository implements CurriculumRepository {
     const source = this.store.sources.get(sourceId);
     if (!source) return null;
 
-    const units = await this.listUnits(sourceId);
-
-    const treeUnits = await Promise.all(
-      units.map(async (unit) => {
-        const lessons = await this.listLessons(unit.id);
-        const unitObjectives = await this.listObjectives({ unitId: unit.id });
-
-        const lessonsWithObjectives = await Promise.all(
-          lessons.map(async (lesson) => ({
-            lesson,
-            objectives: await this.listObjectives({ lessonId: lesson.id }),
-          }))
-        );
-
-        return {
-          unit,
-          lessons: lessonsWithObjectives,
-          objectives: unitObjectives,
-        };
-      })
-    );
-
-    return { source, units: treeUnits };
+    return {
+      source,
+      rootNodes: [],
+      nodeCount: 0,
+      skillCount: 0,
+      canonicalSkillNodeIds: [],
+    };
   }
 }
 
