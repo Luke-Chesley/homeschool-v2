@@ -15,6 +15,7 @@ import { z } from "zod";
 import { requireAppSession } from "@/lib/app-session/server";
 import { streamChatAnswer } from "@/lib/ai/task-service";
 import { getCopilotStore } from "@/lib/ai/copilot-store";
+import { CopilotContextSchema } from "@/lib/ai/types";
 import type { ChatMessage, CopilotContext } from "@/lib/ai/types";
 
 const RequestSchema = z.object({
@@ -25,19 +26,7 @@ const RequestSchema = z.object({
       content: z.string(),
     })
   ),
-  context: z
-    .object({
-      learnerId: z.string().optional(),
-      learnerName: z.string().optional(),
-      curriculumSourceId: z.string().optional(),
-      lessonId: z.string().optional(),
-      standardIds: z.array(z.string()).default([]),
-      goalIds: z.array(z.string()).default([]),
-      recentOutcomes: z
-        .array(z.object({ title: z.string(), status: z.string(), date: z.string() }))
-        .default([]),
-    })
-    .optional(),
+  context: CopilotContextSchema.optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -61,16 +50,19 @@ export async function POST(req: NextRequest) {
 
   const store = getCopilotStore();
   let activeSessionId = sessionId;
-  const scopedContext: CopilotContext = {
+  const normalizedContext: CopilotContext = {
     learnerId: appSession.activeLearner.id,
     learnerName: appSession.activeLearner.displayName,
     curriculumSourceId: context?.curriculumSourceId,
     lessonId: context?.lessonId,
     standardIds: context?.standardIds ?? [],
     goalIds: context?.goalIds ?? [],
+    curriculumSnapshot: context?.curriculumSnapshot,
+    dailyWorkspaceSnapshot: context?.dailyWorkspaceSnapshot,
+    weeklyPlanningSnapshot: context?.weeklyPlanningSnapshot,
+    feedbackNotes: context?.feedbackNotes ?? [],
     recentOutcomes: context?.recentOutcomes ?? [],
   };
-
   if (activeSessionId) {
     const existing = await store.getSession(activeSessionId, {
       householdId: appSession.organization.id,
@@ -83,12 +75,11 @@ export async function POST(req: NextRequest) {
       });
     }
   }
-
   if (!activeSessionId) {
     const session = await store.createSession(
       appSession.organization.id,
       messages.find((m) => m.role === "user")?.content?.slice(0, 60) ?? "New conversation",
-      scopedContext,
+      normalizedContext
     );
     activeSessionId = session.id;
   }
@@ -113,7 +104,7 @@ export async function POST(req: NextRequest) {
 
         for await (const delta of streamChatAnswer({
           messages: messages as ChatMessage[],
-          context: scopedContext,
+          context: normalizedContext,
         })) {
           fullResponse += delta;
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ delta })}\n\n`));

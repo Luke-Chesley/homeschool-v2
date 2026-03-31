@@ -63,7 +63,7 @@ export default async function PlanningPage({ searchParams }: PlanningPageProps) 
         </p>
       </header>
 
-      <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
+      <div className="grid gap-6 2xl:grid-cols-[320px_minmax(0,1fr)]">
         <CurriculumSourceSelector
           sources={sources}
           selectedSourceId={selectedSourceId}

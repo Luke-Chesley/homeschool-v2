@@ -140,6 +140,97 @@ export const CopilotActionSchema = z.object({
 });
 export type CopilotAction = z.infer<typeof CopilotActionSchema>;
 
+export const CurriculumSnapshotSchema = z.object({
+  sourceId: z.string().optional(),
+  subjectFocus: z.array(z.string()).default([]),
+  lessonLabels: z.array(z.string()).default([]),
+  skillNodeIds: z.array(z.string()).default([]),
+  weeklyRouteItemIds: z.array(z.string()).default([]),
+  todayHighlights: z.array(z.string()).default([]),
+});
+export type CurriculumSnapshot = z.infer<typeof CurriculumSnapshotSchema>;
+
+export const DailyWorkspaceItemSummarySchema = z.object({
+  title: z.string(),
+  subject: z.string(),
+  objective: z.string(),
+  lessonLabel: z.string(),
+  status: z.string(),
+  estimatedMinutes: z.number(),
+  materials: z.array(z.string()).default([]),
+  copilotPrompts: z.array(z.string()).default([]),
+});
+
+export const DailyWorkspaceSnapshotSchema = z.object({
+  date: z.string(),
+  headline: z.string(),
+  leadLesson: z.object({
+    title: z.string(),
+    subject: z.string(),
+    objective: z.string(),
+    lessonLabel: z.string(),
+    estimatedMinutes: z.number(),
+  }),
+  planItems: z.array(DailyWorkspaceItemSummarySchema).default([]),
+  prepChecklist: z.array(z.string()).default([]),
+  sessionTargets: z.array(z.string()).default([]),
+  copilotInsertions: z.array(z.string()).default([]),
+  completionPrompts: z.array(z.string()).default([]),
+  familyNotes: z.array(z.string()).default([]),
+});
+export type DailyWorkspaceSnapshot = z.infer<typeof DailyWorkspaceSnapshotSchema>;
+
+export const WeeklyPlanningSnapshotItemSchema = z.object({
+  id: z.string(),
+  skillTitle: z.string(),
+  skillPath: z.string(),
+  subject: z.string(),
+  recommendedPosition: z.number(),
+  currentPosition: z.number(),
+  scheduledDate: z.string().nullable(),
+  manualOverrideKind: z.string(),
+  manualOverrideNote: z.string().nullable(),
+  state: z.string(),
+});
+
+export const WeeklyPlanningSnapshotDaySchema = z.object({
+  date: z.string(),
+  label: z.string(),
+  itemIds: z.array(z.string()).default([]),
+  itemTitles: z.array(z.string()).default([]),
+  scheduledMinutes: z.number(),
+});
+
+export const WeeklyPlanningSnapshotConflictSchema = z.object({
+  type: z.string(),
+  explanation: z.string(),
+  affectedItemIds: z.array(z.string()).default([]),
+  keepOverrideAllowed: z.boolean(),
+});
+
+export const WeeklyPlanningSnapshotSchema = z.object({
+  weekStartDate: z.string(),
+  weekLabel: z.string(),
+  weeklyRouteId: z.string(),
+  sourceId: z.string(),
+  learnerId: z.string(),
+  learnerName: z.string(),
+  summary: z.object({
+    itemCount: z.number(),
+    scheduledCount: z.number(),
+    unassignedCount: z.number(),
+    conflictCount: z.number(),
+    reorderedCount: z.number(),
+    pinnedCount: z.number(),
+    deferredCount: z.number(),
+  }),
+  days: z.array(WeeklyPlanningSnapshotDaySchema).default([]),
+  items: z.array(WeeklyPlanningSnapshotItemSchema).default([]),
+  conflicts: z.array(WeeklyPlanningSnapshotConflictSchema).default([]),
+  highlights: z.array(z.string()).default([]),
+});
+export type WeeklyPlanningSnapshot = z.infer<typeof WeeklyPlanningSnapshotSchema>;
+
 // ---------------------------------------------------------------------------
 // Copilot context (passed to AI to ground its responses)
 // ---------------------------------------------------------------------------
@@ -156,6 +247,10 @@ export const CopilotContextSchema = z.object({
   standardIds: z.array(z.string()).default([]),
   /** Custom goals in scope */
   goalIds: z.array(z.string()).default([]),
+  curriculumSnapshot: CurriculumSnapshotSchema.optional(),
+  dailyWorkspaceSnapshot: DailyWorkspaceSnapshotSchema.optional(),
+  weeklyPlanningSnapshot: WeeklyPlanningSnapshotSchema.optional(),
+  feedbackNotes: z.array(z.string()).default([]),
   /** Recent outcomes for context */
   recentOutcomes: z.array(
     z.object({ title: z.string(), status: z.string(), date: z.string() })

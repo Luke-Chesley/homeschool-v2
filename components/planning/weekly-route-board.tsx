@@ -110,13 +110,13 @@ function SortableRouteItem({
         transition,
       }}
       className={cn(
-        "rounded-xl border border-border/70 bg-card p-3",
+        "min-w-0 rounded-xl border border-border/70 bg-card p-3",
         isDragging && "opacity-70 shadow-md",
       )}
     >
       <div className="flex items-start justify-between gap-2">
-        <div className="space-y-2">
-          <p className="text-sm font-semibold leading-5">{item.skillTitle}</p>
+        <div className="min-w-0 flex-1 space-y-2">
+          <p className="text-sm font-semibold leading-5 break-words">{item.skillTitle}</p>
           <p className="truncate text-xs text-muted-foreground">{item.skillPath}</p>
           <div className="flex flex-wrap gap-1">
             <Badge variant="outline" className="text-[10px] uppercase tracking-[0.14em]">
@@ -138,7 +138,7 @@ function SortableRouteItem({
         <button
           type="button"
           aria-label={`Drag ${item.skillTitle}`}
-          className="rounded-md border border-border/70 p-1 text-muted-foreground transition-colors hover:text-foreground"
+          className="shrink-0 rounded-md border border-border/70 p-1 text-muted-foreground transition-colors hover:text-foreground"
           {...attributes}
           {...listeners}
         >
@@ -161,12 +161,15 @@ function RouteColumn({
   const { setNodeRef, isOver } = useDroppable({ id: columnId });
 
   return (
-    <Card className={cn("min-h-72", isOver && "border-primary/40 bg-primary/5")}>
+    <Card
+      data-weekly-column={columnId}
+      className={cn("min-h-72 min-w-0", isOver && "border-primary/40 bg-primary/5")}
+    >
       <CardHeader className="pb-3">
         <CardTitle className="text-base">{getColumnLabel(columnId)}</CardTitle>
         <CardDescription>{items.length} items</CardDescription>
       </CardHeader>
-      <CardContent ref={setNodeRef} className="space-y-2">
+      <CardContent ref={setNodeRef} className="min-w-0 space-y-2">
         <SortableContext items={items.map((item) => item.id)} strategy={verticalListSortingStrategy}>
           {items.length === 0 ? (
             <div className="rounded-lg border border-dashed border-border/70 px-3 py-6 text-center text-xs text-muted-foreground">
@@ -190,11 +193,13 @@ function RouteColumn({
 export function WeeklyRouteBoard({ initialBoard, weekStartDate }: WeeklyRouteBoardProps) {
   const weekDates = getWeekdayDates(weekStartDate);
   const columnOrder = ["unassigned", ...weekDates];
+  const initialColumns = createColumns(initialBoard.items, weekDates);
   const [board, setBoard] = useState(initialBoard);
-  const [columns, setColumns] = useState<ColumnsState>(() => createColumns(initialBoard.items, weekDates));
+  const [columns, setColumns] = useState<ColumnsState>(initialColumns);
   const [activeItemId, setActiveItemId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const columnsRef = useRef<ColumnsState>(initialColumns);
   const snapshotRef = useRef<{ board: WeeklyRouteBoard; columns: ColumnsState } | null>(null);
 
   const sensors = useSensors(
@@ -209,8 +214,10 @@ export function WeeklyRouteBoard({ initialBoard, weekStartDate }: WeeklyRouteBoa
   const conflictedItemIds = new Set(board.conflicts.flatMap((conflict) => conflict.affectedItemIds));
 
   const resetFromServerBoard = (nextBoard: WeeklyRouteBoard) => {
+    const nextColumns = createColumns(nextBoard.items, weekDates);
     setBoard(nextBoard);
-    setColumns(createColumns(nextBoard.items, weekDates));
+    columnsRef.current = nextColumns;
+    setColumns(nextColumns);
   };
 
   const persistMove = async (itemId: string, nextColumns: ColumnsState) => {
@@ -249,6 +256,7 @@ export function WeeklyRouteBoard({ initialBoard, weekStartDate }: WeeklyRouteBoa
       setError("Could not save this move. The board was restored.");
       if (snapshotRef.current) {
         setBoard(snapshotRef.current.board);
+        columnsRef.current = snapshotRef.current.columns;
         setColumns(snapshotRef.current.columns);
       }
     } finally {
@@ -265,7 +273,7 @@ export function WeeklyRouteBoard({ initialBoard, weekStartDate }: WeeklyRouteBoa
     setActiveItemId(id);
     snapshotRef.current = {
       board,
-      columns,
+      columns: columnsRef.current,
     };
   };
 
@@ -300,11 +308,13 @@ export function WeeklyRouteBoard({ initialBoard, weekStartDate }: WeeklyRouteBoa
       const insertAt = overIndex >= 0 ? overIndex : overColumnItems.length;
       overColumnItems.splice(insertAt, 0, activeId);
 
-      return {
+      const reordered = {
         ...current,
         [activeColumnId]: activeColumnItems,
         [overColumnId]: overColumnItems,
       };
+      columnsRef.current = reordered;
+      return reordered;
     });
   };
 
@@ -321,45 +331,54 @@ export function WeeklyRouteBoard({ initialBoard, weekStartDate }: WeeklyRouteBoa
     if (!overId) {
       if (snapshotRef.current) {
         setBoard(snapshotRef.current.board);
+        columnsRef.current = snapshotRef.current.columns;
         setColumns(snapshotRef.current.columns);
       }
       return;
     }
 
-    let nextColumns: ColumnsState | null = null;
-    setColumns((current) => {
-      const activeColumnId = findColumnForId(activeId, current);
-      const overColumnId = findColumnForId(overId, current);
-      if (!activeColumnId || !overColumnId) {
-        nextColumns = current;
-        return current;
-      }
+    const current = columnsRef.current;
+    const activeColumnId = findColumnForId(activeId, current);
+    const overColumnId = findColumnForId(overId, current);
+    if (!activeColumnId || !overColumnId) {
+      return;
+    }
 
-      if (activeColumnId !== overColumnId) {
-        nextColumns = current;
-        return current;
-      }
-
+    let nextColumns = current;
+    if (activeColumnId === overColumnId) {
       const currentItems = [...current[activeColumnId]];
       const activeIndex = currentItems.indexOf(activeId);
       const overIndex = currentItems.indexOf(overId);
 
       if (activeIndex >= 0 && overIndex >= 0 && activeIndex !== overIndex) {
-        const reordered = {
+        nextColumns = {
           ...current,
           [activeColumnId]: arrayMove(currentItems, activeIndex, overIndex),
         };
-        nextColumns = reordered;
-        return reordered;
       }
-
-      nextColumns = current;
-      return current;
-    });
-
-    if (nextColumns) {
-      await persistMove(activeId, nextColumns);
+    } else {
+      const activeColumnItems = [...current[activeColumnId]];
+      const overColumnItems = [...current[overColumnId]];
+      const activeIndex = activeColumnItems.indexOf(activeId);
+      if (activeIndex >= 0) {
+        activeColumnItems.splice(activeIndex, 1);
+        const overIndex = overColumnItems.indexOf(overId);
+        const insertAt = overIndex >= 0 ? overIndex : overColumnItems.length;
+        overColumnItems.splice(insertAt, 0, activeId);
+        nextColumns = {
+          ...current,
+          [activeColumnId]: activeColumnItems,
+          [overColumnId]: overColumnItems,
+        };
+      }
     }
+
+    if (nextColumns !== current) {
+      columnsRef.current = nextColumns;
+      setColumns(nextColumns);
+    }
+
+    await persistMove(activeId, nextColumns);
   };
 
   return (
@@ -388,7 +407,10 @@ export function WeeklyRouteBoard({ initialBoard, weekStartDate }: WeeklyRouteBoa
         onDragOver={onDragOver}
         onDragEnd={onDragEnd}
       >
-        <div className="grid gap-4 xl:grid-cols-3 2xl:grid-cols-6">
+        <div
+          data-weekly-board
+          className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]"
+        >
           {columnOrder.map((columnId) => {
             const items = columns[columnId]
               .map((itemId) => itemsById.get(itemId))
