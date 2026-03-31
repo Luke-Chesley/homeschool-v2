@@ -14,8 +14,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AddSourceModalContent } from "@/components/curriculum/AddSourceModal";
-
-const DEMO_HOUSEHOLD_ID = "household-demo";
+import { DEMO_HOUSEHOLD_ID } from "@/lib/curriculum/constants";
 
 export default function NewCurriculumPage() {
   const router = useRouter();
@@ -23,12 +22,13 @@ export default function NewCurriculumPage() {
   const [error, setError] = React.useState<string | null>(null);
 
   async function handleCreated(data: {
-    title: string;
-    description: string;
-    kind: import("@/lib/curriculum/types").CurriculumSourceKind;
-    subjects: string[];
-    gradeLevels: string[];
     householdId: string;
+    title?: string;
+    description?: string;
+    kind?: import("@/lib/curriculum/types").CurriculumSourceKind;
+    subjects?: string[];
+    gradeLevels?: string[];
+    importPreset?: "local_curriculum_json";
   }) {
     setCreating(true);
     setError(null);
