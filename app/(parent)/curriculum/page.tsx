@@ -58,7 +58,11 @@ export default async function CurriculumLibraryPage() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {sources.map((source) => (
-            <Link key={source.id} href={`/curriculum/${source.id}`}>
+            <Link
+              key={source.id}
+              href={`/curriculum/${source.id}`}
+              className="block rounded-3xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            >
               <CurriculumSourceCard source={source} className="h-full" />
             </Link>
           ))}
