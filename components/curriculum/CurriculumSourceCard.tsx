@@ -52,7 +52,7 @@ const indexingColors: Record<CurriculumSource["indexingStatus"], string> = {
 // Card
 // ---------------------------------------------------------------------------
 
-const cardVariants = cva("cursor-pointer transition-shadow hover:shadow-md", {
+const cardVariants = cva("transition-shadow hover:shadow-md", {
   variants: {
     selected: {
       true: "ring-2 ring-primary",
@@ -63,16 +63,14 @@ const cardVariants = cva("cursor-pointer transition-shadow hover:shadow-md", {
 });
 
 export interface CurriculumSourceCardProps
-  extends Omit<React.ComponentProps<"div">, "onSelect">,
+  extends React.ComponentProps<"div">,
     VariantProps<typeof cardVariants> {
   source: CurriculumSource;
-  onSelect?: (source: CurriculumSource) => void;
 }
 
 export function CurriculumSourceCard({
   source,
   selected,
-  onSelect,
   className,
   ...props
 }: CurriculumSourceCardProps) {
@@ -82,12 +80,6 @@ export function CurriculumSourceCard({
   return (
     <Card
       className={cn(cardVariants({ selected }), className)}
-      onClick={() => onSelect?.(source)}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") onSelect?.(source);
-      }}
       {...props}
     >
       <CardHeader className="pb-2">
