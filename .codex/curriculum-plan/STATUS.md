@@ -7,7 +7,7 @@ Keep it boring and current.
 ## Contract Freeze Status
 
 - [x] Shared persistence contract accepted
-- [ ] Stable route-generation contract accepted
+- [x] Stable route-generation contract accepted
 - [ ] Daily `PlanItem` integration contract accepted
 - [ ] Tracking/feedback contract accepted
 
@@ -34,14 +34,14 @@ Keep it boring and current.
 - Branch: `agent-b/weekly-route-board`
 - Depends on: shared persistence contract, learner-skill-state contract
 - Can start before full merge: yes, against fixtures or repository adapters
-- Status: not started
-- Blockers: shared contract freeze
+- Status: complete
+- Blockers: none
 - PR: pending
 - Acceptance criteria complete:
-  - [ ] route generation deterministic
-  - [ ] weekly route persisted
-  - [ ] reorder stored as override without mutating canonical sequence
-  - [ ] conflicts and repair preview implemented
+  - [x] route generation deterministic
+  - [x] weekly route persisted
+  - [x] reorder stored as override without mutating canonical sequence
+  - [x] conflicts and repair preview implemented
 
 ### Agent C — Daily Selection And Deferral
 
@@ -77,7 +77,7 @@ Keep it boring and current.
 
 - [x] Stable curriculum node IDs available to all layers
 - [ ] Stable learner-skill-state IDs and statuses available to all layers
-- [ ] Weekly route items reference canonical curriculum nodes
+- [x] Weekly route items reference canonical curriculum nodes
 - [ ] Daily `PlanItem`s reference weekly route items and curriculum nodes
 - [ ] Completion events can update both planning state and learner skill state
 - [ ] Conflicts are computed consistently across weekly and daily surfaces
@@ -91,8 +91,8 @@ Add items here before changing a shared contract:
 
 ## Merge Order
 
-- [ ] Shared contract PR merged
-- [ ] Agent A merged
+- [x] Shared contract PR merged
+- [x] Agent A merged
 - [ ] Agent B merged
 - [ ] Agent C merged
 - [ ] Agent D merged
@@ -103,3 +103,9 @@ Use this section for short cross-agent coordination notes only.
 
 - Agent A contract summary: a curriculum node is one persisted row in `curriculum_nodes`; `id` is deterministic from `(source lineage id, normalized_type, normalized_path)`; parent-child structure is `parent_node_id`; canonical sibling order is `sequence_index`; cross-version retirements flip `is_active` to false rather than deleting the node row.
 - Agent A implemented source-detail reads from persisted normalized nodes. Weekly and daily routing should not read `curriculum_items` for canonical sequence.
+- Agent B contract summary:
+  - `weekly_route_items` are the canonical per-week planning rows; one row references one canonical `curriculum_nodes.id` skill via `skill_node_id`.
+  - Deterministic generation now persists `weekly_routes` + ordered `weekly_route_items` using `recommended_position` and `current_position`; canonical curriculum sequence is never mutated.
+  - Reorder overrides persist only in weekly route state (`current_position`, `manual_override_kind`, `manual_override_note`) and audit to `route_override_events`.
+  - Conflict payload shape is `{ type, affectedItemIds, blockingSkillNodeIds, explanation, suggestedRepairActions, keepOverrideAllowed }`.
+  - Daily handoff fields from each weekly route item are `{ weeklyRouteItemId, curriculumSourceId, curriculumSkillNodeId, currentPosition, scheduledDate, state }`.
