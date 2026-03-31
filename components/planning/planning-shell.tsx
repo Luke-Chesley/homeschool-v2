@@ -59,7 +59,7 @@ export function PlanningShell({
             </p>
           </div>
 
-          <Card className="w-full max-w-xl border-primary/15 bg-background/88">
+          <Card className="w-full max-w-3xl border-primary/15 bg-background/88">
             <CardContent className="grid gap-3 p-4 md:grid-cols-3">
               {navItems.map(({ href, label, view, icon: Icon }) => (
                 <Link
@@ -69,11 +69,22 @@ export function PlanningShell({
                     buttonVariants({
                       variant: currentView === view ? "default" : "outline",
                     }),
-                    "min-h-24 w-full items-start justify-start rounded-3xl px-4 py-4 text-left text-sm leading-5 whitespace-normal"
+                    "h-auto min-h-28 w-full flex-col items-start justify-between rounded-[1.75rem] px-4 py-4 text-left text-sm leading-5 whitespace-normal"
                   )}
                 >
-                  <Icon className="mt-0.5 size-4 shrink-0" />
-                  <span className="min-w-0 text-balance">{label}</span>
+                  <span
+                    className={cn(
+                      "inline-flex size-10 items-center justify-center rounded-2xl border",
+                      currentView === view
+                        ? "border-primary-foreground/20 bg-primary-foreground/10"
+                        : "border-border/70 bg-background/80",
+                    )}
+                  >
+                    <Icon className="size-4 shrink-0" />
+                  </span>
+                  <span className="min-w-0 text-base font-semibold leading-6 whitespace-normal">
+                    {label}
+                  </span>
                 </Link>
               ))}
             </CardContent>

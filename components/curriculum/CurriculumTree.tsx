@@ -43,11 +43,11 @@ function ExpandableRow({
   children?: React.ReactNode;
 }) {
   return (
-    <div>
+    <div className="min-w-0">
       <button
         type="button"
         className={cn(
-          "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left transition-colors",
+          "flex w-full min-w-0 items-start gap-2 rounded-lg px-3 py-2 text-left transition-colors",
           "hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         )}
         style={{ paddingLeft: `${(depth + 1) * 12}px` }}
@@ -60,7 +60,9 @@ function ExpandableRow({
           <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
         )}
         <Icon className="size-4 shrink-0 text-primary/70" />
-        <span className="flex-1 truncate text-sm font-medium">{label}</span>
+        <span className="min-w-0 flex-1 break-words text-sm font-medium leading-6 whitespace-normal">
+          {label}
+        </span>
         {meta}
       </button>
       {expanded && children && <div>{children}</div>}
@@ -86,7 +88,7 @@ function LeafRow({
     <Comp
       type={onClick ? "button" : undefined}
       className={cn(
-        "flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-sm",
+        "flex w-full min-w-0 items-start gap-2 rounded-lg px-3 py-1.5 text-left text-sm",
         "text-foreground/80",
         onClick && "cursor-pointer hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       )}
@@ -94,12 +96,16 @@ function LeafRow({
       onClick={onClick}
     >
       <Icon className="size-3.5 shrink-0 text-muted-foreground" />
-      <span className="flex-1 truncate">{label}</span>
-      {tags?.map((t) => (
-        <Badge key={t} variant="outline" className="text-[10px] normal-case tracking-normal">
-          {t}
-        </Badge>
-      ))}
+      <span className="min-w-0 flex-1 break-words leading-6 whitespace-normal">{label}</span>
+      {tags && tags.length > 0 ? (
+        <span className="flex max-w-full flex-wrap justify-end gap-1">
+          {tags.map((t) => (
+            <Badge key={t} variant="outline" className="max-w-full text-[10px] normal-case tracking-normal whitespace-normal break-all">
+              {t}
+            </Badge>
+          ))}
+        </span>
+      ) : null}
     </Comp>
   );
 }
@@ -248,7 +254,7 @@ export function CurriculumTree({ tree, onSelectLesson, onSelectObjective }: Tree
   const [expanded, setExpanded] = React.useState(true);
 
   return (
-    <div className="select-none rounded-xl border border-border/70 bg-card/80 py-2">
+    <div className="min-w-0 select-none overflow-hidden rounded-xl border border-border/70 bg-card/80 py-2">
       <ExpandableRow
         depth={0}
         expanded={expanded}

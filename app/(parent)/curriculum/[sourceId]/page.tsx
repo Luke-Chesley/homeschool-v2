@@ -62,10 +62,10 @@ export default async function CurriculumSourcePage({ params }: Props) {
       </div>
 
       {/* Content grid */}
-      <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
         {/* Tree */}
-        <div className="flex flex-col gap-4">
-          <div className="flex items-center justify-between">
+        <div className="min-w-0 flex flex-col gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="font-semibold text-lg">Curriculum structure</h2>
             <Link href={`/curriculum/${sourceId}/units/new`}>
               <Button size="sm" variant="outline">
@@ -88,7 +88,7 @@ export default async function CurriculumSourcePage({ params }: Props) {
         </div>
 
         {/* Sidebar */}
-        <div className="flex flex-col gap-4">
+        <div className="min-w-0 flex flex-col gap-4">
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Standards & Goals</CardTitle>
