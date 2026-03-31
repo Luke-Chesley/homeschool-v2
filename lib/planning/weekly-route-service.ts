@@ -304,6 +304,82 @@ export async function moveWeeklyRouteItem(params: {
   return board;
 }
 
+export async function updateWeeklyRouteItemState(params: {
+  learnerId: string;
+  weeklyRouteId: string;
+  weeklyRouteItemId: string;
+  state: WeeklyRouteItemRow["state"];
+  manualOverrideNote?: string;
+}): Promise<WeeklyRouteBoard> {
+  const db = getDb();
+  const route = await db.query.weeklyRoutes.findFirst({
+    where: and(eq(weeklyRoutes.id, params.weeklyRouteId), eq(weeklyRoutes.learnerId, params.learnerId)),
+  });
+
+  if (!route) {
+    throw new Error("Weekly route not found.");
+  }
+
+  const routeItem = await db.query.weeklyRouteItems.findFirst({
+    where: and(
+      eq(weeklyRouteItems.id, params.weeklyRouteItemId),
+      eq(weeklyRouteItems.weeklyRouteId, route.id),
+    ),
+  });
+
+  if (!routeItem) {
+    throw new Error("Weekly route item not found.");
+  }
+
+  if (routeItem.state === params.state && routeItem.manualOverrideNote === params.manualOverrideNote) {
+    const board = await getWeeklyRouteBoardById({
+      learnerId: params.learnerId,
+      weeklyRouteId: route.id,
+    });
+
+    if (!board) {
+      throw new Error("Failed to reload weekly route board after state update.");
+    }
+
+    return board;
+  }
+
+  await db.transaction(async (tx) => {
+    await tx
+      .update(weeklyRouteItems)
+      .set({
+        state: params.state,
+        manualOverrideNote: params.manualOverrideNote ?? routeItem.manualOverrideNote,
+        updatedAt: new Date(),
+      })
+      .where(eq(weeklyRouteItems.id, routeItem.id));
+
+    await tx.insert(routeOverrideEvents).values({
+      learnerId: params.learnerId,
+      weeklyRouteItemId: routeItem.id,
+      eventType: "repair_applied",
+      payload: {
+        weeklyRouteId: route.id,
+        action: "set_state",
+        fromState: routeItem.state,
+        toState: params.state,
+      },
+      createdByAdultUserId: null,
+    });
+  });
+
+  const board = await getWeeklyRouteBoardById({
+    learnerId: params.learnerId,
+    weeklyRouteId: route.id,
+  });
+
+  if (!board) {
+    throw new Error("Failed to reload weekly route board after state update.");
+  }
+
+  return board;
+}
+
 export function buildPlanningWeekdayDates(weekStartDate: string) {
   return buildWeekdayDates(weekStartDate);
 }
