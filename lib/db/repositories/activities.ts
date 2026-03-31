@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import type { InferInsertModel } from "drizzle-orm";
 
 import type { HomeschoolDb } from "@/lib/db/client";
@@ -26,6 +26,33 @@ export function createActivitiesRepository(db: HomeschoolDb) {
       return activity;
     },
 
+    async upsertActivity(input: NewInteractiveActivity) {
+      const [activity] = await db
+        .insert(interactiveActivities)
+        .values(input)
+        .onConflictDoUpdate({
+          target: interactiveActivities.id,
+          set: {
+            organizationId: input.organizationId,
+            learnerId: input.learnerId,
+            planItemId: input.planItemId,
+            lessonSessionId: input.lessonSessionId,
+            artifactId: input.artifactId,
+            activityType: input.activityType,
+            status: input.status,
+            title: input.title,
+            schemaVersion: input.schemaVersion,
+            definition: input.definition,
+            masteryRubric: input.masteryRubric,
+            metadata: input.metadata,
+            updatedAt: new Date(),
+          },
+        })
+        .returning();
+
+      return activity;
+    },
+
     async attachStandard(input: NewActivityStandard) {
       const [link] = await db.insert(activityStandards).values(input).returning();
       return link;
@@ -34,6 +61,64 @@ export function createActivitiesRepository(db: HomeschoolDb) {
     async createAttempt(input: NewActivityAttempt) {
       const [attempt] = await db.insert(activityAttempts).values(input).returning();
       return attempt;
+    },
+
+    async updateAttempt(id: string, input: Partial<NewActivityAttempt>) {
+      const [attempt] = await db
+        .update(activityAttempts)
+        .set({
+          ...input,
+          updatedAt: new Date(),
+        })
+        .where(eq(activityAttempts.id, id))
+        .returning();
+
+      return attempt ?? null;
+    },
+
+    async findActivityById(activityId: string) {
+      return db.query.interactiveActivities.findFirst({
+        where: eq(interactiveActivities.id, activityId),
+      });
+    },
+
+    async findAttemptById(attemptId: string) {
+      return db.query.activityAttempts.findFirst({
+        where: eq(activityAttempts.id, attemptId),
+      });
+    },
+
+    async findLatestAttemptForSession(sessionId: string, learnerId: string) {
+      const [attempt] = await db
+        .select()
+        .from(activityAttempts)
+        .where(
+          and(
+            eq(activityAttempts.learnerId, learnerId),
+            sql`${activityAttempts.metadata} ->> 'sessionId' = ${sessionId}`,
+          ),
+        )
+        .orderBy(desc(activityAttempts.attemptNumber), desc(activityAttempts.createdAt))
+        .limit(1);
+
+      return attempt ?? null;
+    },
+
+    async findInProgressAttemptForSession(sessionId: string, learnerId: string) {
+      const [attempt] = await db
+        .select()
+        .from(activityAttempts)
+        .where(
+          and(
+            eq(activityAttempts.learnerId, learnerId),
+            eq(activityAttempts.status, "in_progress"),
+            sql`${activityAttempts.metadata} ->> 'sessionId' = ${sessionId}`,
+          ),
+        )
+        .orderBy(desc(activityAttempts.attemptNumber), desc(activityAttempts.createdAt))
+        .limit(1);
+
+      return attempt ?? null;
     },
 
     async listActivitiesForPlanItem(planItemId: string) {
@@ -50,6 +135,27 @@ export function createActivitiesRepository(db: HomeschoolDb) {
         .from(activityAttempts)
         .where(eq(activityAttempts.activityId, activityId))
         .orderBy(asc(activityAttempts.attemptNumber), asc(activityAttempts.createdAt));
+    },
+
+    async listAttemptsForActivityAndLearner(activityId: string, learnerId: string) {
+      return db
+        .select()
+        .from(activityAttempts)
+        .where(
+          and(
+            eq(activityAttempts.activityId, activityId),
+            eq(activityAttempts.learnerId, learnerId),
+          ),
+        )
+        .orderBy(desc(activityAttempts.attemptNumber), desc(activityAttempts.createdAt));
+    },
+
+    async listAttemptsForLearner(learnerId: string) {
+      return db
+        .select()
+        .from(activityAttempts)
+        .where(eq(activityAttempts.learnerId, learnerId))
+        .orderBy(desc(activityAttempts.createdAt), desc(activityAttempts.attemptNumber));
     },
   };
 }

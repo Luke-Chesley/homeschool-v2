@@ -15,6 +15,26 @@ export function createOrganizationRepository(db: HomeschoolDb) {
       return organization;
     },
 
+    async upsertOrganization(input: NewOrganization) {
+      const [organization] = await db
+        .insert(organizations)
+        .values(input)
+        .onConflictDoUpdate({
+          target: organizations.id,
+          set: {
+            name: input.name,
+            slug: input.slug,
+            type: input.type,
+            timezone: input.timezone,
+            metadata: input.metadata,
+            updatedAt: new Date(),
+          },
+        })
+        .returning();
+
+      return organization;
+    },
+
     async createAdultUser(input: NewAdultUser) {
       const [adultUser] = await db.insert(adultUsers).values(input).returning();
       return adultUser;

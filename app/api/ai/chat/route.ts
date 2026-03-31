@@ -57,11 +57,10 @@ export async function POST(req: NextRequest) {
 
   const { sessionId, messages, context } = parsed.data;
 
-  // Persist user message to session (non-blocking)
   const store = getCopilotStore();
   let activeSessionId = sessionId;
   if (!activeSessionId) {
-    const session = store.createSession(
+    const session = await store.createSession(
       "household-demo",
       messages.find((m) => m.role === "user")?.content?.slice(0, 60) ?? "New conversation",
       context as CopilotContext | undefined
@@ -71,7 +70,7 @@ export async function POST(req: NextRequest) {
 
   const lastUserMessage = [...messages].reverse().find((m) => m.role === "user");
   if (lastUserMessage) {
-    store.appendMessage(activeSessionId, lastUserMessage as ChatMessage);
+    await store.appendMessage(activeSessionId, lastUserMessage as ChatMessage);
   }
 
   // Create the streaming response
@@ -98,7 +97,7 @@ export async function POST(req: NextRequest) {
         }
 
         // Persist assistant message
-        store.appendMessage(activeSessionId!, {
+        await store.appendMessage(activeSessionId!, {
           role: "assistant",
           content: fullResponse,
           createdAt: new Date().toISOString(),

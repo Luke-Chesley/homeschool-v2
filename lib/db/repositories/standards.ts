@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import type { InferInsertModel } from "drizzle-orm";
 
 import type { HomeschoolDb } from "@/lib/db/client";
@@ -47,6 +47,18 @@ export function createStandardsRepository(db: HomeschoolDb) {
             : and(eq(standardNodes.frameworkId, frameworkId), isNull(standardNodes.parentId)),
         )
         .orderBy(asc(standardNodes.ordering), asc(standardNodes.code));
+    },
+
+    async listNodesByCodes(codes: string[]) {
+      if (codes.length === 0) {
+        return [];
+      }
+
+      return db
+        .select()
+        .from(standardNodes)
+        .where(inArray(standardNodes.code, codes))
+        .orderBy(asc(standardNodes.code));
     },
   };
 }
