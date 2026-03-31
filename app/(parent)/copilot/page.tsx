@@ -11,6 +11,7 @@ import { Sparkles } from "lucide-react";
 import { CopilotChat } from "@/components/copilot/CopilotChat";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { getAiRoutingConfig } from "@/lib/ai/routing";
 
 export const metadata = {
   title: "Copilot",
@@ -27,6 +28,8 @@ interface Props {
 
 export default async function CopilotPage({ searchParams }: Props) {
   const params = await searchParams;
+  const routing = getAiRoutingConfig();
+  const activeChatModel = routing.taskDefaults["chat.answer"] ?? routing.fallbackModel;
 
   const context = {
     learnerId: params.learnerId,
@@ -43,7 +46,7 @@ export default async function CopilotPage({ searchParams }: Props) {
   );
 
   return (
-    <div className="flex flex-col gap-0 h-[calc(100vh-4rem)]">
+    <div className="flex min-h-[42rem] flex-col gap-0">
       {/* Header */}
       <div className="flex items-center justify-between gap-4 px-6 py-4 border-b border-border/60 shrink-0">
         <div className="flex items-center gap-2">
@@ -70,10 +73,18 @@ export default async function CopilotPage({ searchParams }: Props) {
             )}
           </div>
         )}
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="text-xs">
+            {routing.providerId}
+          </Badge>
+          <Badge variant="secondary" className="text-xs">
+            {activeChatModel}
+          </Badge>
+        </div>
       </div>
 
       {/* Chat */}
-      <div className="flex-1 overflow-hidden grid lg:grid-cols-[1fr_280px]">
+      <div className="grid min-h-0 flex-1 overflow-hidden lg:grid-cols-[1fr_280px]">
         <CopilotChat context={context} className="h-full overflow-hidden" />
 
         {/* Sidebar */}
@@ -110,7 +121,7 @@ export default async function CopilotPage({ searchParams }: Props) {
           </Card>
 
           <p className="text-xs text-muted-foreground/60 px-1">
-            Running with mock AI adapter. Wire up real providers in{" "}
+            Copilot provider and model routing come from{" "}
             <code className="font-mono text-[10px]">lib/ai/registry.ts</code>.
           </p>
         </div>

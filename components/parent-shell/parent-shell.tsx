@@ -3,7 +3,6 @@
 import { X } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
-import { ParentRightRail } from "@/components/parent-shell/parent-right-rail";
 import { ParentSidebar } from "@/components/parent-shell/parent-sidebar";
 import { ParentTopbar } from "@/components/parent-shell/parent-topbar";
 import { Button } from "@/components/ui/button";
@@ -14,23 +13,20 @@ export function ParentShell({ children }: { children: ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <div className="mx-auto flex min-h-screen w-full max-w-[1600px] gap-4 px-3 py-3 sm:px-4 lg:px-6">
-      <aside className="hidden w-[350px] shrink-0 lg:block">
-        <div className="sticky top-4">
+    <div className="flex min-h-[calc(100dvh-var(--global-tabs-height))] w-full gap-4 px-3 py-3 sm:px-4 lg:px-6">
+      <aside className="hidden min-h-0 w-[350px] shrink-0 lg:block">
+        <div className="sticky top-4 max-h-[calc(100dvh-var(--global-tabs-height)-2rem)] overflow-y-auto pr-1">
           <ParentSidebar />
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col gap-4">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
         <ParentTopbar onOpenMenu={() => setMobileOpen(true)} />
 
-        <div className="grid min-h-[calc(100vh-9rem)] gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
-          <Card className="min-w-0 border-border/70 bg-card/60 p-2 sm:p-3">
+        <div className="min-h-0 flex-1">
+          <Card className="min-h-0 min-w-0 border-border/70 bg-card/60 p-2 sm:p-3">
             <div className="min-h-full rounded-[1.4rem] bg-background/65">{children}</div>
           </Card>
-          <div className="hidden xl:block">
-            <ParentRightRail />
-          </div>
         </div>
       </div>
 
