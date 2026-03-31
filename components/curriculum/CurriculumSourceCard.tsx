@@ -92,6 +92,12 @@ export function CurriculumSourceCard({
         )}
       </CardHeader>
       <CardContent className="flex flex-wrap items-center gap-2 pt-0">
+        <Badge variant="outline" className="text-xs capitalize">
+          {source.status.replace("_", " ")}
+        </Badge>
+        <Badge variant="outline" className="text-xs">
+          v{source.importVersion}
+        </Badge>
         {source.academicYear && (
           <span className="text-xs text-muted-foreground">{source.academicYear}</span>
         )}

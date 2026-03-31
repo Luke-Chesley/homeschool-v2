@@ -12,6 +12,13 @@ export const curriculumSourceKindEnum = pgEnum("curriculum_source_kind", [
   "external_link",
 ]);
 
+export const curriculumSourceStatusEnum = pgEnum("curriculum_source_status", [
+  "draft",
+  "active",
+  "archived",
+  "failed_import",
+]);
+
 export const curriculumAssetStatusEnum = pgEnum("curriculum_asset_status", [
   "pending",
   "processing",
@@ -35,6 +42,8 @@ export const curriculumSources = pgTable("curriculum_sources", {
   learnerId: text("learner_id").references(() => learners.id, { onDelete: "set null" }),
   title: text("title").notNull(),
   kind: curriculumSourceKindEnum("kind").notNull(),
+  status: curriculumSourceStatusEnum("status").notNull().default("draft"),
+  importVersion: integer("import_version").notNull().default(1),
   provenance: text("provenance"),
   summary: text("summary"),
   metadata: metadataColumn(),
