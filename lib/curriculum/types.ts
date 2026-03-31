@@ -30,8 +30,8 @@ export const CurriculumSourceKindSchema = z.enum([
 // ---------------------------------------------------------------------------
 
 export const CurriculumSourceSchema = z.object({
-  id: z.string().uuid(),
-  householdId: z.string().uuid(),
+  id: z.string(),
+  householdId: z.string(),
   title: z.string().min(1),
   description: z.string().optional(),
   kind: CurriculumSourceKindSchema,
@@ -52,8 +52,8 @@ export const CurriculumSourceSchema = z.object({
 export type CurriculumSource = z.infer<typeof CurriculumSourceSchema>;
 
 export const CurriculumUnitSchema = z.object({
-  id: z.string().uuid(),
-  sourceId: z.string().uuid(),
+  id: z.string(),
+  sourceId: z.string(),
   title: z.string().min(1),
   description: z.string().optional(),
   sequence: z.number().int().nonnegative(),
@@ -65,8 +65,8 @@ export const CurriculumUnitSchema = z.object({
 export type CurriculumUnit = z.infer<typeof CurriculumUnitSchema>;
 
 export const CurriculumLessonSchema = z.object({
-  id: z.string().uuid(),
-  unitId: z.string().uuid(),
+  id: z.string(),
+  unitId: z.string(),
   title: z.string().min(1),
   description: z.string().optional(),
   sequence: z.number().int().nonnegative(),
@@ -81,10 +81,10 @@ export const CurriculumLessonSchema = z.object({
 export type CurriculumLesson = z.infer<typeof CurriculumLessonSchema>;
 
 export const CurriculumObjectiveSchema = z.object({
-  id: z.string().uuid(),
+  id: z.string(),
   /** Objectives can hang from a lesson or directly from a unit */
-  lessonId: z.string().uuid().optional(),
-  unitId: z.string().uuid().optional(),
+  lessonId: z.string().optional(),
+  unitId: z.string().optional(),
   description: z.string().min(1),
   /** IDs of standards mapped to this objective */
   standardIds: z.array(z.string()).default([]),

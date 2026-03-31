@@ -1,29 +1,29 @@
-/**
- * Activity session service.
- *
- * Provides operations for listing, starting, and resuming activity sessions.
- * Uses fixture data for now; replace with a real repository query when plan 02
- * is merged.
- *
- * Integration point: `reportOutcome()` should forward to lib/tracking once
- * plan 07 is merged.
- */
+import { createRepositories } from "@/lib/db";
+import { getDb } from "@/lib/db/server";
 
-import { FIXTURE_SESSIONS } from "./fixtures";
 import { getAttemptStore } from "./attempt-store";
 import type { ActivitySession, ActivityAttempt, AttemptAnswer, ActivityOutcome } from "./types";
+
+type ActivityMetadata = {
+  estimatedMinutes?: number | null;
+  lessonId?: string | null;
+  standardIds?: string[];
+};
 
 // ---------------------------------------------------------------------------
 // Session access
 // ---------------------------------------------------------------------------
 
 export async function listSessions(learnerId: string): Promise<ActivitySession[]> {
-  // Integration point: query sessions assigned to learnerId from DB
-  return FIXTURE_SESSIONS.filter((s) => s.learnerId === learnerId);
+  const repos = createRepositories(getDb());
+  const activities = await repos.activities.listActivitiesForLearner(learnerId);
+
+  return Promise.all(activities.map((activity) => mapActivityToSession(activity)));
 }
 
 export async function getSession(sessionId: string): Promise<ActivitySession | null> {
-  return FIXTURE_SESSIONS.find((s) => s.id === sessionId) ?? null;
+  const activity = await createRepositories(getDb()).activities.getActivity(sessionId);
+  return activity ? mapActivityToSession(activity) : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -80,11 +80,62 @@ export async function submitAttempt(attemptId: string): Promise<ActivityOutcome>
  * Integration point: call lib/tracking once plan 07 ships.
  */
 async function reportOutcome(outcome: ActivityOutcome): Promise<void> {
-  // TODO: import { recordActivityOutcome } from "@/lib/tracking"
-  //       await recordActivityOutcome(outcome)
-  console.info("[activities] outcome reported (stub)", {
-    attemptId: outcome.attemptId,
-    score: outcome.score,
-    timeSpentMs: outcome.timeSpentMs,
+  await createRepositories(getDb()).tracking.createProgressRecord({
+    learnerId: outcome.learnerId,
+    lessonSessionId: outcome.lessonId ?? null,
+    activityAttemptId: outcome.attemptId,
+    status: outcome.score != null && outcome.score >= 0.8 ? "mastered" : "completed",
+    masteryLevel:
+      outcome.score == null
+        ? null
+        : outcome.score >= 0.8
+          ? "secure"
+          : outcome.score >= 0.6
+            ? "developing"
+            : "needs_review",
+    completionPercent: outcome.score != null ? Math.round(outcome.score * 100) : null,
+    timeSpentMinutes:
+      typeof outcome.timeSpentMs === "number" ? Math.max(1, Math.round(outcome.timeSpentMs / 60000)) : null,
+    parentNote: null,
+    metadata: {
+      sessionId: outcome.sessionId,
+      activityId: outcome.activityId,
+      standardIds: outcome.standardIds,
+      completedAt: outcome.completedAt,
+      source: "activity.submit",
+    },
   });
+}
+
+async function mapActivityToSession(activity: {
+  id: string;
+  learnerId: string | null;
+  title: string;
+  definition: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+}) {
+  const repos = createRepositories(getDb());
+  const attempts = await repos.activities.listAttemptsForActivity(activity.id);
+  const latestAttempt = attempts.at(-1) ?? null;
+  const metadata = activity.metadata as ActivityMetadata;
+  const status =
+    latestAttempt?.status === "submitted" || latestAttempt?.status === "graded"
+      ? "completed"
+      : latestAttempt?.status === "in_progress"
+        ? "in_progress"
+        : "not_started";
+
+  return {
+    id: activity.id,
+    learnerId: activity.learnerId ?? "unknown-learner",
+    activityId: activity.id,
+    definition: activity.definition as ActivitySession["definition"],
+    status,
+    startedAt: latestAttempt?.startedAt ?? undefined,
+    completedAt: latestAttempt?.completedAt ?? latestAttempt?.submittedAt ?? undefined,
+    estimatedMinutes:
+      typeof metadata.estimatedMinutes === "number" ? metadata.estimatedMinutes : undefined,
+    lessonId: typeof metadata.lessonId === "string" ? metadata.lessonId : undefined,
+    standardIds: Array.isArray(metadata.standardIds) ? metadata.standardIds : [],
+  } satisfies ActivitySession;
 }

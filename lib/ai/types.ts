@@ -92,7 +92,7 @@ export type ChatMessage = z.infer<typeof ChatMessageSchema>;
  * regenerate, or adjust outputs.
  */
 export const ArtifactLineageSchema = z.object({
-  id: z.string().uuid(),
+  id: z.string(),
   taskName: AiTaskNameSchema,
   promptRef: PromptRefSchema,
   providerId: ProviderIdSchema,
@@ -127,7 +127,7 @@ export const CopilotActionKindSchema = z.enum([
 export type CopilotActionKind = z.infer<typeof CopilotActionKindSchema>;
 
 export const CopilotActionSchema = z.object({
-  id: z.string().uuid(),
+  id: z.string(),
   kind: CopilotActionKindSchema,
   /** Human-readable description */
   label: z.string(),
@@ -136,7 +136,7 @@ export const CopilotActionSchema = z.object({
   /** Whether the parent has applied/dismissed this action */
   status: z.enum(["pending", "applied", "dismissed"]).default("pending"),
   createdAt: z.string().datetime(),
-  lineageId: z.string().uuid().optional(),
+  lineageId: z.string().optional(),
 });
 export type CopilotAction = z.infer<typeof CopilotActionSchema>;
 
@@ -168,7 +168,7 @@ export type CopilotContext = z.infer<typeof CopilotContextSchema>;
 // ---------------------------------------------------------------------------
 
 export const GenerationJobSchema = z.object({
-  jobId: z.string().uuid(),
+  jobId: z.string(),
   taskName: AiTaskNameSchema,
   inputs: z.unknown(),
   context: CopilotContextSchema.optional(),

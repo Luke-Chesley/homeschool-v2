@@ -7,10 +7,9 @@ import Link from "next/link";
 import { Clock, BookOpen, CheckCircle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { requireAppSession } from "@/lib/app-session/server";
 import { listSessions } from "@/lib/activities/session-service";
 import type { ActivitySession } from "@/lib/activities/types";
-
-const DEMO_LEARNER_ID = "learner-demo";
 
 const kindLabels: Record<string, string> = {
   quiz: "Quiz",
@@ -63,7 +62,8 @@ function SessionCard({ session }: { session: ActivitySession }) {
 }
 
 export default async function LearnerHomePage() {
-  const sessions = await listSessions(DEMO_LEARNER_ID);
+  const session = await requireAppSession();
+  const sessions = await listSessions(session.activeLearner.id);
 
   const notStarted = sessions.filter((s) => s.status === "not_started");
   const inProgress = sessions.filter((s) => s.status === "in_progress");

@@ -9,7 +9,13 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
-export function ParentShell({ children }: { children: ReactNode }) {
+export function ParentShell({
+  children,
+  activeLearnerName,
+}: {
+  children: ReactNode;
+  activeLearnerName: string;
+}) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
@@ -21,7 +27,10 @@ export function ParentShell({ children }: { children: ReactNode }) {
       </aside>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
-        <ParentTopbar onOpenMenu={() => setMobileOpen(true)} />
+        <ParentTopbar
+          activeLearnerName={activeLearnerName}
+          onOpenMenu={() => setMobileOpen(true)}
+        />
 
         <div className="min-h-0 flex-1">
           <Card className="min-h-0 min-w-0 border-border/70 bg-card/60 p-2 sm:p-3">

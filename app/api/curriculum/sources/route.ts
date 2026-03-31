@@ -6,17 +6,17 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
 import {
   listCurriculumSources,
   createCurriculumSource,
 } from "@/lib/curriculum/service";
+import { requireAppSession } from "@/lib/app-session/server";
 import { CreateCurriculumSourceInputSchema } from "@/lib/curriculum/types";
 
 export async function GET(req: NextRequest) {
-  const householdId =
-    req.nextUrl.searchParams.get("householdId") ?? "household-demo";
   try {
+    const session = await requireAppSession();
+    const householdId = req.nextUrl.searchParams.get("householdId") ?? session.organization.id;
     const sources = await listCurriculumSources(householdId);
     return NextResponse.json(sources);
   } catch (err) {
@@ -27,6 +27,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const session = await requireAppSession();
     const body = await req.json();
     const parsed = CreateCurriculumSourceInputSchema.safeParse(body);
     if (!parsed.success) {
@@ -35,7 +36,10 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-    const source = await createCurriculumSource(parsed.data);
+    const source = await createCurriculumSource({
+      ...parsed.data,
+      householdId: session.organization.id,
+    });
     return NextResponse.json(source, { status: 201 });
   } catch (err) {
     console.error("[api/curriculum/sources POST]", err);

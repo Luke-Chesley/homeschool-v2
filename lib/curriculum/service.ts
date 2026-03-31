@@ -1,17 +1,9 @@
-/**
- * Curriculum service layer.
- *
- * Exposes the domain operations used by server components and route handlers.
- * All access goes through the repository interface, so real vs. mock
- * implementations are transparent.
- *
- * Integration points:
- * - `triggerIndexing()` should enqueue an Inngest event when the ingestion
- *   pipeline (plan 02 / ingestion workers) is ready.
- * - `scheduleAiDraft()` should dispatch to the AI task registry (plan 08).
- */
+import { eq } from "drizzle-orm";
 
-import { getCurriculumRepository } from "./mock-repository";
+import { createRepositories } from "@/lib/db";
+import { getDb } from "@/lib/db/server";
+import { curriculumItems, curriculumSources } from "@/lib/db/schema";
+
 import type {
   CurriculumSource,
   CurriculumTree,
@@ -21,8 +13,45 @@ import type {
   CreateCurriculumObjectiveInput,
 } from "./types";
 
-function repo() {
-  return getCurriculumRepository();
+function mapKind(kind: string): CurriculumSource["kind"] {
+  return kind === "external_link" ? "external" : (kind as CurriculumSource["kind"]);
+}
+
+function mapSource(record: {
+  id: string;
+  organizationId: string;
+  title: string;
+  kind: string;
+  summary: string | null;
+  provenance: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
+}): CurriculumSource {
+  return {
+    id: record.id,
+    householdId: record.organizationId,
+    title: record.title,
+    description: record.summary ?? undefined,
+    kind: mapKind(record.kind),
+    academicYear:
+      typeof record.metadata.academicYear === "string" ? record.metadata.academicYear : undefined,
+    subjects: Array.isArray(record.metadata.subjects) ? (record.metadata.subjects as string[]) : [],
+    gradeLevels: Array.isArray(record.metadata.gradeLevels)
+      ? (record.metadata.gradeLevels as string[])
+      : [],
+    storagePath:
+      typeof record.metadata.storagePath === "string" ? record.metadata.storagePath : undefined,
+    indexingStatus:
+      (record.metadata.indexingStatus as CurriculumSource["indexingStatus"] | undefined) ??
+      "not_applicable",
+    createdAt: record.createdAt.toISOString(),
+    updatedAt: record.updatedAt.toISOString(),
+  };
+}
+
+function repos() {
+  return createRepositories(getDb());
 }
 
 // ---------------------------------------------------------------------------
@@ -30,31 +59,76 @@ function repo() {
 // ---------------------------------------------------------------------------
 
 export async function listCurriculumSources(householdId: string): Promise<CurriculumSource[]> {
-  return repo().listSources(householdId);
+  const sources = await repos().curriculum.listSourcesForOrganization(householdId);
+  return sources.map(mapSource);
 }
 
 export async function getCurriculumSource(id: string) {
-  return repo().getSource(id);
+  const source = await getDb().query.curriculumSources.findFirst({
+    where: (table, { eq }) => eq(table.id, id),
+  });
+
+  return source ? mapSource(source) : null;
 }
 
 export async function createCurriculumSource(input: CreateCurriculumSourceInput) {
-  const source = await repo().createSource(input);
+  const source = await repos().curriculum.createSource({
+    organizationId: input.householdId,
+    learnerId: null,
+    title: input.title,
+    kind: input.kind === "external" ? "external_link" : input.kind,
+    provenance: input.academicYear ?? null,
+    summary: input.description || null,
+    metadata: {
+      academicYear: input.academicYear ?? null,
+      subjects: input.subjects,
+      gradeLevels: input.gradeLevels,
+      storagePath: input.storagePath ?? null,
+      indexingStatus: "not_applicable",
+    },
+  });
+
   // Integration point: trigger ingestion/indexing job for upload-kind sources
-  if (source.kind === "upload" && source.storagePath) {
+  const mapped = mapSource(source);
+  if (mapped.kind === "upload" && mapped.storagePath) {
     await triggerIndexing(source.id);
   }
-  return source;
+  return mapped;
 }
 
 export async function updateCurriculumSource(
   id: string,
   patch: Partial<CreateCurriculumSourceInput>
 ) {
-  return repo().updateSource(id, patch);
+  const existing = await getDb().query.curriculumSources.findFirst({
+    where: (table, { eq }) => eq(table.id, id),
+  });
+  if (!existing) throw new Error(`CurriculumSource not found: ${id}`);
+
+  const [updated] = await getDb()
+    .update(curriculumSources)
+    .set({
+      title: patch.title ?? existing.title,
+      summary: patch.description ?? existing.summary,
+      provenance: patch.academicYear ?? existing.provenance,
+      metadata: {
+        ...(existing.metadata ?? {}),
+        academicYear: patch.academicYear ?? existing.metadata.academicYear ?? null,
+        subjects: patch.subjects ?? (existing.metadata.subjects as string[] | undefined) ?? [],
+        gradeLevels:
+          patch.gradeLevels ?? (existing.metadata.gradeLevels as string[] | undefined) ?? [],
+        storagePath: patch.storagePath ?? existing.metadata.storagePath ?? null,
+      },
+      updatedAt: new Date(),
+    })
+    .where(eq(curriculumSources.id, id))
+    .returning();
+
+  return mapSource(updated);
 }
 
 export async function deleteCurriculumSource(id: string) {
-  return repo().deleteSource(id);
+  await getDb().delete(curriculumSources).where(eq(curriculumSources.id, id));
 }
 
 // ---------------------------------------------------------------------------
@@ -62,22 +136,94 @@ export async function deleteCurriculumSource(id: string) {
 // ---------------------------------------------------------------------------
 
 export async function listCurriculumUnits(sourceId: string) {
-  return repo().listUnits(sourceId);
+  const items = await repos().curriculum.listItemsForSource(sourceId);
+
+  return items
+    .filter((item) => item.itemType === "unit")
+    .map((item) => ({
+      id: item.id,
+      sourceId: item.sourceId,
+      title: item.title,
+      description: item.description ?? undefined,
+      sequence: item.position,
+      estimatedWeeks:
+        typeof item.metadata.estimatedWeeks === "number" ? item.metadata.estimatedWeeks : undefined,
+      createdAt: item.createdAt.toISOString(),
+      updatedAt: item.updatedAt.toISOString(),
+    }));
 }
 
 export async function createCurriculumUnit(input: CreateCurriculumUnitInput) {
-  return repo().createUnit(input);
+  const [unit] = await getDb()
+    .insert(curriculumItems)
+    .values({
+      sourceId: input.sourceId,
+      learnerId: null,
+      parentItemId: null,
+      itemType: "unit",
+      title: input.title,
+      description: input.description ?? null,
+      subject: null,
+      estimatedMinutes: null,
+      position: input.sequence,
+      metadata: {
+        estimatedWeeks: input.estimatedWeeks ?? null,
+      },
+    })
+    .returning();
+
+  return {
+    id: unit.id,
+    sourceId: unit.sourceId,
+    title: unit.title,
+    description: unit.description ?? undefined,
+    sequence: unit.position,
+    estimatedWeeks:
+      typeof unit.metadata.estimatedWeeks === "number" ? unit.metadata.estimatedWeeks : undefined,
+    createdAt: unit.createdAt.toISOString(),
+    updatedAt: unit.updatedAt.toISOString(),
+  };
 }
 
 export async function updateCurriculumUnit(
   id: string,
   patch: Partial<CreateCurriculumUnitInput>
 ) {
-  return repo().updateUnit(id, patch);
+  const existing = await getDb().query.curriculumItems.findFirst({
+    where: (table, { eq }) => eq(table.id, id),
+  });
+  if (!existing) throw new Error(`CurriculumUnit not found: ${id}`);
+
+  const [unit] = await getDb()
+    .update(curriculumItems)
+    .set({
+      title: patch.title ?? existing.title,
+      description: patch.description ?? existing.description,
+      position: patch.sequence ?? existing.position,
+      metadata: {
+        ...(existing.metadata ?? {}),
+        estimatedWeeks: patch.estimatedWeeks ?? existing.metadata.estimatedWeeks ?? null,
+      },
+      updatedAt: new Date(),
+    })
+    .where(eq(curriculumItems.id, id))
+    .returning();
+
+  return {
+    id: unit.id,
+    sourceId: unit.sourceId,
+    title: unit.title,
+    description: unit.description ?? undefined,
+    sequence: unit.position,
+    estimatedWeeks:
+      typeof unit.metadata.estimatedWeeks === "number" ? unit.metadata.estimatedWeeks : undefined,
+    createdAt: unit.createdAt.toISOString(),
+    updatedAt: unit.updatedAt.toISOString(),
+  };
 }
 
 export async function deleteCurriculumUnit(id: string) {
-  return repo().deleteUnit(id);
+  await getDb().delete(curriculumItems).where(eq(curriculumItems.id, id));
 }
 
 // ---------------------------------------------------------------------------
@@ -85,49 +231,136 @@ export async function deleteCurriculumUnit(id: string) {
 // ---------------------------------------------------------------------------
 
 export async function listCurriculumLessons(unitId: string) {
-  return repo().listLessons(unitId);
+  const unit = await getDb().query.curriculumItems.findFirst({
+    where: (table, { eq }) => eq(table.id, unitId),
+  });
+  if (!unit) return [];
+
+  const items = await repos().curriculum.listItemsForSource(unit.sourceId);
+
+  return items
+    .filter((item) => item.itemType === "lesson" && item.parentItemId === unitId)
+    .map((item) => ({
+      id: item.id,
+      unitId,
+      title: item.title,
+      description: item.description ?? undefined,
+      sequence: item.position,
+      estimatedMinutes: item.estimatedMinutes ?? undefined,
+      materials: Array.isArray(item.metadata.materials) ? (item.metadata.materials as string[]) : [],
+      createdAt: item.createdAt.toISOString(),
+      updatedAt: item.updatedAt.toISOString(),
+    }));
 }
 
 export async function createCurriculumLesson(input: CreateCurriculumLessonInput) {
-  return repo().createLesson(input);
+  const unit = await getDb().query.curriculumItems.findFirst({
+    where: (table, { eq }) => eq(table.id, input.unitId),
+  });
+  if (!unit) throw new Error(`CurriculumUnit not found: ${input.unitId}`);
+
+  const [lesson] = await getDb()
+    .insert(curriculumItems)
+    .values({
+      sourceId: unit.sourceId,
+      learnerId: null,
+      parentItemId: input.unitId,
+      itemType: "lesson",
+      title: input.title,
+      description: input.description ?? null,
+      subject: null,
+      estimatedMinutes: input.estimatedMinutes ?? null,
+      position: input.sequence,
+      metadata: {
+        materials: input.materials,
+      },
+    })
+    .returning();
+
+  return {
+    id: lesson.id,
+    unitId: input.unitId,
+    title: lesson.title,
+    description: lesson.description ?? undefined,
+    sequence: lesson.position,
+    estimatedMinutes: lesson.estimatedMinutes ?? undefined,
+    materials: Array.isArray(lesson.metadata.materials)
+      ? (lesson.metadata.materials as string[])
+      : [],
+    createdAt: lesson.createdAt.toISOString(),
+    updatedAt: lesson.updatedAt.toISOString(),
+  };
 }
 
 export async function updateCurriculumLesson(
   id: string,
   patch: Partial<CreateCurriculumLessonInput>
 ) {
-  return repo().updateLesson(id, patch);
+  const existing = await getDb().query.curriculumItems.findFirst({
+    where: (table, { eq }) => eq(table.id, id),
+  });
+  if (!existing) throw new Error(`CurriculumLesson not found: ${id}`);
+
+  const [lesson] = await getDb()
+    .update(curriculumItems)
+    .set({
+      title: patch.title ?? existing.title,
+      description: patch.description ?? existing.description,
+      estimatedMinutes: patch.estimatedMinutes ?? existing.estimatedMinutes,
+      position: patch.sequence ?? existing.position,
+      metadata: {
+        ...(existing.metadata ?? {}),
+        materials: patch.materials ?? (existing.metadata.materials as string[] | undefined) ?? [],
+      },
+      updatedAt: new Date(),
+    })
+    .where(eq(curriculumItems.id, id))
+    .returning();
+
+  return {
+    id: lesson.id,
+    unitId: lesson.parentItemId!,
+    title: lesson.title,
+    description: lesson.description ?? undefined,
+    sequence: lesson.position,
+    estimatedMinutes: lesson.estimatedMinutes ?? undefined,
+    materials: Array.isArray(lesson.metadata.materials)
+      ? (lesson.metadata.materials as string[])
+      : [],
+    createdAt: lesson.createdAt.toISOString(),
+    updatedAt: lesson.updatedAt.toISOString(),
+  };
 }
 
 export async function deleteCurriculumLesson(id: string) {
-  return repo().deleteLesson(id);
+  await getDb().delete(curriculumItems).where(eq(curriculumItems.id, id));
 }
 
 // ---------------------------------------------------------------------------
 // Objectives
 // ---------------------------------------------------------------------------
 
-export async function listObjectivesForLesson(lessonId: string) {
-  return repo().listObjectives({ lessonId });
+export async function listObjectivesForLesson(_lessonId: string) {
+  return [];
 }
 
-export async function listObjectivesForUnit(unitId: string) {
-  return repo().listObjectives({ unitId });
+export async function listObjectivesForUnit(_unitId: string) {
+  return [];
 }
 
-export async function createCurriculumObjective(input: CreateCurriculumObjectiveInput) {
-  return repo().createObjective(input);
+export async function createCurriculumObjective(_input: CreateCurriculumObjectiveInput) {
+  throw new Error("Curriculum objectives are not wired to persistence yet.");
 }
 
 export async function updateCurriculumObjective(
   id: string,
   patch: Partial<CreateCurriculumObjectiveInput>
 ) {
-  return repo().updateObjective(id, patch);
+  throw new Error("Curriculum objectives are not wired to persistence yet.");
 }
 
-export async function deleteCurriculumObjective(id: string) {
-  return repo().deleteObjective(id);
+export async function deleteCurriculumObjective(_id: string) {
+  throw new Error("Curriculum objectives are not wired to persistence yet.");
 }
 
 // ---------------------------------------------------------------------------
@@ -135,7 +368,39 @@ export async function deleteCurriculumObjective(id: string) {
 // ---------------------------------------------------------------------------
 
 export async function getCurriculumTree(sourceId: string): Promise<CurriculumTree | null> {
-  return repo().getTree(sourceId);
+  const source = await getCurriculumSource(sourceId);
+  if (!source) return null;
+
+  const [units, lessons] = await Promise.all([
+    listCurriculumUnits(sourceId),
+    repos().curriculum.listItemsForSource(sourceId),
+  ]);
+
+  return {
+    source,
+    units: units.map((unit) => ({
+      unit,
+      lessons: lessons
+        .filter((item) => item.itemType === "lesson" && item.parentItemId === unit.id)
+        .map((lesson) => ({
+          lesson: {
+            id: lesson.id,
+            unitId: unit.id,
+            title: lesson.title,
+            description: lesson.description ?? undefined,
+            sequence: lesson.position,
+            estimatedMinutes: lesson.estimatedMinutes ?? undefined,
+            materials: Array.isArray(lesson.metadata.materials)
+              ? (lesson.metadata.materials as string[])
+              : [],
+            createdAt: lesson.createdAt.toISOString(),
+            updatedAt: lesson.updatedAt.toISOString(),
+          },
+          objectives: [],
+        })),
+      objectives: [],
+    })),
+  };
 }
 
 // ---------------------------------------------------------------------------

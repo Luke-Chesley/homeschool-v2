@@ -295,10 +295,10 @@ export const AttemptAnswerSchema = z.object({
 export type AttemptAnswer = z.infer<typeof AttemptAnswerSchema>;
 
 export const ActivityAttemptSchema = z.object({
-  id: z.string().uuid(),
-  sessionId: z.string().uuid(),
-  learnerId: z.string().uuid(),
-  activityId: z.string().uuid(),
+  id: z.string(),
+  sessionId: z.string(),
+  learnerId: z.string(),
+  activityId: z.string(),
   /** Draft answers — populated while in-progress, for autosave/resume */
   answers: z.array(AttemptAnswerSchema).default([]),
   /** Score 0-1 when completed */
@@ -316,11 +316,11 @@ export type ActivityAttempt = z.infer<typeof ActivityAttemptSchema>;
 // ---------------------------------------------------------------------------
 
 export const ActivityOutcomeSchema = z.object({
-  attemptId: z.string().uuid(),
-  sessionId: z.string().uuid(),
-  learnerId: z.string().uuid(),
-  activityId: z.string().uuid(),
-  lessonId: z.string().uuid().optional(),
+  attemptId: z.string(),
+  sessionId: z.string(),
+  learnerId: z.string(),
+  activityId: z.string(),
+  lessonId: z.string().optional(),
   score: z.number().min(0).max(1).optional(),
   timeSpentMs: z.number().optional(),
   completedAt: z.string().datetime(),

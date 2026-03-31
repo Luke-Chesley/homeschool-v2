@@ -10,17 +10,16 @@ import Link from "next/link";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CurriculumSourceCard } from "@/components/curriculum/CurriculumSourceCard";
+import { requireAppSession } from "@/lib/app-session/server";
 import { listCurriculumSources } from "@/lib/curriculum/service";
-
-// Demo household ID — replaced by session lookup once auth is integrated
-const DEMO_HOUSEHOLD_ID = "household-demo";
 
 export const metadata = {
   title: "Curriculum Library",
 };
 
 export default async function CurriculumLibraryPage() {
-  const sources = await listCurriculumSources(DEMO_HOUSEHOLD_ID);
+  const session = await requireAppSession();
+  const sources = await listCurriculumSources(session.organization.id);
 
   return (
     <div className="flex flex-col gap-8 px-6 py-8 max-w-5xl mx-auto">
