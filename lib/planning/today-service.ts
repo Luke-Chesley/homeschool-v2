@@ -8,6 +8,7 @@ import type { AppWorkspace } from "@/lib/users/service";
 import { getOrCreateWeeklyRouteBoardForLearner } from "@/lib/planning/weekly-route-service";
 import type { WeeklyRouteBoard } from "@/lib/curriculum-routing";
 import { toWeekStartDate } from "@/lib/curriculum-routing";
+import { buildCopilotPlanningContext } from "@/lib/planning/copilot-snapshot";
 
 const DEFAULT_UNSCHEDULED_ITEM_COUNT = 4;
 
@@ -229,7 +230,12 @@ export async function getTodayWorkspace(params: {
   learnerName: string;
   date: string;
   sourceId?: string;
-}): Promise<{ workspace: DailyWorkspace; sourceId: string; sourceTitle: string } | null> {
+}): Promise<{
+  workspace: DailyWorkspace;
+  sourceId: string;
+  sourceTitle: string;
+  planningContext: ReturnType<typeof buildCopilotPlanningContext>;
+} | null> {
   const { selectedSource } = await resolveSourceContext({
     organizationId: params.organizationId,
     sourceId: params.sourceId,
@@ -252,6 +258,7 @@ export async function getTodayWorkspace(params: {
     return {
       sourceId: selectedSource.id,
       sourceTitle: selectedSource.title,
+      planningContext: null,
       workspace: {
         date: params.date,
         headline: `${selectedSource.title} route for ${params.learnerName}`,
@@ -298,6 +305,13 @@ export async function getTodayWorkspace(params: {
     return {
       sourceId: selectedSource.id,
       sourceTitle: selectedSource.title,
+      planningContext: buildCopilotPlanningContext({
+        board,
+        learnerId: params.learnerId,
+        learnerName: params.learnerName,
+        sourceId: selectedSource.id,
+        selectedDate: params.date,
+      }),
       workspace: {
         date: params.date,
         headline: `${selectedSource.title} route for ${params.learnerName}`,
@@ -378,6 +392,13 @@ export async function getTodayWorkspace(params: {
     workspace,
     sourceId: selectedSource.id,
     sourceTitle: selectedSource.title,
+    planningContext: buildCopilotPlanningContext({
+      board,
+      learnerId: params.learnerId,
+      learnerName: params.learnerName,
+      sourceId: selectedSource.id,
+      selectedDate: params.date,
+    }),
   };
 }
 

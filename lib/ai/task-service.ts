@@ -94,6 +94,11 @@ export interface TaskResult<T = unknown> {
   lineage: ArtifactLineage;
 }
 
+export interface PromptPreview {
+  systemPrompt: string;
+  userPrompt: string;
+}
+
 // ---------------------------------------------------------------------------
 // Inline tasks (short-running)
 // ---------------------------------------------------------------------------
@@ -184,10 +189,7 @@ export async function dispatchLessonDraft(input: LessonDraftInput): Promise<Gene
   return job;
 }
 
-export async function generateLessonDraft(
-  input: LessonDraftInput,
-): Promise<TaskResult<string>> {
-  const { adapter, model } = getTaskRuntime("lesson.draft");
+export function buildLessonDraftPromptPreview(input: LessonDraftInput): PromptPreview {
   const prompt = resolvePrompt("lesson.draft", LESSON_DRAFT_PROMPT_VERSION);
   const routeItems = input.routeItems ?? [];
   const objectives = input.objectives ?? [];
@@ -197,12 +199,11 @@ export async function generateLessonDraft(
     learnerName: input.context?.learnerName ?? "the learner",
     sourceTitle: input.title ?? input.topic,
     dateLabel: input.context?.dailyWorkspaceSnapshot?.date ?? "today",
+    weekLabel: input.context?.weeklyPlanningSnapshot?.weekLabel,
     itemCount: routeItems.length,
     totalMinutes,
     objectiveCount: objectives.length,
     objectives,
-    leadItemTitle: routeItems[0]?.title ?? input.topic,
-    leadItemObjective: routeItems[0]?.objective ?? input.topic,
     routeItems: routeItems.map((item) => ({
       title: item.title,
       subject: item.subject,
@@ -212,18 +213,38 @@ export async function generateLessonDraft(
       note: item.note,
     })),
     materials: input.materials ?? [],
+    weekHighlights: input.context?.weeklyPlanningSnapshot?.highlights ?? [],
+    weekScheduleSummary:
+      input.context?.weeklyPlanningSnapshot?.days.map(
+        (day) =>
+          `${day.label}: ${
+            day.itemTitles.length > 0 ? day.itemTitles.join(", ") : "No scheduled items"
+          }`,
+      ) ?? [],
   })}
 
 Context:
 ${input.context ? JSON.stringify(input.context, null, 2) : "No additional context provided."}`;
 
+  return {
+    systemPrompt: prompt.systemPrompt,
+    userPrompt,
+  };
+}
+
+export async function generateLessonDraft(
+  input: LessonDraftInput,
+): Promise<TaskResult<string>> {
+  const { adapter, model } = getTaskRuntime("lesson.draft");
+  const promptPreview = buildLessonDraftPromptPreview(input);
+
   const result = await adapter.complete({
     model,
     messages: [
-      { role: "system", content: prompt.systemPrompt },
+      { role: "system", content: promptPreview.systemPrompt },
       {
         role: "user",
-        content: userPrompt,
+        content: promptPreview.userPrompt,
       },
     ],
   });

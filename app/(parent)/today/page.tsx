@@ -3,7 +3,11 @@ import Link from "next/link";
 import { CalendarClock, CalendarDays, LayoutDashboard, Sparkles } from "lucide-react";
 
 import { PlanningShell } from "@/components/planning/planning-shell";
-import { TodayWorkspaceView } from "@/components/planning/today-workspace-view";
+import {
+  TodayLessonPlanSection,
+  TodayRouteItemsSection,
+} from "@/components/planning/today-workspace-view";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireAppSession } from "@/lib/app-session/server";
@@ -136,6 +140,7 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
   }
 
   const { workspace, sourceTitle } = workspaceResult;
+  const totalMinutes = workspace.items.reduce((sum, item) => sum + item.estimatedMinutes, 0);
 
   return (
     <PlanningShell
@@ -143,8 +148,36 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
       title={`${workspace.learner.name}'s daily workspace`}
       description={`Active source: ${sourceTitle}. This surface keeps execution, prep, and tracking handoff on the same screen.`}
       navItems={navItems}
+      headerSupplement={
+        <div className="rounded-[1.5rem] border border-border/70 bg-background/72 px-4 py-4 sm:px-5">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline">{workspace.leadItem.sourceLabel}</Badge>
+            <Badge variant="secondary">{workspace.items.length} items</Badge>
+            <Badge variant="secondary">{totalMinutes} min</Badge>
+            <Badge variant="secondary">
+              {workspace.sessionTargets.length} objective
+              {workspace.sessionTargets.length === 1 ? "" : "s"}
+            </Badge>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-foreground">Curriculum overview</p>
+              <p className="text-sm leading-6 text-muted-foreground">
+                {workspace.items.length} curriculum item{workspace.items.length === 1 ? "" : "s"} are in scope for today from{" "}
+                {workspace.leadItem.sourceLabel}.
+              </p>
+            </div>
+            <Button asChild size="sm" variant="outline">
+              <Link href={`/curriculum${selectedSourceId ? `?sourceId=${encodeURIComponent(selectedSourceId)}` : ""}`}>
+                Review curriculum
+              </Link>
+            </Button>
+          </div>
+          <TodayRouteItemsSection workspace={workspace} sourceId={selectedSourceId} embedded />
+        </div>
+      }
     >
-      <TodayWorkspaceView workspace={workspace} sourceId={selectedSourceId} />
+      <TodayLessonPlanSection workspace={workspace} sourceId={selectedSourceId} />
     </PlanningShell>
   );
 }
