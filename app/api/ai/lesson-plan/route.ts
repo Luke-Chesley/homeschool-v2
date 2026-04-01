@@ -3,11 +3,12 @@ import { z } from "zod";
 
 import { requireAppSession } from "@/lib/app-session/server";
 import { getTodayWorkspace } from "@/lib/planning/today-service";
-import { generateLessonDraft } from "@/lib/ai/task-service";
+import { buildLessonDraftPromptPreview, generateLessonDraft } from "@/lib/ai/task-service";
 
 const RequestSchema = z.object({
   date: z.string().optional(),
   sourceId: z.string().optional(),
+  debug: z.boolean().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -40,10 +41,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { workspace, sourceTitle } = workspaceResult;
+  const { workspace, sourceTitle, planningContext } = workspaceResult;
   const totalMinutes = workspace.items.reduce((sum, item) => sum + item.estimatedMinutes, 0);
 
-  const result = await generateLessonDraft({
+  const lessonDraftInput = {
     title: sourceTitle,
     topic: workspace.leadItem.title,
     estimatedMinutes: totalMinutes,
@@ -64,7 +65,9 @@ export async function POST(req: NextRequest) {
       lessonId: workspace.leadItem.curriculum?.weeklyRouteItemId,
       standardIds: workspace.items.flatMap((item) => item.standards),
       goalIds: workspace.items.flatMap((item) => item.goals),
-      feedbackNotes: [],
+      curriculumSnapshot: planningContext?.curriculumSnapshot,
+      weeklyPlanningSnapshot: planningContext?.weeklyPlanningSnapshot,
+      feedbackNotes: planningContext?.feedbackNotes ?? [],
       recentOutcomes: [],
       dailyWorkspaceSnapshot: {
         date: workspace.date,
@@ -93,7 +96,20 @@ export async function POST(req: NextRequest) {
         familyNotes: workspace.familyNotes,
       },
     },
-  });
+  };
+
+  if (parsed.data.debug) {
+    const promptPreview = buildLessonDraftPromptPreview(lessonDraftInput);
+
+    return NextResponse.json({
+      promptVersion: "preview",
+      sourceTitle,
+      date,
+      debug: promptPreview,
+    });
+  }
+
+  const result = await generateLessonDraft(lessonDraftInput);
 
   return NextResponse.json({
     markdown: result.output,
@@ -104,6 +120,8 @@ export async function POST(req: NextRequest) {
       itemCount: workspace.items.length,
       totalMinutes,
       objectiveCount: workspace.sessionTargets.length,
+      weekLabel: planningContext?.weeklyPlanningSnapshot?.weekLabel,
+      weekHighlights: planningContext?.weeklyPlanningSnapshot?.highlights ?? [],
     },
   });
 }

@@ -27,6 +27,7 @@ interface PlanningShellProps {
   description: string;
   children: ReactNode;
   navItems?: PlanningNavItem[];
+  headerSupplement?: ReactNode;
 }
 
 const defaultNavItems = [
@@ -62,6 +63,7 @@ export function PlanningShell({
   description,
   children,
   navItems: navItemsOverride,
+  headerSupplement,
 }: PlanningShellProps) {
   const isTodayView = currentView === "today";
   const resolvedNavItems = navItemsOverride ?? defaultNavItems;
@@ -100,10 +102,13 @@ export function PlanningShell({
           </div>
 
           {isTodayView ? (
-            <div className="flex flex-wrap gap-2">
-              <Badge variant="secondary">Today route</Badge>
-              <Badge variant="outline">Active learner</Badge>
-              <Badge variant="outline">Compact view</Badge>
+            <div className="grid gap-4">
+              <div className="flex flex-wrap gap-2">
+                <Badge variant="secondary">Today route</Badge>
+                <Badge variant="outline">Active learner</Badge>
+                <Badge variant="outline">Compact view</Badge>
+              </div>
+              {headerSupplement}
             </div>
           ) : (
             <Card className="w-full max-w-5xl border-primary/15 bg-background/88">
