@@ -21,6 +21,7 @@ Coordination rules:
 - Stay strictly inside the owned write scope for that plan.
 - Do not edit files owned by another plan unless the plan explicitly allows it.
 - When finished, merge back to main, resolve conflicts, rerun relevant checks, and update STATUS.md to done on main.
+- After merging back to main, run `bash ./scripts/verify-before-merge.sh` before marking the task done.
 - If blocked, update STATUS.md to blocked with a short reason, then pick the next available task.
 
 Execution strategy:

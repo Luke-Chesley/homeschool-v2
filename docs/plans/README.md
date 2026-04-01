@@ -21,6 +21,7 @@ git branch -m main
 - If another task is not merged yet, use mock data or a local adapter inside your owned scope rather than editing another worker's files.
 - Treat [docs/PRODUCT_IMPLEMENTATION_PLAN.md](/home/luke/Desktop/homeschoolV2/docs/PRODUCT_IMPLEMENTATION_PLAN.md) as the product source of truth.
 - Keep feature work modular so final integration is mostly wiring, not rewriting.
+- When you merge a branch back to `main`, rerun the relevant checks and include `bash ./scripts/verify-before-merge.sh` for UI-facing changes.
 
 ## Suggested Parallel Batch
 

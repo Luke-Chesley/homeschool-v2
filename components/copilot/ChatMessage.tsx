@@ -34,7 +34,7 @@ export function ChatMessage({ message }: Props) {
       {/* Bubble */}
       <div
         className={cn(
-          "max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed",
+          "max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed break-words",
           isUser
             ? "bg-primary/10 text-foreground rounded-tr-sm"
             : "bg-card/80 border border-border/60 text-foreground rounded-tl-sm",

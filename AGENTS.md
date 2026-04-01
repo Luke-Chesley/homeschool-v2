@@ -17,6 +17,7 @@
 - `corepack pnpm build`: build the production app.
 - `corepack pnpm start`: run the production build locally.
 - `corepack pnpm typecheck`: run TypeScript checks; use this before finishing changes.
+- `bash ./scripts/verify-before-merge.sh`: run typecheck plus a browser smoke test against the live dev server; use this after merging a branch back to `main` before declaring the work complete.
 - `corepack pnpm dev:stack`: start local Supabase services.
 - `corepack pnpm dev:stack:stop`: stop local Supabase services.
 - `corepack pnpm inngest:dev`: run the local Inngest dev process when working on async jobs.
@@ -28,7 +29,7 @@
 - Keep Tailwind utility usage consistent with current patterns; shared primitives live in `components/ui`.
 
 ## Testing Guidelines
-- There is no formal test suite yet; the minimum gate is `corepack pnpm typecheck`.
+- There is no formal test suite yet; the minimum gate is `corepack pnpm typecheck`, and UI changes should also run `bash ./scripts/verify-before-merge.sh` before merge completion.
 - Before opening browser tools or running UI checks, confirm whether the shared main server on `localhost:3000` is already available and reuse it when possible.
 - When changing UI flows, verify the affected route in the browser and note the route tested, for example `/curriculum` or `/copilot`.
 - Reserve `localhost:3000` for the main checkout at `/home/luke/Desktop/homeschool-v2`. If a worktree session needs browser validation, it must use its own port and report that exact URL, for example `http://localhost:3002/copilot`.
