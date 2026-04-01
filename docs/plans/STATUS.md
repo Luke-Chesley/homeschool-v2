@@ -34,6 +34,9 @@ git checkout main
 git pull --ff-only
 git merge ai/05-planning-and-daily-workspace
 
+# run verification before declaring the merge done
+bash ./scripts/verify-before-merge.sh
+
 # edit docs/plans/STATUS.md
 # change status to done and update last_updated/notes
 

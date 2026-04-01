@@ -134,7 +134,7 @@ export function CopilotChat({ sessionId: initialSessionId, initialMessages = [],
   }
 
   return (
-    <div className={cn("flex flex-col h-full", className)}>
+    <div className={cn("flex min-w-0 flex-col h-full", className)}>
       {/* Message list */}
       <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-4">
         {messages.length === 0 && (
@@ -176,7 +176,7 @@ export function CopilotChat({ sessionId: initialSessionId, initialMessages = [],
             <div className="shrink-0 flex size-8 items-center justify-center rounded-full bg-secondary/25 text-secondary-foreground text-xs font-semibold">
               AI
             </div>
-            <div className="max-w-[85%] rounded-2xl rounded-tl-sm border border-border/60 bg-card/80 px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap">
+            <div className="max-w-[85%] rounded-2xl rounded-tl-sm border border-border/60 bg-card/80 px-4 py-3 text-sm leading-relaxed break-words whitespace-pre-wrap">
               {streamingContent}
               <span className="inline-block w-1.5 h-4 bg-primary/60 ml-0.5 animate-pulse" />
             </div>

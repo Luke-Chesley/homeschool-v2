@@ -85,39 +85,41 @@ export default async function CopilotPage({ searchParams }: Props) {
   );
 
   return (
-    <div className="flex min-h-[42rem] flex-col gap-0">
+    <div className="flex min-h-[42rem] min-w-0 flex-col gap-0">
       {/* Header */}
-      <div className="flex items-center justify-between gap-4 px-6 py-4 border-b border-border/60 shrink-0">
-        <div className="flex items-center gap-2">
-          <Sparkles className="size-5 text-primary" />
-          <h1 className="font-serif text-xl font-semibold">Copilot</h1>
-        </div>
-        {hasContext && (
+      <div className="flex flex-col gap-4 border-b border-border/60 px-6 py-4 xl:flex-row xl:items-start xl:justify-between shrink-0">
+        <div className="flex min-w-0 flex-1 flex-col gap-2">
           <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">Context:</span>
-            {context.learnerName && (
-              <Badge variant="secondary" className="text-xs">
-                {context.learnerName}
-              </Badge>
-            )}
-            {context.curriculumSourceId && (
-              <Badge variant="outline" className="text-xs">
-                Curriculum
-              </Badge>
-            )}
-            {context.lessonId && (
-              <Badge variant="outline" className="text-xs">
-                Lesson
-              </Badge>
-            )}
-            {context.weeklyPlanningSnapshot && (
-              <Badge variant="outline" className="text-xs">
-                Week {context.weeklyPlanningSnapshot.weekLabel}
-              </Badge>
-            )}
+            <Sparkles className="size-5 text-primary" />
+            <h1 className="font-serif text-xl font-semibold">Copilot</h1>
           </div>
-        )}
-        <div className="flex items-center gap-2">
+          {hasContext && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-muted-foreground">Context:</span>
+              {context.learnerName && (
+                <Badge variant="secondary" className="text-xs">
+                  {context.learnerName}
+                </Badge>
+              )}
+              {context.curriculumSourceId && (
+                <Badge variant="outline" className="text-xs">
+                  Curriculum
+                </Badge>
+              )}
+              {context.lessonId && (
+                <Badge variant="outline" className="text-xs">
+                  Lesson
+                </Badge>
+              )}
+              {context.weeklyPlanningSnapshot && (
+                <Badge variant="outline" className="text-xs">
+                  Week {context.weeklyPlanningSnapshot.weekLabel}
+                </Badge>
+              )}
+            </div>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-2 xl:justify-end">
           <Badge variant="outline" className="text-xs">
             {routing.providerId}
           </Badge>
@@ -128,11 +130,11 @@ export default async function CopilotPage({ searchParams }: Props) {
       </div>
 
       {/* Chat */}
-      <div className="grid min-h-0 flex-1 overflow-hidden lg:grid-cols-[1fr_280px]">
-        <CopilotChat context={context} className="h-full overflow-hidden" />
+      <div className="grid min-h-0 flex-1 overflow-hidden xl:grid-cols-[minmax(0,1fr)_280px]">
+        <CopilotChat context={context} className="h-full min-w-0 overflow-hidden" />
 
         {/* Sidebar */}
-        <div className="hidden lg:flex flex-col gap-4 border-l border-border/60 p-4 overflow-y-auto">
+        <div className="hidden min-w-0 flex-col gap-4 border-l border-border/60 p-4 overflow-y-auto xl:flex">
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm">What I can help with</CardTitle>

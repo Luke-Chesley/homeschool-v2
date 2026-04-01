@@ -28,6 +28,7 @@ Coordination rules:
 - Stay strictly inside the owned write scope for that plan unless you are doing an explicit post-merge integration pass on main.
 - Do not edit files owned by another active task unless that task is already merged or explicitly blocked and you are taking it over.
 - When finished, merge back to main, resolve conflicts, rerun relevant checks, and update STATUS.md to done on main.
+- After merging back to main, run `bash ./scripts/verify-before-merge.sh` before marking the task done.
 - If blocked, update STATUS.md to blocked with a short reason, then choose the next available task.
 
 Execution strategy:

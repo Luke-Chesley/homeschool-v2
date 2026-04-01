@@ -161,4 +161,5 @@ If you are trying to find the source of behavior, these are the usual starting p
 - `http://localhost:3000` is reserved for the main checkout.
 - Branch worktrees under `.worktrees/` should use their own ports.
 - The minimum verification gate is currently `corepack pnpm typecheck`.
+- Before merging a branch back to `main`, run `bash ./scripts/verify-before-merge.sh` from the target checkout so the typecheck and UI smoke test both pass.
 - If major structure or subsystem ownership changes, update this README in the same task.
