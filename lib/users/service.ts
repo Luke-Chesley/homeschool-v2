@@ -2,10 +2,11 @@ import "server-only";
 
 import { and, asc, eq } from "drizzle-orm";
 
-import { FIXTURE_SESSIONS } from "@/lib/activities/fixtures";
+import { ensurePublishedActivitiesForLearner } from "@/lib/activities/assignment-service";
 import { createRepositories } from "@/lib/db";
 import { ensureDatabaseReady, getDb } from "@/lib/db/server";
-import { interactiveActivities, learners, organizations } from "@/lib/db/schema";
+import { learners, organizations } from "@/lib/db/schema";
+import { ensureOrganizationPlatformSettings } from "@/lib/platform/settings";
 
 export type AppLearner = {
   id: string;
@@ -22,6 +23,17 @@ export type AppWorkspace = {
     name: string;
     slug: string;
     timezone: string;
+  };
+  platformSettings: {
+    templateKey: string;
+    workflowMode: string;
+    reportingMode: string;
+    primaryGuideLabel: string;
+    learnerLabel: string;
+    sessionLabel: string;
+    moduleLabel: string;
+    activityLabel: string;
+    checkpointLabel: string;
   };
   learners: AppLearner[];
   activeLearner: AppLearner | null;
@@ -73,18 +85,29 @@ export async function ensureAppOrganization() {
   });
 
   if (existing) {
+    await ensureOrganizationPlatformSettings({
+      id: existing.id,
+      type: existing.type,
+    });
     return existing;
   }
 
   const timestamp = Date.now();
 
-  return repos.organizations.createOrganization({
+  const organization = await repos.organizations.createOrganization({
     name: "Homeschool",
     slug: `homeschool-${timestamp}`,
     type: "household",
     timezone: "America/Los_Angeles",
     metadata: {},
   });
+
+  await ensureOrganizationPlatformSettings({
+    id: organization.id,
+    type: organization.type,
+  });
+
+  return organization;
 }
 
 export async function listLearnersForOrganization(organizationId: string): Promise<AppLearner[]> {
@@ -95,37 +118,16 @@ export async function listLearnersForOrganization(organizationId: string): Promi
   return learners.map(mapLearnerRecord);
 }
 
-export async function ensureFixtureActivitiesForLearner(
-  organizationId: string,
-  learnerId: string,
-) {
-  const db = getDb();
-  const existing = await db
-    .select({ id: interactiveActivities.id })
-    .from(interactiveActivities)
-    .where(eq(interactiveActivities.learnerId, learnerId))
-    .limit(1);
-
-  if (existing.length > 0) {
-    return;
-  }
-
-  for (const session of FIXTURE_SESSIONS) {
-    await db.insert(interactiveActivities).values({
-      organizationId,
-      learnerId,
-      activityType: session.definition.kind === "hybrid_layout" ? "reading_check" : session.definition.kind,
-      status: "published",
-      title: session.definition.title,
-      definition: session.definition as Record<string, unknown>,
-      metadata: {
-        sessionKind: session.definition.kind,
-        estimatedMinutes: session.estimatedMinutes ?? null,
-        lessonId: session.lessonId ?? null,
-        standardIds: session.standardIds,
-      },
-    });
-  }
+export async function ensureActivitiesForLearner(params: {
+  organizationId: string;
+  learnerId: string;
+  learnerName: string;
+}) {
+  await ensurePublishedActivitiesForLearner({
+    organizationId: params.organizationId,
+    learnerId: params.learnerId,
+    learnerName: params.learnerName,
+  });
 }
 
 export async function createLearnerForOrganization(
@@ -150,7 +152,11 @@ export async function createLearnerForOrganization(
     metadata: {},
   });
 
-  await ensureFixtureActivitiesForLearner(organizationId, learner.id);
+  await ensureActivitiesForLearner({
+    organizationId,
+    learnerId: learner.id,
+    learnerName: learner.displayName,
+  });
   return mapLearnerRecord(learner);
 }
 
@@ -172,12 +178,21 @@ export async function getWorkspaceContext(options?: {
     organization = await ensureAppOrganization();
   }
 
+  const platformSettings = await ensureOrganizationPlatformSettings({
+    id: organization.id,
+    type: organization.type,
+  });
+
   const learners = await listLearnersForOrganization(organization.id);
   const activeLearner =
     learners.find((learner) => learner.id === options?.learnerId) ?? learners[0] ?? null;
 
   if (activeLearner) {
-    await ensureFixtureActivitiesForLearner(organization.id, activeLearner.id);
+    await ensureActivitiesForLearner({
+      organizationId: organization.id,
+      learnerId: activeLearner.id,
+      learnerName: activeLearner.displayName,
+    });
   }
 
   return {
@@ -186,6 +201,17 @@ export async function getWorkspaceContext(options?: {
       name: organization.name,
       slug: organization.slug,
       timezone: organization.timezone,
+    },
+    platformSettings: {
+      templateKey: platformSettings.templateKey,
+      workflowMode: platformSettings.workflowMode,
+      reportingMode: platformSettings.reportingMode,
+      primaryGuideLabel: platformSettings.primaryGuideLabel,
+      learnerLabel: platformSettings.learnerLabel,
+      sessionLabel: platformSettings.sessionLabel,
+      moduleLabel: platformSettings.moduleLabel,
+      activityLabel: platformSettings.activityLabel,
+      checkpointLabel: platformSettings.checkpointLabel,
     },
     learners,
     activeLearner,

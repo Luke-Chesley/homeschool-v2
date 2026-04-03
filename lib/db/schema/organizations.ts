@@ -19,7 +19,36 @@ export const membershipRoleEnum = pgEnum("membership_role", [
   "owner",
   "admin",
   "educator",
+  "coach",
+  "manager",
+  "reviewer",
   "observer",
+]);
+
+export const organizationWorkflowModeEnum = pgEnum("organization_workflow_mode", [
+  "family_guided",
+  "educator_led",
+  "manager_led",
+  "cohort_based",
+  "self_guided",
+]);
+
+export const organizationReportingModeEnum = pgEnum("organization_reporting_mode", [
+  "progress_journal",
+  "standards_tracking",
+  "competency_tracking",
+  "certification_tracking",
+  "onboarding_completion",
+]);
+
+export const organizationTemplateEnum = pgEnum("organization_template", [
+  "homeschool",
+  "tutoring_practice",
+  "classroom_support",
+  "workforce_onboarding",
+  "certification_prep",
+  "bootcamp",
+  "self_guided",
 ]);
 
 export const adultUsers = pgTable(
@@ -74,6 +103,42 @@ export const memberships = pgTable(
     membershipUnique: uniqueIndex("memberships_org_adult_idx").on(
       table.organizationId,
       table.adultUserId,
+    ),
+  }),
+);
+
+export const organizationPlatformSettings = pgTable(
+  "organization_platform_settings",
+  {
+    id: text("id").primaryKey().$defaultFn(() => prefixedId("orgsettings")),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    workflowMode: organizationWorkflowModeEnum("workflow_mode")
+      .notNull()
+      .default("family_guided"),
+    reportingMode: organizationReportingModeEnum("reporting_mode")
+      .notNull()
+      .default("progress_journal"),
+    templateKey: organizationTemplateEnum("template_key")
+      .notNull()
+      .default("homeschool"),
+    primaryGuideLabel: text("primary_guide_label").notNull().default("Parent"),
+    learnerLabel: text("learner_label").notNull().default("Learner"),
+    sessionLabel: text("session_label").notNull().default("Lesson"),
+    moduleLabel: text("module_label").notNull().default("Module"),
+    activityLabel: text("activity_label").notNull().default("Practice"),
+    checkpointLabel: text("checkpoint_label").notNull().default("Checkpoint"),
+    terminology: metadataColumn("terminology"),
+    progressDefaults: metadataColumn("progress_defaults"),
+    evidenceDefaults: metadataColumn("evidence_defaults"),
+    reportDefaults: metadataColumn("report_defaults"),
+    metadata: metadataColumn(),
+    ...timestamps(),
+  },
+  (table) => ({
+    organizationSettingsUnique: uniqueIndex("organization_platform_settings_org_idx").on(
+      table.organizationId,
     ),
   }),
 );

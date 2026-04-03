@@ -22,6 +22,15 @@ export const observationNoteTypeEnum = pgEnum("observation_note_type", [
   "adaptation_signal",
 ]);
 
+export const progressModelEnum = pgEnum("progress_model", [
+  "binary_completion",
+  "percent_completion",
+  "rubric_score",
+  "mastery_band",
+  "reviewer_approval",
+  "competency_demonstrated",
+]);
+
 export const progressRecords = pgTable("progress_records", {
   id: text("id").primaryKey().$defaultFn(() => prefixedId("progress")),
   learnerId: text("learner_id")
@@ -35,6 +44,11 @@ export const progressRecords = pgTable("progress_records", {
     onDelete: "set null",
   }),
   status: progressRecordStatusEnum("status").notNull().default("not_started"),
+  progressModel: progressModelEnum("progress_model")
+    .notNull()
+    .default("percent_completion"),
+  progressValue: integer("progress_value"),
+  reviewState: text("review_state").notNull().default("not_required"),
   masteryLevel: text("mastery_level"),
   completionPercent: integer("completion_percent"),
   timeSpentMinutes: integer("time_spent_minutes"),

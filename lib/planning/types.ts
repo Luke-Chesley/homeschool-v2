@@ -55,6 +55,7 @@ export interface ScheduleConstraint {
 export interface PlanItem {
   id: string;
   date: string;
+  ordering?: number;
   startTime?: string;
   title: string;
   subject: string;
@@ -70,11 +71,23 @@ export interface PlanItem {
   sourceLabel: string;
   lessonLabel: string;
   planOrigin?: PlanItemOrigin;
+  planRecordId?: string;
+  sessionRecordId?: string;
+  reviewState?: string;
+  completionStatus?: string;
   curriculum?: {
     sourceId: string;
     skillNodeId: string;
     weeklyRouteItemId: string;
     origin: PlanItemOrigin;
+  };
+  workflow?: {
+    planItemId: string;
+    lessonSessionId: string | null;
+    completionStatus: string | null;
+    reviewState: string | null;
+    evidenceCount: number;
+    activityCount: number;
   };
   note?: string;
 }

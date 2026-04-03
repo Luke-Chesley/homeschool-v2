@@ -16,13 +16,13 @@ interface TrackingShellProps {
 const navItems = [
   {
     href: "/tracking",
-    label: "Tracking overview",
+    label: "Overview",
     view: "overview" as const,
     icon: ListChecks,
   },
   {
     href: "/tracking/reports",
-    label: "Reports and exports",
+    label: "Reports",
     view: "reports" as const,
     icon: FileSpreadsheet,
   },
@@ -43,7 +43,7 @@ export function TrackingShell({
 
         <div className="relative flex flex-col gap-6">
           <div className="max-w-3xl">
-            <Badge className="mb-4">Tracking And Reporting</Badge>
+            <Badge className="mb-4">Tracking and reporting</Badge>
             <h1 className="font-serif text-4xl leading-[0.95] tracking-[-0.04em] sm:text-5xl lg:text-6xl">
               {title}
             </h1>
@@ -85,7 +85,7 @@ export function TrackingShell({
                 <div className="min-w-0">
                   <p className="text-base font-semibold leading-6">Evidence-first records</p>
                   <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                    Built for exports, audits, and future adaptation.
+                    Built for exports, review, and future adaptation.
                   </p>
                 </div>
               </div>

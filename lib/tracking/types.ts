@@ -2,6 +2,13 @@ export type OutcomeStatus = "completed" | "partial" | "skipped";
 export type MasterySignal = "secure" | "developing" | "emerging" | "needs_review";
 export type EvidenceKind = "worksheet" | "photo" | "activity" | "note" | "audio";
 export type ObservationTone = "bright_spot" | "watch" | "adjustment";
+export type ReviewQueueState =
+  | "awaiting_review"
+  | "approved"
+  | "revision_requested"
+  | "insufficient_evidence"
+  | "closed";
+export type RecommendationState = "proposed" | "accepted" | "dismissed" | "applied";
 
 export interface TrackingLearnerSummary {
   id: string;
@@ -62,6 +69,22 @@ export interface GoalProgressRow {
   linkedStandards: string[];
 }
 
+export interface ReviewQueueEntry {
+  id: string;
+  subjectType: string;
+  state: ReviewQueueState;
+  dueAt?: string;
+  decisionSummary?: string;
+}
+
+export interface AdaptationRecommendation {
+  id: string;
+  title: string;
+  description: string;
+  status: RecommendationState;
+  recommendationType: string;
+}
+
 export interface TrackingSummary {
   plannedMinutes: number;
   actualMinutes: number;
@@ -89,6 +112,8 @@ export interface TrackingDashboard {
   evidence: EvidenceRecord[];
   standards: StandardCoverageRow[];
   goals: GoalProgressRow[];
+  reviewQueue: ReviewQueueEntry[];
+  recommendations: AdaptationRecommendation[];
 }
 
 export interface TrackingExportRow {

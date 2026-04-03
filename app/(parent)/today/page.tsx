@@ -82,7 +82,12 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
 
   if (action && planItemId) {
     if (action === "complete") {
-      await completeTodayPlanItem(session.activeLearner.id, planItemId);
+      await completeTodayPlanItem({
+        organizationId: session.organization.id,
+        learnerId: session.activeLearner.id,
+        weeklyRouteItemId: planItemId,
+        date: date ?? new Date().toISOString().slice(0, 10),
+      });
     } else if (action === "push_to_tomorrow") {
       await pushTodayPlanItemToTomorrow(
         session.activeLearner.id,

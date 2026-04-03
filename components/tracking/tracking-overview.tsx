@@ -1,7 +1,11 @@
+import Link from "next/link";
+
 import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatMinutes, formatOutcomeDelta, formatTrackingDate } from "@/lib/tracking/service";
 import type { TrackingDashboard } from "@/lib/tracking/types";
+import { cn } from "@/lib/utils";
 
 const masteryTone: Record<string, string> = {
   secure: "bg-secondary/18 text-secondary-foreground",
@@ -30,7 +34,7 @@ export function TrackingOverview({ dashboard }: { dashboard: TrackingDashboard }
             {dashboard.curriculum ? (
               <div className="space-y-2 rounded-[1.2rem] border border-border/70 bg-background/70 p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                  Active curriculum
+                  Active objective set
                 </p>
                 <p className="font-semibold text-foreground">{dashboard.curriculum.sourceTitle}</p>
                 <p className="text-sm leading-6">
@@ -45,10 +49,7 @@ export function TrackingOverview({ dashboard }: { dashboard: TrackingDashboard }
                 </div>
               </div>
             ) : null}
-            <p>
-              Planned versus actual stays visible here so reporting doesn&apos;t flatten out real
-              family days.
-            </p>
+            <p>Planned versus actual stays visible here so reporting stays grounded in what happened.</p>
           </CardContent>
         </Card>
 
@@ -60,11 +61,8 @@ export function TrackingOverview({ dashboard }: { dashboard: TrackingDashboard }
       <section className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
         <Card>
           <CardHeader>
-            <CardTitle>Completion history</CardTitle>
-            <CardDescription>
-              Planned, actual, mastery, and evidence stay in the same row so recovery decisions
-              stay grounded.
-            </CardDescription>
+            <CardTitle>Progress history</CardTitle>
+            <CardDescription>Planned, actual, mastery, and evidence stay in the same row.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {dashboard.outcomes.length === 0 ? (
@@ -133,7 +131,7 @@ export function TrackingOverview({ dashboard }: { dashboard: TrackingDashboard }
             <CardHeader>
               <CardTitle>Observation feed</CardTitle>
               <CardDescription>
-                Notes stay lightweight but still anchor to specific outcomes.
+                Notes stay lightweight but still anchor to specific progress events.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -175,7 +173,7 @@ export function TrackingOverview({ dashboard }: { dashboard: TrackingDashboard }
                   title="No evidence linked yet"
                   body={
                     dashboard.curriculum
-                      ? `${dashboard.curriculum.scheduledItemCount} route items are currently in scope for ${dashboard.curriculum.sourceTitle}. Evidence will show up here once work is recorded.`
+                      ? `${dashboard.curriculum.scheduledItemCount} items are currently in scope for ${dashboard.curriculum.sourceTitle}. Evidence will show up here once work is recorded.`
                       : "Evidence records will show up here once work samples, notes, or outcomes are captured."
                   }
                 />
@@ -190,6 +188,102 @@ export function TrackingOverview({ dashboard }: { dashboard: TrackingDashboard }
                       {item.linkedTo} · {item.capturedAt}
                     </p>
                     <p className="mt-3 text-sm leading-6 text-muted-foreground">{item.note}</p>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Review queue</CardTitle>
+              <CardDescription>
+                Items waiting on a guide, reviewer, or manager stay visible here.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {dashboard.reviewQueue.length === 0 ? (
+                <TrackingEmptyState
+                  title="Nothing is waiting for review"
+                  body="Session, evidence, and activity review requests will collect here when work needs another adult decision."
+                />
+              ) : (
+                dashboard.reviewQueue.map((item) => (
+                  <div key={item.id} className="rounded-[1.4rem] border border-border/70 bg-background/70 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="font-semibold capitalize">{item.subjectType.replace("_", " ")}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Needs an adult decision before it closes.
+                        </p>
+                      </div>
+                      <Badge variant="outline">{item.state.replace("_", " ")}</Badge>
+                    </div>
+                    {item.dueAt ? (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Due {formatTrackingDate(item.dueAt.slice(0, 10))}
+                      </p>
+                    ) : null}
+                    {item.decisionSummary ? (
+                      <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                        {item.decisionSummary}
+                      </p>
+                    ) : null}
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Recommendations</CardTitle>
+              <CardDescription>
+                Proposed changes can be accepted or overridden without losing the audit trail.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {dashboard.recommendations.length === 0 ? (
+                <TrackingEmptyState
+                  title="No proposals yet"
+                  body="Proposals appear here after adaptation jobs or structured review flows create a next-step change."
+                />
+              ) : (
+                dashboard.recommendations.map((recommendation) => (
+                  <div
+                    key={recommendation.id}
+                    className="rounded-[1.4rem] border border-border/70 bg-background/70 p-4"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="font-semibold">{recommendation.title}</p>
+                        <p className="mt-1 text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                          {recommendation.recommendationType.replace("_", " ")}
+                        </p>
+                      </div>
+                      <Badge variant="outline">{recommendation.status}</Badge>
+                    </div>
+                    <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                      {recommendation.description}
+                    </p>
+                    {recommendation.status === "proposed" ? (
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <Link
+                          href={`/tracking?action=accept&recommendationId=${encodeURIComponent(recommendation.id)}`}
+                          className={buttonVariants({ size: "sm" })}
+                        >
+                          Accept
+                        </Link>
+                        <Link
+                          href={`/tracking?action=override&recommendationId=${encodeURIComponent(recommendation.id)}`}
+                          className={cn(
+                            buttonVariants({ variant: "outline", size: "sm" }),
+                          )}
+                        >
+                          Override
+                        </Link>
+                      </div>
+                    ) : null}
                   </div>
                 ))
               )}

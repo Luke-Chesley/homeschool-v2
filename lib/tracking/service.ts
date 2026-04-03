@@ -6,6 +6,8 @@ import { getDb } from "@/lib/db/server";
 import {
   curriculumNodes,
   curriculumSources,
+  evidenceRecordObjectives,
+  evidenceRecords,
   goalMappings,
   learnerProfiles,
   learningGoals,
@@ -13,12 +15,16 @@ import {
   planItemCurriculumLinks,
   progressRecords,
   progressRecordStandards,
+  recommendations,
+  reviewQueueItems,
   standardNodes,
   weeklyRouteItems,
   weeklyRoutes,
 } from "@/lib/db/schema";
 import { buildStandardsExportRows, buildTrackingExportRows } from "@/lib/tracking/export";
 import type {
+  AdaptationRecommendation,
+  ReviewQueueEntry,
   TrackingCurriculumContext,
   EvidenceRecord,
   GoalProgressRow,
@@ -84,6 +90,22 @@ function mapObservationTone(value: string) {
       return "adjustment" as const;
     default:
       return "watch" as const;
+  }
+}
+
+function mapEvidenceKind(value: string): EvidenceRecord["kind"] {
+  switch (value) {
+    case "photo":
+      return "photo";
+    case "audio_video_metadata":
+      return "audio";
+    case "artifact_output":
+      return "worksheet";
+    case "note":
+    case "review_note":
+      return "note";
+    default:
+      return "activity";
   }
 }
 
@@ -197,7 +219,16 @@ export async function getTrackingDashboard(params: {
 }): Promise<TrackingDashboard> {
   const db = getDb();
 
-  const [profile, curriculum, progressCandidates, noteCandidates, goals] = await Promise.all([
+  const [
+    profile,
+    curriculum,
+    progressCandidates,
+    noteCandidates,
+    goals,
+    evidenceCandidates,
+    reviewCandidates,
+    recommendationCandidates,
+  ] = await Promise.all([
     db.query.learnerProfiles.findFirst({
       where: eq(learnerProfiles.learnerId, params.learnerId),
     }),
@@ -223,10 +254,34 @@ export async function getTrackingDashboard(params: {
       orderBy: [desc(learningGoals.updatedAt)],
       limit: 25,
     }),
+    db.query.evidenceRecords.findMany({
+      where: and(
+        eq(evidenceRecords.organizationId, params.organizationId),
+        eq(evidenceRecords.learnerId, params.learnerId),
+      ),
+      orderBy: [desc(evidenceRecords.capturedAt), desc(evidenceRecords.createdAt)],
+      limit: 100,
+    }),
+    db.query.reviewQueueItems.findMany({
+      where: and(
+        eq(reviewQueueItems.organizationId, params.organizationId),
+        eq(reviewQueueItems.learnerId, params.learnerId),
+      ),
+      orderBy: [desc(reviewQueueItems.createdAt)],
+      limit: 50,
+    }),
+    db.query.recommendations.findMany({
+      where: and(
+        eq(recommendations.organizationId, params.organizationId),
+        eq(recommendations.learnerId, params.learnerId),
+      ),
+      orderBy: [desc(recommendations.createdAt)],
+      limit: 25,
+    }),
   ]);
 
   const planItemIds = [...new Set(
-    [...progressCandidates, ...noteCandidates]
+    [...progressCandidates, ...noteCandidates, ...evidenceCandidates]
       .map((row) => row.planItemId)
       .filter((value): value is string => typeof value === "string"),
   )];
@@ -271,6 +326,19 @@ export async function getTrackingDashboard(params: {
         .slice(0, 25)
     : noteCandidates.slice(0, 25);
 
+  const evidence = curriculum
+    ? evidenceCandidates
+        .filter((record) => {
+          const linkedSourceId =
+            (record.planItemId ? sourceIdByPlanItemId.get(record.planItemId) : undefined) ??
+            (record.progressRecordId ? progressSourceIdByRecordId.get(record.progressRecordId) : undefined) ??
+            getCurriculumLinkSourceId(record.metadata);
+
+          return linkedSourceId === curriculum.sourceId;
+        })
+        .slice(0, 25)
+    : evidenceCandidates.slice(0, 25);
+
   const progressIds = progress.map((row) => row.id);
   const standardLinks =
     progressIds.length === 0
@@ -279,7 +347,18 @@ export async function getTrackingDashboard(params: {
           where: inArray(progressRecordStandards.progressRecordId, progressIds),
         });
 
-  const standardNodeIds = [...new Set(standardLinks.map((row) => row.standardNodeId))];
+  const evidenceIds = evidence.map((record) => record.id);
+  const evidenceObjectiveLinks =
+    evidenceIds.length === 0
+      ? []
+      : await db.query.evidenceRecordObjectives.findMany({
+          where: inArray(evidenceRecordObjectives.evidenceRecordId, evidenceIds),
+        });
+
+  const standardNodeIds = [...new Set([
+    ...standardLinks.map((row) => row.standardNodeId),
+    ...evidenceObjectiveLinks.map((row) => row.standardNodeId),
+  ])];
   const linkedStandards =
     standardNodeIds.length === 0
       ? []
@@ -298,6 +377,18 @@ export async function getTrackingDashboard(params: {
     const current = standardsByProgressId.get(link.progressRecordId) ?? [];
     current.push(standardCodeById.get(link.standardNodeId) ?? link.standardNodeId);
     standardsByProgressId.set(link.progressRecordId, current);
+  }
+
+  const evidenceCountByProgressId = new Map<string, number>();
+  for (const record of evidence) {
+    if (!record.progressRecordId) {
+      continue;
+    }
+
+    evidenceCountByProgressId.set(
+      record.progressRecordId,
+      (evidenceCountByProgressId.get(record.progressRecordId) ?? 0) + 1,
+    );
   }
 
   const outcomes: TrackingOutcome[] = progress.map((row) => {
@@ -323,7 +414,7 @@ export async function getTrackingDashboard(params: {
         ? metadata.goalTitles.filter((value): value is string => typeof value === "string")
         : [],
       deviationNote: typeof row.parentNote === "string" ? row.parentNote : undefined,
-      evidenceCount: standardCodes.length,
+      evidenceCount: evidenceCountByProgressId.get(row.id) ?? standardCodes.length,
     };
   });
 
@@ -336,22 +427,23 @@ export async function getTrackingDashboard(params: {
     linkedOutcomeId: typeof note.metadata?.progressRecordId === "string" ? note.metadata.progressRecordId : undefined,
   }));
 
-  const evidence: EvidenceRecord[] = progress.map((row) => {
-    const metadata = row.metadata ?? {};
-    return {
-      id: `evidence-${row.id}`,
-      title: safeText(metadata.evidenceTitle, safeText(metadata.activityTitle, "Learning evidence")),
-      kind: "activity",
-      linkedTo: safeText(metadata.activityTitle, "Learning record"),
-      capturedAt: row.createdAt.toLocaleString("en-US", {
-        month: "short",
-        day: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-      }),
-      note: safeText(metadata.evidenceNote, row.parentNote ?? "Recorded from activity progress."),
-    };
-  });
+  const mappedEvidence: EvidenceRecord[] = evidence.map((record) => ({
+    id: record.id,
+    title: record.title,
+    kind: mapEvidenceKind(record.evidenceType),
+    linkedTo:
+      record.planItemId ??
+      record.progressRecordId ??
+      record.activityAttemptId ??
+      "Learner evidence",
+    capturedAt: record.capturedAt.toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }),
+    note: safeText(record.body, safeText(record.metadata?.summary, "Evidence captured.")),
+  }));
 
   const standardStats = new Map<
     string,
@@ -376,6 +468,27 @@ export async function getTrackingDashboard(params: {
     }
 
     current.evidenceCount += 1;
+  }
+
+  for (const link of evidenceObjectiveLinks) {
+    const code = standardCodeById.get(link.standardNodeId) ?? link.standardNodeId;
+    const label = standardLabelById.get(link.standardNodeId) ?? code;
+    const subject = standardSubjectById.get(link.standardNodeId) ?? "General";
+    const current = standardStats.get(link.standardNodeId);
+
+    if (!current) {
+      standardStats.set(link.standardNodeId, {
+        code,
+        label,
+        subject,
+        evidenceCount: 1,
+        latestEvidence: "Evidence record",
+      });
+      continue;
+    }
+
+    current.evidenceCount += 1;
+    current.latestEvidence = "Evidence record";
   }
 
   const standards: StandardCoverageRow[] = Array.from(standardStats.entries()).map(
@@ -419,6 +532,24 @@ export async function getTrackingDashboard(params: {
     linkedStandards: standardCodesByGoalId.get(goal.id) ?? [],
   }));
 
+  const reviewQueue: ReviewQueueEntry[] = reviewCandidates.map((item) => ({
+    id: item.id,
+    subjectType: item.subjectType,
+    state: item.state,
+    dueAt: item.dueAt?.toISOString(),
+    decisionSummary: item.decisionSummary ?? undefined,
+  }));
+
+  const mappedRecommendations: AdaptationRecommendation[] = recommendationCandidates.map(
+    (recommendation) => ({
+      id: recommendation.id,
+      title: recommendation.title,
+      description: recommendation.description,
+      status: recommendation.status,
+      recommendationType: recommendation.recommendationType,
+    }),
+  );
+
   const plannedMinutes = outcomes.reduce((total, item) => total + item.plannedMinutes, 0);
   const actualMinutes = outcomes.reduce((total, item) => total + item.actualMinutes, 0);
   const completedCount = outcomes.filter((item) => item.status === "completed").length;
@@ -442,9 +573,11 @@ export async function getTrackingDashboard(params: {
     },
     outcomes,
     observations,
-    evidence,
+    evidence: mappedEvidence,
     standards,
     goals: goalRows,
+    reviewQueue,
+    recommendations: mappedRecommendations,
   };
 }
 
@@ -479,4 +612,43 @@ export function formatOutcomeDelta(plannedMinutes: number, actualMinutes: number
   }
 
   return `${Math.abs(delta)} min under`;
+}
+
+export async function updateRecommendationDecision(params: {
+  organizationId: string;
+  learnerId: string;
+  recommendationId: string;
+  action: "accept" | "override";
+}) {
+  const db = getDb();
+  const recommendation = await db.query.recommendations.findFirst({
+    where: and(
+      eq(recommendations.id, params.recommendationId),
+      eq(recommendations.organizationId, params.organizationId),
+      eq(recommendations.learnerId, params.learnerId),
+    ),
+  });
+
+  if (!recommendation) {
+    return null;
+  }
+
+  const nextStatus = params.action === "accept" ? "accepted" : "dismissed";
+  const [updated] = await db
+    .update(recommendations)
+    .set({
+      status: nextStatus,
+      acceptedAt: params.action === "accept" ? new Date().toISOString() : recommendation.acceptedAt,
+      dismissedAt:
+        params.action === "override" ? new Date().toISOString() : recommendation.dismissedAt,
+      metadata: {
+        ...(recommendation.metadata ?? {}),
+        decisionAction: params.action,
+      },
+      updatedAt: new Date(),
+    })
+    .where(eq(recommendations.id, recommendation.id))
+    .returning();
+
+  return updated ?? null;
 }

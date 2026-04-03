@@ -2,12 +2,13 @@ import "server-only";
 
 import type { InferSelectModel } from "drizzle-orm";
 
-import { FIXTURE_SESSIONS } from "@/lib/activities/fixtures";
 import { createRepositories } from "@/lib/db";
 import { ensureLocalDemoData } from "@/lib/db/fixtures/local-demo-persistence";
 import { getDb } from "@/lib/db/server";
 import { activityAttempts } from "@/lib/db/schema";
+import { LOCAL_DEMO_LEARNER_ID } from "@/lib/db/fixtures/local-demo-persistence";
 import type { ActivityAttempt, AttemptAnswer, ActivityOutcome, ActivitySession } from "./types";
+import { parseActivityDefinition } from "./types";
 
 export interface AttemptStore {
   findInProgress(sessionId: string, learnerId: string): Promise<ActivityAttempt | null>;
@@ -30,10 +31,6 @@ type PersistedAttemptRecord = InferSelectModel<typeof activityAttempts>;
 
 function getActivitiesRepo() {
   return createRepositories(getDb()).activities;
-}
-
-function getFixtureSession(sessionId: string): ActivitySession | null {
-  return FIXTURE_SESSIONS.find((session) => session.id === sessionId) ?? null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -64,6 +61,67 @@ function getAttemptSessionId(record: PersistedAttemptRecord): string {
   }
 
   return record.activityId;
+}
+
+function getActivitySessionId(activity: {
+  id: string;
+  metadata: Record<string, unknown>;
+}) {
+  if (typeof activity.metadata.sessionId === "string") {
+    return activity.metadata.sessionId;
+  }
+
+  return activity.id;
+}
+
+function getActivityStandardIds(activity: {
+  metadata: Record<string, unknown>;
+}) {
+  const value = activity.metadata.standardIds;
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
+function getActivityLessonId(activity: {
+  lessonSessionId: string | null;
+  metadata: Record<string, unknown>;
+}) {
+  if (activity.lessonSessionId) {
+    return activity.lessonSessionId;
+  }
+
+  return typeof activity.metadata.lessonId === "string" ? activity.metadata.lessonId : undefined;
+}
+
+async function getActivitySession(sessionId: string): Promise<ActivitySession | null> {
+  const activity =
+    (await getActivitiesRepo().findPrimaryActivityForSession(sessionId)) ??
+    (await getActivitiesRepo().findActivityBySessionId(sessionId)) ??
+    (await getActivitiesRepo().findActivityById(sessionId));
+
+  if (!activity) {
+    return null;
+  }
+
+  const definition = parseActivityDefinition(activity.definition);
+  if (!definition || !activity.learnerId) {
+    return null;
+  }
+
+  return {
+    id: getActivitySessionId(activity),
+    learnerId: activity.learnerId ?? LOCAL_DEMO_LEARNER_ID,
+    activityId: activity.id,
+    definition,
+    status: "not_started",
+    estimatedMinutes:
+      typeof activity.metadata.estimatedMinutes === "number"
+        ? activity.metadata.estimatedMinutes
+        : undefined,
+    lessonId: getActivityLessonId(activity),
+    standardIds: getActivityStandardIds(activity),
+  };
 }
 
 function toIsoString(value: string | Date | null | undefined, fallback: Date): string {
@@ -142,6 +200,7 @@ class DbAttemptStore implements AttemptStore {
     const created = await getActivitiesRepo().createAttempt({
       activityId: params.activityId,
       learnerId: params.learnerId,
+      lessonSessionId: params.sessionId,
       attemptNumber: (existingAttempts[0]?.attemptNumber ?? 0) + 1,
       status: "in_progress",
       responses: {
@@ -213,7 +272,7 @@ class DbAttemptStore implements AttemptStore {
     }
 
     const mappedAttempt = mapAttempt(submitted);
-    const session = getFixtureSession(mappedAttempt.sessionId);
+    const session = await getActivitySession(mappedAttempt.sessionId);
     const startedAtMs = new Date(mappedAttempt.startedAt).getTime();
     const completedAtMs = new Date(completedAt).getTime();
 

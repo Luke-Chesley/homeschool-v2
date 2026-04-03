@@ -75,6 +75,16 @@ export function createActivitiesRepository(db: HomeschoolDb) {
       });
     },
 
+    async findActivityBySessionId(sessionId: string) {
+      const [activity] = await db
+        .select()
+        .from(interactiveActivities)
+        .where(sql`${interactiveActivities.metadata} ->> 'sessionId' = ${sessionId}`)
+        .limit(1);
+
+      return activity ?? null;
+    },
+
     async listActivitiesForLearner(learnerId: string) {
       return db
         .select()
@@ -89,6 +99,61 @@ export function createActivitiesRepository(db: HomeschoolDb) {
         .from(interactiveActivities)
         .where(eq(interactiveActivities.planItemId, planItemId))
         .orderBy(asc(interactiveActivities.createdAt));
+    },
+
+    async listActivitiesForSession(sessionId: string) {
+      return db
+        .select()
+        .from(interactiveActivities)
+        .where(eq(interactiveActivities.lessonSessionId, sessionId))
+        .orderBy(asc(interactiveActivities.createdAt));
+    },
+
+    async findPrimaryActivityForSession(sessionId: string) {
+      return db.query.interactiveActivities.findFirst({
+        where: eq(interactiveActivities.lessonSessionId, sessionId),
+        orderBy: [asc(interactiveActivities.createdAt)],
+      });
+    },
+
+    async listPublishedActivitiesForLearner(learnerId: string) {
+      return db
+        .select()
+        .from(interactiveActivities)
+        .where(
+          and(
+            eq(interactiveActivities.learnerId, learnerId),
+            eq(interactiveActivities.status, "published"),
+          ),
+        )
+        .orderBy(asc(interactiveActivities.createdAt));
+    },
+
+    async listArtifactsForPlanItem(planItemId: string) {
+      return db
+        .select()
+        .from(generatedArtifacts)
+        .where(eq(generatedArtifacts.planItemId, planItemId))
+        .orderBy(desc(generatedArtifacts.createdAt));
+    },
+
+    async updateArtifact(id: string, input: Partial<NewGeneratedArtifact>) {
+      const [artifact] = await db
+        .update(generatedArtifacts)
+        .set({
+          ...input,
+          updatedAt: new Date(),
+        })
+        .where(eq(generatedArtifacts.id, id))
+        .returning();
+
+      return artifact ?? null;
+    },
+
+    async findArtifactById(artifactId: string) {
+      return db.query.generatedArtifacts.findFirst({
+        where: eq(generatedArtifacts.id, artifactId),
+      });
     },
 
     async listAttemptsForActivity(activityId: string) {
@@ -139,7 +204,7 @@ export function createActivitiesRepository(db: HomeschoolDb) {
           and(
             eq(activityAttempts.learnerId, learnerId),
             eq(activityAttempts.status, "in_progress"),
-            sql`${activityAttempts.metadata} ->> 'sessionId' = ${sessionId}`,
+            eq(activityAttempts.lessonSessionId, sessionId),
           ),
         )
         .orderBy(desc(activityAttempts.attemptNumber), desc(activityAttempts.createdAt))
@@ -155,7 +220,7 @@ export function createActivitiesRepository(db: HomeschoolDb) {
         .where(
           and(
             eq(activityAttempts.learnerId, learnerId),
-            sql`${activityAttempts.metadata} ->> 'sessionId' = ${sessionId}`,
+            eq(activityAttempts.lessonSessionId, sessionId),
           ),
         )
         .orderBy(desc(activityAttempts.attemptNumber), desc(activityAttempts.createdAt))

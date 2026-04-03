@@ -44,6 +44,7 @@ export const StandardSchema = z.object({
   /** For nested standards (cluster -> standard -> sub-standard) */
   parentId: z.string().optional(),
   depth: z.number().int().nonnegative().default(0),
+  hasChildren: z.boolean().optional(),
 });
 
 export type Standard = z.infer<typeof StandardSchema>;
@@ -53,8 +54,8 @@ export type Standard = z.infer<typeof StandardSchema>;
 // ---------------------------------------------------------------------------
 
 export const CustomGoalSchema = z.object({
-  id: z.string().uuid(),
-  householdId: z.string().uuid(),
+  id: z.string(),
+  householdId: z.string(),
   title: z.string().min(1),
   description: z.string().optional(),
   subject: z.string().optional(),
@@ -77,10 +78,10 @@ export type CreateCustomGoalInput = z.infer<typeof CreateCustomGoalInputSchema>;
 // ---------------------------------------------------------------------------
 
 export const StandardsMappingSchema = z.object({
-  id: z.string().uuid(),
-  objectiveId: z.string().uuid(),
+  id: z.string(),
+  objectiveId: z.string(),
   standardId: z.string().optional(),
-  customGoalId: z.string().uuid().optional(),
+  customGoalId: z.string().optional(),
   /** How the standard relates to the objective */
   relationship: z.enum(["primary", "supporting", "related"]).default("primary"),
   createdAt: z.string().datetime(),

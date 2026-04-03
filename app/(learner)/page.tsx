@@ -14,6 +14,10 @@ const kindLabels: Record<string, string> = {
   sequencing: "Sequencing",
   guided_practice: "Guided Practice",
   reflection: "Reflection",
+  checklist: "Checklist",
+  rubric_response: "Rubric Response",
+  file_submission: "File Submission",
+  supervisor_sign_off: "Sign-off",
   hybrid_layout: "Lesson",
 };
 
@@ -64,6 +68,9 @@ function SessionCard({ session }: { session: ActivitySession }) {
 export default async function LearnerHomePage() {
   const session = await requireAppSession();
   const sessions = await listSessions(session.activeLearner.id);
+  const sessionLabel = session.platformSettings.sessionLabel;
+  const activityLabel = session.platformSettings.activityLabel;
+  const isSelfGuided = session.platformSettings.workflowMode === "self_guided";
 
   const notStarted = sessions.filter((s) => s.status === "not_started");
   const inProgress = sessions.filter((s) => s.status === "in_progress");
@@ -72,9 +79,22 @@ export default async function LearnerHomePage() {
   return (
     <div className="space-y-8">
       <div className="border-b border-border/70 pb-4">
-        <p className="text-sm text-muted-foreground">Daily view</p>
+        <p className="text-sm text-muted-foreground">
+          {isSelfGuided ? "Self-guided queue" : "Daily view"}
+        </p>
         <h1 className="font-serif text-3xl tracking-tight">Today</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          {sessionLabel}s and {activityLabel.toLowerCase()} work stay in one queue so progress,
+          evidence, and review checkpoints do not split apart.
+        </p>
       </div>
+
+      {isSelfGuided ? (
+        <div className="rounded-xl border border-border/70 bg-card/70 px-4 py-3 text-sm text-muted-foreground">
+          Self-guided mode is active. Work can move independently until a checkpoint or review item
+          asks for another adult decision.
+        </div>
+      ) : null}
 
       {inProgress.length > 0 ? (
         <section className="space-y-3">
@@ -112,7 +132,9 @@ export default async function LearnerHomePage() {
       {sessions.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border/70 py-16 text-center">
           <BookOpen className="mx-auto size-8 text-muted-foreground/50" />
-          <p className="mt-3 text-sm text-muted-foreground">No activities assigned yet.</p>
+          <p className="mt-3 text-sm text-muted-foreground">
+            No {activityLabel.toLowerCase()} work is assigned yet.
+          </p>
         </div>
       ) : null}
     </div>

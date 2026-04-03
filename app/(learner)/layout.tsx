@@ -25,14 +25,16 @@ export default async function LearnerLayout({ children }: { children: ReactNode 
         <div className="mx-auto flex h-14 max-w-4xl items-center justify-between gap-4 px-4 sm:px-6">
           <div className="flex items-center gap-2">
             <BookOpen className="size-4 text-primary" />
-            <span className="font-serif text-lg">{session.activeLearner.displayName}</span>
+            <span className="font-serif text-lg">
+              {session.platformSettings.learnerLabel}: {session.activeLearner.displayName}
+            </span>
           </div>
           <Link
             href="/today"
             className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
           >
             <ArrowLeft className="size-4" />
-            Parent
+            {session.platformSettings.primaryGuideLabel}
           </Link>
         </div>
       </header>

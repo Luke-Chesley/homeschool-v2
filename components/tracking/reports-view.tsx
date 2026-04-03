@@ -5,13 +5,37 @@ import type { TrackingDashboard } from "@/lib/tracking/types";
 
 export function ReportsView({ dashboard }: { dashboard: TrackingDashboard }) {
   const exports = getTrackingExportPreview(dashboard);
+  const objectiveCount = dashboard.standards.length;
+  const evidenceCount = dashboard.evidence.length;
+  const openReviews = dashboard.reviewQueue.length;
 
   return (
     <div className="grid gap-6">
+      <section className="grid gap-4 md:grid-cols-3">
+        <Card>
+          <CardHeader>
+            <CardDescription>Objective rows</CardDescription>
+            <CardTitle className="text-4xl">{objectiveCount}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardDescription>Evidence records</CardDescription>
+            <CardTitle className="text-4xl">{evidenceCount}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardDescription>Open reviews</CardDescription>
+            <CardTitle className="text-4xl">{openReviews}</CardTitle>
+          </CardHeader>
+        </Card>
+      </section>
+
       <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
         <Card>
           <CardHeader>
-            <CardTitle>Standards coverage and gaps</CardTitle>
+            <CardTitle>Objective coverage and gaps</CardTitle>
             <CardDescription>
               Coverage tracks both completed evidence and visible gaps, instead of only counting planned exposure.
             </CardDescription>
@@ -49,9 +73,9 @@ export function ReportsView({ dashboard }: { dashboard: TrackingDashboard }) {
 
         <Card>
           <CardHeader>
-            <CardTitle>Goal progress</CardTitle>
+            <CardTitle>Progress signals</CardTitle>
             <CardDescription>
-              Household goals and formal standards stay visible in the same reporting flow.
+              Goals stay visible alongside the objective rows so planning can follow the evidence.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -77,9 +101,9 @@ export function ReportsView({ dashboard }: { dashboard: TrackingDashboard }) {
       <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <Card>
           <CardHeader>
-            <CardTitle>Lesson export preview</CardTitle>
+            <CardTitle>Progress export preview</CardTitle>
             <CardDescription>
-              Export rows are shaped for CSV or parent records without forcing feature code to know the table format.
+              Export rows are shaped for CSV or records without forcing feature code to know the table format.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -93,7 +117,7 @@ export function ReportsView({ dashboard }: { dashboard: TrackingDashboard }) {
                   {row.date} · {row.subject} · {row.actualMinutes}/{row.plannedMinutes} minutes
                 </p>
                 <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                  {row.standards || "No standards linked"} · {row.goals || "No goals linked"}
+                  {row.standards || "No objectives linked"} · {row.goals || "No goals linked"}
                 </p>
               </div>
             ))}
@@ -102,7 +126,7 @@ export function ReportsView({ dashboard }: { dashboard: TrackingDashboard }) {
 
         <Card>
           <CardHeader>
-            <CardTitle>Standards export preview</CardTitle>
+            <CardTitle>Objective export preview</CardTitle>
             <CardDescription>
               Compact rows for coverage reports, compliance snapshots, and organizational summaries.
             </CardDescription>

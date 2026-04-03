@@ -24,6 +24,10 @@ import { MatchingRenderer } from "./MatchingRenderer";
 import { SequencingRenderer } from "./SequencingRenderer";
 import { GuidedPracticeRenderer } from "./GuidedPracticeRenderer";
 import { ReflectionRenderer } from "./ReflectionRenderer";
+import { ChecklistRenderer } from "./ChecklistRenderer";
+import { RubricResponseRenderer } from "./RubricResponseRenderer";
+import { FileSubmissionRenderer } from "./FileSubmissionRenderer";
+import { SupervisorSignOffRenderer } from "./SupervisorSignOffRenderer";
 
 export interface ActivityRendererProps {
   definition: ActivityDefinition;
@@ -118,6 +122,58 @@ export function ActivityRenderer({
     case "reflection":
       return (
         <ReflectionRenderer
+          activity={definition}
+          initialAnswers={initialAnswers}
+          estimatedMinutes={estimatedMinutes}
+          onAnswerChange={onAnswerChange}
+          onSubmit={onSubmit}
+          submitting={submitting}
+          submitted={submitted}
+        />
+      );
+
+    case "checklist":
+      return (
+        <ChecklistRenderer
+          activity={definition}
+          initialAnswers={initialAnswers}
+          estimatedMinutes={estimatedMinutes}
+          onAnswerChange={onAnswerChange}
+          onSubmit={onSubmit}
+          submitting={submitting}
+          submitted={submitted}
+        />
+      );
+
+    case "rubric_response":
+      return (
+        <RubricResponseRenderer
+          activity={definition}
+          initialAnswers={initialAnswers}
+          estimatedMinutes={estimatedMinutes}
+          onAnswerChange={onAnswerChange}
+          onSubmit={onSubmit}
+          submitting={submitting}
+          submitted={submitted}
+        />
+      );
+
+    case "file_submission":
+      return (
+        <FileSubmissionRenderer
+          activity={definition}
+          initialAnswers={initialAnswers}
+          estimatedMinutes={estimatedMinutes}
+          onAnswerChange={onAnswerChange}
+          onSubmit={onSubmit}
+          submitting={submitting}
+          submitted={submitted}
+        />
+      );
+
+    case "supervisor_sign_off":
+      return (
+        <SupervisorSignOffRenderer
           activity={definition}
           initialAnswers={initialAnswers}
           estimatedMinutes={estimatedMinutes}

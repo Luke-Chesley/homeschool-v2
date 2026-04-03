@@ -31,7 +31,7 @@ export async function continueCurriculumAiDraftConversation(params: {
   learner: AppLearner;
   messages: CurriculumAiChatMessage[];
 }): Promise<CurriculumAiChatTurn> {
-  const prompt = resolvePrompt("curriculum.intake", CURRICULUM_INTAKE_PROMPT_VERSION);
+  const prompt = await resolvePrompt("curriculum.intake", CURRICULUM_INTAKE_PROMPT_VERSION);
   const adapter = getAdapterForTask("curriculum.intake");
   const model = getModelForTask("curriculum.intake", getAiRoutingConfig());
   const messages = normalizeMessages(params.messages);
@@ -87,7 +87,7 @@ async function generateCurriculumArtifact(params: {
   learner: AppLearner;
   messages: CurriculumAiChatMessage[];
 }): Promise<CurriculumAiGeneratedArtifact> {
-  const prompt = resolvePrompt("curriculum.generate", CURRICULUM_GENERATION_PROMPT_VERSION);
+  const prompt = await resolvePrompt("curriculum.generate", CURRICULUM_GENERATION_PROMPT_VERSION);
   const adapter = getAdapterForTask("curriculum.generate");
   const model = getModelForTask("curriculum.generate", getAiRoutingConfig());
   const messages = normalizeMessages(params.messages);

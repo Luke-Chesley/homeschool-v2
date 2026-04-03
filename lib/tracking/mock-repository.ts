@@ -240,6 +240,8 @@ export function getTrackingRepository() {
         evidence,
         standards,
         goals,
+        reviewQueue: [],
+        recommendations: [],
       };
     },
   };

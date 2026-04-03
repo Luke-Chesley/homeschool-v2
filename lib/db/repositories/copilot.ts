@@ -82,6 +82,19 @@ export function createCopilotRepository(db: HomeschoolDb) {
       return recommendation;
     },
 
+    async updateRecommendation(id: string, input: Partial<NewRecommendation>) {
+      const [recommendation] = await db
+        .update(recommendations)
+        .set({
+          ...input,
+          updatedAt: new Date(),
+        })
+        .where(eq(recommendations.id, id))
+        .returning();
+
+      return recommendation ?? null;
+    },
+
     async getThread(threadId: string) {
       return db.query.conversationThreads.findFirst({
         where: eq(conversationThreads.id, threadId),

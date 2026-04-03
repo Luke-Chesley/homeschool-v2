@@ -11,6 +11,10 @@
  *   sequencing    — reorder items
  *   guided_practice — step-by-step worked problems
  *   reflection    — open-ended text/journal response
+ *   checklist     — checklist / completion confirmation
+ *   rubric_response — rubric-scored response with criteria
+ *   file_submission — upload metadata + submission note
+ *   supervisor_sign_off — learner request for adult sign-off
  *   hybrid_layout — allowlisted component composition for rich lessons
  */
 
@@ -169,6 +173,85 @@ export const ReflectionActivitySchema = z.object({
 });
 
 // ---------------------------------------------------------------------------
+// Checklist
+// ---------------------------------------------------------------------------
+
+export const ChecklistItemSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  description: z.string().optional(),
+  required: z.boolean().optional().default(true),
+});
+
+export const ChecklistActivitySchema = z.object({
+  kind: z.literal("checklist"),
+  title: z.string(),
+  instructions: z.string().optional(),
+  items: z.array(ChecklistItemSchema).min(1),
+  allowPartialSubmit: z.boolean().optional().default(true),
+});
+
+// ---------------------------------------------------------------------------
+// Rubric response
+// ---------------------------------------------------------------------------
+
+export const RubricLevelSchema = z.object({
+  value: z.number().int().positive(),
+  label: z.string(),
+  description: z.string().optional(),
+});
+
+export const RubricCriterionSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  description: z.string().optional(),
+});
+
+export const RubricResponseActivitySchema = z.object({
+  kind: z.literal("rubric_response"),
+  title: z.string(),
+  instructions: z.string().optional(),
+  prompt: RichTextSchema.optional(),
+  criteria: z.array(RubricCriterionSchema).min(1),
+  levels: z.array(RubricLevelSchema).min(2),
+  notePrompt: z.string().optional(),
+});
+
+// ---------------------------------------------------------------------------
+// File submission
+// ---------------------------------------------------------------------------
+
+export const FileSubmissionActivitySchema = z.object({
+  kind: z.literal("file_submission"),
+  title: z.string(),
+  instructions: z.string().optional(),
+  prompt: RichTextSchema.optional(),
+  accept: z.array(z.string()).optional(),
+  maxFiles: z.number().int().positive().optional(),
+  notePrompt: z.string().optional(),
+});
+
+// ---------------------------------------------------------------------------
+// Supervisor sign-off
+// ---------------------------------------------------------------------------
+
+export const SupervisorSignOffItemSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  description: z.string().optional(),
+});
+
+export const SupervisorSignOffActivitySchema = z.object({
+  kind: z.literal("supervisor_sign_off"),
+  title: z.string(),
+  instructions: z.string().optional(),
+  prompt: RichTextSchema.optional(),
+  items: z.array(SupervisorSignOffItemSchema).optional(),
+  notePrompt: z.string().optional(),
+  acknowledgmentLabel: z.string().optional(),
+});
+
+// ---------------------------------------------------------------------------
 // Hybrid layout
 // ---------------------------------------------------------------------------
 
@@ -220,6 +303,10 @@ export type ActivityDefinition =
   | z.infer<typeof SequencingActivitySchema>
   | z.infer<typeof GuidedPracticeActivitySchema>
   | z.infer<typeof ReflectionActivitySchema>
+  | z.infer<typeof ChecklistActivitySchema>
+  | z.infer<typeof RubricResponseActivitySchema>
+  | z.infer<typeof FileSubmissionActivitySchema>
+  | z.infer<typeof SupervisorSignOffActivitySchema>
   | HybridLayoutActivity;
 
 export type ActivityKind = ActivityDefinition["kind"];
@@ -236,6 +323,10 @@ export function parseActivityDefinition(value: unknown): ActivityDefinition | nu
     SequencingActivitySchema,
     GuidedPracticeActivitySchema,
     ReflectionActivitySchema,
+    ChecklistActivitySchema,
+    RubricResponseActivitySchema,
+    FileSubmissionActivitySchema,
+    SupervisorSignOffActivitySchema,
   ] as const;
 
   for (const schema of schemas) {

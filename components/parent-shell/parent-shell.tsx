@@ -11,9 +11,13 @@ import { cn } from "@/lib/utils";
 export function ParentShell({
   children,
   activeLearnerName,
+  organizationName,
+  learnerLabel,
 }: {
   children: ReactNode;
   activeLearnerName: string;
+  organizationName: string;
+  learnerLabel: string;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -21,13 +25,18 @@ export function ParentShell({
     <div className="flex min-h-[calc(100dvh-var(--global-tabs-height))] w-full bg-background">
       <aside className="hidden w-64 shrink-0 border-r border-border/70 lg:block">
         <div className="sticky top-[var(--global-tabs-height)] h-[calc(100dvh-var(--global-tabs-height))] overflow-y-auto">
-          <ParentSidebar activeLearnerName={activeLearnerName} />
+          <ParentSidebar
+            activeLearnerName={activeLearnerName}
+            organizationName={organizationName}
+            learnerLabel={learnerLabel}
+          />
         </div>
       </aside>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <ParentTopbar
           activeLearnerName={activeLearnerName}
+          learnerLabel={learnerLabel}
           onOpenMenu={() => setMobileOpen(true)}
         />
 
@@ -58,7 +67,12 @@ export function ParentShell({
             </Button>
           </div>
           <div className="h-[calc(100%-3.5rem)] overflow-y-auto">
-            <ParentSidebar activeLearnerName={activeLearnerName} onNavigate={() => setMobileOpen(false)} />
+            <ParentSidebar
+              activeLearnerName={activeLearnerName}
+              organizationName={organizationName}
+              learnerLabel={learnerLabel}
+              onNavigate={() => setMobileOpen(false)}
+            />
           </div>
         </div>
       </div>

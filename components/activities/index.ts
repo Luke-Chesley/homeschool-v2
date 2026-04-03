@@ -7,3 +7,7 @@ export { MatchingRenderer } from "./MatchingRenderer";
 export { SequencingRenderer } from "./SequencingRenderer";
 export { GuidedPracticeRenderer } from "./GuidedPracticeRenderer";
 export { ReflectionRenderer } from "./ReflectionRenderer";
+export { ChecklistRenderer } from "./ChecklistRenderer";
+export { RubricResponseRenderer } from "./RubricResponseRenderer";
+export { FileSubmissionRenderer } from "./FileSubmissionRenderer";
+export { SupervisorSignOffRenderer } from "./SupervisorSignOffRenderer";

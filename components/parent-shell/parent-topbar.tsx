@@ -9,10 +9,11 @@ import { parentPrimaryNav } from "@/components/navigation/parent-nav-config";
 
 type ParentTopbarProps = {
   activeLearnerName: string;
+  learnerLabel: string;
   onOpenMenu: () => void;
 };
 
-export function ParentTopbar({ activeLearnerName, onOpenMenu }: ParentTopbarProps) {
+export function ParentTopbar({ activeLearnerName, learnerLabel, onOpenMenu }: ParentTopbarProps) {
   const pathname = usePathname();
   const activeSection =
     parentPrimaryNav.find(
@@ -23,7 +24,9 @@ export function ParentTopbar({ activeLearnerName, onOpenMenu }: ParentTopbarProp
     <div className="border-b border-border/70 bg-background/96 px-4 py-3 sm:px-6">
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
-          <p className="text-xs text-muted-foreground">{activeLearnerName}</p>
+          <p className="text-xs text-muted-foreground">
+            {learnerLabel} · {activeLearnerName}
+          </p>
           <h1 className="font-serif text-2xl leading-tight">{activeSection.label}</h1>
         </div>
 

@@ -11,7 +11,9 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+
 import { AiTaskNameSchema } from "@/lib/ai/types";
+import { requireAppSession } from "@/lib/app-session/server";
 import {
   dispatchLessonDraft,
   dispatchWorksheetGeneration,
@@ -49,21 +51,39 @@ export async function POST(req: NextRequest) {
   }
 
   const { taskName, inputs } = parsed.data;
+  const session = await requireAppSession();
+  const dispatchContext = {
+    organizationId: session.organization.id,
+    learnerId: parsed.data.context?.learnerId ?? session.activeLearner.id,
+    lessonSessionId: parsed.data.context?.lessonId ?? null,
+  };
 
   try {
     let job;
     switch (taskName) {
       case "lesson.draft":
-        job = await dispatchLessonDraft(inputs as unknown as Parameters<typeof dispatchLessonDraft>[0]);
+        job = await dispatchLessonDraft(
+          inputs as unknown as Parameters<typeof dispatchLessonDraft>[0],
+          dispatchContext,
+        );
         break;
       case "worksheet.generate":
-        job = await dispatchWorksheetGeneration(inputs as unknown as Parameters<typeof dispatchWorksheetGeneration>[0]);
+        job = await dispatchWorksheetGeneration(
+          inputs as unknown as Parameters<typeof dispatchWorksheetGeneration>[0],
+          dispatchContext,
+        );
         break;
       case "interactive.generate":
-        job = await dispatchInteractiveGeneration(inputs as unknown as Parameters<typeof dispatchInteractiveGeneration>[0]);
+        job = await dispatchInteractiveGeneration(
+          inputs as unknown as Parameters<typeof dispatchInteractiveGeneration>[0],
+          dispatchContext,
+        );
         break;
       case "plan.adapt":
-        job = await dispatchPlanAdaptation(inputs as unknown as Parameters<typeof dispatchPlanAdaptation>[0]);
+        job = await dispatchPlanAdaptation(
+          inputs as unknown as Parameters<typeof dispatchPlanAdaptation>[0],
+          dispatchContext,
+        );
         break;
       default:
         return NextResponse.json(
@@ -72,7 +92,12 @@ export async function POST(req: NextRequest) {
         );
     }
 
-    return NextResponse.json({ jobId: job.jobId, taskName: job.taskName, status: "dispatched" });
+    return NextResponse.json({
+      jobId: job.jobId,
+      taskName: job.taskName,
+      artifactId: job.artifactId ?? null,
+      status: "queued",
+    });
   } catch (err) {
     console.error("[api/ai/generate POST]", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

@@ -1,18 +1,8 @@
-/**
- * Prompt store — versioned prompt templates.
- *
- * Prompts are stored as typed records with version strings. The version is
- * included in artifact lineage so outputs can be re-generated with the same
- * prompt later.
- *
- * Convention: prompts are stored by task name + version. A "1.0.0" version
- * always exists as the default.
- *
- * Integration point: prompts can be stored in the database (plan 02) for
- * runtime editing by the parent. This store is the fallback.
- */
+import "server-only";
 
 import type { AiTaskName } from "@/lib/ai/types";
+import { getRepositories } from "@/lib/db";
+import { ensureDatabaseReady } from "@/lib/db/server";
 import {
   CURRICULUM_GENERATION_PROMPT_VERSION,
   CURRICULUM_GENERATION_SYSTEM_PROMPT,
@@ -34,13 +24,14 @@ export interface PromptRecord {
   systemPrompt: string;
   userTemplate?: string;
   notes?: string;
+  id?: string;
 }
 
 // ---------------------------------------------------------------------------
 // Prompt library
 // ---------------------------------------------------------------------------
 
-const PROMPTS: PromptRecord[] = [
+const STATIC_PROMPTS: PromptRecord[] = [
   {
     task: "curriculum.intake",
     version: CURRICULUM_INTAKE_PROMPT_VERSION,
@@ -138,24 +129,106 @@ Only include standards that are a clear match. Prefer specificity (leaf-level st
 // Store accessor
 // ---------------------------------------------------------------------------
 
-export function resolvePrompt(
+function resolveStaticPrompt(
   task: AiTaskName,
   version = "1.0.0"
 ): PromptRecord {
-  const prompt = PROMPTS.find((p) => p.task === task && p.version === version);
+  const prompt = STATIC_PROMPTS.find((p) => p.task === task && p.version === version);
   if (!prompt) {
     // Fallback to any version of this task
-    const fallback = PROMPTS.find((p) => p.task === task);
+    const fallback = STATIC_PROMPTS.find((p) => p.task === task);
     if (fallback) return fallback;
     throw new Error(`No prompt found for task "${task}" version "${version}"`);
   }
   return prompt;
 }
 
-export function listPrompts(): PromptRecord[] {
-  return PROMPTS;
+let seedPromise: Promise<void> | null = null;
+
+async function ensurePromptTemplatesSeeded() {
+  if (seedPromise) {
+    return seedPromise;
+  }
+
+  seedPromise = (async () => {
+    await ensureDatabaseReady();
+    const repos = getRepositories();
+
+    await Promise.all(
+      STATIC_PROMPTS.map((prompt) =>
+        repos.aiPlatform.upsertPromptTemplate({
+          organizationId: null,
+          taskName: prompt.task,
+          version: prompt.version,
+          status: "active",
+          label: `${prompt.task}:${prompt.version}`,
+          systemPrompt: prompt.systemPrompt,
+          userTemplate: prompt.userTemplate ?? null,
+          notes: prompt.notes ?? null,
+          isDefault: true,
+          createdByAdultUserId: null,
+          metadata: {
+            source: "static-seed",
+          },
+        }),
+      ),
+    );
+  })().catch((error) => {
+    seedPromise = null;
+    throw error;
+  });
+
+  return seedPromise;
 }
 
-export function listPromptsForTask(task: AiTaskName): PromptRecord[] {
-  return PROMPTS.filter((p) => p.task === task);
+export async function resolvePrompt(
+  task: AiTaskName,
+  version = "1.0.0",
+  organizationId?: string | null,
+): Promise<PromptRecord> {
+  await ensurePromptTemplatesSeeded();
+
+  const repos = getRepositories();
+  const prompt = await repos.aiPlatform.findPromptTemplate({
+    organizationId: organizationId ?? null,
+    taskName: task,
+    version,
+  });
+
+  if (!prompt) {
+    return resolveStaticPrompt(task, version);
+  }
+
+  return {
+    id: prompt.id,
+    task: prompt.taskName as AiTaskName,
+    version: prompt.version,
+    systemPrompt: prompt.systemPrompt,
+    userTemplate: prompt.userTemplate ?? undefined,
+    notes: prompt.notes ?? undefined,
+  };
+}
+
+export async function listPrompts(
+  task?: AiTaskName,
+  organizationId?: string | null,
+): Promise<PromptRecord[]> {
+  await ensurePromptTemplatesSeeded();
+  const prompts = await getRepositories().aiPlatform.listPromptTemplates(task, organizationId ?? null);
+
+  return prompts.map((prompt) => ({
+    id: prompt.id,
+    task: prompt.taskName as AiTaskName,
+    version: prompt.version,
+    systemPrompt: prompt.systemPrompt,
+    userTemplate: prompt.userTemplate ?? undefined,
+    notes: prompt.notes ?? undefined,
+  }));
+}
+
+export async function listPromptsForTask(
+  task: AiTaskName,
+  organizationId?: string | null,
+): Promise<PromptRecord[]> {
+  return listPrompts(task, organizationId);
 }
