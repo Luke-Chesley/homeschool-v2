@@ -5,6 +5,7 @@ import { BookOpen, FileJson2, Upload, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { AiDraftConversation } from "@/components/curriculum/AiDraftConversation";
 import type { CurriculumSourceKind } from "@/lib/curriculum/types";
 
 // ---------------------------------------------------------------------------
@@ -168,21 +169,35 @@ function UploadForm({ onCancel }: { onCancel: () => void }) {
 // AI draft form (stub — integration point for plan 08)
 // ---------------------------------------------------------------------------
 
-function AiDraftForm({ onCancel }: { onCancel: () => void }) {
+function AiDraftForm({
+  householdId,
+  activeLearner,
+  onSubmit,
+  onCancel,
+}: {
+  householdId: string;
+  activeLearner: {
+    displayName: string;
+    firstName: string;
+  };
+  onSubmit: (data: {
+    title: string;
+    description: string;
+    kind: CurriculumSourceKind;
+    subjects: string[];
+    gradeLevels: string[];
+    householdId: string;
+    academicYear?: string;
+  }) => void;
+  onCancel: () => void;
+}) {
   return (
-    <div className="flex flex-col items-center gap-4 py-6 text-center">
-      <Sparkles className="size-10 text-primary/60" />
-      <p className="text-sm text-muted-foreground">
-        AI curriculum drafting connects to the AI task registry.
-        <br />
-        <span className="text-xs">
-          Integration point: dispatch to plan 08 lesson-drafting task.
-        </span>
-      </p>
-      <Button variant="outline" size="sm" onClick={onCancel}>
-        Back
-      </Button>
-    </div>
+    <AiDraftConversation
+      householdId={householdId}
+      activeLearner={activeLearner}
+      onCreate={onSubmit}
+      onCancel={onCancel}
+    />
   );
 }
 
@@ -231,6 +246,10 @@ function LocalJsonImportForm({
 
 export interface AddSourceModalContentProps {
   householdId: string;
+  activeLearner: {
+    displayName: string;
+    firstName: string;
+  };
   onCreated: (
     data:
       | {
@@ -240,6 +259,7 @@ export interface AddSourceModalContentProps {
           subjects: string[];
           gradeLevels: string[];
           householdId: string;
+          academicYear?: string;
         }
       | {
           householdId: string;
@@ -251,6 +271,7 @@ export interface AddSourceModalContentProps {
 
 export function AddSourceModalContent({
   householdId,
+  activeLearner,
   onCreated,
   onClose,
 }: AddSourceModalContentProps) {
@@ -272,7 +293,14 @@ export function AddSourceModalContent({
   }
 
   if (selectedKind === "ai_draft") {
-    return <AiDraftForm onCancel={() => setSelectedKind(null)} />;
+    return (
+      <AiDraftForm
+        householdId={householdId}
+        activeLearner={activeLearner}
+        onSubmit={onCreated}
+        onCancel={() => setSelectedKind(null)}
+      />
+    );
   }
 
   if (selectedKind === "external") {

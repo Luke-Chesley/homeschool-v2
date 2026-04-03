@@ -9,7 +9,16 @@ import { AddSourceModalContent } from "@/components/curriculum/AddSourceModal";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-export function NewCurriculumClientPage({ householdId }: { householdId: string }) {
+export function NewCurriculumClientPage({
+  householdId,
+  activeLearner,
+}: {
+  householdId: string;
+  activeLearner: {
+    displayName: string;
+    firstName: string;
+  };
+}) {
   const router = useRouter();
   const [creating, setCreating] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -21,6 +30,7 @@ export function NewCurriculumClientPage({ householdId }: { householdId: string }
     kind?: import("@/lib/curriculum/types").CurriculumSourceKind;
     subjects?: string[];
     gradeLevels?: string[];
+    academicYear?: string;
     importPreset?: "local_curriculum_json";
   }) {
     setCreating(true);
@@ -68,6 +78,7 @@ export function NewCurriculumClientPage({ householdId }: { householdId: string }
           ) : (
             <AddSourceModalContent
               householdId={householdId}
+              activeLearner={activeLearner}
               onCreated={handleCreated}
               onClose={() => router.back()}
             />
