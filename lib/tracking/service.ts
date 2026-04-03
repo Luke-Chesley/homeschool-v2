@@ -4,16 +4,22 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 
 import { getDb } from "@/lib/db/server";
 import {
+  curriculumNodes,
+  curriculumSources,
   goalMappings,
   learnerProfiles,
   learningGoals,
   observationNotes,
+  planItemCurriculumLinks,
   progressRecords,
   progressRecordStandards,
   standardNodes,
+  weeklyRouteItems,
+  weeklyRoutes,
 } from "@/lib/db/schema";
 import { buildStandardsExportRows, buildTrackingExportRows } from "@/lib/tracking/export";
 import type {
+  TrackingCurriculumContext,
   EvidenceRecord,
   GoalProgressRow,
   MasterySignal,
@@ -29,6 +35,25 @@ function toDateOnly(value: Date) {
 
 function safeText(value: unknown, fallback: string) {
   return typeof value === "string" && value.trim().length > 0 ? value : fallback;
+}
+
+function asRecord(value: unknown) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return null;
+  }
+
+  return value as Record<string, unknown>;
+}
+
+function getMetadataString(value: unknown, key: string) {
+  const record = asRecord(value);
+  return typeof record?.[key] === "string" ? record[key] : undefined;
+}
+
+function getCurriculumLinkSourceId(value: unknown) {
+  const record = asRecord(value);
+  const curriculumLink = asRecord(record?.curriculumLink);
+  return typeof curriculumLink?.sourceId === "string" ? curriculumLink.sourceId : undefined;
 }
 
 function mapMastery(value: string | null): MasterySignal {
@@ -67,6 +92,104 @@ function defaultReportingWindow() {
   return `Week of ${now.toLocaleDateString("en-US", { month: "long", day: "numeric" })}`;
 }
 
+async function buildCurriculumContext(args: {
+  sourceId: string;
+  selectionReason: string;
+  weekStartDate?: string | null;
+  weeklyRouteId?: string;
+}): Promise<TrackingCurriculumContext | null> {
+  const db = getDb();
+  const source = await db.query.curriculumSources.findFirst({
+    where: eq(curriculumSources.id, args.sourceId),
+  });
+
+  if (!source) {
+    return null;
+  }
+
+  const [nodes, routeItems] = await Promise.all([
+    db.query.curriculumNodes.findMany({
+      where: and(eq(curriculumNodes.sourceId, source.id), eq(curriculumNodes.isActive, true)),
+      columns: {
+        id: true,
+        normalizedType: true,
+      },
+    }),
+    args.weeklyRouteId
+      ? db.query.weeklyRouteItems.findMany({
+          where: eq(weeklyRouteItems.weeklyRouteId, args.weeklyRouteId),
+          columns: {
+            id: true,
+          },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  return {
+    sourceId: source.id,
+    sourceTitle: source.title,
+    selectionReason: args.selectionReason,
+    weekStartDate: args.weekStartDate ?? undefined,
+    scheduledItemCount: routeItems.length,
+    totalNodeCount: nodes.length,
+    totalSkillCount: nodes.filter((node) => node.normalizedType === "skill").length,
+  };
+}
+
+async function resolveActiveCurriculumContext(params: {
+  organizationId: string;
+  learnerId: string;
+}): Promise<TrackingCurriculumContext | null> {
+  const db = getDb();
+
+  const latestWeeklyRoute = await db.query.weeklyRoutes.findFirst({
+    where: and(eq(weeklyRoutes.learnerId, params.learnerId), eq(weeklyRoutes.status, "active")),
+    orderBy: [desc(weeklyRoutes.weekStartDate), desc(weeklyRoutes.createdAt)],
+  });
+
+  if (latestWeeklyRoute) {
+    return buildCurriculumContext({
+      sourceId: latestWeeklyRoute.sourceId,
+      selectionReason: "Latest weekly route",
+      weekStartDate: latestWeeklyRoute.weekStartDate,
+      weeklyRouteId: latestWeeklyRoute.id,
+    });
+  }
+
+  const learnerScopedSource = await db.query.curriculumSources.findFirst({
+    where: and(
+      eq(curriculumSources.organizationId, params.organizationId),
+      eq(curriculumSources.learnerId, params.learnerId),
+      eq(curriculumSources.status, "active"),
+    ),
+    orderBy: [desc(curriculumSources.updatedAt), desc(curriculumSources.createdAt)],
+  });
+
+  if (learnerScopedSource) {
+    return buildCurriculumContext({
+      sourceId: learnerScopedSource.id,
+      selectionReason: "Learner-scoped active curriculum",
+    });
+  }
+
+  const organizationScopedSource = await db.query.curriculumSources.findFirst({
+    where: and(
+      eq(curriculumSources.organizationId, params.organizationId),
+      eq(curriculumSources.status, "active"),
+    ),
+    orderBy: [desc(curriculumSources.updatedAt), desc(curriculumSources.createdAt)],
+  });
+
+  if (organizationScopedSource) {
+    return buildCurriculumContext({
+      sourceId: organizationScopedSource.id,
+      selectionReason: "Most recent household curriculum",
+    });
+  }
+
+  return null;
+}
+
 export async function getTrackingDashboard(params: {
   organizationId: string;
   learnerId: string;
@@ -74,14 +197,18 @@ export async function getTrackingDashboard(params: {
 }): Promise<TrackingDashboard> {
   const db = getDb();
 
-  const [profile, progress, notes, goals] = await Promise.all([
+  const [profile, curriculum, progressCandidates, noteCandidates, goals] = await Promise.all([
     db.query.learnerProfiles.findFirst({
       where: eq(learnerProfiles.learnerId, params.learnerId),
+    }),
+    resolveActiveCurriculumContext({
+      organizationId: params.organizationId,
+      learnerId: params.learnerId,
     }),
     db.query.progressRecords.findMany({
       where: eq(progressRecords.learnerId, params.learnerId),
       orderBy: [desc(progressRecords.createdAt)],
-      limit: 25,
+      limit: 100,
     }),
     db.query.observationNotes.findMany({
       where: and(
@@ -89,7 +216,7 @@ export async function getTrackingDashboard(params: {
         eq(observationNotes.learnerId, params.learnerId),
       ),
       orderBy: [desc(observationNotes.createdAt)],
-      limit: 25,
+      limit: 100,
     }),
     db.query.learningGoals.findMany({
       where: eq(learningGoals.learnerId, params.learnerId),
@@ -97,6 +224,52 @@ export async function getTrackingDashboard(params: {
       limit: 25,
     }),
   ]);
+
+  const planItemIds = [...new Set(
+    [...progressCandidates, ...noteCandidates]
+      .map((row) => row.planItemId)
+      .filter((value): value is string => typeof value === "string"),
+  )];
+  const planItemLinks =
+    planItemIds.length === 0
+      ? []
+      : await db.query.planItemCurriculumLinks.findMany({
+          where: inArray(planItemCurriculumLinks.planItemId, planItemIds),
+        });
+  const sourceIdByPlanItemId = new Map(planItemLinks.map((row) => [row.planItemId, row.sourceId]));
+
+  const progressSourceIdByRecordId = new Map(
+    progressCandidates.map((row) => [
+      row.id,
+      getCurriculumLinkSourceId(row.metadata) ??
+        (row.planItemId ? sourceIdByPlanItemId.get(row.planItemId) : undefined),
+    ]),
+  );
+
+  const progress = curriculum
+    ? progressCandidates
+        .filter((row) => progressSourceIdByRecordId.get(row.id) === curriculum.sourceId)
+        .slice(0, 25)
+    : progressCandidates.slice(0, 25);
+  const filteredProgressIds = new Set(progress.map((row) => row.id));
+
+  const notes = curriculum
+    ? noteCandidates
+        .filter((note) => {
+          const linkedProgressId = getMetadataString(note.metadata, "progressRecordId");
+          if (linkedProgressId && filteredProgressIds.has(linkedProgressId)) {
+            return true;
+          }
+
+          const linkedSourceId =
+            getCurriculumLinkSourceId(note.metadata) ??
+            (note.planItemId ? sourceIdByPlanItemId.get(note.planItemId) : undefined) ??
+            (linkedProgressId ? progressSourceIdByRecordId.get(linkedProgressId) : undefined);
+
+          return linkedSourceId === curriculum.sourceId;
+        })
+        .slice(0, 25)
+    : noteCandidates.slice(0, 25);
 
   const progressIds = progress.map((row) => row.id);
   const standardLinks =
@@ -259,6 +432,7 @@ export async function getTrackingDashboard(params: {
       gradeLabel: profile?.gradeLevel ? `Grade ${profile.gradeLevel}` : "Grade level not set",
       reportingWindow: defaultReportingWindow(),
     },
+    curriculum,
     summary: {
       plannedMinutes,
       actualMinutes,
