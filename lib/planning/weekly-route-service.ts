@@ -175,6 +175,7 @@ export async function moveWeeklyRouteItem(params: {
   learnerId: string;
   weeklyRouteId: string;
   weeklyRouteItemId: string;
+  targetWeeklyRouteId?: string;
   targetScheduledDate: string | null;
   targetIndex: number;
   manualOverrideNote?: string;
@@ -187,16 +188,6 @@ export async function moveWeeklyRouteItem(params: {
     throw new Error("Weekly route not found.");
   }
 
-  const weekdayDates = buildWeekdayDates(route.weekStartDate);
-  const targetColumnKey =
-    params.targetScheduledDate == null
-      ? "unassigned"
-      : toColumnKey(params.targetScheduledDate, weekdayDates);
-
-  if (params.targetScheduledDate != null && targetColumnKey === "unassigned") {
-    throw new Error("Scheduled date must be within this week (Monday-Friday).");
-  }
-
   const rows = await db.query.weeklyRouteItems.findMany({
     where: eq(weeklyRouteItems.weeklyRouteId, route.id),
     orderBy: [asc(weeklyRouteItems.currentPosition), asc(weeklyRouteItems.createdAt)],
@@ -207,42 +198,230 @@ export async function moveWeeklyRouteItem(params: {
     throw new Error("Weekly route item not found.");
   }
 
-  const columnOrder = ["unassigned", ...weekdayDates];
-  const itemsByColumn = new Map<string, string[]>();
-  for (const columnKey of columnOrder) {
-    itemsByColumn.set(columnKey, []);
+  const targetWeeklyRouteId = params.targetWeeklyRouteId ?? route.id;
+
+  if (targetWeeklyRouteId === route.id) {
+    const weekdayDates = buildWeekdayDates(route.weekStartDate);
+    const targetColumnKey =
+      params.targetScheduledDate == null
+        ? "unassigned"
+        : toColumnKey(params.targetScheduledDate, weekdayDates);
+
+    if (params.targetScheduledDate != null && targetColumnKey === "unassigned") {
+      throw new Error("Scheduled date must be within this week (Monday-Friday).");
+    }
+
+    const columnOrder = ["unassigned", ...weekdayDates];
+    const itemsByColumn = new Map<string, string[]>();
+    for (const columnKey of columnOrder) {
+      itemsByColumn.set(columnKey, []);
+    }
+
+    for (const item of rows) {
+      const columnKey = toColumnKey(item.scheduledDate, weekdayDates);
+      itemsByColumn.get(columnKey)!.push(item.id);
+    }
+
+    const sourceColumnKey = toColumnKey(movingItem.scheduledDate, weekdayDates);
+    itemsByColumn.set(
+      sourceColumnKey,
+      (itemsByColumn.get(sourceColumnKey) ?? []).filter((id) => id !== movingItem.id),
+    );
+
+    const targetColumnItems = [...(itemsByColumn.get(targetColumnKey) ?? [])];
+    const clampedTargetIndex = Math.max(0, Math.min(params.targetIndex, targetColumnItems.length));
+    targetColumnItems.splice(clampedTargetIndex, 0, movingItem.id);
+    itemsByColumn.set(targetColumnKey, targetColumnItems);
+
+    const columnByItemId = new Map<string, string>();
+    for (const columnKey of columnOrder) {
+      for (const itemId of itemsByColumn.get(columnKey) ?? []) {
+        columnByItemId.set(itemId, columnKey);
+      }
+    }
+
+    const nextOrderedIds = columnOrder.flatMap((columnKey) => itemsByColumn.get(columnKey) ?? []);
+    const rowsById = new Map(rows.map((row) => [row.id, row]));
+
+    await db.transaction(async (tx) => {
+      for (const [position, itemId] of nextOrderedIds.entries()) {
+        const row = rowsById.get(itemId)!;
+        const columnKey = columnByItemId.get(itemId)!;
+        const nextScheduledDate = columnKey === "unassigned" ? null : columnKey;
+        const nextOverrideKind = deriveOverrideKind(row, position, nextScheduledDate);
+        const nextManualOverrideNote =
+          itemId === movingItem.id
+            ? params.manualOverrideNote ?? row.manualOverrideNote
+            : row.manualOverrideNote;
+
+        if (
+          row.currentPosition !== position ||
+          row.scheduledDate !== nextScheduledDate ||
+          row.manualOverrideKind !== nextOverrideKind ||
+          row.manualOverrideNote !== nextManualOverrideNote
+        ) {
+          await tx
+            .update(weeklyRouteItems)
+            .set({
+              currentPosition: position,
+              scheduledDate: nextScheduledDate,
+              manualOverrideKind: nextOverrideKind,
+              manualOverrideNote: nextManualOverrideNote,
+              updatedAt: new Date(),
+            })
+            .where(eq(weeklyRouteItems.id, itemId));
+        }
+      }
+
+      const fromDate = movingItem.scheduledDate;
+      const toDate = targetColumnKey === "unassigned" ? null : targetColumnKey;
+      const nextGlobalPosition = nextOrderedIds.indexOf(movingItem.id);
+
+      const eventType =
+        fromDate === toDate ? "reorder" : toDate == null ? "defer" : "pin";
+
+      await tx.insert(routeOverrideEvents).values({
+        learnerId: params.learnerId,
+        weeklyRouteItemId: movingItem.id,
+        eventType,
+        payload: {
+          weeklyRouteId: route.id,
+          fromPosition: movingItem.currentPosition,
+          toPosition: nextGlobalPosition,
+          toColumnIndex: clampedTargetIndex,
+          fromScheduledDate: fromDate,
+          toScheduledDate: toDate,
+        },
+        createdByAdultUserId: null,
+      });
+    });
+
+    const board = await getWeeklyRouteBoardById({
+      learnerId: params.learnerId,
+      weeklyRouteId: route.id,
+    });
+
+    if (!board) {
+      throw new Error("Failed to reload weekly route board after update.");
+    }
+
+    return board;
+  }
+
+  const targetRoute = await db.query.weeklyRoutes.findFirst({
+    where: and(eq(weeklyRoutes.id, targetWeeklyRouteId), eq(weeklyRoutes.learnerId, params.learnerId)),
+  });
+  if (!targetRoute) {
+    throw new Error("Target weekly route not found.");
+  }
+
+  if (targetRoute.sourceId !== route.sourceId) {
+    throw new Error("Target weekly route must use the same curriculum source.");
+  }
+
+  const targetRows = await db.query.weeklyRouteItems.findMany({
+    where: eq(weeklyRouteItems.weeklyRouteId, targetRoute.id),
+    orderBy: [asc(weeklyRouteItems.currentPosition), asc(weeklyRouteItems.createdAt)],
+  });
+
+  if (targetRows.some((row) => row.skillNodeId === movingItem.skillNodeId)) {
+    throw new Error("Target week already contains this curriculum item.");
+  }
+
+  const sourceWeekdayDates = buildWeekdayDates(route.weekStartDate);
+  const targetWeekdayDates = buildWeekdayDates(targetRoute.weekStartDate);
+  const targetColumnKey =
+    params.targetScheduledDate == null
+      ? "unassigned"
+      : toColumnKey(params.targetScheduledDate, targetWeekdayDates);
+
+  if (params.targetScheduledDate != null && targetColumnKey === "unassigned") {
+    throw new Error("Scheduled date must be within the target week (Monday-Friday).");
+  }
+
+  const sourceColumnOrder = ["unassigned", ...sourceWeekdayDates];
+  const sourceItemsByColumn = new Map<string, string[]>();
+  for (const columnKey of sourceColumnOrder) {
+    sourceItemsByColumn.set(columnKey, []);
   }
 
   for (const item of rows) {
-    const columnKey = toColumnKey(item.scheduledDate, weekdayDates);
-    itemsByColumn.get(columnKey)!.push(item.id);
+    const columnKey = toColumnKey(item.scheduledDate, sourceWeekdayDates);
+    sourceItemsByColumn.get(columnKey)!.push(item.id);
   }
 
-  const sourceColumnKey = toColumnKey(movingItem.scheduledDate, weekdayDates);
-  itemsByColumn.set(
+  const sourceColumnKey = toColumnKey(movingItem.scheduledDate, sourceWeekdayDates);
+  sourceItemsByColumn.set(
     sourceColumnKey,
-    (itemsByColumn.get(sourceColumnKey) ?? []).filter((id) => id !== movingItem.id),
+    (sourceItemsByColumn.get(sourceColumnKey) ?? []).filter((id) => id !== movingItem.id),
   );
 
-  const targetColumnItems = [...(itemsByColumn.get(targetColumnKey) ?? [])];
+  const targetColumnOrder = ["unassigned", ...targetWeekdayDates];
+  const targetItemsByColumn = new Map<string, string[]>();
+  for (const columnKey of targetColumnOrder) {
+    targetItemsByColumn.set(columnKey, []);
+  }
+
+  for (const item of targetRows) {
+    const columnKey = toColumnKey(item.scheduledDate, targetWeekdayDates);
+    targetItemsByColumn.get(columnKey)!.push(item.id);
+  }
+
+  const targetColumnItems = [...(targetItemsByColumn.get(targetColumnKey) ?? [])];
   const clampedTargetIndex = Math.max(0, Math.min(params.targetIndex, targetColumnItems.length));
   targetColumnItems.splice(clampedTargetIndex, 0, movingItem.id);
-  itemsByColumn.set(targetColumnKey, targetColumnItems);
+  targetItemsByColumn.set(targetColumnKey, targetColumnItems);
 
-  const columnByItemId = new Map<string, string>();
-  for (const columnKey of columnOrder) {
-    for (const itemId of itemsByColumn.get(columnKey) ?? []) {
-      columnByItemId.set(itemId, columnKey);
+  const sourceColumnByItemId = new Map<string, string>();
+  for (const columnKey of sourceColumnOrder) {
+    for (const itemId of sourceItemsByColumn.get(columnKey) ?? []) {
+      sourceColumnByItemId.set(itemId, columnKey);
     }
   }
 
-  const nextOrderedIds = columnOrder.flatMap((columnKey) => itemsByColumn.get(columnKey) ?? []);
-  const rowsById = new Map(rows.map((row) => [row.id, row]));
+  const targetColumnByItemId = new Map<string, string>();
+  for (const columnKey of targetColumnOrder) {
+    for (const itemId of targetItemsByColumn.get(columnKey) ?? []) {
+      targetColumnByItemId.set(itemId, columnKey);
+    }
+  }
+
+  const nextSourceOrderedIds = sourceColumnOrder.flatMap(
+    (columnKey) => sourceItemsByColumn.get(columnKey) ?? [],
+  );
+  const nextTargetOrderedIds = targetColumnOrder.flatMap(
+    (columnKey) => targetItemsByColumn.get(columnKey) ?? [],
+  );
+  const sourceRowsById = new Map(rows.map((row) => [row.id, row]));
+  const targetRowsById = new Map(targetRows.map((row) => [row.id, row]));
 
   await db.transaction(async (tx) => {
-    for (const [position, itemId] of nextOrderedIds.entries()) {
-      const row = rowsById.get(itemId)!;
-      const columnKey = columnByItemId.get(itemId)!;
+    for (const [position, itemId] of nextSourceOrderedIds.entries()) {
+      const row = sourceRowsById.get(itemId)!;
+      const columnKey = sourceColumnByItemId.get(itemId)!;
+      const nextScheduledDate = columnKey === "unassigned" ? null : columnKey;
+      const nextOverrideKind = deriveOverrideKind(row, position, nextScheduledDate);
+
+      if (
+        row.currentPosition !== position ||
+        row.scheduledDate !== nextScheduledDate ||
+        row.manualOverrideKind !== nextOverrideKind
+      ) {
+        await tx
+          .update(weeklyRouteItems)
+          .set({
+            currentPosition: position,
+            scheduledDate: nextScheduledDate,
+            manualOverrideKind: nextOverrideKind,
+            updatedAt: new Date(),
+          })
+          .where(eq(weeklyRouteItems.id, itemId));
+      }
+    }
+
+    for (const [position, itemId] of nextTargetOrderedIds.entries()) {
+      const row = itemId === movingItem.id ? movingItem : targetRowsById.get(itemId)!;
+      const columnKey = targetColumnByItemId.get(itemId)!;
       const nextScheduledDate = columnKey === "unassigned" ? null : columnKey;
       const nextOverrideKind = deriveOverrideKind(row, position, nextScheduledDate);
       const nextManualOverrideNote =
@@ -251,6 +430,7 @@ export async function moveWeeklyRouteItem(params: {
           : row.manualOverrideNote;
 
       if (
+        row.weeklyRouteId !== targetRoute.id ||
         row.currentPosition !== position ||
         row.scheduledDate !== nextScheduledDate ||
         row.manualOverrideKind !== nextOverrideKind ||
@@ -259,6 +439,7 @@ export async function moveWeeklyRouteItem(params: {
         await tx
           .update(weeklyRouteItems)
           .set({
+            weeklyRouteId: targetRoute.id,
             currentPosition: position,
             scheduledDate: nextScheduledDate,
             manualOverrideKind: nextOverrideKind,
@@ -271,7 +452,7 @@ export async function moveWeeklyRouteItem(params: {
 
     const fromDate = movingItem.scheduledDate;
     const toDate = targetColumnKey === "unassigned" ? null : targetColumnKey;
-    const nextGlobalPosition = nextOrderedIds.indexOf(movingItem.id);
+    const nextGlobalPosition = nextTargetOrderedIds.indexOf(movingItem.id);
 
     const eventType =
       fromDate === toDate ? "reorder" : toDate == null ? "defer" : "pin";
@@ -282,6 +463,7 @@ export async function moveWeeklyRouteItem(params: {
       eventType,
       payload: {
         weeklyRouteId: route.id,
+        targetWeeklyRouteId: targetRoute.id,
         fromPosition: movingItem.currentPosition,
         toPosition: nextGlobalPosition,
         toColumnIndex: clampedTargetIndex,
@@ -294,7 +476,7 @@ export async function moveWeeklyRouteItem(params: {
 
   const board = await getWeeklyRouteBoardById({
     learnerId: params.learnerId,
-    weeklyRouteId: route.id,
+    weeklyRouteId: targetRoute.id,
   });
 
   if (!board) {

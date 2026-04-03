@@ -1,6 +1,5 @@
 import {
   getOrCreateWeeklyRouteBoardForLearner,
-  buildPlanningWeekdayDates,
 } from "@/lib/planning/weekly-route-service";
 import type {
   MonthlyPlan,
@@ -47,6 +46,30 @@ function formatDayLabel(date: string) {
   }).format(parseDateOrThrow(date));
 }
 
+function formatShortDayLabel(date: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+  }).format(parseDateOrThrow(date));
+}
+
+function isWeekend(date: string) {
+  const weekday = parseDateOrThrow(date).getUTCDay();
+  return weekday === 0 || weekday === 6;
+}
+
+function isInMonth(date: string, monthStartDate: string) {
+  const value = parseDateOrThrow(date);
+  const monthStart = parseDateOrThrow(monthStartDate);
+  return (
+    value.getUTCFullYear() === monthStart.getUTCFullYear() &&
+    value.getUTCMonth() === monthStart.getUTCMonth()
+  );
+}
+
+function buildCalendarWeekDates(weekStartDate: string) {
+  return Array.from({ length: 7 }, (_, index) => addDays(weekStartDate, index));
+}
+
 function getMonthWeekStarts(anchorDate: string) {
   const parsed = parseDateOrThrow(anchorDate);
   const firstOfMonth = new Date(Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth(), 1));
@@ -67,8 +90,12 @@ function sumMinutes(items: WeeklyRouteBoardItem[]) {
   return items.reduce((total, item) => total + (item.estimatedMinutes ?? 0), 0);
 }
 
-function buildMonthWeek(board: WeeklyRouteBoard, weekStartDate: string): MonthlyPlanWeek {
-  const weekDates = buildPlanningWeekdayDates(weekStartDate);
+function buildMonthWeek(
+  board: WeeklyRouteBoard,
+  weekStartDate: string,
+  monthStartDate: string,
+): MonthlyPlanWeek {
+  const weekDates = buildCalendarWeekDates(weekStartDate);
   const itemsByDate = new Map<string, WeeklyRouteBoardItem[]>();
 
   for (const date of weekDates) {
@@ -89,6 +116,13 @@ function buildMonthWeek(board: WeeklyRouteBoard, weekStartDate: string): Monthly
     return {
       date,
       label: formatDayLabel(date),
+      shortLabel: formatShortDayLabel(date),
+      dayNumber: parseDateOrThrow(date).getUTCDate(),
+      inMonth: isInMonth(date, monthStartDate),
+      isWeekend: isWeekend(date),
+      isDroppable: !isWeekend(date),
+      weekStartDate,
+      weeklyRouteId: board.summary.weeklyRouteId,
       items,
       scheduledMinutes: sumMinutes(items),
     };
@@ -100,6 +134,7 @@ function buildMonthWeek(board: WeeklyRouteBoard, weekStartDate: string): Monthly
   return {
     weekStartDate,
     weekLabel: formatWeekLabel(weekStartDate),
+    weeklyRouteId: board.summary.weeklyRouteId,
     days,
     unassignedItems,
     scheduledMinutes: sumMinutes(scheduledItems),
@@ -123,6 +158,9 @@ export async function getMonthlyPlanningView(params: {
   )
     .toISOString()
     .slice(0, 10);
+  const daysInMonth = new Date(
+    Date.UTC(parsedMonthAnchor.getUTCFullYear(), parsedMonthAnchor.getUTCMonth() + 1, 0),
+  ).getUTCDate();
   const weekStartDates = getMonthWeekStarts(monthAnchorDate);
 
   const weeks = await Promise.all(
@@ -133,7 +171,7 @@ export async function getMonthlyPlanningView(params: {
         weekStartDate,
       });
 
-      return buildMonthWeek(board, weekStartDate);
+      return buildMonthWeek(board, weekStartDate, monthStartDate);
     }),
   );
 
@@ -158,6 +196,7 @@ export async function getMonthlyPlanningView(params: {
     weeks,
     summary: {
       weeksInView: weeks.length,
+      daysInMonth,
       scheduledCount,
       scheduledMinutes,
       unassignedCount,

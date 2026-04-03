@@ -10,6 +10,7 @@ import { WeeklyRouteItemStateSchema } from "@/lib/curriculum-routing/types";
 
 const UpdateWeeklyRouteItemSchema = z.object({
   weeklyRouteId: z.string().min(1),
+  targetWeeklyRouteId: z.string().min(1).optional(),
   targetScheduledDate: z.string().nullable().optional(),
   targetIndex: z.number().int().nonnegative().optional(),
   state: WeeklyRouteItemStateSchema.optional(),
@@ -53,6 +54,7 @@ export async function PATCH(req: NextRequest, { params }: RouteProps) {
               learnerId: session.activeLearner.id,
               weeklyRouteId: parsed.data.weeklyRouteId,
               weeklyRouteItemId: id,
+              targetWeeklyRouteId: parsed.data.targetWeeklyRouteId,
               targetScheduledDate: parsed.data.targetScheduledDate ?? null,
               targetIndex: parsed.data.targetIndex,
               manualOverrideNote: parsed.data.manualOverrideNote,
