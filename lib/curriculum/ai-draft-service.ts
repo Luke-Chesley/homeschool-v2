@@ -45,15 +45,17 @@ export async function buildCurriculumAiDraft(params: {
   const userPrompt = buildUserPrompt({ learner, answers });
 
   try {
-    const draft = await adapter.completeJson({
+    const response = await adapter.complete({
       model,
       systemPrompt: CURRICULUM_AI_DRAFT_SYSTEM_PROMPT,
-      outputSchema: CurriculumAiDraftSchema,
       messages: [{ role: "user", content: userPrompt }],
     });
 
-    if (draft) {
-      const parsedDraft = sanitizeDraft(CurriculumAiDraftSchema.parse(draft));
+    const parsed = safeParseJson(response.content);
+    const validated = CurriculumAiDraftSchema.safeParse(parsed);
+
+    if (validated.success) {
+      const parsedDraft = sanitizeDraft(validated.data);
       if (isDraftGroundedInTopic(parsedDraft, answerMap)) {
         return parsedDraft;
       }
@@ -300,4 +302,21 @@ function toSentenceFragment(value: string) {
 
 function normalizeTimeframePhrase(value: string) {
   return toSentenceFragment(value).replace(/^plan\s+for\s+/i, "");
+}
+
+function safeParseJson(content: string) {
+  try {
+    return JSON.parse(content) as unknown;
+  } catch {
+    const fenceMatch = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+    if (!fenceMatch) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(fenceMatch[1]) as unknown;
+    } catch {
+      return null;
+    }
+  }
 }
