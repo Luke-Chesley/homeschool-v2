@@ -203,6 +203,15 @@ export interface DailyWorkspaceArtifactSlot {
   description: string;
 }
 
+export interface DailyWorkspaceLessonDraft {
+  markdown: string;
+  sourceId: string;
+  sourceTitle: string;
+  routeFingerprint: string;
+  promptVersion?: string;
+  savedAt: string;
+}
+
 export interface DailyWorkspace {
   date: string;
   headline: string;
@@ -217,4 +226,5 @@ export interface DailyWorkspace {
   familyNotes: string[];
   recoveryOptions: RecoveryOption[];
   alternatesByPlanItemId: Record<string, WeeklyRouteItem[]>;
+  lessonDraft: DailyWorkspaceLessonDraft | null;
 }

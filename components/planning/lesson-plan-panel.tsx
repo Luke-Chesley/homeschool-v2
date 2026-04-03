@@ -18,6 +18,9 @@ interface LessonPlanPanelProps {
   objectiveCount: number;
   objectives: string[];
   routeItemTitles: string[];
+  draftMarkdown?: string | null;
+  onDraftChange?: (markdown: string | null) => void;
+  showDraftOutput?: boolean;
 }
 
 type LessonPlanState =
@@ -41,6 +44,9 @@ export function LessonPlanPanel({
   objectiveCount,
   objectives,
   routeItemTitles,
+  draftMarkdown,
+  onDraftChange,
+  showDraftOutput = true,
 }: LessonPlanPanelProps) {
   const [state, setState] = useState<LessonPlanState>({ status: "idle" });
   const [promptDebugState, setPromptDebugState] = useState<PromptDebugState>({
@@ -102,6 +108,7 @@ export function LessonPlanPanel({
       }
 
       setState({ status: "ready", markdown: data.markdown });
+      onDraftChange?.(data.markdown);
     } catch (error) {
       setState({
         status: "error",
@@ -183,7 +190,7 @@ export function LessonPlanPanel({
             ) : (
               <Sparkles className="size-4" />
             )}
-            {state.status === "ready" ? "Regenerate" : "Generate"}
+            {draftMarkdown ? "Regenerate" : "Generate"}
           </button>
 
           <button
@@ -248,15 +255,15 @@ export function LessonPlanPanel({
           </div>
         ) : null}
 
-        {state.status === "ready" ? (
+        {showDraftOutput && draftMarkdown ? (
           <div className="rounded-lg border border-border/70 bg-background p-5">
-            <MarkdownContent content={state.markdown} />
+            <MarkdownContent content={draftMarkdown} />
           </div>
-        ) : (
+        ) : showDraftOutput ? (
           <div className="rounded-lg border border-dashed border-border/70 bg-background p-4 text-sm text-muted-foreground">
             Generate a draft when today’s route is set.
           </div>
-        )}
+        ) : null}
       </div>
     </Card>
   );
