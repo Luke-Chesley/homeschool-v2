@@ -1,14 +1,36 @@
-import { type AnyPgColumn, integer, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
+import { type AnyPgColumn, integer, pgEnum, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
 
 import { learningGoals } from "@/lib/db/schema/learners";
+import { organizations } from "@/lib/db/schema/organizations";
 import { metadataColumn, orderingColumn, prefixedId, timestamps } from "@/lib/db/schema/shared";
+
+export const frameworkTypeEnum = pgEnum("framework_type", [
+  "academic_standard",
+  "competency_framework",
+  "role_matrix",
+  "exam_blueprint",
+  "custom_goal",
+]);
+
+export const objectiveNodeTypeEnum = pgEnum("objective_node_type", [
+  "domain",
+  "strand",
+  "competency",
+  "objective",
+  "checkpoint",
+]);
 
 export const standardFrameworks = pgTable("standard_frameworks", {
   id: text("id").primaryKey().$defaultFn(() => prefixedId("framework")),
+  organizationId: text("organization_id").references(() => organizations.id, {
+    onDelete: "cascade",
+  }),
   name: text("name").notNull(),
+  frameworkType: frameworkTypeEnum("framework_type").notNull().default("academic_standard"),
   version: text("version"),
   jurisdiction: text("jurisdiction"),
   subject: text("subject"),
+  description: text("description"),
   metadata: metadataColumn(),
   ...timestamps(),
 });
@@ -26,8 +48,11 @@ export const standardNodes = pgTable(
     code: text("code").notNull(),
     title: text("title").notNull(),
     description: text("description"),
+    objectiveType: objectiveNodeTypeEnum("objective_type").notNull().default("objective"),
     gradeBand: text("grade_band"),
     subject: text("subject"),
+    completionCriteria: metadataColumn("completion_criteria"),
+    masteryRubric: metadataColumn("mastery_rubric"),
     depth: integer("depth").notNull().default(0),
     ordering: orderingColumn(),
     metadata: metadataColumn(),

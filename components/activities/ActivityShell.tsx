@@ -18,6 +18,7 @@ interface ActivityShellProps {
   estimatedMinutes?: number;
   onSubmit?: () => void;
   onSkip?: () => void;
+  submitDisabled?: boolean;
   submitting?: boolean;
   submitted?: boolean;
   feedback?: { correct: boolean; message?: string };
@@ -31,6 +32,7 @@ export function ActivityShell({
   estimatedMinutes,
   onSubmit,
   onSkip,
+  submitDisabled,
   submitting,
   submitted,
   feedback,
@@ -103,7 +105,7 @@ export function ActivityShell({
               className="ml-auto"
               size="sm"
               onClick={onSubmit}
-              disabled={submitting}
+              disabled={submitting || submitDisabled}
             >
               {submitting ? "Submitting…" : "Submit"}
             </Button>

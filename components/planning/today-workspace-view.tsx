@@ -37,6 +37,14 @@ function getStatusLabel(status: string) {
   return status.replace("_", " ");
 }
 
+function getReviewLabel(reviewState?: string | null) {
+  if (!reviewState || reviewState === "not_required") {
+    return null;
+  }
+
+  return reviewState.replaceAll("_", " ");
+}
+
 export function TodayWorkspaceView({ workspace, sourceId }: TodayWorkspaceViewProps) {
   const [lessonDraft, setLessonDraft] = useState<string | null>(workspace.lessonDraft?.markdown ?? null);
 
@@ -130,7 +138,21 @@ export function TodayRouteItemsSection({
                     <h3 className="text-sm font-medium leading-5 text-foreground">{item.title}</h3>
                     <p className="text-xs text-muted-foreground">{item.objective}</p>
                   </div>
+                  {item.workflow ? (
+                    <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                      <span>{item.workflow.activityCount} activities</span>
+                      <span>{item.workflow.evidenceCount} evidence</span>
+                    </div>
+                  ) : null}
                   <div className="flex flex-wrap gap-2">
+                    {item.sessionRecordId ? (
+                      <Link
+                        href={`/activity/${item.sessionRecordId}`}
+                        className={buttonVariants({ variant: "outline", size: "sm" })}
+                      >
+                        Open activity
+                      </Link>
+                    ) : null}
                     <Link
                       href={`/today?date=${workspace.date}${sourceId ? `&sourceId=${sourceId}` : ""}&action=complete&planItemId=${item.id}`}
                       className={buttonVariants({ variant: "default", size: "sm" })}
@@ -185,16 +207,36 @@ export function TodayRouteItemsSection({
                       <Badge variant="outline">{item.subject}</Badge>
                       <Badge variant="outline">{formatMinutes(item.estimatedMinutes)}</Badge>
                       {item.status !== "ready" ? <Badge>{getStatusLabel(item.status)}</Badge> : null}
+                      {item.completionStatus && item.completionStatus !== "not_started" ? (
+                        <Badge variant="secondary">{getStatusLabel(item.completionStatus)}</Badge>
+                      ) : null}
+                      {getReviewLabel(item.reviewState) ? (
+                        <Badge variant="outline">{getReviewLabel(item.reviewState)}</Badge>
+                      ) : null}
                     </div>
                     <div className="space-y-1">
                       <h3 className="font-serif text-xl leading-tight">{item.title}</h3>
                       <p className="text-sm text-muted-foreground">{item.objective}</p>
                     </div>
                     <p className="text-xs text-muted-foreground">{item.lessonLabel}</p>
+                    {item.workflow ? (
+                      <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                        <span>{item.workflow.activityCount} activities</span>
+                        <span>{item.workflow.evidenceCount} evidence</span>
+                      </div>
+                    ) : null}
                     {item.note ? <p className="text-sm text-muted-foreground">{item.note}</p> : null}
                   </div>
 
                   <div className="flex flex-wrap gap-2 sm:justify-end">
+                    {item.sessionRecordId ? (
+                      <Link
+                        href={`/activity/${item.sessionRecordId}`}
+                        className={buttonVariants({ variant: "outline", size: "sm" })}
+                      >
+                        Open activity
+                      </Link>
+                    ) : null}
                     <Link
                       href={`/today?date=${workspace.date}${sourceId ? `&sourceId=${sourceId}` : ""}&action=complete&planItemId=${item.id}`}
                       className={buttonVariants({ variant: "default", size: "sm" })}

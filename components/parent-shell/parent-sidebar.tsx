@@ -6,19 +6,23 @@ import { cn } from "@/lib/utils";
 
 export function ParentSidebar({
   activeLearnerName,
+  organizationName,
+  learnerLabel,
   onNavigate,
 }: {
   activeLearnerName: string;
+  organizationName: string;
+  learnerLabel: string;
   onNavigate?: () => void;
 }) {
   return (
     <div className="flex h-full flex-col bg-background">
       <div className="border-b border-border/70 px-5 py-5">
         <Link href="/today" className="inline-flex text-sm font-semibold text-foreground">
-          Homeschool
+          {organizationName}
         </Link>
         <div className="mt-3 space-y-1">
-          <p className="text-xs text-muted-foreground">Active learner</p>
+          <p className="text-xs text-muted-foreground">Active {learnerLabel.toLowerCase()}</p>
           <p className="text-sm font-medium text-foreground">{activeLearnerName}</p>
         </div>
       </div>

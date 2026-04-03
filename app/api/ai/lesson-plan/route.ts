@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 import { requireAppSession } from "@/lib/app-session/server";
+import { getRepositories } from "@/lib/db";
 import {
   buildTodayLessonDraftFingerprint,
   getTodayWorkspace,
@@ -103,7 +104,7 @@ export async function POST(req: NextRequest) {
   };
 
   if (parsed.data.debug) {
-    const promptPreview = buildLessonDraftPromptPreview(lessonDraftInput);
+    const promptPreview = await buildLessonDraftPromptPreview(lessonDraftInput);
 
     return NextResponse.json({
       promptVersion: "preview",
@@ -114,13 +115,47 @@ export async function POST(req: NextRequest) {
   }
 
   const result = await generateLessonDraft(lessonDraftInput);
+  const routeFingerprint = buildTodayLessonDraftFingerprint(workspace.items.map((item) => item.id));
+  const artifact = await getRepositories().activities.createArtifact({
+    organizationId: session.organization.id,
+    learnerId: session.activeLearner.id,
+    planItemId: null,
+    lessonSessionId: null,
+    artifactType: "lesson_plan",
+    title: `${sourceTitle} lesson draft`,
+    status: "ready",
+    body: result.output,
+    promptVersion: result.lineage.promptRef.version,
+    promptTemplateId: null,
+    generationJobId: null,
+    storagePath: null,
+    providerId: result.lineage.providerId,
+    modelId: result.lineage.modelId,
+    inputHash: result.lineage.inputHash,
+    lineageParentId: null,
+    supersededByArtifactId: null,
+    approvedAt: null,
+    archivedAt: null,
+    sourceContext: {
+      date,
+      sourceId: workspaceResult.sourceId,
+      routeFingerprint,
+    },
+    qaMetadata: {
+      lineageId: result.lineage.id,
+    },
+    costMetadata: result.usage ?? {},
+    metadata: {
+      routeItemIds: workspace.items.map((item) => item.id),
+    },
+  });
   const savedDraft = await saveTodayLessonDraft({
     organizationId: session.organization.id,
     learnerId: session.activeLearner.id,
     date,
     sourceId: workspaceResult.sourceId,
     sourceTitle,
-    routeFingerprint: buildTodayLessonDraftFingerprint(workspace.items.map((item) => item.id)),
+    routeFingerprint,
     markdown: result.output,
     promptVersion: result.lineage.promptRef.version,
   });
@@ -128,6 +163,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     markdown: savedDraft.markdown,
     promptVersion: savedDraft.promptVersion,
+    artifactId: artifact.id,
     sourceTitle,
     date,
     summary: {

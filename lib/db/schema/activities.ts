@@ -1,4 +1,4 @@
-import { type AnyPgColumn, integer, pgEnum, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
+import { type AnyPgColumn, integer, pgEnum, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 
 import { learners } from "@/lib/db/schema/learners";
 import { organizations } from "@/lib/db/schema/organizations";
@@ -22,6 +22,8 @@ export const generatedArtifactStatusEnum = pgEnum("generated_artifact_status", [
   "generating",
   "ready",
   "failed",
+  "superseded",
+  "archived",
 ]);
 
 export const interactiveActivityTypeEnum = pgEnum("interactive_activity_type", [
@@ -33,6 +35,13 @@ export const interactiveActivityTypeEnum = pgEnum("interactive_activity_type", [
   "reflection",
   "reading_check",
   "simulation",
+  "rubric_response",
+  "checklist",
+  "file_submission",
+  "scenario_decision_tree",
+  "step_validation",
+  "supervisor_sign_off",
+  "oral_video_evidence",
 ]);
 
 export const interactiveActivityStatusEnum = pgEnum("interactive_activity_status", [
@@ -63,13 +72,29 @@ export const generatedArtifacts = pgTable("generated_artifacts", {
   status: generatedArtifactStatusEnum("status").notNull().default("queued"),
   body: text("body"),
   promptVersion: text("prompt_version"),
+  promptTemplateId: text("prompt_template_id"),
+  generationJobId: text("generation_job_id"),
+  storagePath: text("storage_path"),
+  providerId: text("provider_id"),
+  modelId: text("model_id"),
+  inputHash: text("input_hash"),
   lineageParentId: text("lineage_parent_id").references(
     (): AnyPgColumn => generatedArtifacts.id,
     {
       onDelete: "set null",
     },
   ),
+  supersededByArtifactId: text("superseded_by_artifact_id").references(
+    (): AnyPgColumn => generatedArtifacts.id,
+    {
+      onDelete: "set null",
+    },
+  ),
+  approvedAt: timestamp("approved_at", { withTimezone: true }),
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
   sourceContext: metadataColumn("source_context"),
+  qaMetadata: metadataColumn("qa_metadata"),
+  costMetadata: metadataColumn("cost_metadata"),
   metadata: metadataColumn(),
   ...timestamps(),
 });
@@ -132,6 +157,7 @@ export const activityAttempts = pgTable("activity_attempts", {
   status: activityAttemptStatusEnum("status").notNull().default("in_progress"),
   attemptNumber: integer("attempt_number").notNull().default(1),
   scorePercent: integer("score_percent"),
+  reviewState: text("review_state").notNull().default("not_required"),
   responses: metadataColumn("responses"),
   startedAt: text("started_at"),
   submittedAt: text("submitted_at"),

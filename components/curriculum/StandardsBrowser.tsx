@@ -4,8 +4,6 @@ import * as React from "react";
 import { Search, ChevronRight, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { listFrameworks, listStandards, getStandardChildren } from "@/lib/standards/service";
 import type { Standard, StandardsFramework } from "@/lib/standards/types";
 
 // ---------------------------------------------------------------------------
@@ -86,20 +84,87 @@ export function StandardsBrowser({
   frameworkId: initialFrameworkId,
   className,
 }: StandardsBrowserProps) {
-  const frameworks = listFrameworks().filter((f) => f.kind !== "custom");
+  const [frameworks, setFrameworks] = React.useState<StandardsFramework[]>([]);
   const [frameworkId, setFrameworkId] = React.useState(
-    initialFrameworkId ?? frameworks[0]?.id ?? ""
+    initialFrameworkId ?? ""
   );
   const [query, setQuery] = React.useState("");
   const [drillStack, setDrillStack] = React.useState<Standard[]>([]);
+  const [standards, setStandards] = React.useState<Standard[]>([]);
+  const [loading, setLoading] = React.useState(true);
 
   const currentParentId = drillStack.at(-1)?.id ?? null;
 
-  const standards = React.useMemo(() => {
-    if (query.trim()) {
-      return listStandards({ frameworkId, query });
+  React.useEffect(() => {
+    let cancelled = false;
+
+    async function loadFrameworks() {
+      const response = await fetch("/api/standards/frameworks");
+      if (!response.ok) {
+        return;
+      }
+
+      const data = (await response.json()) as StandardsFramework[];
+      if (cancelled) {
+        return;
+      }
+
+      const nextFrameworks = data.filter((framework) => framework.kind !== "custom");
+      setFrameworks(nextFrameworks);
+
+      if (!frameworkId && nextFrameworks[0]?.id) {
+        setFrameworkId(initialFrameworkId ?? nextFrameworks[0].id);
+      }
     }
-    return listStandards({ frameworkId, parentId: currentParentId });
+
+    void loadFrameworks();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [frameworkId, initialFrameworkId]);
+
+  React.useEffect(() => {
+    if (!frameworkId) {
+      return;
+    }
+
+    let cancelled = false;
+    setLoading(true);
+
+    async function loadStandards() {
+      const search = new URLSearchParams();
+      search.set("frameworkId", frameworkId);
+
+      if (query.trim()) {
+        search.set("query", query.trim());
+      } else {
+        search.set("parentId", currentParentId ?? "root");
+      }
+
+      const response = await fetch(`/api/standards/nodes?${search.toString()}`);
+      if (!response.ok) {
+        if (!cancelled) {
+          setStandards([]);
+          setLoading(false);
+        }
+        return;
+      }
+
+      const data = (await response.json()) as Standard[];
+      if (cancelled) {
+        return;
+      }
+
+      setStandards(data);
+      setLoading(false);
+    }
+
+    void loadStandards();
+
+    return () => {
+      cancelled = true;
+    };
   }, [frameworkId, query, currentParentId]);
 
   const selectedSet = new Set(selectedIds);
@@ -118,11 +183,9 @@ export function StandardsBrowser({
   }
 
   const hasChildrenCache = React.useMemo(() => {
-    const cache = new Map<string, boolean>();
-    for (const s of standards) {
-      cache.set(s.id, getStandardChildren(s.id).length > 0);
-    }
-    return cache;
+    return new Map(
+      standards.map((standard) => [standard.id, standard.hasChildren ?? false]),
+    );
   }, [standards]);
 
   return (
@@ -193,19 +256,25 @@ export function StandardsBrowser({
 
       {/* Standards list */}
       <div className="flex flex-col gap-0.5 max-h-80 overflow-y-auto rounded-lg border border-border/70 bg-card/60 p-1">
-        {standards.length === 0 && (
-          <p className="py-6 text-center text-sm text-muted-foreground">No standards found.</p>
+        {loading ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">Loading standards…</p>
+        ) : null}
+        {!loading && standards.length === 0 && (
+          <p className="py-6 text-center text-sm text-muted-foreground">
+            No standards found.
+          </p>
         )}
-        {standards.map((s) => (
-          <StandardRow
-            key={s.id}
-            standard={s}
-            selected={selectedSet.has(s.id)}
-            onToggle={handleToggle}
-            hasChildren={hasChildrenCache.get(s.id) ?? false}
-            onDrill={handleDrill}
-          />
-        ))}
+        {!loading &&
+          standards.map((s) => (
+            <StandardRow
+              key={s.id}
+              standard={s}
+              selected={selectedSet.has(s.id)}
+              onToggle={handleToggle}
+              hasChildren={hasChildrenCache.get(s.id) ?? false}
+              onDrill={handleDrill}
+            />
+          ))}
       </div>
 
       {/* Selected count */}

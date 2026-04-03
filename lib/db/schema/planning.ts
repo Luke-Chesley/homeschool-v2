@@ -1,8 +1,8 @@
-import { date, integer, pgEnum, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
+import { boolean, date, integer, pgEnum, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 
 import { curriculumItems } from "@/lib/db/schema/curriculum";
 import { learners } from "@/lib/db/schema/learners";
-import { organizations } from "@/lib/db/schema/organizations";
+import { adultUsers, organizations } from "@/lib/db/schema/organizations";
 import { metadataColumn, orderingColumn, prefixedId, timestamps } from "@/lib/db/schema/shared";
 import { standardNodes } from "@/lib/db/schema/standards";
 
@@ -33,6 +33,31 @@ export const lessonSessionStatusEnum = pgEnum("lesson_session_status", [
   "in_progress",
   "completed",
   "abandoned",
+]);
+
+export const sessionWorkspaceTypeEnum = pgEnum("session_workspace_type", [
+  "homeschool_day",
+  "classroom_block",
+  "bootcamp_lab",
+  "onboarding_session",
+  "self_guided_queue",
+]);
+
+export const sessionCompletionStatusEnum = pgEnum("session_completion_status", [
+  "not_started",
+  "completed_as_planned",
+  "partially_completed",
+  "skipped",
+  "needs_review",
+  "needs_follow_up",
+]);
+
+export const sessionReviewStateEnum = pgEnum("session_review_state", [
+  "not_required",
+  "awaiting_review",
+  "approved",
+  "revision_requested",
+  "insufficient_evidence",
 ]);
 
 export const plans = pgTable("plans", {
@@ -136,17 +161,41 @@ export const planItemStandards = pgTable(
 
 export const lessonSessions = pgTable("lesson_sessions", {
   id: text("id").primaryKey().$defaultFn(() => prefixedId("session")),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
   learnerId: text("learner_id")
     .notNull()
     .references(() => learners.id, { onDelete: "cascade" }),
+  planId: text("plan_id").references(() => plans.id, { onDelete: "set null" }),
+  planDayId: text("plan_day_id").references(() => planDays.id, { onDelete: "set null" }),
   planItemId: text("plan_item_id")
     .notNull()
     .references(() => planItems.id, { onDelete: "cascade" }),
   sessionDate: date("session_date").notNull(),
+  workspaceType: sessionWorkspaceTypeEnum("workspace_type")
+    .notNull()
+    .default("homeschool_day"),
   status: lessonSessionStatusEnum("status").notNull().default("planned"),
+  completionStatus: sessionCompletionStatusEnum("completion_status")
+    .notNull()
+    .default("not_started"),
+  reviewState: sessionReviewStateEnum("review_state")
+    .notNull()
+    .default("not_required"),
+  reviewRequired: boolean("review_required").notNull().default(false),
   actualMinutes: integer("actual_minutes"),
+  scheduledMinutes: integer("scheduled_minutes"),
+  startedAt: timestamp("started_at", { withTimezone: true }),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  reviewedByAdultUserId: text("reviewed_by_adult_user_id").references(() => adultUsers.id, {
+    onDelete: "set null",
+  }),
   summary: text("summary"),
   notes: text("notes"),
+  retrospective: text("retrospective"),
+  nextAction: text("next_action"),
   deviationReason: text("deviation_reason"),
   metadata: metadataColumn(),
   ...timestamps(),

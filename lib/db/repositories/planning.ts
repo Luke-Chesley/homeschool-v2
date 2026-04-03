@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import type { InferInsertModel } from "drizzle-orm";
 
 import type { HomeschoolDb } from "@/lib/db/client";
@@ -41,6 +41,86 @@ export function createPlanningRepository(db: HomeschoolDb) {
     async createLessonSession(input: NewLessonSession) {
       const [session] = await db.insert(lessonSessions).values(input).returning();
       return session;
+    },
+
+    async findLessonSessionById(sessionId: string) {
+      return db.query.lessonSessions.findFirst({
+        where: eq(lessonSessions.id, sessionId),
+      });
+    },
+
+    async listLessonSessionsForLearner(learnerId: string) {
+      return db
+        .select()
+        .from(lessonSessions)
+        .where(eq(lessonSessions.learnerId, learnerId))
+        .orderBy(desc(lessonSessions.sessionDate), desc(lessonSessions.createdAt));
+    },
+
+    async findPlanItemById(planItemId: string) {
+      return db.query.planItems.findFirst({
+        where: eq(planItems.id, planItemId),
+      });
+    },
+
+    async findLessonSessionForPlanItem(params: {
+      organizationId: string;
+      learnerId: string;
+      planItemId: string;
+      sessionDate: string;
+    }) {
+      return db.query.lessonSessions.findFirst({
+        where: and(
+          eq(lessonSessions.organizationId, params.organizationId),
+          eq(lessonSessions.learnerId, params.learnerId),
+          eq(lessonSessions.planItemId, params.planItemId),
+          eq(lessonSessions.sessionDate, params.sessionDate),
+        ),
+        orderBy: [desc(lessonSessions.updatedAt)],
+      });
+    },
+
+    async upsertLessonSession(input: NewLessonSession) {
+      const existing = await db.query.lessonSessions.findFirst({
+        where: and(
+          eq(lessonSessions.organizationId, input.organizationId),
+          eq(lessonSessions.learnerId, input.learnerId),
+          eq(lessonSessions.planItemId, input.planItemId),
+          eq(lessonSessions.sessionDate, input.sessionDate),
+        ),
+      });
+
+      if (existing) {
+        const [updated] = await db
+          .update(lessonSessions)
+          .set({
+            ...input,
+            updatedAt: new Date(),
+          })
+          .where(eq(lessonSessions.id, existing.id))
+          .returning();
+
+        return updated;
+      }
+
+      const [created] = await db.insert(lessonSessions).values(input).returning();
+      return created;
+    },
+
+    async updateLessonSession(
+      sessionId: string,
+      input: Partial<NewLessonSession>,
+    ) {
+      const [updated] = await db
+        .update(lessonSessions)
+        .set({
+          ...input,
+          updatedAt: new Date(),
+        })
+        .where(eq(lessonSessions.id, sessionId))
+        .returning();
+
+      return updated ?? null;
     },
 
     async listPlansForLearner(learnerId: string) {

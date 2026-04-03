@@ -11,5 +11,13 @@ export default async function ParentLayout({ children }: { children: ReactNode }
     redirect("/users");
   }
 
-  return <ParentShell activeLearnerName={session.activeLearner.displayName}>{children}</ParentShell>;
+  return (
+    <ParentShell
+      activeLearnerName={session.activeLearner.displayName}
+      organizationName={session.organization.name}
+      learnerLabel={session.platformSettings.learnerLabel}
+    >
+      {children}
+    </ParentShell>
+  );
 }

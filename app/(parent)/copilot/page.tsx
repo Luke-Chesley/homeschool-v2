@@ -68,7 +68,7 @@ export default async function CopilotPage({ searchParams }: Props) {
     feedbackNotes: snapshot?.feedbackNotes ?? [],
     recentOutcomes: [],
   };
-  const promptRecord = resolvePrompt("chat.answer");
+  const promptRecord = await resolvePrompt("chat.answer");
   const promptPreview = buildPromptPreview(promptRecord.systemPrompt, context);
 
   return (

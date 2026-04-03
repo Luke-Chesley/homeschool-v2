@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, ilike, inArray, isNull, or } from "drizzle-orm";
 import type { InferInsertModel } from "drizzle-orm";
 
 import type { HomeschoolDb } from "@/lib/db/client";
@@ -27,6 +27,19 @@ export function createStandardsRepository(db: HomeschoolDb) {
 
     async listFrameworks() {
       return db.select().from(standardFrameworks).orderBy(asc(standardFrameworks.name));
+    },
+
+    async listFrameworksForOrganization(organizationId: string) {
+      return db
+        .select()
+        .from(standardFrameworks)
+        .where(
+          or(
+            eq(standardFrameworks.organizationId, organizationId),
+            isNull(standardFrameworks.organizationId),
+          ),
+        )
+        .orderBy(asc(standardFrameworks.name));
     },
 
     async listNodesByFramework(frameworkId: string) {
@@ -59,6 +72,36 @@ export function createStandardsRepository(db: HomeschoolDb) {
         .from(standardNodes)
         .where(inArray(standardNodes.code, codes))
         .orderBy(asc(standardNodes.code));
+    },
+
+    async searchNodes(params: {
+      frameworkId: string;
+      query: string;
+      subject?: string;
+      gradeBand?: string;
+    }) {
+      const whereClauses = [
+        eq(standardNodes.frameworkId, params.frameworkId),
+        or(
+          ilike(standardNodes.code, `%${params.query}%`),
+          ilike(standardNodes.title, `%${params.query}%`),
+          ilike(standardNodes.description, `%${params.query}%`),
+        ),
+      ];
+
+      if (params.subject) {
+        whereClauses.push(eq(standardNodes.subject, params.subject));
+      }
+
+      if (params.gradeBand) {
+        whereClauses.push(eq(standardNodes.gradeBand, params.gradeBand));
+      }
+
+      return db
+        .select()
+        .from(standardNodes)
+        .where(and(...whereClauses))
+        .orderBy(asc(standardNodes.depth), asc(standardNodes.code));
     },
   };
 }
