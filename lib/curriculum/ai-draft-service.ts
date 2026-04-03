@@ -39,6 +39,7 @@ export async function continueCurriculumAiDraftConversation(params: {
   try {
     const response = await adapter.complete({
       model,
+      temperature: 0.35,
       systemPrompt: prompt.systemPrompt,
       messages: [
         {
@@ -46,16 +47,15 @@ export async function continueCurriculumAiDraftConversation(params: {
           content: buildCurriculumIntakePrompt({
             learnerName: params.learner.displayName,
             messages,
+            requirementHints: inferCapturedRequirements(messages),
           }),
         },
       ],
     });
 
-    const parsed = safeParseJson(response.content);
-    const validated = CurriculumAiChatTurnSchema.safeParse(parsed);
-
-    if (validated.success) {
-      return sanitizeChatTurn(validated.data);
+    const parsedTurn = parseCurriculumChatTurn(response.content);
+    if (parsedTurn) {
+      return parsedTurn;
     }
   } catch (error) {
     console.error("[curriculum/ai-draft] Intake turn failed, using fallback.", error);
@@ -95,6 +95,7 @@ async function generateCurriculumArtifact(params: {
   try {
     const response = await adapter.complete({
       model,
+      temperature: 0.4,
       systemPrompt: prompt.systemPrompt,
       messages: [
         {
@@ -107,11 +108,9 @@ async function generateCurriculumArtifact(params: {
       ],
     });
 
-    const parsed = safeParseJson(response.content);
-    const validated = CurriculumAiGeneratedArtifactSchema.safeParse(parsed);
-
-    if (validated.success) {
-      const artifact = sanitizeArtifact(validated.data);
+    const parsedArtifact = parseCurriculumGeneratedArtifact(response.content);
+    if (parsedArtifact) {
+      const artifact = sanitizeArtifact(parsedArtifact);
       if (artifactMatchesConversation(artifact, messages)) {
         return artifact;
       }
@@ -171,16 +170,76 @@ function sanitizeArtifact(artifact: CurriculumAiGeneratedArtifact): CurriculumAi
   };
 }
 
+function parseCurriculumChatTurn(content: string) {
+  const parsed = safeParseJson(content);
+  if (!parsed) {
+    return null;
+  }
+
+  const candidate = normalizeChatTurnCandidate(parsed);
+  const validated = CurriculumAiChatTurnSchema.safeParse(candidate);
+
+  return validated.success ? sanitizeChatTurn(validated.data) : null;
+}
+
+function parseCurriculumGeneratedArtifact(content: string) {
+  const parsed = safeParseJson(content);
+  if (!parsed) {
+    return null;
+  }
+
+  const validated = CurriculumAiGeneratedArtifactSchema.safeParse(parsed);
+  return validated.success ? validated.data : null;
+}
+
+function normalizeChatTurnCandidate(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return value;
+  }
+
+  const record = value as Record<string, unknown>;
+  const stateRecord =
+    "state" in record && record.state && typeof record.state === "object" && !Array.isArray(record.state)
+      ? (record.state as Record<string, unknown>)
+      : record;
+
+  return {
+    assistantMessage:
+      typeof record.assistantMessage === "string"
+        ? record.assistantMessage
+        : typeof stateRecord.assistantMessage === "string"
+          ? stateRecord.assistantMessage
+          : "",
+    state: {
+      readiness: stateRecord.readiness,
+      summary: typeof stateRecord.summary === "string" ? stateRecord.summary : "",
+      missingInformation: Array.isArray(stateRecord.missingInformation)
+        ? stateRecord.missingInformation
+            .map((item) => (typeof item === "string" ? item : String(item ?? "")))
+            .filter(Boolean)
+            .slice(0, 6)
+        : [],
+      capturedRequirements:
+        stateRecord.capturedRequirements &&
+        typeof stateRecord.capturedRequirements === "object" &&
+        !Array.isArray(stateRecord.capturedRequirements)
+          ? stateRecord.capturedRequirements
+          : {},
+    },
+  };
+}
+
 function buildFallbackChatTurn(params: {
   learner: AppLearner;
   messages: ChatMessage[];
 }): CurriculumAiChatTurn {
   const capturedRequirements = inferCapturedRequirements(params.messages);
   const missingInformation = getMissingRequirements(capturedRequirements);
+  const readiness = deriveFallbackReadiness(capturedRequirements, missingInformation);
 
   if (params.messages.length === 0) {
     return {
-      assistantMessage: `What do you want ${params.learner.firstName} to learn, and what kind of growth are you hoping to see by the end of this curriculum?`,
+      assistantMessage: `What are you hoping to build for ${params.learner.firstName} right now? Tell me the topic or area you want to focus on, and what you want this curriculum to help them become able to do.`,
       state: {
         readiness: "gathering",
         summary: `We are starting a new curriculum conversation for ${params.learner.displayName}.`,
@@ -190,10 +249,9 @@ function buildFallbackChatTurn(params: {
     };
   }
 
-  if (missingInformation.length === 0) {
+  if (readiness === "ready") {
     return {
-      assistantMessage:
-        "I have enough to generate a full curriculum tree and a lesson outline. If you want, I can create it now, or you can keep refining the requirements first.",
+      assistantMessage: buildFallbackReadyMessage(capturedRequirements),
       state: {
         readiness: "ready",
         summary: buildRequirementSummary(capturedRequirements),
@@ -204,7 +262,11 @@ function buildFallbackChatTurn(params: {
   }
 
   return {
-    assistantMessage: buildFallbackQuestion(params.learner.firstName, missingInformation[0]),
+    assistantMessage: buildFallbackQuestion(
+      params.learner.firstName,
+      missingInformation[0],
+      capturedRequirements,
+    ),
     state: {
       readiness: "gathering",
       summary: buildRequirementSummary(capturedRequirements),
@@ -363,7 +425,7 @@ function inferCapturedRequirements(messages: ChatMessage[]): CurriculumAiCapture
     structurePreferences:
       findFirstMatchingMessage(
         userMessages,
-        /(unit|sequence|domain|strand|theme|project-based|skill progression|lesson)/i,
+        /(domain|strand|goal group|theme|project-based|project sequence|skill progression|spiral|mastery)/i,
       ) ?? "",
   };
 
@@ -399,25 +461,59 @@ function getMissingRequirements(requirements: CurriculumAiCapturedRequirements) 
   return missing.slice(0, 6);
 }
 
-function buildFallbackQuestion(learnerFirstName: string, missing: string) {
+function deriveFallbackReadiness(
+  requirements: CurriculumAiCapturedRequirements,
+  missingInformation: string[],
+) {
+  const hasCoreContext =
+    Boolean(requirements.topic) &&
+    Boolean(requirements.goals) &&
+    Boolean(requirements.learnerProfile);
+  const hasPlanningContext = Boolean(requirements.timeframe) || Boolean(requirements.constraints);
+  const onlyOptionalGaps = missingInformation.every(
+    (item) => item === "assessment" || item === "structure",
+  );
+
+  return hasCoreContext && (hasPlanningContext || onlyOptionalGaps) ? "ready" : "gathering";
+}
+
+function buildFallbackQuestion(
+  learnerFirstName: string,
+  missing: string,
+  requirements: CurriculumAiCapturedRequirements,
+) {
+  const topic = requirements.topic ? toSentenceFragment(requirements.topic) : "";
+  const topicLead = topic ? `For ${topic.toLowerCase()}, ` : "";
+
   switch (missing) {
     case "topic":
       return `What do you want ${learnerFirstName} to study, and what makes that topic worth building a curriculum around right now?`;
     case "goals":
-      return "What should the learner be able to do, explain, or produce by the end of this curriculum?";
+      return `${topicLead}what would success look like by the end of the plan? I’m looking for the kind of understanding, performance, or independence you want to see.`;
     case "timeframe":
-      return "How much time do you want this curriculum to cover, and what kind of weekly rhythm is realistic?";
+      return "What span should this curriculum cover, and what weekly rhythm is actually sustainable for your family?";
     case "learner profile":
-      return `What does ${learnerFirstName} already know, and where do they tend to need support or confidence-building?`;
+      return `What does ${learnerFirstName} already know in this area, and where do they tend to need more support, confidence, or structure?`;
     case "constraints":
-      return "What materials, routines, family constraints, or prep limits should this curriculum respect?";
+      return "What constraints should I design around, such as prep time, available materials, budget, schedule, or the kind of routine that works best at home?";
     case "assessment":
-      return "How do you want to notice progress or mastery as the curriculum unfolds?";
+      return "How would you like to notice progress as you go: quick conversations, short performances, projects, written work, or something lighter-touch?";
     case "structure":
-      return "Do you want this organized more like a skill progression, a themed study, a project sequence, or something else?";
+      return "Should I organize this more like a steady skill progression, a themed exploration, a project sequence, or another structure you already have in mind?";
     default:
       return "Tell me a bit more about what this curriculum needs to accomplish.";
   }
+}
+
+function buildFallbackReadyMessage(requirements: CurriculumAiCapturedRequirements) {
+  const fragments = [
+    requirements.topic ? `the focus is ${toSentenceFragment(requirements.topic)}` : null,
+    requirements.goals ? `the main goal is ${toSentenceFragment(requirements.goals)}` : null,
+    requirements.timeframe ? `the pacing is ${toSentenceFragment(requirements.timeframe)}` : null,
+  ].filter(Boolean);
+
+  const summary = fragments.length > 0 ? fragments.join(", ") : "I have the key planning context";
+  return `I have enough to build this curriculum now. From what you’ve shared, ${summary}. If that sounds right, I can generate the domain-to-skill structure and the first unit-and-lesson sequence.`;
 }
 
 function buildRequirementSummary(requirements: CurriculumAiCapturedRequirements) {
@@ -427,6 +523,7 @@ function buildRequirementSummary(requirements: CurriculumAiCapturedRequirements)
     requirements.timeframe ? `Pacing: ${requirements.timeframe}` : null,
     requirements.learnerProfile ? `Learner: ${shorten(requirements.learnerProfile, 160)}` : null,
     requirements.constraints ? `Constraints: ${shorten(requirements.constraints, 160)}` : null,
+    requirements.assessment ? `Assessment: ${shorten(requirements.assessment, 120)}` : null,
   ].filter(Boolean);
 
   return parts.length > 0
@@ -538,6 +635,10 @@ function estimateWeeksPerUnit(timeframe: string, unitCount: number, index: numbe
 }
 
 function extractTopicLabel(value: string) {
+  if (!value.trim()) {
+    return "";
+  }
+
   const firstSentence = splitIntoSentences(value)[0] ?? value;
   const curriculumMatch = firstSentence.match(
     /(?:want|need|build|create|design|make)\s+(?:a|an)?\s*(.+?)\s+curriculum\b/i,
@@ -678,12 +779,21 @@ function safeParseJson(content: string) {
     return JSON.parse(content) as unknown;
   } catch {
     const fenceMatch = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-    if (!fenceMatch) {
+    if (fenceMatch) {
+      try {
+        return JSON.parse(fenceMatch[1]) as unknown;
+      } catch {
+        // Fall through to broad JSON extraction below.
+      }
+    }
+
+    const objectMatch = content.match(/\{[\s\S]*\}/);
+    if (!objectMatch) {
       return null;
     }
 
     try {
-      return JSON.parse(fenceMatch[1]) as unknown;
+      return JSON.parse(objectMatch[0]) as unknown;
     } catch {
       return null;
     }

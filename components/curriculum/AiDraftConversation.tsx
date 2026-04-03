@@ -3,10 +3,10 @@
 import * as React from "react";
 import { ArrowRight, RefreshCcw, Sparkles } from "lucide-react";
 
+import { ChatInput } from "@/components/copilot/ChatInput";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { ChatInput } from "@/components/copilot/ChatInput";
 import {
   type CurriculumAiChatMessage,
   type CurriculumAiChatTurn,
@@ -147,9 +147,9 @@ export function AiDraftConversation({
   }
 
   return (
-    <div className="flex flex-col gap-5">
-      <Card className="border-primary/15 bg-primary/5 shadow-sm">
-        <CardContent className="flex flex-col gap-3 p-5">
+    <div className="flex flex-col gap-6">
+      <Card className="overflow-hidden border-primary/15 bg-primary/5 shadow-sm">
+        <CardContent className="flex flex-col gap-4 p-6">
           <div className="flex flex-wrap items-center gap-2">
             <Badge className="gap-1 rounded-full">
               <Sparkles className="size-3" />
@@ -164,23 +164,41 @@ export function AiDraftConversation({
               </Badge>
             ) : null}
           </div>
-          <div className="space-y-1">
-            <p className="font-serif text-xl font-semibold tracking-tight">
-              Build the curriculum through conversation
-            </p>
-            <p className="text-sm text-muted-foreground">
-              The AI should ask follow-up questions as it learns about goals, pacing, readiness,
-              structure, and constraints. When the intake is strong enough, it will generate the
-              curriculum tree and lesson outline.
-            </p>
+
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.45fr)_minmax(240px,0.7fr)] lg:items-end">
+            <div className="space-y-2">
+              <p className="font-serif text-2xl font-semibold tracking-tight sm:text-3xl">
+                Shape the curriculum through live intake
+              </p>
+              <p className="max-w-3xl text-sm text-muted-foreground sm:text-base">
+                The AI should understand the learner, surface the real teaching goals, and then
+                build a usable domain, strand, goal-group, skill, unit, and lesson structure from
+                that conversation.
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-primary/15 bg-background/75 p-4 text-sm text-muted-foreground">
+              Expect a back-and-forth, not a static wizard. The assistant should sharpen the scope,
+              pacing, and progression before you generate anything.
+            </div>
           </div>
         </CardContent>
       </Card>
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.4fr)_320px]">
-        <Card className="min-h-[520px]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.75fr)_minmax(320px,400px)]">
+        <Card className="min-h-[680px] overflow-hidden border-border/70 shadow-sm">
           <CardContent className="flex h-full flex-col p-0">
-            <div className="flex-1 space-y-4 overflow-y-auto px-5 py-5">
+            <div className="border-b border-border/60 bg-muted/15 px-5 py-4 sm:px-6">
+              <div className="flex flex-col gap-1">
+                <p className="text-sm font-medium">Conversation</p>
+                <p className="text-sm text-muted-foreground">
+                  Answer naturally. The AI should keep adapting the next question to what you have
+                  already said.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex-1 space-y-4 overflow-y-auto bg-muted/10 px-5 py-5 sm:px-6 sm:py-6">
               {loadingInitial ? (
                 <ConversationBubble
                   role="assistant"
@@ -209,25 +227,25 @@ export function AiDraftConversation({
             </div>
 
             {error ? (
-              <div className="px-5 pb-4">
+              <div className="px-5 pb-4 pt-4 sm:px-6">
                 <p className="rounded-xl border border-destructive/25 bg-destructive/10 px-4 py-3 text-sm text-destructive">
                   {error}
                 </p>
               </div>
             ) : null}
 
-            <div className="border-t border-border/60 p-4">
+            <div className="border-t border-border/60 bg-background p-4 sm:p-5">
               <ChatInput
                 onSend={handleSend}
                 disabled={loadingInitial || sending || creating}
-                placeholder="Tell the AI what you want this curriculum to do…"
+                placeholder="Describe the curriculum you want to build, what matters, or what the AI should clarify next…"
               />
             </div>
           </CardContent>
         </Card>
 
-        <div className="flex flex-col gap-4">
-          <Card>
+        <div className="flex flex-col gap-4 xl:sticky xl:top-24 xl:self-start">
+          <Card className="border-border/70 shadow-sm">
             <CardContent className="space-y-4 p-5">
               <div className="space-y-1">
                 <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
@@ -239,22 +257,10 @@ export function AiDraftConversation({
                 </p>
               </div>
 
-              <CapturedSection
-                label="Topic"
-                value={state?.capturedRequirements.topic}
-              />
-              <CapturedSection
-                label="Goals"
-                value={state?.capturedRequirements.goals}
-              />
-              <CapturedSection
-                label="Pacing"
-                value={state?.capturedRequirements.timeframe}
-              />
-              <CapturedSection
-                label="Learner"
-                value={state?.capturedRequirements.learnerProfile}
-              />
+              <CapturedSection label="Topic" value={state?.capturedRequirements.topic} />
+              <CapturedSection label="Goals" value={state?.capturedRequirements.goals} />
+              <CapturedSection label="Pacing" value={state?.capturedRequirements.timeframe} />
+              <CapturedSection label="Learner" value={state?.capturedRequirements.learnerProfile} />
               <CapturedSection
                 label="Constraints"
                 value={state?.capturedRequirements.constraints}
@@ -279,7 +285,7 @@ export function AiDraftConversation({
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="border-border/70 shadow-sm">
             <CardContent className="space-y-4 p-5">
               <div className="space-y-1">
                 <p className="text-sm font-medium">Generate the curriculum</p>
@@ -328,7 +334,7 @@ function ConversationBubble({
     <div className={cn("flex gap-3", isUser && "flex-row-reverse")}>
       <div
         className={cn(
-          "flex size-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+          "flex size-10 shrink-0 items-center justify-center rounded-full text-xs font-semibold shadow-sm",
           isUser ? "bg-primary/15 text-primary" : "bg-secondary/35 text-secondary-foreground",
         )}
       >
@@ -336,10 +342,8 @@ function ConversationBubble({
       </div>
       <div
         className={cn(
-          "max-w-[85%] rounded-2xl border px-4 py-3 text-sm leading-relaxed shadow-sm",
-          isUser
-            ? "border-primary/20 bg-primary/10"
-            : "border-border/70 bg-card",
+          "max-w-[85%] rounded-[22px] border px-4 py-3 text-sm leading-relaxed shadow-sm sm:max-w-[82%]",
+          isUser ? "border-primary/20 bg-primary/10" : "border-border/70 bg-background",
           !isUser && "whitespace-pre-wrap",
         )}
       >

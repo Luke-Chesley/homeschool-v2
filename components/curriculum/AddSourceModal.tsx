@@ -33,7 +33,7 @@ const entryPoints: {
   {
     kind: "ai_draft",
     label: "AI draft",
-    description: "Describe your course and let the AI generate a skeleton.",
+    description: "Talk through the plan and let the AI generate the curriculum tree and lessons.",
     Icon: Sparkles,
   },
   {
