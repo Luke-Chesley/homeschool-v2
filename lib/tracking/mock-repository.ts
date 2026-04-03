@@ -227,6 +227,7 @@ export function getTrackingRepository() {
 
       return {
         learner,
+        curriculum: null,
         summary: {
           plannedMinutes,
           actualMinutes,
