@@ -22,7 +22,7 @@ export function ChatMessage({ message }: Props) {
       {/* Avatar */}
       <div
         className={cn(
-          "shrink-0 flex size-8 items-center justify-center rounded-full text-xs font-semibold",
+          "shrink-0 flex size-8 items-center justify-center rounded-md text-xs font-medium",
           isUser
             ? "bg-primary/15 text-primary"
             : "bg-secondary/25 text-secondary-foreground"
@@ -34,10 +34,10 @@ export function ChatMessage({ message }: Props) {
       {/* Bubble */}
       <div
         className={cn(
-          "max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed break-words",
+          "max-w-[85%] rounded-lg px-4 py-3 text-sm leading-relaxed break-words",
           isUser
-            ? "bg-primary/10 text-foreground rounded-tr-sm"
-            : "bg-card/80 border border-border/60 text-foreground rounded-tl-sm",
+            ? "bg-primary/10 text-foreground"
+            : "border border-border/60 bg-card text-foreground",
           isAssistant && "whitespace-pre-wrap"
         )}
       >

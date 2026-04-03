@@ -1,22 +1,15 @@
-/**
- * Copilot page — parent workspace AI assistant.
- *
- * Full-height chat interface with context sidebar.
- * Context can be prefilled from query params (learnerId, lessonId, etc.)
- * to enable contextual AI interactions from other parts of the workspace.
- */
-
-import * as React from "react";
-import { Sparkles } from "lucide-react";
 import { CopilotChat } from "@/components/copilot/CopilotChat";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CopilotPromptPreview } from "@/components/copilot/CopilotPromptPreview";
 import { Badge } from "@/components/ui/badge";
-import { listCurriculumSources } from "@/lib/curriculum/service";
+import { Card } from "@/components/ui/card";
 import { getAiRoutingConfig } from "@/lib/ai/routing";
+import type { CopilotContext } from "@/lib/ai/types";
 import { requireAppSession } from "@/lib/app-session/server";
+import { listCurriculumSources } from "@/lib/curriculum/service";
+import { toWeekStartDate } from "@/lib/curriculum-routing";
+import { resolvePrompt } from "@/lib/prompts/store";
 import { buildCopilotPlanningContext } from "@/lib/planning/copilot-snapshot";
 import { getOrCreateWeeklyRouteBoardForLearner } from "@/lib/planning/weekly-route-service";
-import { toWeekStartDate } from "@/lib/curriculum-routing";
 
 export const metadata = {
   title: "Copilot",
@@ -62,7 +55,7 @@ export default async function CopilotPage({ searchParams }: Props) {
       })
     : null;
 
-  const context = {
+  const context: CopilotContext = {
     learnerId: session.activeLearner.id,
     learnerName: session.activeLearner.displayName,
     curriculumSourceId: selectedSourceId,
@@ -75,103 +68,64 @@ export default async function CopilotPage({ searchParams }: Props) {
     feedbackNotes: snapshot?.feedbackNotes ?? [],
     recentOutcomes: [],
   };
-
-  const hasContext = Boolean(
-    context.learnerId ||
-      context.curriculumSourceId ||
-      context.lessonId ||
-      context.dailyWorkspaceSnapshot ||
-      context.weeklyPlanningSnapshot,
-  );
+  const promptRecord = resolvePrompt("chat.answer");
+  const promptPreview = buildPromptPreview(promptRecord.systemPrompt, context);
 
   return (
-    <div className="flex min-h-[42rem] min-w-0 flex-col gap-0">
-      {/* Header */}
-      <div className="flex flex-col gap-4 border-b border-border/60 px-6 py-4 xl:flex-row xl:items-start xl:justify-between shrink-0">
-        <div className="flex min-w-0 flex-1 flex-col gap-2">
-          <div className="flex items-center gap-2">
-            <Sparkles className="size-5 text-primary" />
-            <h1 className="font-serif text-xl font-semibold">Copilot</h1>
+    <main className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-5 py-6 sm:px-6 lg:px-8">
+      <header className="border-b border-border/70 pb-4">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
+          <div>
+            <h1 className="font-serif text-3xl tracking-tight">Copilot</h1>
+            <p className="mt-1 text-sm text-muted-foreground">{session.activeLearner.displayName}</p>
           </div>
-          {hasContext && (
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs text-muted-foreground">Context:</span>
-              {context.learnerName && (
-                <Badge variant="secondary" className="text-xs">
-                  {context.learnerName}
-                </Badge>
-              )}
-              {context.curriculumSourceId && (
-                <Badge variant="outline" className="text-xs">
-                  Curriculum
-                </Badge>
-              )}
-              {context.lessonId && (
-                <Badge variant="outline" className="text-xs">
-                  Lesson
-                </Badge>
-              )}
-              {context.weeklyPlanningSnapshot && (
-                <Badge variant="outline" className="text-xs">
-                  Week {context.weeklyPlanningSnapshot.weekLabel}
-                </Badge>
-              )}
+          <div className="flex flex-wrap gap-2">
+            <Badge variant="outline">{routing.providerId}</Badge>
+            <Badge variant="outline">{activeChatModel}</Badge>
+            {context.curriculumSourceId ? <Badge variant="outline">Curriculum loaded</Badge> : null}
+            {context.weeklyPlanningSnapshot ? <Badge variant="outline">Week loaded</Badge> : null}
+          </div>
+        </div>
+      </header>
+
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_300px]">
+        <Card className="min-h-[42rem] overflow-hidden">
+          <CopilotChat context={context} className="h-full min-w-0 overflow-hidden" />
+        </Card>
+
+        <div className="space-y-4">
+          <Card>
+            <div className="space-y-3 p-4 text-sm">
+              <p className="font-medium text-foreground">Current context</p>
+              <div className="space-y-2 text-muted-foreground">
+                <p>Learner: {context.learnerName}</p>
+                <p>Source: {context.curriculumSourceId ? "Attached" : "None"}</p>
+                <p>Day: {context.dailyWorkspaceSnapshot ? "Attached" : "None"}</p>
+                <p>Week: {context.weeklyPlanningSnapshot ? "Attached" : "None"}</p>
+              </div>
             </div>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-2 xl:justify-end">
-          <Badge variant="outline" className="text-xs">
-            {routing.providerId}
-          </Badge>
-          <Badge variant="secondary" className="text-xs">
-            {activeChatModel}
-          </Badge>
-        </div>
-      </div>
-
-      {/* Chat */}
-      <div className="grid min-h-0 flex-1 overflow-hidden xl:grid-cols-[minmax(0,1fr)_280px]">
-        <CopilotChat context={context} className="h-full min-w-0 overflow-hidden" />
-
-        {/* Sidebar */}
-        <div className="hidden min-w-0 flex-col gap-4 border-l border-border/60 p-4 overflow-y-auto xl:flex">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">What I can help with</CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-2 text-xs text-muted-foreground">
-              <p>• Draft lesson plans and outlines</p>
-              <p>• Generate worksheets and activities</p>
-              <p>• Suggest relevant standards</p>
-              <p>• Summarize curriculum materials</p>
-              <p>• Review progress and suggest plan adaptations</p>
-              <p>• Answer questions about teaching and learning</p>
-            </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">Generation tasks</CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-2 text-xs text-muted-foreground">
-              <p className="text-foreground/80 font-medium">Long-running tasks (async):</p>
-              <p>• Lesson drafts</p>
-              <p>• Worksheet generation</p>
-              <p>• Interactive activities</p>
-              <p>• Plan adaptation</p>
-              <p className="mt-2 text-foreground/80 font-medium">Inline tasks:</p>
-              <p>• Standards suggestions</p>
-              <p>• Text summarization</p>
-              <p>• Chat answers</p>
-            </CardContent>
+            <div className="space-y-3 p-4 text-sm">
+              <p className="font-medium text-foreground">Start with</p>
+              <div className="space-y-2 text-muted-foreground">
+                <p>Draft today&apos;s lesson.</p>
+                <p>Trim tomorrow&apos;s workload.</p>
+                <p>Map a skill to standards.</p>
+                <p>Adjust the week after missed work.</p>
+              </div>
+            </div>
           </Card>
 
-          <p className="text-xs text-muted-foreground/60 px-1">
-            Copilot provider and model routing come from{" "}
-            <code className="font-mono text-[10px]">lib/ai/routing.ts</code>.
-          </p>
+          <CopilotPromptPreview promptPreview={promptPreview} />
         </div>
       </div>
-  </div>
-);
+    </main>
+  );
+}
+
+function buildPromptPreview(systemPrompt: string, context: CopilotContext) {
+  const contextString = JSON.stringify(context, null, 2);
+  return `${systemPrompt}\n\nContext:\n${contextString}`;
 }

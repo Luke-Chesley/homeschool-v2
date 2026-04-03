@@ -22,10 +22,8 @@ export default async function CurriculumPage({ searchParams }: CurriculumPagePro
 
   if (sources.length === 0) {
     return (
-      <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-6 py-8 sm:px-8">
-        <CurriculumPageHeader
-          description="Start with one source and build a normalized tree the planner can route."
-        />
+      <main className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-5 py-6 sm:px-6 lg:px-8">
+        <CurriculumPageHeader />
         <CurriculumEmptyState householdId={session.organization.id} />
       </main>
     );
@@ -39,31 +37,28 @@ export default async function CurriculumPage({ searchParams }: CurriculumPagePro
 
   if (!tree) {
     return (
-      <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-6 py-8 sm:px-8">
-        <CurriculumPageHeader description="The selected source could not be loaded right now." />
+      <main className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-5 py-6 sm:px-6 lg:px-8">
+        <CurriculumPageHeader description="The selected source could not be loaded." />
       </main>
     );
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-6 py-8 sm:px-8">
-      <CurriculumPageHeader description="Canonical overview from normalized curriculum nodes." />
+    <main className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-5 py-6 sm:px-6 lg:px-8">
+      <CurriculumPageHeader />
       <CurriculumOverview sources={sources} selectedSourceId={selectedSourceId} tree={tree} />
     </main>
   );
 }
 
-function CurriculumPageHeader({ description }: { description: string }) {
+function CurriculumPageHeader({ description }: { description?: string }) {
   return (
-    <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <header className="flex flex-col gap-4 border-b border-border/70 pb-4 sm:flex-row sm:items-end sm:justify-between">
       <div>
-        <h1 className="font-serif text-4xl leading-tight tracking-tight">Curriculum</h1>
-        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">{description}</p>
+        <h1 className="font-serif text-3xl leading-tight tracking-tight">Curriculum</h1>
+        {description ? <p className="mt-1 text-sm text-muted-foreground">{description}</p> : null}
       </div>
-      <Link
-        href="/curriculum/new"
-        className={buttonVariants({ variant: "default", size: "sm" })}
-      >
+      <Link href="/curriculum/new" className={buttonVariants({ variant: "default", size: "sm" })}>
         Add curriculum
       </Link>
     </header>

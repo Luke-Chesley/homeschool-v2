@@ -1,35 +1,50 @@
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import Link from "next/link";
+
 import { ParentNav } from "@/components/navigation/parent-nav";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
-export function ParentSidebar({ onNavigate }: { onNavigate?: () => void }) {
+export function ParentSidebar({
+  activeLearnerName,
+  onNavigate,
+}: {
+  activeLearnerName: string;
+  onNavigate?: () => void;
+}) {
   return (
-    <Card className="overflow-hidden border-border/70 bg-card/88">
-      <CardHeader className="border-b border-border/70 bg-gradient-to-br from-card via-card to-primary/8">
-        <Badge className="w-fit">Parent workspace</Badge>
-        <CardTitle className="max-w-xs text-3xl">
-          Calm operations for the school day and the work around it.
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-6 p-4">
-        <ParentNav onNavigate={onNavigate} />
-
-        <div className="rounded-[1.4rem] border border-border/70 bg-background/80 p-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-            This week
-          </p>
-          <div className="mt-3 grid grid-cols-2 gap-3">
-            <div className="rounded-2xl bg-primary/9 p-3">
-              <div className="text-2xl font-serif">18</div>
-              <p className="text-xs text-muted-foreground">Planned lessons</p>
-            </div>
-            <div className="rounded-2xl bg-secondary/18 p-3">
-              <div className="text-2xl font-serif">4</div>
-              <p className="text-xs text-muted-foreground">Carryover items</p>
-            </div>
-          </div>
+    <div className="flex h-full flex-col bg-background">
+      <div className="border-b border-border/70 px-5 py-5">
+        <Link href="/today" className="inline-flex text-sm font-semibold text-foreground">
+          Homeschool
+        </Link>
+        <div className="mt-3 space-y-1">
+          <p className="text-xs text-muted-foreground">Active learner</p>
+          <p className="text-sm font-medium text-foreground">{activeLearnerName}</p>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+
+      <div className="flex-1 px-4 py-4">
+        <ParentNav onNavigate={onNavigate} />
+      </div>
+
+      <div className="border-t border-border/70 px-4 py-4">
+        <div className="grid gap-2">
+          <Link
+            href="/today"
+            onClick={onNavigate}
+            className={cn(buttonVariants({ variant: "default", size: "sm" }), "w-full justify-start")}
+          >
+            Open today
+          </Link>
+          <Link
+            href="/copilot"
+            onClick={onNavigate}
+            className={cn(buttonVariants({ variant: "outline", size: "sm" }), "w-full justify-start")}
+          >
+            Ask AI
+          </Link>
+        </div>
+      </div>
+    </div>
   );
 }
