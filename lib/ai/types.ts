@@ -38,6 +38,8 @@ export type ProviderId = z.infer<typeof ProviderIdSchema>;
  * inline in route handlers.
  */
 export const AiTaskNameSchema = z.enum([
+  "curriculum.intake",     // Conversational intake for curriculum drafting
+  "curriculum.generate",   // Structured curriculum tree + lesson outline generation
   "lesson.draft",           // Generate a lesson outline from topic + standard
   "worksheet.generate",    // Generate a printable worksheet
   "interactive.generate",  // Generate an activity schema (quiz, flashcards, etc.)

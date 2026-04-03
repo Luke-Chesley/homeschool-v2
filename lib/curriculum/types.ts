@@ -113,9 +113,12 @@ export const CurriculumLessonSchema = z.object({
   unitId: z.string(),
   title: z.string().min(1),
   description: z.string().optional(),
+  subject: z.string().optional(),
   sequence: z.number().int().nonnegative(),
   estimatedMinutes: z.number().optional(),
   materials: z.array(z.string()).default([]),
+  objectives: z.array(z.string()).default([]),
+  linkedSkillTitles: z.array(z.string()).default([]),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
@@ -134,6 +137,10 @@ export const CurriculumObjectiveSchema = z.object({
 });
 
 export type CurriculumObjective = z.infer<typeof CurriculumObjectiveSchema>;
+
+export interface CurriculumUnitOutline extends CurriculumUnit {
+  lessons: CurriculumLesson[];
+}
 
 export const CreateCurriculumSourceInputSchema = CurriculumSourceSchema.omit({
   id: true,

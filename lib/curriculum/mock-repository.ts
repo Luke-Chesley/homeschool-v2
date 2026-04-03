@@ -80,9 +80,12 @@ const seedLessons: CurriculumLesson[] = [
     id: SEED_LESSON_1_ID,
     unitId: SEED_UNIT_1_ID,
     title: "Lesson 1 — Numbers to 10,000",
+    subject: "math",
     sequence: 0,
     estimatedMinutes: 45,
     materials: ["textbook p.1-6", "place value chart"],
+    objectives: ["Read, write, and represent whole numbers to 10,000."],
+    linkedSkillTitles: ["Read and write whole numbers to 10,000"],
     createdAt: now,
     updatedAt: now,
   },
@@ -90,9 +93,12 @@ const seedLessons: CurriculumLesson[] = [
     id: SEED_LESSON_2_ID,
     unitId: SEED_UNIT_1_ID,
     title: "Lesson 2 — Numbers to 100,000",
+    subject: "math",
     sequence: 1,
     estimatedMinutes: 45,
     materials: ["textbook p.7-12"],
+    objectives: ["Understand place value in numbers up to 100,000."],
+    linkedSkillTitles: ["Understand place value to 100,000"],
     createdAt: now,
     updatedAt: now,
   },
@@ -100,9 +106,12 @@ const seedLessons: CurriculumLesson[] = [
     id: SEED_LESSON_3_ID,
     unitId: SEED_UNIT_2_ID,
     title: "Lesson 1 — Multiplying by 1-Digit Numbers",
+    subject: "math",
     sequence: 0,
     estimatedMinutes: 60,
     materials: ["textbook p.40-48", "multiplication chart"],
+    objectives: ["Multiply larger numbers by 1-digit factors using place value understanding."],
+    linkedSkillTitles: ["Multiply by 1-digit numbers"],
     createdAt: now,
     updatedAt: now,
   },
@@ -240,6 +249,9 @@ class InMemoryCurriculumRepository implements CurriculumRepository {
   async createLesson(input: CreateCurriculumLessonInput): Promise<CurriculumLesson> {
     const record: CurriculumLesson = {
       ...input,
+      subject: input.subject,
+      objectives: input.objectives ?? [],
+      linkedSkillTitles: input.linkedSkillTitles ?? [],
       id: randomUUID(),
       createdAt: this.ts(),
       updatedAt: this.ts(),
@@ -251,7 +263,13 @@ class InMemoryCurriculumRepository implements CurriculumRepository {
   async updateLesson(id: string, patch: Partial<CreateCurriculumLessonInput>): Promise<CurriculumLesson> {
     const existing = this.store.lessons.get(id);
     if (!existing) throw new Error(`CurriculumLesson not found: ${id}`);
-    const updated = { ...existing, ...patch, updatedAt: this.ts() };
+    const updated = {
+      ...existing,
+      ...patch,
+      objectives: patch.objectives ?? existing.objectives,
+      linkedSkillTitles: patch.linkedSkillTitles ?? existing.linkedSkillTitles,
+      updatedAt: this.ts(),
+    };
     this.store.lessons.set(id, updated);
     return updated;
   }

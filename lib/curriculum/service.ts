@@ -8,6 +8,7 @@ import {
   curriculumSources,
 } from "@/lib/db/schema";
 
+import type { CurriculumAiGeneratedArtifact } from "./ai-draft";
 import { loadLocalCurriculumJson, type ImportedCurriculumDocument } from "./local-json-import";
 import { normalizeCurriculumDocument } from "./normalization";
 import type {
@@ -19,6 +20,7 @@ import type {
   CreateCurriculumObjectiveInput,
   CreateCurriculumSourceInput,
   CreateCurriculumUnitInput,
+  CurriculumUnitOutline,
 } from "./types";
 
 function mapKind(kind: string): CurriculumSource["kind"] {
@@ -131,9 +133,18 @@ function buildCurriculumTree(source: CurriculumSource, nodes: CurriculumNode[]):
   };
 }
 
+export interface CreatedAiDraftCurriculumResult {
+  sourceId: string;
+  sourceTitle: string;
+  nodeCount: number;
+  skillCount: number;
+  unitCount: number;
+  lessonCount: number;
+}
+
 async function createSourceRecord(
   input: CreateCurriculumSourceInput,
-  options?: { status?: CurriculumSource["status"] },
+  options?: { status?: CurriculumSource["status"]; metadata?: Record<string, unknown> },
 ) {
   const [source] = await getDb()
     .insert(curriculumSources)
@@ -155,6 +166,7 @@ async function createSourceRecord(
         importFingerprint: null,
         normalizedNodeCount: 0,
         normalizedSkillCount: 0,
+        ...(options?.metadata ?? {}),
       },
     })
     .returning();
@@ -162,7 +174,58 @@ async function createSourceRecord(
   return source;
 }
 
-async function importNormalizedTree(sourceId: string, imported: ImportedCurriculumDocument) {
+async function replaceCurriculumOutline(
+  tx: Pick<ReturnType<typeof getDb>, "delete" | "insert">,
+  sourceId: string,
+  units: ImportedCurriculumDocument["units"] = [],
+) {
+  await tx.delete(curriculumItems).where(eq(curriculumItems.sourceId, sourceId));
+
+  for (const [unitIndex, unit] of units.entries()) {
+    const [createdUnit] = await tx
+      .insert(curriculumItems)
+      .values({
+        sourceId,
+        learnerId: null,
+        parentItemId: null,
+        itemType: "unit",
+        title: unit.title,
+        description: unit.description ?? null,
+        subject: null,
+        estimatedMinutes: null,
+        position: unitIndex,
+        metadata: {
+          estimatedWeeks: unit.estimatedWeeks ?? null,
+        },
+      })
+      .returning();
+
+    for (const [lessonIndex, lesson] of unit.lessons.entries()) {
+      await tx.insert(curriculumItems).values({
+        sourceId,
+        learnerId: null,
+        parentItemId: createdUnit.id,
+        itemType: "lesson",
+        title: lesson.title,
+        description: lesson.description ?? null,
+        subject: lesson.subject ?? null,
+        estimatedMinutes: lesson.estimatedMinutes ?? null,
+        position: lessonIndex,
+        metadata: {
+          materials: lesson.materials ?? [],
+          objectives: lesson.objectives ?? [],
+          linkedSkillTitles: lesson.linkedSkillTitles ?? [],
+        },
+      });
+    }
+  }
+}
+
+async function importNormalizedTree(
+  sourceId: string,
+  imported: ImportedCurriculumDocument,
+  options?: { metadata?: Record<string, unknown> },
+) {
   const source = await getDb().query.curriculumSources.findFirst({
     where: (table, { eq }) => eq(table.id, sourceId),
   });
@@ -233,6 +296,8 @@ async function importNormalizedTree(sourceId: string, imported: ImportedCurricul
       await tx.insert(curriculumSkillPrerequisites).values(normalized.prerequisites);
     }
 
+    await replaceCurriculumOutline(tx, sourceId, imported.units);
+
     await tx
       .update(curriculumSources)
       .set({
@@ -252,6 +317,8 @@ async function importNormalizedTree(sourceId: string, imported: ImportedCurricul
           normalizedSkillCount: normalized.summary.skillCount,
           normalizationVersion: 1,
           lastImportedAt: new Date().toISOString(),
+          ...(imported.metadata ?? {}),
+          ...(options?.metadata ?? {}),
         },
         updatedAt: new Date(),
       })
@@ -318,6 +385,72 @@ export async function importCurriculumSourceFromLocalJson(
 
   try {
     return await importNormalizedTree(source.id, imported);
+  } catch (error) {
+    await getDb()
+      .update(curriculumSources)
+      .set({
+        status: "failed_import",
+        updatedAt: new Date(),
+      })
+      .where(eq(curriculumSources.id, source.id));
+    throw error;
+  }
+}
+
+export async function createCurriculumSourceFromAiDraftArtifact(params: {
+  householdId: string;
+  artifact: CurriculumAiGeneratedArtifact;
+}): Promise<CreatedAiDraftCurriculumResult> {
+  const imported: ImportedCurriculumDocument = {
+    title: params.artifact.source.title,
+    description: params.artifact.source.description,
+    kind: "ai_draft",
+    academicYear: params.artifact.source.academicYear,
+    subjects: params.artifact.source.subjects,
+    gradeLevels: params.artifact.source.gradeLevels,
+    document: params.artifact.document,
+    units: params.artifact.units,
+    metadata: {
+      intakeSummary: params.artifact.intakeSummary,
+      teachingApproach: params.artifact.source.teachingApproach,
+      successSignals: params.artifact.source.successSignals,
+      parentNotes: params.artifact.source.parentNotes,
+      rationale: params.artifact.source.rationale,
+      generatedUnitCount: params.artifact.units.length,
+      generatedLessonCount: params.artifact.units.reduce(
+        (total, unit) => total + unit.lessons.length,
+        0,
+      ),
+    },
+  };
+
+  const source = await createSourceRecord(
+    {
+      householdId: params.householdId,
+      title: imported.title,
+      description: imported.description,
+      kind: imported.kind,
+      academicYear: imported.academicYear,
+      subjects: imported.subjects,
+      gradeLevels: imported.gradeLevels,
+    },
+    { status: "active", metadata: imported.metadata },
+  );
+
+  try {
+    await importNormalizedTree(source.id, imported, { metadata: imported.metadata });
+    const tree = await getCurriculumTree(source.id, params.householdId);
+    const outline = await listCurriculumOutline(source.id);
+    const lessonCount = outline.reduce((total, unit) => total + unit.lessons.length, 0);
+
+    return {
+      sourceId: source.id,
+      sourceTitle: source.title,
+      nodeCount: tree?.nodeCount ?? 0,
+      skillCount: tree?.skillCount ?? 0,
+      unitCount: outline.length,
+      lessonCount,
+    };
   } catch (error) {
     await getDb()
       .update(curriculumSources)
@@ -506,9 +639,14 @@ export async function listCurriculumLessons(unitId: string) {
       unitId,
       title: item.title,
       description: item.description ?? undefined,
+      subject: item.subject ?? undefined,
       sequence: item.position,
       estimatedMinutes: item.estimatedMinutes ?? undefined,
       materials: Array.isArray(item.metadata.materials) ? (item.metadata.materials as string[]) : [],
+      objectives: Array.isArray(item.metadata.objectives) ? (item.metadata.objectives as string[]) : [],
+      linkedSkillTitles: Array.isArray(item.metadata.linkedSkillTitles)
+        ? (item.metadata.linkedSkillTitles as string[])
+        : [],
       createdAt: item.createdAt.toISOString(),
       updatedAt: item.updatedAt.toISOString(),
     }));
@@ -529,11 +667,13 @@ export async function createCurriculumLesson(input: CreateCurriculumLessonInput)
       itemType: "lesson",
       title: input.title,
       description: input.description ?? null,
-      subject: null,
+      subject: input.subject ?? null,
       estimatedMinutes: input.estimatedMinutes ?? null,
       position: input.sequence,
       metadata: {
         materials: input.materials,
+        objectives: input.objectives ?? [],
+        linkedSkillTitles: input.linkedSkillTitles ?? [],
       },
     })
     .returning();
@@ -543,10 +683,17 @@ export async function createCurriculumLesson(input: CreateCurriculumLessonInput)
     unitId: input.unitId,
     title: lesson.title,
     description: lesson.description ?? undefined,
+    subject: lesson.subject ?? undefined,
     sequence: lesson.position,
     estimatedMinutes: lesson.estimatedMinutes ?? undefined,
     materials: Array.isArray(lesson.metadata.materials)
       ? (lesson.metadata.materials as string[])
+      : [],
+    objectives: Array.isArray(lesson.metadata.objectives)
+      ? (lesson.metadata.objectives as string[])
+      : [],
+    linkedSkillTitles: Array.isArray(lesson.metadata.linkedSkillTitles)
+      ? (lesson.metadata.linkedSkillTitles as string[])
       : [],
     createdAt: lesson.createdAt.toISOString(),
     updatedAt: lesson.updatedAt.toISOString(),
@@ -567,11 +714,17 @@ export async function updateCurriculumLesson(
     .set({
       title: patch.title ?? existing.title,
       description: patch.description ?? existing.description,
+      subject: patch.subject ?? existing.subject,
       estimatedMinutes: patch.estimatedMinutes ?? existing.estimatedMinutes,
       position: patch.sequence ?? existing.position,
       metadata: {
         ...(existing.metadata ?? {}),
         materials: patch.materials ?? (existing.metadata.materials as string[] | undefined) ?? [],
+        objectives: patch.objectives ?? (existing.metadata.objectives as string[] | undefined) ?? [],
+        linkedSkillTitles:
+          patch.linkedSkillTitles ??
+          (existing.metadata.linkedSkillTitles as string[] | undefined) ??
+          [],
       },
       updatedAt: new Date(),
     })
@@ -583,14 +736,38 @@ export async function updateCurriculumLesson(
     unitId: lesson.parentItemId!,
     title: lesson.title,
     description: lesson.description ?? undefined,
+    subject: lesson.subject ?? undefined,
     sequence: lesson.position,
     estimatedMinutes: lesson.estimatedMinutes ?? undefined,
     materials: Array.isArray(lesson.metadata.materials)
       ? (lesson.metadata.materials as string[])
       : [],
+    objectives: Array.isArray(lesson.metadata.objectives)
+      ? (lesson.metadata.objectives as string[])
+      : [],
+    linkedSkillTitles: Array.isArray(lesson.metadata.linkedSkillTitles)
+      ? (lesson.metadata.linkedSkillTitles as string[])
+      : [],
     createdAt: lesson.createdAt.toISOString(),
     updatedAt: lesson.updatedAt.toISOString(),
   };
+}
+
+export async function listCurriculumOutline(sourceId: string): Promise<CurriculumUnitOutline[]> {
+  const units = await listCurriculumUnits(sourceId);
+  const lessonsByUnit = await Promise.all(
+    units.map(async (unit) => ({
+      unitId: unit.id,
+      lessons: await listCurriculumLessons(unit.id),
+    })),
+  );
+
+  const lessonMap = new Map(lessonsByUnit.map((entry) => [entry.unitId, entry.lessons]));
+
+  return units.map((unit) => ({
+    ...unit,
+    lessons: lessonMap.get(unit.id) ?? [],
+  }));
 }
 
 export async function deleteCurriculumLesson(id: string) {

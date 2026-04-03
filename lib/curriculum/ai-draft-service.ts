@@ -1,186 +1,559 @@
 import "server-only";
 
 import { getAdapterForTask } from "@/lib/ai/registry";
-import { getAiRoutingConfig } from "@/lib/ai/routing";
 import { getModelForTask } from "@/lib/ai/provider-adapter";
+import { getAiRoutingConfig } from "@/lib/ai/routing";
+import type { ChatMessage } from "@/lib/ai/types";
+import { resolvePrompt } from "@/lib/prompts/store";
+import {
+  buildCurriculumGenerationPrompt,
+  buildCurriculumIntakePrompt,
+  CURRICULUM_GENERATION_PROMPT_VERSION,
+  CURRICULUM_INTAKE_PROMPT_VERSION,
+} from "@/lib/prompts/curriculum-draft";
 import type { AppLearner } from "@/lib/users/service";
 
 import {
-  CurriculumAiDraftSchema,
-  type CurriculumAiDraft,
-  type CurriculumAiDraftAnswer,
+  createCurriculumSourceFromAiDraftArtifact,
+  type CreatedAiDraftCurriculumResult,
+} from "./service";
+import {
+  CurriculumAiCapturedRequirementsSchema,
+  CurriculumAiChatTurnSchema,
+  CurriculumAiGeneratedArtifactSchema,
+  type CurriculumAiCapturedRequirements,
+  type CurriculumAiChatMessage,
+  type CurriculumAiChatTurn,
+  type CurriculumAiGeneratedArtifact,
 } from "./ai-draft";
 
-const CURRICULUM_AI_DRAFT_SYSTEM_PROMPT = `You are helping a homeschool parent shape a first-pass curriculum brief from an intake conversation.
-
-Use sound pedagogy:
-- begin with the learner's goals and prior knowledge
-- keep pacing realistic for the stated schedule
-- prefer coherent progression over broad coverage
-- include motivation, practice, and a visible way to tell whether the plan is working
-- keep the tone calm, practical, and parent-facing
-
-Return JSON only with these keys:
-- title: short curriculum title
-- description: one concise summary sentence for the curriculum source card
-- subjects: 1 to 4 plain-language subject labels
-- gradeLevels: inferred grade labels only if the parent implied them
-- academicYear: optional, only if the parent clearly named one
-- summary: a short paragraph describing the shape of the curriculum
-- teachingApproach: one sentence describing the instructional approach
-- successSignals: 2 to 4 short bullets describing what success will look like
-- parentNotes: 2 to 4 short practical notes for the parent
-- rationale: 2 to 4 short bullets explaining why this draft is structured this way
-
-Do not mention JSON. Do not include markdown fences.`;
-
-export async function buildCurriculumAiDraft(params: {
+export async function continueCurriculumAiDraftConversation(params: {
   learner: AppLearner;
-  answers: CurriculumAiDraftAnswer[];
-}): Promise<CurriculumAiDraft> {
-  const { learner, answers } = params;
-  const answerMap = new Map(answers.map((entry) => [entry.questionId, entry.answer.trim()]));
-  const adapter = getAdapterForTask("chat.answer");
-  const model = getModelForTask("chat.answer", getAiRoutingConfig());
-  const userPrompt = buildUserPrompt({ learner, answers });
+  messages: CurriculumAiChatMessage[];
+}): Promise<CurriculumAiChatTurn> {
+  const prompt = resolvePrompt("curriculum.intake", CURRICULUM_INTAKE_PROMPT_VERSION);
+  const adapter = getAdapterForTask("curriculum.intake");
+  const model = getModelForTask("curriculum.intake", getAiRoutingConfig());
+  const messages = normalizeMessages(params.messages);
 
   try {
     const response = await adapter.complete({
       model,
-      systemPrompt: CURRICULUM_AI_DRAFT_SYSTEM_PROMPT,
-      messages: [{ role: "user", content: userPrompt }],
+      systemPrompt: prompt.systemPrompt,
+      messages: [
+        {
+          role: "user",
+          content: buildCurriculumIntakePrompt({
+            learnerName: params.learner.displayName,
+            messages,
+          }),
+        },
+      ],
     });
 
     const parsed = safeParseJson(response.content);
-    const validated = CurriculumAiDraftSchema.safeParse(parsed);
+    const validated = CurriculumAiChatTurnSchema.safeParse(parsed);
 
     if (validated.success) {
-      const parsedDraft = sanitizeDraft(validated.data);
-      if (isDraftGroundedInTopic(parsedDraft, answerMap)) {
-        return parsedDraft;
-      }
+      return sanitizeChatTurn(validated.data);
     }
   } catch (error) {
-    console.error("[curriculum/ai-draft] Structured generation failed, using fallback.", error);
+    console.error("[curriculum/ai-draft] Intake turn failed, using fallback.", error);
   }
 
-  return buildFallbackDraft({ learner, answers });
-}
-
-function buildUserPrompt(params: {
-  learner: AppLearner;
-  answers: CurriculumAiDraftAnswer[];
-}) {
-  const answerLines = params.answers.map(
-    (entry, index) => `${index + 1}. ${humanizeQuestion(entry.questionId)}\nAnswer: ${entry.answer}`,
-  );
-
-  return [
-    `Active learner: ${params.learner.displayName}`,
-    `Learner first name: ${params.learner.firstName}`,
-    "",
-    "Parent intake conversation:",
-    answerLines.join("\n\n"),
-  ].join("\n");
-}
-
-function humanizeQuestion(questionId: CurriculumAiDraftAnswer["questionId"]) {
-  switch (questionId) {
-    case "topic":
-      return "What should this curriculum focus on?";
-    case "goals":
-      return "What outcomes matter most?";
-    case "timeframe":
-      return "What pace and time horizon are realistic?";
-    case "learnerProfile":
-      return "What prior knowledge and supports should shape the plan?";
-    case "constraints":
-      return "What materials, routines, or constraints should the plan honor?";
-  }
-}
-
-function sanitizeDraft(draft: CurriculumAiDraft): CurriculumAiDraft {
-  return {
-    ...draft,
-    title: draft.title.trim(),
-    description: draft.description.trim(),
-    summary: draft.summary.trim(),
-    teachingApproach: draft.teachingApproach.trim(),
-    subjects: uniqueNonEmpty(draft.subjects),
-    gradeLevels: uniqueNonEmpty(draft.gradeLevels),
-    successSignals: uniqueNonEmpty(draft.successSignals),
-    parentNotes: uniqueNonEmpty(draft.parentNotes),
-    rationale: uniqueNonEmpty(draft.rationale),
-  };
-}
-
-function buildFallbackDraft(params: {
-  learner: AppLearner;
-  answers: CurriculumAiDraftAnswer[];
-}): CurriculumAiDraft {
-  const answerMap = new Map(params.answers.map((entry) => [entry.questionId, entry.answer.trim()]));
-  const topic = extractTopicLabel(answerMap.get("topic") ?? "Custom Study");
-  const goals = answerMap.get("goals") ?? "";
-  const timeframe = answerMap.get("timeframe") ?? "";
-  const learnerProfile = answerMap.get("learnerProfile") ?? "";
-  const constraints = answerMap.get("constraints") ?? "";
-  const normalizedGoals = toSentenceFragment(shorten(goals, 140));
-  const normalizedTimeframe = normalizeTimeframePhrase(timeframe);
-  const combinedText = [topic, goals, timeframe, learnerProfile, constraints].join(" ");
-  const subjects = inferSubjects(combinedText);
-  const gradeLevels = inferGradeLevels(combinedText);
-
-  const summaryParts = [
-    `${params.learner.displayName} will work through a ${topic.toLowerCase()} plan`,
-    normalizedTimeframe ? `paced around ${normalizedTimeframe}` : null,
-    normalizedGoals ? `with emphasis on ${normalizedGoals}` : null,
-  ].filter(Boolean);
-
-  const parentNotes = [
-    timeframe ? `Keep the cadence aligned with ${shorten(timeframe, 90)}.` : null,
-    learnerProfile ? `Build from current readiness: ${shorten(learnerProfile, 90)}.` : null,
-    constraints ? `Plan around these constraints: ${shorten(constraints, 90)}.` : null,
-  ].filter((value): value is string => Boolean(value));
-
-  const rationale = [
-    goals
-      ? `The sequence is anchored to the parent's stated goals instead of broad topic coverage.`
-      : "The sequence starts with core understanding before layering on more independent work.",
-    timeframe
-      ? `The pacing stays realistic for the stated schedule so the plan is teachable week to week.`
-      : "The pacing is intentionally restrained so the learner can revisit important ideas.",
-    learnerProfile
-      ? `The plan accounts for current readiness and support needs rather than assuming a blank slate.`
-      : "The plan includes explicit practice and reflection so progress is visible to the parent.",
-  ];
-
-  const successSignals = [
-    goals
-      ? `The learner can demonstrate progress toward ${shorten(goals, 80).replace(/\.$/, "")}.`
-      : `The learner can explain and apply the core ideas in ${topic.toLowerCase()}.`,
-    "The parent can point to concrete work, discussion, or performance evidence each week.",
-    constraints
-      ? `The routine remains workable within the family's actual resources and energy.`
-      : `The routine remains sustainable without heavy prep every session.`,
-  ];
-
-  return sanitizeDraft({
-    title: toTitleCase(topic),
-    description: summaryParts.join(", ") + ".",
-    subjects,
-    gradeLevels,
-    summary:
-      `${summaryParts.join(", ")}. The draft balances clear instruction, guided practice, and a visible way to tell whether the plan is working.`,
-    teachingApproach:
-      "Use short, coherent lessons that connect new ideas to prior knowledge and end with visible practice or reflection.",
-    successSignals,
-    parentNotes,
-    rationale,
+  return buildFallbackChatTurn({
+    learner: params.learner,
+    messages,
   });
 }
 
+export async function createCurriculumFromConversation(params: {
+  householdId: string;
+  learner: AppLearner;
+  messages: CurriculumAiChatMessage[];
+}): Promise<CreatedAiDraftCurriculumResult> {
+  const artifact = await generateCurriculumArtifact({
+    learner: params.learner,
+    messages: params.messages,
+  });
+
+  return createCurriculumSourceFromAiDraftArtifact({
+    householdId: params.householdId,
+    artifact,
+  });
+}
+
+async function generateCurriculumArtifact(params: {
+  learner: AppLearner;
+  messages: CurriculumAiChatMessage[];
+}): Promise<CurriculumAiGeneratedArtifact> {
+  const prompt = resolvePrompt("curriculum.generate", CURRICULUM_GENERATION_PROMPT_VERSION);
+  const adapter = getAdapterForTask("curriculum.generate");
+  const model = getModelForTask("curriculum.generate", getAiRoutingConfig());
+  const messages = normalizeMessages(params.messages);
+
+  try {
+    const response = await adapter.complete({
+      model,
+      systemPrompt: prompt.systemPrompt,
+      messages: [
+        {
+          role: "user",
+          content: buildCurriculumGenerationPrompt({
+            learnerName: params.learner.displayName,
+            messages,
+          }),
+        },
+      ],
+    });
+
+    const parsed = safeParseJson(response.content);
+    const validated = CurriculumAiGeneratedArtifactSchema.safeParse(parsed);
+
+    if (validated.success) {
+      const artifact = sanitizeArtifact(validated.data);
+      if (artifactMatchesConversation(artifact, messages)) {
+        return artifact;
+      }
+    }
+  } catch (error) {
+    console.error("[curriculum/ai-draft] Artifact generation failed, using fallback.", error);
+  }
+
+  return buildFallbackArtifact({
+    learner: params.learner,
+    messages,
+  });
+}
+
+function sanitizeChatTurn(turn: CurriculumAiChatTurn): CurriculumAiChatTurn {
+  return {
+    assistantMessage: turn.assistantMessage.trim(),
+    state: {
+      readiness: turn.state.readiness,
+      summary: turn.state.summary.trim(),
+      missingInformation: uniqueNonEmpty(turn.state.missingInformation),
+      capturedRequirements: sanitizeCapturedRequirements(turn.state.capturedRequirements),
+    },
+  };
+}
+
+function sanitizeArtifact(artifact: CurriculumAiGeneratedArtifact): CurriculumAiGeneratedArtifact {
+  return {
+    source: {
+      ...artifact.source,
+      title: artifact.source.title.trim(),
+      description: artifact.source.description.trim(),
+      summary: artifact.source.summary.trim(),
+      teachingApproach: artifact.source.teachingApproach.trim(),
+      subjects: uniqueNonEmpty(artifact.source.subjects),
+      gradeLevels: uniqueNonEmpty(artifact.source.gradeLevels),
+      successSignals: uniqueNonEmpty(artifact.source.successSignals),
+      parentNotes: uniqueNonEmpty(artifact.source.parentNotes),
+      rationale: uniqueNonEmpty(artifact.source.rationale),
+    },
+    intakeSummary: artifact.intakeSummary.trim(),
+    document: artifact.document,
+    units: artifact.units.map((unit) => ({
+      ...unit,
+      title: unit.title.trim(),
+      description: unit.description.trim(),
+      lessons: unit.lessons.map((lesson) => ({
+        ...lesson,
+        title: lesson.title.trim(),
+        description: lesson.description.trim(),
+        subject: lesson.subject?.trim() || undefined,
+        materials: uniqueNonEmpty(lesson.materials),
+        objectives: uniqueNonEmpty(lesson.objectives),
+        linkedSkillTitles: uniqueNonEmpty(lesson.linkedSkillTitles),
+      })),
+    })),
+  };
+}
+
+function buildFallbackChatTurn(params: {
+  learner: AppLearner;
+  messages: ChatMessage[];
+}): CurriculumAiChatTurn {
+  const capturedRequirements = inferCapturedRequirements(params.messages);
+  const missingInformation = getMissingRequirements(capturedRequirements);
+
+  if (params.messages.length === 0) {
+    return {
+      assistantMessage: `What do you want ${params.learner.firstName} to learn, and what kind of growth are you hoping to see by the end of this curriculum?`,
+      state: {
+        readiness: "gathering",
+        summary: `We are starting a new curriculum conversation for ${params.learner.displayName}.`,
+        missingInformation,
+        capturedRequirements,
+      },
+    };
+  }
+
+  if (missingInformation.length === 0) {
+    return {
+      assistantMessage:
+        "I have enough to generate a full curriculum tree and a lesson outline. If you want, I can create it now, or you can keep refining the requirements first.",
+      state: {
+        readiness: "ready",
+        summary: buildRequirementSummary(capturedRequirements),
+        missingInformation,
+        capturedRequirements,
+      },
+    };
+  }
+
+  return {
+    assistantMessage: buildFallbackQuestion(params.learner.firstName, missingInformation[0]),
+    state: {
+      readiness: "gathering",
+      summary: buildRequirementSummary(capturedRequirements),
+      missingInformation,
+      capturedRequirements,
+    },
+  };
+}
+
+function buildFallbackArtifact(params: {
+  learner: AppLearner;
+  messages: ChatMessage[];
+}): CurriculumAiGeneratedArtifact {
+  const capturedRequirements = inferCapturedRequirements(params.messages);
+  const topic = extractTopicLabel(capturedRequirements.topic || collectUserMessages(params.messages)[0] || "Custom Study");
+  const title = toTitleCase(topic);
+  const subjects = inferSubjects(
+    [
+      capturedRequirements.topic,
+      capturedRequirements.goals,
+      capturedRequirements.structurePreferences,
+    ].join(" "),
+  );
+  const gradeLevels = inferGradeLevels(
+    [
+      capturedRequirements.topic,
+      capturedRequirements.goals,
+      capturedRequirements.learnerProfile,
+    ].join(" "),
+  );
+  const skills = buildFallbackSkills(title, capturedRequirements);
+  const skillGroups = chunk(skills, Math.max(2, Math.ceil(skills.length / 3)));
+  const document = {
+    [title]: {
+      Foundations: {
+        "Core Ideas": skillGroups[0] ?? skills,
+      },
+      Practice: {
+        "Applied Work": skillGroups[1] ?? skills.slice(0, 3),
+        "Independent Growth": skillGroups[2] ?? skills.slice(Math.max(0, skills.length - 3)),
+      },
+    },
+  };
+
+  const units = skillGroups.map((group, index) => ({
+    title:
+      index === 0
+        ? `${title} Foundations`
+        : index === 1
+          ? `${title} Guided Practice`
+          : `${title} Independent Growth`,
+    description:
+      index === 0
+        ? `Build the essential vocabulary, concepts, and routines for ${title.toLowerCase()}.`
+        : index === 1
+          ? `Practice the main skills in teachable, low-prep sessions.`
+          : `Apply the learning with more independence and visible progress checks.`,
+    estimatedWeeks: estimateWeeksPerUnit(capturedRequirements.timeframe, skillGroups.length, index),
+    lessons: group.map((skillTitle, lessonIndex) => ({
+      title:
+        lessonIndex === 0
+          ? `Introduction to ${skillTitle}`
+          : `${skillTitle} in practice`,
+      description: `Teach and rehearse ${skillTitle.toLowerCase()} in a way that fits ${params.learner.firstName}'s pace and current readiness.`,
+      subject: subjects[0],
+      estimatedMinutes: estimateLessonMinutes(capturedRequirements.timeframe),
+      materials: buildFallbackMaterials(title, capturedRequirements),
+      objectives: [
+        `Explain or demonstrate ${skillTitle.toLowerCase()}.`,
+        "Show visible progress through guided practice, discussion, or a short performance task.",
+      ],
+      linkedSkillTitles: [skillTitle],
+    })),
+  }));
+
+  const normalizedTimeframe = normalizeTimeframePhrase(capturedRequirements.timeframe);
+  const goalFragment = toSentenceFragment(capturedRequirements.goals);
+
+  return sanitizeArtifact({
+    source: {
+      title,
+      description: [
+        `${params.learner.displayName} will work through a ${title.toLowerCase()} curriculum`,
+        normalizedTimeframe ? `paced around ${normalizedTimeframe}` : null,
+        goalFragment ? `with emphasis on ${shorten(goalFragment, 110)}` : null,
+      ]
+        .filter(Boolean)
+        .join(", ") + ".",
+      subjects,
+      gradeLevels,
+      academicYear: undefined,
+      summary:
+        `${params.learner.displayName} will build ${title.toLowerCase()} through a coherent sequence of skills, units, and lessons that match the family's requested pace and constraints.`,
+      teachingApproach:
+        "Use short, teachable lessons that connect new ideas to prior knowledge, guided practice, and visible reflection.",
+      successSignals: [
+        "The learner can explain and apply the main ideas with growing independence.",
+        "The parent can point to concrete lesson artifacts or performances that show progress.",
+        "The sequence remains sustainable within the stated time and prep constraints.",
+      ],
+      parentNotes: [
+        capturedRequirements.constraints
+          ? `Keep the routine aligned to these constraints: ${shorten(capturedRequirements.constraints, 120)}.`
+          : "Keep prep light and protect consistency over novelty.",
+        capturedRequirements.learnerProfile
+          ? `Differentiate from current readiness: ${shorten(capturedRequirements.learnerProfile, 120)}.`
+          : "Use short feedback loops so the learner's confidence stays visible.",
+      ].filter(Boolean) as string[],
+      rationale: [
+        "The curriculum is organized as a skill progression instead of a loose topic list.",
+        "Units and lessons are aligned to the requested goals, pace, and teaching constraints.",
+        "The outline leaves room for later lesson-plan generation without losing curricular coherence.",
+      ],
+    },
+    intakeSummary: buildRequirementSummary(capturedRequirements),
+    document,
+    units,
+  });
+}
+
+function inferCapturedRequirements(messages: ChatMessage[]): CurriculumAiCapturedRequirements {
+  const userMessages = collectUserMessages(messages);
+  const combined = userMessages.join(" ");
+  const openingMessage = userMessages[0] ?? "";
+  const openingSentences = splitIntoSentences(openingMessage);
+  const openingTopicSentence = openingSentences[0] ?? openingMessage;
+  const openingGoalRemainder = openingSentences.slice(1).join(" ").trim();
+
+  const requirements = {
+    topic: extractTopicLabel(openingTopicSentence),
+    goals:
+      openingGoalRemainder ||
+      findFirstMatchingMessage(userMessages.slice(1), /(goal|by the end|want .* to|hope|outcome|master)/i) ||
+      "",
+    timeframe: firstMatch(combined, /\b(?:\d+\s+(?:week|weeks|month|months|day|days|session|sessions)|semester|year|daily|weekly|minutes?)\b.*?(?:\.|$)/i),
+    learnerProfile:
+      findFirstMatchingMessage(
+        userMessages,
+        /(already know|struggle|support|learn best|confidence|attention|ready|experience)/i,
+      ) ?? "",
+    constraints:
+      findFirstMatchingMessage(
+        userMessages,
+        /(material|resource|prep|schedule|routine|constraint|avoid|need|have|offline|budget)/i,
+      ) ?? "",
+    teachingStyle:
+      findFirstMatchingMessage(
+        userMessages,
+        /(hands-on|discussion|project|visual|direct instruction|short lessons|practice)/i,
+      ) ?? "",
+    assessment:
+      findFirstMatchingMessage(
+        userMessages,
+        /(assess|progress|show|portfolio|project|demonstrate|evidence|mastery)/i,
+      ) ?? "",
+    structurePreferences:
+      findFirstMatchingMessage(
+        userMessages,
+        /(unit|sequence|domain|strand|theme|project-based|skill progression|lesson)/i,
+      ) ?? "",
+  };
+
+  return sanitizeCapturedRequirements(requirements);
+}
+
+function sanitizeCapturedRequirements(
+  requirements: CurriculumAiCapturedRequirements,
+): CurriculumAiCapturedRequirements {
+  return CurriculumAiCapturedRequirementsSchema.parse({
+    topic: requirements.topic.trim(),
+    goals: requirements.goals.trim(),
+    timeframe: requirements.timeframe.trim(),
+    learnerProfile: requirements.learnerProfile.trim(),
+    constraints: requirements.constraints.trim(),
+    teachingStyle: requirements.teachingStyle.trim(),
+    assessment: requirements.assessment.trim(),
+    structurePreferences: requirements.structurePreferences.trim(),
+  });
+}
+
+function getMissingRequirements(requirements: CurriculumAiCapturedRequirements) {
+  const missing: string[] = [];
+
+  if (!requirements.topic) missing.push("topic");
+  if (!requirements.goals) missing.push("goals");
+  if (!requirements.timeframe) missing.push("timeframe");
+  if (!requirements.learnerProfile) missing.push("learner profile");
+  if (!requirements.constraints) missing.push("constraints");
+  if (!requirements.assessment) missing.push("assessment");
+  if (!requirements.structurePreferences) missing.push("structure");
+
+  return missing.slice(0, 6);
+}
+
+function buildFallbackQuestion(learnerFirstName: string, missing: string) {
+  switch (missing) {
+    case "topic":
+      return `What do you want ${learnerFirstName} to study, and what makes that topic worth building a curriculum around right now?`;
+    case "goals":
+      return "What should the learner be able to do, explain, or produce by the end of this curriculum?";
+    case "timeframe":
+      return "How much time do you want this curriculum to cover, and what kind of weekly rhythm is realistic?";
+    case "learner profile":
+      return `What does ${learnerFirstName} already know, and where do they tend to need support or confidence-building?`;
+    case "constraints":
+      return "What materials, routines, family constraints, or prep limits should this curriculum respect?";
+    case "assessment":
+      return "How do you want to notice progress or mastery as the curriculum unfolds?";
+    case "structure":
+      return "Do you want this organized more like a skill progression, a themed study, a project sequence, or something else?";
+    default:
+      return "Tell me a bit more about what this curriculum needs to accomplish.";
+  }
+}
+
+function buildRequirementSummary(requirements: CurriculumAiCapturedRequirements) {
+  const parts = [
+    requirements.topic ? `Topic: ${requirements.topic}` : null,
+    requirements.goals ? `Goals: ${shorten(requirements.goals, 160)}` : null,
+    requirements.timeframe ? `Pacing: ${requirements.timeframe}` : null,
+    requirements.learnerProfile ? `Learner: ${shorten(requirements.learnerProfile, 160)}` : null,
+    requirements.constraints ? `Constraints: ${shorten(requirements.constraints, 160)}` : null,
+  ].filter(Boolean);
+
+  return parts.length > 0
+    ? parts.join(" ")
+    : "The intake is still gathering the core requirements for this curriculum.";
+}
+
+function artifactMatchesConversation(artifact: CurriculumAiGeneratedArtifact, messages: ChatMessage[]) {
+  const combinedText = JSON.stringify({
+    title: artifact.source.title,
+    description: artifact.source.description,
+    summary: artifact.source.summary,
+    document: artifact.document,
+    units: artifact.units.map((unit) => ({
+      title: unit.title,
+      lessons: unit.lessons.map((lesson) => lesson.title),
+    })),
+  }).toLowerCase();
+
+  const topicKeywords = extractMeaningfulKeywords(collectUserMessages(messages).join(" "));
+  if (topicKeywords.length === 0) {
+    return true;
+  }
+
+  return topicKeywords.some((keyword) => combinedText.includes(keyword));
+}
+
+function normalizeMessages(messages: CurriculumAiChatMessage[]): ChatMessage[] {
+  return messages.map((message) => ({
+    role: message.role,
+    content: message.content.trim(),
+  }));
+}
+
+function collectUserMessages(messages: ChatMessage[]) {
+  return messages
+    .filter((message) => message.role === "user")
+    .map((message) => message.content.trim())
+    .filter(Boolean);
+}
+
+function findFirstMatchingMessage(messages: string[], pattern: RegExp) {
+  return messages.find((message) => pattern.test(message)) ?? null;
+}
+
+function firstMatch(value: string, pattern: RegExp) {
+  return value.match(pattern)?.[0]?.trim() ?? "";
+}
+
+function buildFallbackSkills(
+  topic: string,
+  requirements: CurriculumAiCapturedRequirements,
+) {
+  const loweredTopic = topic.toLowerCase();
+
+  if (loweredTopic.includes("chess")) {
+    return [
+      "Set up the board and explain the role of each piece",
+      "Apply legal moves, captures, and special rules",
+      "Read and write simple algebraic notation",
+      "Recognize check, checkmate, and stalemate",
+      "Use basic opening principles",
+      "Plan one move ahead and notice simple tactics",
+    ];
+  }
+
+  return [
+    `Build core vocabulary in ${topic.toLowerCase()}`,
+    `Explain foundational concepts in ${topic.toLowerCase()}`,
+    `Practice guided application in ${topic.toLowerCase()}`,
+    `Use feedback to improve work in ${topic.toLowerCase()}`,
+    `Show independent understanding of ${topic.toLowerCase()}`,
+    requirements.goals
+      ? `Work toward the parent's priority outcome: ${shorten(toSentenceFragment(requirements.goals), 90)}`
+      : `Reflect on progress and next steps in ${topic.toLowerCase()}`,
+  ];
+}
+
+function buildFallbackMaterials(topic: string, requirements: CurriculumAiCapturedRequirements) {
+  const materials: string[] = [];
+  const constraintsLower = requirements.constraints.toLowerCase();
+
+  if (topic.toLowerCase().includes("chess")) {
+    materials.push("chess board", "pieces", "short practice positions");
+  }
+  if (constraintsLower.includes("book")) {
+    materials.push("family-selected reference book");
+  }
+  if (constraintsLower.includes("workbook")) {
+    materials.push("workbook or printed practice page");
+  }
+
+  return materials.length > 0 ? uniqueNonEmpty(materials) : ["notebook", "simple practice materials"];
+}
+
+function estimateLessonMinutes(timeframe: string) {
+  const match = timeframe.match(/(\d+)\s*minute/i);
+  return match?.[1] ? Number(match[1]) : 30;
+}
+
+function estimateWeeksPerUnit(timeframe: string, unitCount: number, index: number) {
+  const match = timeframe.match(/(\d+)\s*week/i);
+  if (!match?.[1]) {
+    return index === unitCount - 1 ? 1 : undefined;
+  }
+
+  const totalWeeks = Number(match[1]);
+  return Math.max(1, Math.round(totalWeeks / unitCount));
+}
+
 function extractTopicLabel(value: string) {
-  const cleaned = value
+  const firstSentence = splitIntoSentences(value)[0] ?? value;
+  const curriculumMatch = firstSentence.match(
+    /(?:want|need|build|create|design|make)\s+(?:a|an)?\s*(.+?)\s+curriculum\b/i,
+  );
+  if (curriculumMatch?.[1]) {
+    return cleanTopicFragment(curriculumMatch[1]);
+  }
+
+  const learnMatch = firstSentence.match(
+    /(?:want|need)\s+to\s+(?:learn|study|explore)\s+(?:about\s+)?(.+)/i,
+  );
+  if (learnMatch?.[1]) {
+    return cleanTopicFragment(learnMatch[1]);
+  }
+
+  const cleaned = firstSentence
     .replace(/^we\s+(want|need)\s+to\s+(learn|study|explore)\s+/i, "")
     .replace(/^i\s+(want|need)\s+to\s+(learn|study|explore|build)\s+(about\s+)?/i, "")
     .replace(/^please\s+(help|make|create)\s+(me\s+)?(a\s+)?/i, "")
@@ -191,39 +564,6 @@ function extractTopicLabel(value: string) {
     .replace(/[.?!]+$/, "");
 
   return cleaned.length > 0 ? cleaned : "Custom Study";
-}
-
-function isDraftGroundedInTopic(
-  draft: CurriculumAiDraft,
-  answerMap: Map<CurriculumAiDraftAnswer["questionId"], string>,
-) {
-  const topicAnswer = answerMap.get("topic") ?? "";
-  const topicKeywords = extractMeaningfulKeywords(extractTopicLabel(topicAnswer));
-
-  if (topicKeywords.length === 0) {
-    return true;
-  }
-
-  const combinedDraftText = [
-    draft.title,
-    draft.description,
-    draft.summary,
-    draft.subjects.join(" "),
-    draft.rationale.join(" "),
-  ]
-    .join(" ")
-    .toLowerCase();
-
-  return topicKeywords.some((keyword) => combinedDraftText.includes(keyword));
-}
-
-function extractMeaningfulKeywords(value: string) {
-  return value
-    .toLowerCase()
-    .split(/[^a-z0-9]+/)
-    .map((part) => part.trim())
-    .filter((part) => part.length >= 4)
-    .filter((part) => !["learn", "study", "about", "curriculum", "plan"].includes(part));
 }
 
 function inferSubjects(text: string) {
@@ -263,15 +603,9 @@ function inferGradeLevels(text: string) {
     }
   }
 
-  if (value.includes("kindergarten")) {
-    matches.add("K");
-  }
-  if (value.includes("middle school")) {
-    matches.add("6-8");
-  }
-  if (value.includes("high school")) {
-    matches.add("9-12");
-  }
+  if (value.includes("kindergarten")) matches.add("K");
+  if (value.includes("middle school")) matches.add("6-8");
+  if (value.includes("high school")) matches.add("9-12");
 
   return [...matches].slice(0, 4);
 }
@@ -302,6 +636,41 @@ function toSentenceFragment(value: string) {
 
 function normalizeTimeframePhrase(value: string) {
   return toSentenceFragment(value).replace(/^plan\s+for\s+/i, "");
+}
+
+function extractMeaningfulKeywords(value: string) {
+  return value
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .map((part) => part.trim())
+    .filter((part) => part.length >= 4)
+    .filter((part) => !["learn", "study", "about", "curriculum", "plan", "want", "need"].includes(part));
+}
+
+function chunk<T>(items: T[], size: number) {
+  const groups: T[][] = [];
+
+  for (let index = 0; index < items.length; index += size) {
+    groups.push(items.slice(index, index + size));
+  }
+
+  return groups.length > 0 ? groups : [items];
+}
+
+function splitIntoSentences(value: string) {
+  return value
+    .split(/(?<=[.!?])\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function cleanTopicFragment(value: string) {
+  return value
+    .replace(/\bfor\s+my\s+child\b.*$/i, "")
+    .replace(/\bfor\s+the\s+learner\b.*$/i, "")
+    .replace(/\bfor\s+our\s+family\b.*$/i, "")
+    .replace(/[.?!]+$/, "")
+    .trim();
 }
 
 function safeParseJson(content: string) {

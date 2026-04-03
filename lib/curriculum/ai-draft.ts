@@ -1,118 +1,115 @@
 import { z } from "zod";
 
-export const CurriculumAiDraftQuestionIdSchema = z.enum([
-  "topic",
-  "goals",
-  "timeframe",
-  "learnerProfile",
-  "constraints",
-]);
+const CurriculumAiChatRoleSchema = z.enum(["user", "assistant"]);
 
-export type CurriculumAiDraftQuestionId = z.infer<typeof CurriculumAiDraftQuestionIdSchema>;
-
-export interface CurriculumAiDraftQuestion {
-  id: CurriculumAiDraftQuestionId;
-  prompt: string;
-  helperText: string;
-  placeholder: string;
-  suggestedReplies: string[];
-}
-
-export function buildCurriculumAiDraftQuestions(
-  learnerName: string,
-): CurriculumAiDraftQuestion[] {
-  return [
-    {
-      id: "topic",
-      prompt: `What does ${learnerName} want to learn or explore right now?`,
-      helperText:
-        "Start with the topic, interest, or experience you want this curriculum to revolve around.",
-      placeholder: "For example: I want to build a chess curriculum for my child.",
-      suggestedReplies: [
-        "We want to learn about chess.",
-        "I want a hands-on nature study around birds and habitats.",
-        "We need a writing curriculum focused on personal narratives.",
-      ],
-    },
-    {
-      id: "goals",
-      prompt: "What do you hope will be true by the end of this plan?",
-      helperText:
-        "Name the skills, habits, or products you want to see so the draft can aim at clear outcomes.",
-      placeholder: "Describe the goals, milestones, or visible outcomes you want.",
-      suggestedReplies: [
-        "I want them to understand the rules, notation, and basic strategy.",
-        "I want confidence, consistency, and a project they can show off.",
-        "I want a balance of knowledge, practice, and independent work.",
-      ],
-    },
-    {
-      id: "timeframe",
-      prompt: "How much time do you want to plan for, and what pace is realistic?",
-      helperText:
-        "A strong draft needs pacing, session length, and planning horizon, not just content coverage.",
-      placeholder: "For example: 6 weeks, three 30-minute sessions per week.",
-      suggestedReplies: [
-        "About 6 weeks with three 30-minute sessions each week.",
-        "A one-month unit with short daily lessons.",
-        "A semester-long study with two deeper sessions each week.",
-      ],
-    },
-    {
-      id: "learnerProfile",
-      prompt: `What does ${learnerName} already know, and what support do they need?`,
-      helperText:
-        "Prior knowledge, confidence, attention, and challenge level should shape the sequence.",
-      placeholder: "Share what they already know, where they struggle, and how they learn best.",
-      suggestedReplies: [
-        "They know the basic moves but need help thinking ahead.",
-        "They are curious but get discouraged when work feels too open-ended.",
-        "They learn best with visuals, discussion, and short practice bursts.",
-      ],
-    },
-    {
-      id: "constraints",
-      prompt: "Are there any materials, routines, or non-negotiables I should plan around?",
-      helperText:
-        "Include available resources, preferred formats, assessment ideas, and any family constraints.",
-      placeholder: "Mention books, tools, outings, routines, or things this plan should avoid.",
-      suggestedReplies: [
-        "We have a chess board, a few beginner books, and want offline practice.",
-        "Please keep prep light and include project-based work.",
-        "We need something flexible enough for mixed-energy days.",
-      ],
-    },
-  ];
-}
-
-export const CurriculumAiDraftAnswerSchema = z.object({
-  questionId: CurriculumAiDraftQuestionIdSchema,
-  answer: z.string().trim().min(1).max(4_000),
+export const CurriculumAiChatMessageSchema = z.object({
+  role: CurriculumAiChatRoleSchema,
+  content: z.string().trim().min(1).max(8_000),
 });
 
-export type CurriculumAiDraftAnswer = z.infer<typeof CurriculumAiDraftAnswerSchema>;
+export type CurriculumAiChatMessage = z.infer<typeof CurriculumAiChatMessageSchema>;
 
-export const CurriculumAiDraftRequestSchema = z.object({
-  answers: z.array(CurriculumAiDraftAnswerSchema).min(3),
+export const CurriculumAiCapturedRequirementsSchema = z.object({
+  topic: z.string().default(""),
+  goals: z.string().default(""),
+  timeframe: z.string().default(""),
+  learnerProfile: z.string().default(""),
+  constraints: z.string().default(""),
+  teachingStyle: z.string().default(""),
+  assessment: z.string().default(""),
+  structurePreferences: z.string().default(""),
 });
 
-export const CurriculumAiDraftSchema = z.object({
+export type CurriculumAiCapturedRequirements = z.infer<
+  typeof CurriculumAiCapturedRequirementsSchema
+>;
+
+export const CurriculumAiIntakeStateSchema = z.object({
+  readiness: z.enum(["gathering", "ready"]),
+  summary: z.string().trim().min(1).max(1_200),
+  missingInformation: z.array(z.string().trim().min(1).max(240)).max(6).default([]),
+  capturedRequirements: CurriculumAiCapturedRequirementsSchema,
+});
+
+export type CurriculumAiIntakeState = z.infer<typeof CurriculumAiIntakeStateSchema>;
+
+export const CurriculumAiChatTurnSchema = z.object({
+  assistantMessage: z.string().trim().min(1).max(1_500),
+  state: CurriculumAiIntakeStateSchema,
+});
+
+export type CurriculumAiChatTurn = z.infer<typeof CurriculumAiChatTurnSchema>;
+
+export const CurriculumAiChatRequestSchema = z.object({
+  messages: z.array(CurriculumAiChatMessageSchema).max(40).default([]),
+});
+
+export const CurriculumAiDraftSummarySchema = z.object({
   title: z.string().trim().min(1).max(160),
   description: z.string().trim().min(1).max(600),
-  subjects: z.array(z.string().trim().min(1).max(80)).max(5).default([]),
+  subjects: z.array(z.string().trim().min(1).max(80)).max(6).default([]),
   gradeLevels: z.array(z.string().trim().min(1).max(40)).max(4).default([]),
   academicYear: z.string().trim().min(1).max(80).optional(),
-  summary: z.string().trim().min(1).max(900),
-  teachingApproach: z.string().trim().min(1).max(300),
-  successSignals: z.array(z.string().trim().min(1).max(200)).max(5).default([]),
-  parentNotes: z.array(z.string().trim().min(1).max(240)).max(5).default([]),
-  rationale: z.array(z.string().trim().min(1).max(240)).max(5).default([]),
+  summary: z.string().trim().min(1).max(1_200),
+  teachingApproach: z.string().trim().min(1).max(400),
+  successSignals: z.array(z.string().trim().min(1).max(220)).max(6).default([]),
+  parentNotes: z.array(z.string().trim().min(1).max(260)).max(6).default([]),
+  rationale: z.array(z.string().trim().min(1).max(260)).max(6).default([]),
 });
 
-export type CurriculumAiDraft = z.infer<typeof CurriculumAiDraftSchema>;
+export type CurriculumAiDraftSummary = z.infer<typeof CurriculumAiDraftSummarySchema>;
 
-export const CurriculumAiDraftResponseSchema = z.object({
-  draft: CurriculumAiDraftSchema,
+type CurriculumJsonNode = string | string[] | { [key: string]: CurriculumJsonNode };
+
+export const CurriculumAiDocumentNodeSchema: z.ZodType<CurriculumJsonNode> = z.lazy(() =>
+  z.union([
+    z.string().trim().min(1).max(240),
+    z.array(z.string().trim().min(1).max(240)).min(1).max(16),
+    z.record(z.string().trim().min(1).max(180), CurriculumAiDocumentNodeSchema),
+  ]),
+);
+
+export const CurriculumAiLessonSchema = z.object({
+  title: z.string().trim().min(1).max(180),
+  description: z.string().trim().min(1).max(600),
+  subject: z.string().trim().min(1).max(80).optional(),
+  estimatedMinutes: z.number().int().positive().max(240).optional(),
+  materials: z.array(z.string().trim().min(1).max(180)).max(12).default([]),
+  objectives: z.array(z.string().trim().min(1).max(220)).max(8).default([]),
+  linkedSkillTitles: z.array(z.string().trim().min(1).max(180)).max(8).default([]),
 });
 
-export type CurriculumAiDraftResponse = z.infer<typeof CurriculumAiDraftResponseSchema>;
+export type CurriculumAiLesson = z.infer<typeof CurriculumAiLessonSchema>;
+
+export const CurriculumAiUnitSchema = z.object({
+  title: z.string().trim().min(1).max(180),
+  description: z.string().trim().min(1).max(700),
+  estimatedWeeks: z.number().positive().max(52).optional(),
+  lessons: z.array(CurriculumAiLessonSchema).min(1).max(12),
+});
+
+export type CurriculumAiUnit = z.infer<typeof CurriculumAiUnitSchema>;
+
+export const CurriculumAiGeneratedArtifactSchema = z.object({
+  source: CurriculumAiDraftSummarySchema,
+  intakeSummary: z.string().trim().min(1).max(1_500),
+  document: z.record(z.string().trim().min(1).max(180), CurriculumAiDocumentNodeSchema),
+  units: z.array(CurriculumAiUnitSchema).min(1).max(16),
+});
+
+export type CurriculumAiGeneratedArtifact = z.infer<typeof CurriculumAiGeneratedArtifactSchema>;
+
+export const CurriculumAiCreateRequestSchema = z.object({
+  messages: z.array(CurriculumAiChatMessageSchema).max(40).min(2),
+});
+
+export const CurriculumAiCreateResponseSchema = z.object({
+  sourceId: z.string(),
+  sourceTitle: z.string(),
+  nodeCount: z.number().int().nonnegative(),
+  skillCount: z.number().int().nonnegative(),
+  unitCount: z.number().int().nonnegative(),
+  lessonCount: z.number().int().nonnegative(),
+});
+
+export type CurriculumAiCreateResponse = z.infer<typeof CurriculumAiCreateResponseSchema>;

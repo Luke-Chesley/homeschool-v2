@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CurriculumTree } from "@/components/curriculum/CurriculumTree";
 import { requireAppSession } from "@/lib/app-session/server";
-import { getCurriculumTree } from "@/lib/curriculum/service";
+import { getCurriculumTree, listCurriculumOutline } from "@/lib/curriculum/service";
 
 interface Props {
   params: Promise<{ sourceId: string }>;
@@ -22,6 +22,8 @@ export default async function CurriculumSourcePage({ params }: Props) {
   if (!tree) notFound();
 
   const { source } = tree;
+  const outline = await listCurriculumOutline(sourceId);
+  const lessonCount = outline.reduce((total, unit) => total + unit.lessons.length, 0);
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-8 px-6 py-8">
@@ -71,6 +73,8 @@ export default async function CurriculumSourcePage({ params }: Props) {
             <div className="flex gap-2 text-xs text-muted-foreground">
               <span>{tree.nodeCount} nodes</span>
               <span>{tree.skillCount} skills</span>
+              <span>{outline.length} units</span>
+              <span>{lessonCount} lessons</span>
             </div>
           </div>
           {tree.rootNodes.length === 0 ? (
@@ -112,6 +116,46 @@ export default async function CurriculumSourcePage({ params }: Props) {
                   Browse standards
                 </Button>
               </Link>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Teaching Outline</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {outline.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No units or lessons have been generated for this curriculum yet.
+                </p>
+              ) : (
+                outline.slice(0, 4).map((unit) => (
+                  <div key={unit.id} className="rounded-xl border border-border/70 px-3 py-3">
+                    <p className="text-sm font-medium">{unit.title}</p>
+                    {unit.description ? (
+                      <p className="mt-1 text-xs text-muted-foreground">{unit.description}</p>
+                    ) : null}
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      {unit.lessons.length} lessons
+                      {typeof unit.estimatedWeeks === "number"
+                        ? ` · ${unit.estimatedWeeks} week${unit.estimatedWeeks === 1 ? "" : "s"}`
+                        : ""}
+                    </p>
+                    <div className="mt-2 space-y-1">
+                      {unit.lessons.slice(0, 3).map((lesson) => (
+                        <p key={lesson.id} className="text-xs text-muted-foreground">
+                          {lesson.title}
+                        </p>
+                      ))}
+                      {unit.lessons.length > 3 ? (
+                        <p className="text-xs text-muted-foreground">
+                          +{unit.lessons.length - 3} more lessons
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                ))
+              )}
             </CardContent>
           </Card>
         </div>

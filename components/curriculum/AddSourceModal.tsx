@@ -170,32 +170,21 @@ function UploadForm({ onCancel }: { onCancel: () => void }) {
 // ---------------------------------------------------------------------------
 
 function AiDraftForm({
-  householdId,
   activeLearner,
-  onSubmit,
+  onCreatedSourceId,
   onCancel,
 }: {
-  householdId: string;
   activeLearner: {
     displayName: string;
     firstName: string;
   };
-  onSubmit: (data: {
-    title: string;
-    description: string;
-    kind: CurriculumSourceKind;
-    subjects: string[];
-    gradeLevels: string[];
-    householdId: string;
-    academicYear?: string;
-  }) => void;
+  onCreatedSourceId: (sourceId: string) => void;
   onCancel: () => void;
 }) {
   return (
     <AiDraftConversation
-      householdId={householdId}
       activeLearner={activeLearner}
-      onCreate={onSubmit}
+      onCreatedSourceId={onCreatedSourceId}
       onCancel={onCancel}
     />
   );
@@ -250,6 +239,7 @@ export interface AddSourceModalContentProps {
     displayName: string;
     firstName: string;
   };
+  onCreatedSourceId: (sourceId: string) => void;
   onCreated: (
     data:
       | {
@@ -272,6 +262,7 @@ export interface AddSourceModalContentProps {
 export function AddSourceModalContent({
   householdId,
   activeLearner,
+  onCreatedSourceId,
   onCreated,
   onClose,
 }: AddSourceModalContentProps) {
@@ -295,9 +286,8 @@ export function AddSourceModalContent({
   if (selectedKind === "ai_draft") {
     return (
       <AiDraftForm
-        householdId={householdId}
         activeLearner={activeLearner}
-        onSubmit={onCreated}
+        onCreatedSourceId={onCreatedSourceId}
         onCancel={() => setSelectedKind(null)}
       />
     );

@@ -50,6 +50,10 @@ export function NewCurriculumClientPage({
     }
   }
 
+  function handleCreatedSourceId(sourceId: string) {
+    router.push(`/curriculum/${sourceId}`);
+  }
+
   return (
     <div className="flex flex-col gap-8 px-6 py-8 max-w-2xl mx-auto">
       <div className="flex items-center gap-3">
@@ -80,6 +84,7 @@ export function NewCurriculumClientPage({
               householdId={householdId}
               activeLearner={activeLearner}
               onCreated={handleCreated}
+              onCreatedSourceId={handleCreatedSourceId}
               onClose={() => router.back()}
             />
           )}
