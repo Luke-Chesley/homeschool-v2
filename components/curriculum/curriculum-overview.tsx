@@ -1,9 +1,14 @@
+import Link from "next/link";
+import { ArrowRight } from "lucide-react";
+
 import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { CurriculumSource, CurriculumTree as CurriculumTreeData } from "@/lib/curriculum/types";
+import { cn } from "@/lib/utils";
 
 import { CurriculumSourceSelector } from "./curriculum-source-selector";
-import { CurriculumVisualizationPanel } from "./curriculum-visualization-panel";
+import { CurriculumTree } from "./curriculum-tree";
 
 interface CurriculumOverviewProps {
   sources: CurriculumSource[];
@@ -49,17 +54,36 @@ export function CurriculumOverview({ sources, selectedSourceId, tree }: Curricul
         <CardHeader>
           <CardTitle className="text-xl">{tree.source.title}</CardTitle>
           <p className="text-sm text-muted-foreground">
-            Visualize the normalized hierarchy as either an ordered flow map or the underlying tree
-            from persisted <code>curriculum_nodes</code>.
+            Canonical normalized hierarchy from persisted <code>curriculum_nodes</code>, with a
+            dedicated graph workspace available for visual flow.
           </p>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          <div className="rounded-2xl border border-border/70 bg-background/70 p-4">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-foreground">Graph workspace</p>
+                <p className="text-sm text-muted-foreground">
+                  Open the dedicated graph view to inspect connected nodes, hierarchy, and branch
+                  flow in a visual canvas.
+                </p>
+              </div>
+              <Link
+                href={`/curriculum/graph?sourceId=${selectedSourceId}`}
+                className={cn(buttonVariants({ size: "sm" }), "w-full justify-center lg:w-auto")}
+              >
+                Open graph view
+                <ArrowRight className="size-4" />
+              </Link>
+            </div>
+          </div>
+
           {tree.rootNodes.length === 0 ? (
             <p className="rounded-lg border border-dashed border-border/70 px-4 py-8 text-center text-sm text-muted-foreground">
               This source has no normalized nodes yet.
             </p>
           ) : (
-            <CurriculumVisualizationPanel tree={tree} />
+            <CurriculumTree tree={tree} />
           )}
         </CardContent>
       </Card>
