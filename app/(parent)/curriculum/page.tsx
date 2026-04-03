@@ -58,9 +58,14 @@ function CurriculumPageHeader({ description }: { description?: string }) {
         <h1 className="font-serif text-3xl leading-tight tracking-tight">Curriculum</h1>
         {description ? <p className="mt-1 text-sm text-muted-foreground">{description}</p> : null}
       </div>
-      <Link href="/curriculum/new" className={buttonVariants({ variant: "default", size: "sm" })}>
-        Add curriculum
-      </Link>
+      <div className="flex flex-wrap gap-2">
+        <Link href="/curriculum/manage" className={buttonVariants({ variant: "outline", size: "sm" })}>
+          Manage sources
+        </Link>
+        <Link href="/curriculum/new" className={buttonVariants({ variant: "default", size: "sm" })}>
+          Add curriculum
+        </Link>
+      </div>
     </header>
   );
 }
