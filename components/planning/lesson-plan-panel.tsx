@@ -5,7 +5,7 @@ import { Loader2, Sparkles } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { MarkdownContent } from "@/components/ui/markdown-content";
 import { cn } from "@/lib/utils";
 
@@ -75,9 +75,6 @@ export function LessonPlanPanel({
     setState({ status: "idle" });
     setPromptDebugState({ status: "idle", open: false });
   }, [contextKey]);
-
-  const buttonLabel =
-    state.status === "ready" ? "Regenerate lesson plan" : "Generate lesson plan";
 
   async function handleGenerate() {
     setState({ status: "loading" });
@@ -160,145 +157,107 @@ export function LessonPlanPanel({
   }
 
   return (
-    <Card className="border-border/70 bg-card/88 shadow-sm">
-      <CardHeader className="space-y-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline">{routeItemCount} items</Badge>
-          <Badge variant="secondary">{totalMinutes} min</Badge>
-          <Badge variant="outline">{objectiveCount} objectives</Badge>
-        </div>
-        <CardDescription>Lesson plan generation</CardDescription>
-        <CardTitle className="font-serif text-2xl leading-tight">
-          Draft from today&apos;s objectives and this week&apos;s route
-        </CardTitle>
-        <p className="max-w-3xl text-sm leading-7 text-muted-foreground">
-          Uses the current route items, daily objectives, and weekly planning context to generate a lesson plan you can teach from directly on this page.
-        </p>
-      </CardHeader>
-
-      <CardContent className="space-y-5">
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-          <details className="rounded-3xl border border-border/70 bg-background/65 px-4 py-3">
-            <summary className="cursor-pointer select-none text-sm font-medium text-foreground">
-              Prompt context
-            </summary>
-            <div className="mt-3 grid gap-2 text-sm leading-6 text-muted-foreground">
-              <div>
-                <span className="font-semibold text-foreground">Source:</span> {sourceTitle}
-              </div>
-              <div>
-                <span className="font-semibold text-foreground">Route items:</span>{" "}
-                {routeItemTitles.length > 0 ? routeItemTitles.join(" · ") : "No route items"}
-              </div>
-              <div>
-                <span className="font-semibold text-foreground">Objectives:</span>{" "}
-                {objectives.length > 0 ? objectives.join(" · ") : "None captured"}
-              </div>
-            </div>
-          </details>
-
-          <div className="rounded-3xl border border-border/70 bg-background/65 px-4 py-3">
-            <p className="text-sm font-medium text-foreground">What changes now</p>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              The generated draft renders as markdown in the main flow, so the page can read like a real lesson plan instead of raw model text.
-            </p>
+    <Card>
+      <div className="space-y-5 p-5">
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline">{routeItemCount} items</Badge>
+            <Badge variant="outline">{totalMinutes} min</Badge>
+            <Badge variant="outline">{objectiveCount} targets</Badge>
+          </div>
+          <div>
+            <h2 className="font-serif text-2xl">Lesson draft</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{sourceTitle}</p>
           </div>
         </div>
 
-        <div className="relative flex flex-wrap items-start gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             type="button"
             onClick={handleGenerate}
             disabled={state.status === "loading" || routeItemCount === 0}
-            className={cn(buttonVariants({ variant: "default", size: "sm" }), "w-full sm:w-auto")}
+            className={cn(buttonVariants({ variant: "default", size: "sm" }))}
           >
             {state.status === "loading" ? (
               <Loader2 className="size-4 animate-spin" />
             ) : (
               <Sparkles className="size-4" />
             )}
-            {buttonLabel}
+            {state.status === "ready" ? "Regenerate" : "Generate"}
           </button>
 
           <button
             type="button"
             onClick={handlePromptPreview}
             disabled={routeItemCount === 0 || promptDebugState.status === "loading"}
-            className={cn(buttonVariants({ variant: "outline", size: "sm" }), "w-full sm:w-auto")}
+            className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
           >
-            {promptDebugState.status === "loading" ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : null}
+            {promptDebugState.status === "loading" ? <Loader2 className="size-4 animate-spin" /> : null}
             {promptDebugState.open ? "Hide prompt" : "View prompt"}
           </button>
-
-          {promptDebugState.open ? (
-            <div className="z-10 w-full rounded-3xl border border-border/70 bg-background/98 p-4 shadow-lg sm:absolute sm:top-11 sm:right-0 sm:max-w-3xl">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-medium text-foreground">Prompt preview</p>
-                  <p className="text-xs leading-5 text-muted-foreground">
-                    Exact system and user prompt content for the current lesson-plan request.
-                  </p>
-                </div>
-              </div>
-
-              {promptDebugState.status === "error" ? (
-                <div className="mt-4 rounded-2xl border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">
-                  {promptDebugState.message}
-                </div>
-              ) : null}
-
-              {promptDebugState.status === "loading" ? (
-                <div className="mt-4 rounded-2xl border border-border/70 bg-muted/40 p-3 text-sm text-muted-foreground">
-                  Building prompt preview...
-                </div>
-              ) : null}
-
-              {promptDebugState.status === "ready" ? (
-                <div className="mt-4 grid gap-4">
-                  <div className="rounded-2xl border border-border/70 bg-muted/30 p-3">
-                    <p className="text-xs font-semibold tracking-[0.16em] text-muted-foreground uppercase">
-                      System prompt
-                    </p>
-                    <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-words text-xs leading-6 text-foreground">
-                      {promptDebugState.systemPrompt}
-                    </pre>
-                  </div>
-
-                  <div className="rounded-2xl border border-border/70 bg-muted/30 p-3">
-                    <p className="text-xs font-semibold tracking-[0.16em] text-muted-foreground uppercase">
-                      User prompt
-                    </p>
-                    <pre className="mt-2 max-h-[26rem] overflow-auto whitespace-pre-wrap break-words text-xs leading-6 text-foreground">
-                      {promptDebugState.userPrompt}
-                    </pre>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
         </div>
 
+        <details className="rounded-lg border border-border/70 bg-background px-4 py-3">
+          <summary className="cursor-pointer text-sm font-medium text-foreground">
+            Context
+          </summary>
+          <div className="mt-3 space-y-3 text-sm text-muted-foreground">
+            <div>
+              <span className="font-medium text-foreground">Route:</span>{" "}
+              {routeItemTitles.length > 0 ? routeItemTitles.join(" · ") : "No route items"}
+            </div>
+            <div>
+              <span className="font-medium text-foreground">Targets:</span>{" "}
+              {objectives.length > 0 ? objectives.join(" · ") : "None"}
+            </div>
+          </div>
+        </details>
+
+        {promptDebugState.open ? (
+          <div className="rounded-lg border border-border/70 bg-background p-4">
+            {promptDebugState.status === "error" ? (
+              <div className="text-sm text-destructive">{promptDebugState.message}</div>
+            ) : null}
+
+            {promptDebugState.status === "loading" ? (
+              <div className="text-sm text-muted-foreground">Building prompt preview...</div>
+            ) : null}
+
+            {promptDebugState.status === "ready" ? (
+              <div className="grid gap-4">
+                <div>
+                  <p className="text-sm font-medium text-foreground">System</p>
+                  <pre className="mt-2 overflow-x-auto whitespace-pre-wrap rounded-lg border border-border/70 bg-muted/35 p-3 text-xs leading-6 text-foreground">
+                    {promptDebugState.systemPrompt}
+                  </pre>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-foreground">User</p>
+                  <pre className="mt-2 max-h-[22rem] overflow-auto whitespace-pre-wrap rounded-lg border border-border/70 bg-muted/35 p-3 text-xs leading-6 text-foreground">
+                    {promptDebugState.userPrompt}
+                  </pre>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
         {state.status === "error" ? (
-          <div className="rounded-3xl border border-destructive/20 bg-destructive/10 p-4 text-sm leading-7 text-destructive">
+          <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-4 text-sm text-destructive">
             {state.message}
           </div>
         ) : null}
 
         {state.status === "ready" ? (
-          <div className="rounded-3xl border border-border/70 bg-background/75 p-5 sm:p-6">
-            <p className="text-xs font-semibold tracking-[0.16em] text-muted-foreground uppercase">
-              Generated lesson plan
-            </p>
-            <MarkdownContent content={state.markdown} className="mt-4" />
+          <div className="rounded-lg border border-border/70 bg-background p-5">
+            <MarkdownContent content={state.markdown} />
           </div>
         ) : (
-          <div className="rounded-3xl border border-dashed border-border/70 bg-background/50 p-4 text-sm leading-7 text-muted-foreground">
-            The lesson plan will render here after you generate it.
+          <div className="rounded-lg border border-dashed border-border/70 bg-background p-4 text-sm text-muted-foreground">
+            Generate a draft when today’s route is set.
           </div>
         )}
-      </CardContent>
+      </div>
     </Card>
   );
 }

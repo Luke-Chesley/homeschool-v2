@@ -123,7 +123,7 @@ function SortableRouteItem({
         transition,
       }}
       className={cn(
-        "min-w-0 rounded-xl border border-border/70 bg-card p-3",
+        "min-w-0 rounded-lg border border-border/70 bg-card p-3",
         isDragging && "opacity-70 shadow-md",
       )}
     >
@@ -132,36 +132,33 @@ function SortableRouteItem({
           <p className="text-sm font-semibold leading-5 break-words">{item.skillTitle}</p>
           <p className="truncate text-xs text-muted-foreground">{item.skillPath}</p>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[10px] font-semibold tracking-[0.16em] text-muted-foreground uppercase">
+            <label className="text-xs text-muted-foreground" htmlFor={`route-state-${item.id}`}>
               State
-            </span>
-            {STATE_OPTIONS.map(({ value, label }) => (
-              <button
-                key={value}
-                type="button"
-                disabled={isSaving}
-                aria-pressed={item.state === value}
-                className={cn(
-                  buttonVariants({
-                    variant: item.state === value ? "default" : "outline",
-                    size: "sm",
-                  }),
-                  "h-7 px-2.5 text-[10px] uppercase tracking-[0.14em]",
-                )}
-                onClick={() => void onChangeState(item.id, value)}
-              >
-                {label}
-              </button>
-            ))}
+            </label>
+            <select
+              id={`route-state-${item.id}`}
+              disabled={isSaving}
+              value={item.state}
+              className="h-8 rounded-md border border-input bg-background px-2 text-sm text-foreground"
+              onChange={(event) =>
+                void onChangeState(item.id, event.currentTarget.value as WeeklyRouteBoardItem["state"])
+              }
+            >
+              {STATE_OPTIONS.map(({ value, label }) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="flex flex-wrap gap-1">
             {item.manualOverrideKind !== "none" ? (
-              <Badge variant="secondary" className="text-[10px] uppercase tracking-[0.14em]">
+              <Badge variant="secondary">
                 {item.manualOverrideKind.replace("_", " ")}
               </Badge>
             ) : null}
             {conflicted ? (
-              <Badge variant="outline" className="text-[10px] uppercase tracking-[0.14em] text-destructive">
+              <Badge variant="outline" className="text-destructive">
                 Conflict
               </Badge>
             ) : null}

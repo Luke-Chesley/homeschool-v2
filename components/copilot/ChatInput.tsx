@@ -42,7 +42,7 @@ export function ChatInput({ onSend, disabled, placeholder }: Props) {
   }
 
   return (
-    <div className="flex items-end gap-2 rounded-2xl border border-input bg-card/80 px-4 py-3 shadow-sm">
+    <div className="flex items-end gap-2 rounded-lg border border-input bg-background px-3 py-3">
       <textarea
         ref={textareaRef}
         value={value}

@@ -1,14 +1,7 @@
-/**
- * Learner-safe layout.
- *
- * Intentionally minimal — no parent navigation, admin controls, or
- * curriculum management links. Keeps the learner's environment distraction-
- * free and clearly separated from the parent workspace.
- */
-
 import { ReactNode } from "react";
+import Link from "next/link";
 import { redirect } from "next/navigation";
-import { BookOpen } from "lucide-react";
+import { ArrowLeft, BookOpen } from "lucide-react";
 
 import { getAppSession } from "@/lib/app-session/server";
 
@@ -27,20 +20,25 @@ export default async function LearnerLayout({ children }: { children: ReactNode 
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
-      {/* Minimal learner header */}
-      <header className="border-b border-border/60 bg-card/80 backdrop-blur-sm">
-        <div className="mx-auto flex h-14 max-w-3xl items-center gap-2 px-4">
-          <BookOpen className="size-5 text-primary" />
-          <span className="font-serif text-base font-semibold">
-            {session.activeLearner.displayName}
-          </span>
+    <div className="min-h-screen bg-background">
+      <header className="border-b border-border/70 bg-background/96">
+        <div className="mx-auto flex h-14 max-w-4xl items-center justify-between gap-4 px-4 sm:px-6">
+          <div className="flex items-center gap-2">
+            <BookOpen className="size-4 text-primary" />
+            <span className="font-serif text-lg">{session.activeLearner.displayName}</span>
+          </div>
+          <Link
+            href="/today"
+            className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <ArrowLeft className="size-4" />
+            Parent
+          </Link>
         </div>
       </header>
 
-      {/* Content */}
-      <main className="flex-1 py-8 px-4">
-        <div className="mx-auto max-w-3xl">{children}</div>
+      <main className="flex-1 px-4 py-6 sm:px-6">
+        <div className="mx-auto max-w-4xl">{children}</div>
       </main>
     </div>
   );

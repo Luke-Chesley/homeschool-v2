@@ -1,13 +1,9 @@
-import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
+import { notFound, redirect } from "next/navigation";
 import { CalendarClock, CalendarDays, LayoutDashboard, Sparkles } from "lucide-react";
 
 import { PlanningShell } from "@/components/planning/planning-shell";
-import {
-  TodayLessonPlanSection,
-  TodayRouteItemsSection,
-} from "@/components/planning/today-workspace-view";
-import { Badge } from "@/components/ui/badge";
+import { TodayWorkspaceView } from "@/components/planning/today-workspace-view";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireAppSession } from "@/lib/app-session/server";
@@ -29,6 +25,14 @@ interface TodayPageProps {
     planItemId?: string | string[];
     alternateWeeklyRouteItemId?: string | string[];
   }>;
+}
+
+function formatLongDate(date: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+  }).format(new Date(`${date}T12:00:00`));
 }
 
 export default async function TodayPage({ searchParams }: TodayPageProps) {
@@ -56,16 +60,16 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
     return (
       <PlanningShell
         currentView="today"
-        title={`${session.activeLearner.displayName}'s daily workspace`}
-        description="Import a curriculum source to turn today into a real route."
+        title="Today"
+        description={session.activeLearner.displayName}
       >
         <Card>
           <CardHeader>
-            <CardTitle>No curriculum source available</CardTitle>
+            <CardTitle>No curriculum source</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Import a curriculum source first so today can load real route items for the active learner.
+              Import a source before building the day.
             </p>
             <Button asChild>
               <Link href="/curriculum">Open curriculum</Link>
@@ -80,9 +84,17 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
     if (action === "complete") {
       await completeTodayPlanItem(session.activeLearner.id, planItemId);
     } else if (action === "push_to_tomorrow") {
-      await pushTodayPlanItemToTomorrow(session.activeLearner.id, planItemId, date ?? new Date().toISOString().slice(0, 10));
+      await pushTodayPlanItemToTomorrow(
+        session.activeLearner.id,
+        planItemId,
+        date ?? new Date().toISOString().slice(0, 10),
+      );
     } else if (action === "remove_today") {
-      await removeTodayPlanItem(session.activeLearner.id, planItemId, date ?? new Date().toISOString().slice(0, 10));
+      await removeTodayPlanItem(
+        session.activeLearner.id,
+        planItemId,
+        date ?? new Date().toISOString().slice(0, 10),
+      );
     } else if (action === "swap_with_alternate" && alternateWeeklyRouteItemId) {
       await swapTodayPlanItemWithAlternate(
         session.activeLearner.id,
@@ -93,7 +105,9 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
     }
 
     const redirectQuery = date ? `?date=${encodeURIComponent(date)}` : "";
-    const sourceQuery = selectedSourceId ? `${redirectQuery ? "&" : "?"}sourceId=${encodeURIComponent(selectedSourceId)}` : "";
+    const sourceQuery = selectedSourceId
+      ? `${redirectQuery ? "&" : "?"}sourceId=${encodeURIComponent(selectedSourceId)}`
+      : "";
     redirect(`/today${redirectQuery}${sourceQuery}`);
   }
 
@@ -145,39 +159,37 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
   return (
     <PlanningShell
       currentView="today"
-      title={`${workspace.learner.name}'s daily workspace`}
-      description={`Active source: ${sourceTitle}. This surface keeps execution, prep, and tracking handoff on the same screen.`}
+      title="Today"
+      description={`${workspace.learner.name} · ${sourceTitle}`}
       navItems={navItems}
       headerSupplement={
-        <div className="rounded-[1.5rem] border border-border/70 bg-background/72 px-4 py-4 sm:px-5">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="outline">{workspace.leadItem.sourceLabel}</Badge>
-            <Badge variant="secondary">{workspace.items.length} items</Badge>
-            <Badge variant="secondary">{totalMinutes} min</Badge>
-            <Badge variant="secondary">
-              {workspace.sessionTargets.length} objective
-              {workspace.sessionTargets.length === 1 ? "" : "s"}
-            </Badge>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
+            <span>{formatLongDate(workspace.date)}</span>
+            <span>{workspace.items.length} items</span>
+            <span>{totalMinutes} min</span>
           </div>
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-foreground">Curriculum overview</p>
-              <p className="text-sm leading-6 text-muted-foreground">
-                {workspace.items.length} curriculum item{workspace.items.length === 1 ? "" : "s"} are in scope for today from{" "}
-                {workspace.leadItem.sourceLabel}.
-              </p>
-            </div>
+          <div className="flex flex-wrap gap-2">
             <Button asChild size="sm" variant="outline">
               <Link href={`/curriculum${selectedSourceId ? `?sourceId=${encodeURIComponent(selectedSourceId)}` : ""}`}>
-                Review curriculum
+                Curriculum
+              </Link>
+            </Button>
+            <Button asChild size="sm" variant="outline">
+              <Link href={`/planning?sourceId=${encodeURIComponent(selectedSourceId ?? "")}&weekStartDate=${encodeURIComponent(todayWeekStartDate)}`}>
+                Week plan
+              </Link>
+            </Button>
+            <Button asChild size="sm" variant="secondary">
+              <Link href={`/copilot?sourceId=${encodeURIComponent(selectedSourceId ?? "")}&date=${encodeURIComponent(workspace.date)}`}>
+                Ask AI
               </Link>
             </Button>
           </div>
-          <TodayRouteItemsSection workspace={workspace} sourceId={selectedSourceId} embedded />
         </div>
       }
     >
-      <TodayLessonPlanSection workspace={workspace} sourceId={selectedSourceId} />
+      <TodayWorkspaceView workspace={workspace} sourceId={selectedSourceId} />
     </PlanningShell>
   );
 }
