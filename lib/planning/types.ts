@@ -148,6 +148,13 @@ export interface WeeklyPlan {
 export interface MonthlyPlanDay {
   date: string;
   label: string;
+  shortLabel: string;
+  dayNumber: number;
+  inMonth: boolean;
+  isWeekend: boolean;
+  isDroppable: boolean;
+  weekStartDate: string;
+  weeklyRouteId: string;
   items: WeeklyRouteBoardItem[];
   scheduledMinutes: number;
 }
@@ -155,6 +162,7 @@ export interface MonthlyPlanDay {
 export interface MonthlyPlanWeek {
   weekStartDate: string;
   weekLabel: string;
+  weeklyRouteId: string;
   days: MonthlyPlanDay[];
   unassignedItems: WeeklyRouteBoardItem[];
   scheduledMinutes: number;
@@ -165,6 +173,7 @@ export interface MonthlyPlanWeek {
 
 export interface MonthlyPlanSummary {
   weeksInView: number;
+  daysInMonth: number;
   scheduledMinutes: number;
   scheduledCount: number;
   unassignedCount: number;
