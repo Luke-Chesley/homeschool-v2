@@ -2,15 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { requireAppSession } from "@/lib/app-session/server";
 import {
-  CurriculumAiCreateRequestSchema,
-  CurriculumAiCreateResponseSchema,
+  CurriculumAiChatRequestSchema,
+  CurriculumAiChatTurnSchema,
 } from "@/lib/curriculum/ai-draft";
-import { createCurriculumFromConversation } from "@/lib/curriculum/ai-draft-service";
+import { continueCurriculumAiDraftConversation } from "@/lib/curriculum/ai-draft-service";
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const parsed = CurriculumAiCreateRequestSchema.safeParse(body);
+    const parsed = CurriculumAiChatRequestSchema.safeParse(body);
 
     if (!parsed.success) {
       return NextResponse.json(
@@ -20,15 +20,14 @@ export async function POST(req: NextRequest) {
     }
 
     const session = await requireAppSession();
-    const created = await createCurriculumFromConversation({
-      householdId: session.organization.id,
+    const turn = await continueCurriculumAiDraftConversation({
       learner: session.activeLearner,
       messages: parsed.data.messages,
     });
 
-    return NextResponse.json(CurriculumAiCreateResponseSchema.parse(created));
+    return NextResponse.json(CurriculumAiChatTurnSchema.parse(turn));
   } catch (error) {
-    console.error("[api/curriculum/ai-draft POST]", error);
+    console.error("[api/curriculum/ai-draft/chat POST]", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

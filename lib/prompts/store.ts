@@ -14,6 +14,12 @@
 
 import type { AiTaskName } from "@/lib/ai/types";
 import {
+  CURRICULUM_GENERATION_PROMPT_VERSION,
+  CURRICULUM_GENERATION_SYSTEM_PROMPT,
+  CURRICULUM_INTAKE_PROMPT_VERSION,
+  CURRICULUM_INTAKE_SYSTEM_PROMPT,
+} from "@/lib/prompts/curriculum-draft";
+import {
   LESSON_DRAFT_PROMPT_VERSION,
   LESSON_DRAFT_SYSTEM_PROMPT,
 } from "@/lib/prompts/lesson-draft";
@@ -35,6 +41,18 @@ export interface PromptRecord {
 // ---------------------------------------------------------------------------
 
 const PROMPTS: PromptRecord[] = [
+  {
+    task: "curriculum.intake",
+    version: CURRICULUM_INTAKE_PROMPT_VERSION,
+    systemPrompt: CURRICULUM_INTAKE_SYSTEM_PROMPT,
+    notes: "Conversational intake for AI curriculum drafting",
+  },
+  {
+    task: "curriculum.generate",
+    version: CURRICULUM_GENERATION_PROMPT_VERSION,
+    systemPrompt: CURRICULUM_GENERATION_SYSTEM_PROMPT,
+    notes: "Structured curriculum tree and lesson outline generation",
+  },
   {
     task: "chat.answer",
     version: "1.0.0",
