@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { CurriculumSource, CurriculumTree as CurriculumTreeData } from "@/lib/curriculum/types";
 
 import { CurriculumSourceSelector } from "./curriculum-source-selector";
-import { CurriculumTree } from "./curriculum-tree";
+import { CurriculumVisualizationPanel } from "./curriculum-visualization-panel";
 
 interface CurriculumOverviewProps {
   sources: CurriculumSource[];
@@ -49,7 +49,8 @@ export function CurriculumOverview({ sources, selectedSourceId, tree }: Curricul
         <CardHeader>
           <CardTitle className="text-xl">{tree.source.title}</CardTitle>
           <p className="text-sm text-muted-foreground">
-            Normalized curriculum hierarchy from persisted <code>curriculum_nodes</code>.
+            Visualize the normalized hierarchy as either an ordered flow map or the underlying tree
+            from persisted <code>curriculum_nodes</code>.
           </p>
         </CardHeader>
         <CardContent>
@@ -58,7 +59,7 @@ export function CurriculumOverview({ sources, selectedSourceId, tree }: Curricul
               This source has no normalized nodes yet.
             </p>
           ) : (
-            <CurriculumTree tree={tree} />
+            <CurriculumVisualizationPanel tree={tree} />
           )}
         </CardContent>
       </Card>
