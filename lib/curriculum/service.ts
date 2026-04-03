@@ -1,4 +1,4 @@
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 
 import { getDb } from "@/lib/db/server";
 import {
@@ -361,8 +361,13 @@ export async function updateCurriculumSource(
   return mapSource(updated);
 }
 
-export async function deleteCurriculumSource(id: string) {
-  await getDb().delete(curriculumSources).where(eq(curriculumSources.id, id));
+export async function deleteCurriculumSource(id: string, organizationId: string) {
+  const [deleted] = await getDb()
+    .delete(curriculumSources)
+    .where(and(eq(curriculumSources.id, id), eq(curriculumSources.organizationId, organizationId)))
+    .returning();
+
+  return deleted ? mapSource(deleted) : null;
 }
 
 export async function listCurriculumNodes(sourceId: string, options?: { includeInactive?: boolean }) {
