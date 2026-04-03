@@ -1,23 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
-import {
-  ArrowRight,
-  BookOpenText,
-  FolderTree,
-  Layers3,
-  LocateFixed,
-  Network,
-  RotateCcw,
-  Sparkles,
-  Target,
-} from "lucide-react";
+import { useEffect, useState } from "react";
+import { ArrowRight, BookOpenText, FolderTree, Layers3, Network, RotateCcw, Target } from "lucide-react";
 
-import { CurriculumSourceSelector } from "@/components/curriculum/curriculum-source-selector";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import type {
   CurriculumSource,
   CurriculumTree as CurriculumTreeData,
@@ -33,11 +22,10 @@ interface CurriculumGraphWorkspaceProps {
 }
 
 interface GraphNodePosition {
-  centerY: number;
+  node: CurriculumTreeNode;
+  depth: number;
   left: number;
   top: number;
-  depth: number;
-  node: CurriculumTreeNode;
 }
 
 interface GraphEdgePosition {
@@ -49,18 +37,20 @@ interface GraphEdgePosition {
 interface GraphLayout {
   width: number;
   height: number;
+  nodeWidth: number;
+  nodeHeight: number;
   nodes: GraphNodePosition[];
   edges: GraphEdgePosition[];
   levels: CurriculumNodeType[];
 }
 
-const NODE_WIDTH = 244;
-const NODE_HEIGHT = 132;
-const COLUMN_GAP = 96;
-const LEAF_GAP = 28;
-const GRAPH_PADDING_X = 40;
-const GRAPH_PADDING_Y = 48;
-const MIN_GRAPH_HEIGHT = 560;
+const GRAPH_WIDTH = 1320;
+const GRAPH_PADDING_X = 42;
+const GRAPH_PADDING_Y = 34;
+const GRAPH_COLUMN_GAP = 52;
+const GRAPH_NODE_HEIGHT = 118;
+const GRAPH_ROW_GAP = 20;
+const MIN_GRAPH_HEIGHT = 620;
 
 const typeIcon = {
   domain: FolderTree,
@@ -77,10 +67,10 @@ const typeLabel = {
 } as const;
 
 const nodeSurface = {
-  domain: "border-amber-400/60 bg-amber-50/80 dark:bg-amber-950/20",
-  strand: "border-sky-400/60 bg-sky-50/80 dark:bg-sky-950/20",
-  goal_group: "border-emerald-400/60 bg-emerald-50/80 dark:bg-emerald-950/20",
-  skill: "border-rose-400/60 bg-rose-50/80 dark:bg-rose-950/20",
+  domain: "border-amber-400/65 bg-amber-50/85 dark:bg-amber-950/25",
+  strand: "border-sky-400/65 bg-sky-50/85 dark:bg-sky-950/25",
+  goal_group: "border-emerald-400/65 bg-emerald-50/85 dark:bg-emerald-950/25",
+  skill: "border-rose-400/65 bg-rose-50/85 dark:bg-rose-950/25",
 } as const;
 
 function sortNodes(nodes: CurriculumTreeNode[]) {
@@ -101,18 +91,6 @@ function countSkills(node: CurriculumTreeNode): number {
   return node.children.reduce((total, child) => total + countSkills(child), 0);
 }
 
-function countDescendants(node: CurriculumTreeNode): number {
-  return node.children.reduce((total, child) => total + 1 + countDescendants(child), 0);
-}
-
-function collectDescendantIds(node: CurriculumTreeNode, acc = new Set<string>()) {
-  acc.add(node.id);
-  for (const child of node.children) {
-    collectDescendantIds(child, acc);
-  }
-  return acc;
-}
-
 function indexSubtree(root: CurriculumTreeNode) {
   const nodeMap = new Map<string, CurriculumTreeNode>();
   const parentMap = new Map<string, string | null>();
@@ -120,6 +98,7 @@ function indexSubtree(root: CurriculumTreeNode) {
   const visit = (node: CurriculumTreeNode, parentId: string | null) => {
     nodeMap.set(node.id, node);
     parentMap.set(node.id, parentId);
+
     for (const child of node.children) {
       visit(child, node.id);
     }
@@ -128,6 +107,16 @@ function indexSubtree(root: CurriculumTreeNode) {
   visit(root, null);
 
   return { nodeMap, parentMap };
+}
+
+function collectDescendantIds(node: CurriculumTreeNode, acc = new Set<string>()) {
+  acc.add(node.id);
+
+  for (const child of node.children) {
+    collectDescendantIds(child, acc);
+  }
+
+  return acc;
 }
 
 function getAncestorIds(nodeId: string, parentMap: Map<string, string | null>) {
@@ -142,29 +131,26 @@ function getAncestorIds(nodeId: string, parentMap: Map<string, string | null>) {
   return ancestorIds;
 }
 
-function buildEdgePath(parent: GraphNodePosition, child: GraphNodePosition) {
-  const startX = parent.left + NODE_WIDTH;
-  const startY = parent.top + NODE_HEIGHT / 2;
+function buildEdgePath(parent: GraphNodePosition, child: GraphNodePosition, nodeWidth: number, nodeHeight: number) {
+  const startX = parent.left + nodeWidth;
+  const startY = parent.top + nodeHeight / 2;
   const endX = child.left;
-  const endY = child.top + NODE_HEIGHT / 2;
-  const deltaX = endX - startX;
-  const controlOffset = Math.max(deltaX * 0.38, 48);
+  const endY = child.top + nodeHeight / 2;
+  const controlOffset = Math.max((endX - startX) * 0.42, 36);
 
   return `M ${startX} ${startY} C ${startX + controlOffset} ${startY}, ${endX - controlOffset} ${endY}, ${endX} ${endY}`;
 }
 
 function buildGraphLayout(root: CurriculumTreeNode): GraphLayout {
-  const edges: GraphEdgePosition[] = [];
   const nodesByDepth = new Map<number, CurriculumTreeNode[]>();
-  const nodeMap = new Map<string, GraphNodePosition>();
   const levels = new Set<CurriculumNodeType>();
   let maxDepth = 0;
 
   const visit = (node: CurriculumTreeNode, depth: number) => {
     levels.add(node.normalizedType);
     maxDepth = Math.max(maxDepth, depth);
-    const column = nodesByDepth.get(depth);
 
+    const column = nodesByDepth.get(depth);
     if (column) {
       column.push(node);
     } else {
@@ -178,27 +164,33 @@ function buildGraphLayout(root: CurriculumTreeNode): GraphLayout {
 
   visit(root, 0);
 
+  const columnCount = maxDepth + 1;
+  const nodeWidth =
+    (GRAPH_WIDTH - GRAPH_PADDING_X * 2 - Math.max(columnCount - 1, 0) * GRAPH_COLUMN_GAP) /
+    columnCount;
+
   const nodes: GraphNodePosition[] = [];
+  const positionById = new Map<string, GraphNodePosition>();
 
   for (const [depth, columnNodes] of [...nodesByDepth.entries()].sort((left, right) => left[0] - right[0])) {
     columnNodes.forEach((node, index) => {
-      const top = GRAPH_PADDING_Y + index * (NODE_HEIGHT + LEAF_GAP);
       const position: GraphNodePosition = {
         node,
         depth,
-        top,
-        centerY: top + NODE_HEIGHT / 2,
-        left: GRAPH_PADDING_X + depth * (NODE_WIDTH + COLUMN_GAP),
+        left: GRAPH_PADDING_X + depth * (nodeWidth + GRAPH_COLUMN_GAP),
+        top: GRAPH_PADDING_Y + index * (GRAPH_NODE_HEIGHT + GRAPH_ROW_GAP),
       };
 
       nodes.push(position);
-      nodeMap.set(node.id, position);
+      positionById.set(node.id, position);
     });
   }
 
+  const edges: GraphEdgePosition[] = [];
+
   for (const position of nodes) {
     for (const child of sortNodes(position.node.children)) {
-      const childPosition = nodeMap.get(child.id);
+      const childPosition = positionById.get(child.id);
 
       if (!childPosition) {
         continue;
@@ -207,24 +199,61 @@ function buildGraphLayout(root: CurriculumTreeNode): GraphLayout {
       edges.push({
         fromId: position.node.id,
         toId: child.id,
-        path: buildEdgePath(position, childPosition),
+        path: buildEdgePath(position, childPosition, nodeWidth, GRAPH_NODE_HEIGHT),
       });
     }
   }
 
   const tallestColumn = Math.max(...[...nodesByDepth.values()].map((column) => column.length), 1);
+  const height =
+    GRAPH_PADDING_Y * 2 +
+    tallestColumn * GRAPH_NODE_HEIGHT +
+    Math.max(tallestColumn - 1, 0) * GRAPH_ROW_GAP;
 
   return {
+    width: GRAPH_WIDTH,
+    height: Math.max(height, MIN_GRAPH_HEIGHT),
+    nodeWidth,
+    nodeHeight: GRAPH_NODE_HEIGHT,
     nodes,
     edges,
     levels: Array.from(levels),
-    width: GRAPH_PADDING_X * 2 + (maxDepth + 1) * NODE_WIDTH + maxDepth * COLUMN_GAP,
-    height:
-      Math.max(
-        MIN_GRAPH_HEIGHT,
-        GRAPH_PADDING_Y * 2 + tallestColumn * NODE_HEIGHT + Math.max(tallestColumn - 1, 0) * LEAF_GAP,
-      ),
   };
+}
+
+function SourceBar({
+  sources,
+  selectedSourceId,
+}: {
+  sources: CurriculumSource[];
+  selectedSourceId: string;
+}) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {sources.map((source) => {
+        const selected = source.id === selectedSourceId;
+        const href = `/curriculum/graph?sourceId=${source.id}`;
+
+        return (
+          <Link
+            key={source.id}
+            href={href}
+            className={cn(
+              "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm transition-colors",
+              selected
+                ? "border-primary/40 bg-primary/10 text-foreground shadow-[var(--shadow-active)]"
+                : "border-border/70 bg-background/75 text-muted-foreground hover:bg-muted/40 hover:text-foreground",
+            )}
+          >
+            <span className="font-medium">{source.title}</span>
+            <Badge variant="outline" className="text-[10px] uppercase tracking-[0.14em]">
+              v{source.importVersion}
+            </Badge>
+          </Link>
+        );
+      })}
+    </div>
+  );
 }
 
 export function CurriculumGraphWorkspace({
@@ -236,7 +265,6 @@ export function CurriculumGraphWorkspace({
   const [activeDomainId, setActiveDomainId] = useState(rootDomains[0]?.id ?? "");
   const [graphRootId, setGraphRootId] = useState(rootDomains[0]?.id ?? "");
   const [selectedNodeId, setSelectedNodeId] = useState(rootDomains[0]?.id ?? "");
-  const graphScrollerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const firstDomain = sortNodes(tree.rootNodes)[0];
@@ -246,8 +274,7 @@ export function CurriculumGraphWorkspace({
     setSelectedNodeId(nextId);
   }, [tree.source.id, tree.rootNodes]);
 
-  const activeDomain =
-    rootDomains.find((domain) => domain.id === activeDomainId) ?? rootDomains[0] ?? null;
+  const activeDomain = rootDomains.find((domain) => domain.id === activeDomainId) ?? rootDomains[0] ?? null;
 
   if (!activeDomain) {
     return (
@@ -261,249 +288,118 @@ export function CurriculumGraphWorkspace({
     );
   }
 
-  const domainIndex = indexSubtree(activeDomain);
-  const graphRoot = domainIndex.nodeMap.get(graphRootId) ?? activeDomain;
+  const activeDomainIndex = indexSubtree(activeDomain);
+  const graphRoot = activeDomainIndex.nodeMap.get(graphRootId) ?? activeDomain;
   const graphIndex = indexSubtree(graphRoot);
   const selectedNode = graphIndex.nodeMap.get(selectedNodeId) ?? graphRoot;
   const selectedAncestors = getAncestorIds(selectedNode.id, graphIndex.parentMap);
   const selectedDescendants = collectDescendantIds(selectedNode);
   const highlightedIds = new Set([...selectedAncestors, ...selectedDescendants]);
   const graphLayout = buildGraphLayout(graphRoot);
-  const selectedChildren = sortNodes(selectedNode.children);
-  const activeLineage = Array.from(selectedAncestors)
-    .map((nodeId) => graphIndex.nodeMap.get(nodeId))
-    .filter((node): node is CurriculumTreeNode => Boolean(node))
-    .reverse();
 
-  useEffect(() => {
-    graphScrollerRef.current?.scrollTo({ left: 0, top: 0 });
-  }, [graphRoot.id, tree.source.id]);
+  const handleDomainChange = (domainId: string) => {
+    setActiveDomainId(domainId);
+    setGraphRootId(domainId);
+    setSelectedNodeId(domainId);
+  };
 
-  useEffect(() => {
-    const graphScroller = graphScrollerRef.current;
-    const graphNode = graphScroller?.querySelector<HTMLElement>(
-      `[data-graph-node-id="${CSS.escape(selectedNode.id)}"]`,
-    );
+  const handleNodeClick = (node: CurriculumTreeNode) => {
+    setSelectedNodeId(node.id);
 
-    graphNode?.scrollIntoView({
-      block: "nearest",
-      inline: "nearest",
-    });
-  }, [selectedNode.id]);
+    if (node.children.length > 0 && node.id !== graphRoot.id) {
+      setGraphRootId(node.id);
+    }
+  };
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
-      <div className="min-w-0 space-y-4">
-        <CurriculumSourceSelector
-          sources={sources}
-          selectedSourceId={selectedSourceId}
-          basePath="/curriculum/graph"
-        />
-
-        <Card className="bg-[radial-gradient(circle_at_top,_rgba(217,119,6,0.1),_transparent_55%),_var(--color-card)]">
-          <CardHeader>
-            <CardTitle className="text-base">Graph controls</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm text-muted-foreground">
-            <p>
-              Pick a domain across the source, then click any node in the canvas to inspect its
-              branch and connected sequence.
-            </p>
-            <Link
-              href={`/curriculum?sourceId=${selectedSourceId}`}
-              className={cn(buttonVariants({ variant: "outline", size: "sm" }), "w-full justify-center")}
-            >
-              Return to overview tree
-            </Link>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Selected node</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className={cn("rounded-2xl border p-4", nodeSurface[selectedNode.normalizedType])}>
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                    {typeLabel[selectedNode.normalizedType]}
-                  </p>
-                  <h2 className="mt-1 font-serif text-2xl leading-tight">{selectedNode.title}</h2>
-                </div>
-                <Badge variant="outline">Step {selectedNode.sequenceIndex + 1}</Badge>
-              </div>
-              <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                {selectedNode.description?.trim() || selectedNode.normalizedPath}
-              </p>
-            </div>
-
-            <div className="grid gap-2 text-sm">
-              <div className="flex items-center justify-between rounded-xl border border-border/70 px-3 py-2">
-                <span className="text-muted-foreground">Children</span>
-                <span className="font-semibold">{selectedNode.children.length}</span>
-              </div>
-              <div className="flex items-center justify-between rounded-xl border border-border/70 px-3 py-2">
-                <span className="text-muted-foreground">Descendants</span>
-                <span className="font-semibold">{countDescendants(selectedNode)}</span>
-              </div>
-              <div className="flex items-center justify-between rounded-xl border border-border/70 px-3 py-2">
-                <span className="text-muted-foreground">Skills in branch</span>
-                <span className="font-semibold">{countSkills(selectedNode)}</span>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                Lineage
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {activeLineage.map((node, index) => (
-                  <div key={node.id} className="flex items-center gap-2">
-                    <Badge variant={node.id === selectedNode.id ? "secondary" : "outline"}>
-                      {node.title}
-                    </Badge>
-                    {index < activeLineage.length - 1 ? (
-                      <ArrowRight className="size-3 text-muted-foreground" />
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setGraphRootId(selectedNode.id);
-                  setSelectedNodeId(selectedNode.id);
-                }}
-                className={cn(
-                  buttonVariants({ variant: "default", size: "sm" }),
-                  "w-full justify-center",
-                )}
-              >
-                <LocateFixed className="size-4" />
-                Focus this branch
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setGraphRootId(activeDomain.id);
-                  setSelectedNodeId(activeDomain.id);
-                }}
-                className={cn(
-                  buttonVariants({ variant: "outline", size: "sm" }),
-                  "w-full justify-center",
-                )}
-              >
-                <RotateCcw className="size-4" />
-                Reset to domain
-              </button>
-            </div>
-
-            {selectedChildren.length > 0 ? (
+    <div className="space-y-4">
+      <Card className="overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(234,179,8,0.12),_transparent_35%),radial-gradient(circle_at_bottom_right,_rgba(14,165,233,0.1),_transparent_28%),var(--color-card)]">
+        <CardContent className="space-y-6 p-6 sm:p-7">
+          <div className="space-y-4">
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
               <div className="space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                  Next nodes
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                  Curriculum source
                 </p>
-                <div className="space-y-2">
-                  {selectedChildren.map((child) => (
-                    <button
-                      key={child.id}
-                      type="button"
-                      onClick={() => setSelectedNodeId(child.id)}
-                      className="flex w-full items-center justify-between rounded-xl border border-border/70 px-3 py-2 text-left text-sm hover:bg-muted/40"
-                    >
-                      <span className="min-w-0 flex-1 truncate font-medium">{child.title}</span>
-                      <Badge variant="outline" className="ml-3 text-[10px] uppercase tracking-[0.14em]">
-                        {typeLabel[child.normalizedType]}
-                      </Badge>
-                    </button>
-                  ))}
-                </div>
+                <SourceBar sources={sources} selectedSourceId={selectedSourceId} />
               </div>
-            ) : null}
-          </CardContent>
-        </Card>
-      </div>
+              <div className="flex flex-wrap gap-2">
+                <Badge variant="outline">{tree.nodeCount} nodes</Badge>
+                <Badge variant="outline">{tree.skillCount} skills</Badge>
+                <Badge variant="outline" className="capitalize">
+                  {tree.source.kind.replace("_", " ")}
+                </Badge>
+              </div>
+            </div>
 
-      <div className="min-w-0 space-y-6">
-        <Card className="min-w-0 overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(234,179,8,0.1),_transparent_40%),radial-gradient(circle_at_bottom_right,_rgba(14,165,233,0.12),_transparent_35%),var(--color-card)]">
-          <CardHeader className="gap-4 border-b border-border/60">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
                   <Network className="size-4 text-primary" />
                   Logical curriculum graph
                 </div>
-                <div>
-                  <h2 className="font-serif text-3xl leading-tight tracking-tight">{tree.source.title}</h2>
-                  <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
-                    Domains run in sequence across the top. Inside the canvas, each node is connected
-                    to the next hierarchy level with explicit edges so you can see how the curriculum
-                    unfolds from one branch to the next.
-                  </p>
-                </div>
+                <p className="max-w-4xl text-sm leading-6 text-muted-foreground">
+                  Choose a domain, then click nodes to move deeper into that branch. The graph uses
+                  the full workspace width so the structure reads as one connected view instead of a
+                  side-panel dashboard.
+                </p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Badge variant="outline">{tree.nodeCount} nodes</Badge>
-                <Badge variant="outline">{tree.skillCount} skills</Badge>
-                <Badge variant="outline">Focused on {typeLabel[graphRoot.normalizedType]}</Badge>
+                <Badge variant="secondary">Viewing {graphRoot.title}</Badge>
+                {graphRoot.id !== activeDomain.id ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setGraphRootId(activeDomain.id);
+                      setSelectedNodeId(activeDomain.id);
+                    }}
+                    className={cn(buttonVariants({ variant: "outline", size: "sm" }), "rounded-full")}
+                  >
+                    <RotateCcw className="size-4" />
+                    Show full domain
+                  </button>
+                ) : null}
               </div>
             </div>
+          </div>
 
-            <div className="overflow-x-auto pb-1">
-              <div className="flex min-w-max items-center gap-3">
-                {rootDomains.map((domain, index) => (
-                  <div key={domain.id} className="flex items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setActiveDomainId(domain.id);
-                        setGraphRootId(domain.id);
-                        setSelectedNodeId(domain.id);
-                      }}
-                      className={cn(
-                        "group rounded-full border px-4 py-3 text-left transition-colors",
-                        domain.id === activeDomain.id
-                          ? "border-primary/40 bg-primary/10 text-foreground shadow-[var(--shadow-active)]"
-                          : "border-border/70 bg-background/70 text-muted-foreground hover:bg-muted/40 hover:text-foreground",
-                      )}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="flex size-8 items-center justify-center rounded-full bg-card text-xs font-semibold text-foreground">
-                          {domain.sequenceIndex + 1}
-                        </div>
-                        <div>
-                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                            Domain
-                          </p>
-                          <p className="max-w-[18rem] text-sm font-medium text-foreground">{domain.title}</p>
-                        </div>
-                      </div>
-                    </button>
-                    {index < rootDomains.length - 1 ? (
-                      <div className="flex items-center gap-2 text-muted-foreground">
-                        <div className="h-px w-10 bg-border/70" />
-                        <ArrowRight className="size-4" />
-                        <div className="h-px w-10 bg-border/70" />
-                      </div>
-                    ) : null}
+          <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-3">
+            {rootDomains.map((domain) => {
+              const selected = domain.id === activeDomain.id;
+
+              return (
+                <button
+                  key={domain.id}
+                  type="button"
+                  onClick={() => handleDomainChange(domain.id)}
+                  className={cn(
+                    "rounded-[26px] border px-5 py-4 text-left transition-colors",
+                    selected
+                      ? "border-primary/40 bg-primary/10 shadow-[var(--shadow-active)]"
+                      : "border-border/70 bg-background/75 hover:bg-muted/35",
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="space-y-1">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                        Domain {domain.sequenceIndex + 1}
+                      </p>
+                      <p className="text-base font-semibold leading-6 text-foreground">{domain.title}</p>
+                    </div>
+                    <Badge variant={selected ? "secondary" : "outline"}>{countSkills(domain)} skills</Badge>
                   </div>
-                ))}
-              </div>
-            </div>
-          </CardHeader>
+                </button>
+              );
+            })}
+          </div>
 
-          <CardContent className="space-y-4 p-6">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="rounded-[32px] border border-border/70 bg-background/80 p-4 shadow-inner">
+            <div className="flex flex-col gap-3 border-b border-border/60 pb-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-sm font-semibold text-foreground">
-                  Showing <span className="text-primary">{graphRoot.title}</span>
-                </p>
+                <p className="text-sm font-semibold text-foreground">{graphRoot.title}</p>
                 <p className="text-sm text-muted-foreground">
-                  Click any node to inspect it. Focus a node to redraw the graph around that branch.
+                  Click a node to redraw the graph around that branch. Leaf skills stay highlighted
+                  in place so you can still read the larger sequence.
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -515,30 +411,20 @@ export function CurriculumGraphWorkspace({
               </div>
             </div>
 
-            <div className="min-w-0 rounded-[28px] border border-border/70 bg-background/80 p-3 shadow-inner">
-              <div
-                ref={graphScrollerRef}
-                className="overflow-auto rounded-[22px] border border-border/60 bg-[radial-gradient(circle_at_top,_rgba(251,191,36,0.1),_transparent_30%),linear-gradient(180deg,rgba(255,255,255,0.55),rgba(255,255,255,0.18))] dark:bg-[radial-gradient(circle_at_top,_rgba(251,191,36,0.08),_transparent_30%),linear-gradient(180deg,rgba(15,23,42,0.7),rgba(2,6,23,0.45))]"
-              >
-                <div
-                  className="relative"
-                  style={{
-                    width: `${graphLayout.width}px`,
-                    height: `${graphLayout.height}px`,
-                  }}
-                >
-                  <svg className="absolute inset-0 h-full w-full" aria-hidden="true">
+            <div className="mt-4 hidden md:block">
+              <div className="relative overflow-hidden rounded-[26px] border border-border/60 bg-[radial-gradient(circle_at_top,_rgba(251,191,36,0.1),_transparent_30%),linear-gradient(180deg,rgba(255,255,255,0.62),rgba(255,255,255,0.2))] p-4 dark:bg-[radial-gradient(circle_at_top,_rgba(251,191,36,0.08),_transparent_30%),linear-gradient(180deg,rgba(15,23,42,0.76),rgba(2,6,23,0.46))]">
+                <div className="relative" style={{ height: `${graphLayout.height}px` }}>
+                  <svg className="absolute inset-0 h-full w-full" viewBox={`0 0 ${graphLayout.width} ${graphLayout.height}`} preserveAspectRatio="none" aria-hidden="true">
                     {graphLayout.edges.map((edge) => {
-                      const highlighted =
-                        highlightedIds.has(edge.fromId) && highlightedIds.has(edge.toId);
+                      const highlighted = highlightedIds.has(edge.fromId) && highlightedIds.has(edge.toId);
 
                       return (
                         <path
                           key={`${edge.fromId}-${edge.toId}`}
                           d={edge.path}
                           fill="none"
-                          stroke={highlighted ? "hsl(var(--primary))" : "color-mix(in srgb, hsl(var(--muted-foreground)) 30%, transparent)"}
-                          strokeOpacity={highlighted ? 0.7 : 0.2}
+                          stroke={highlighted ? "hsl(var(--primary))" : "color-mix(in srgb, hsl(var(--muted-foreground)) 28%, transparent)"}
+                          strokeOpacity={highlighted ? 0.7 : 0.22}
                           strokeWidth={highlighted ? 3 : 2}
                           strokeLinecap="round"
                         />
@@ -556,23 +442,24 @@ export function CurriculumGraphWorkspace({
                       <button
                         key={node.id}
                         type="button"
-                        data-graph-node-id={node.id}
-                        onClick={() => setSelectedNodeId(node.id)}
+                        onClick={() => handleNodeClick(node)}
                         className={cn(
-                          "absolute flex h-[132px] w-[244px] flex-col justify-between rounded-[24px] border p-4 text-left shadow-sm transition-all",
+                          "absolute flex flex-col justify-between rounded-[24px] border p-4 text-left shadow-sm transition-all",
                           nodeSurface[node.normalizedType],
-                          selected && "scale-[1.02] border-primary bg-primary/12 shadow-[var(--shadow-active)]",
-                          !selected && highlighted && "border-primary/25 shadow-md",
-                          !highlighted && "opacity-45",
+                          selected && "scale-[1.01] border-primary bg-primary/12 shadow-[var(--shadow-active)]",
+                          !selected && highlighted && "border-primary/25",
+                          !highlighted && "opacity-35",
                         )}
                         style={{
-                          left: `${position.left}px`,
+                          left: `${(position.left / graphLayout.width) * 100}%`,
                           top: `${position.top}px`,
+                          width: `${(graphLayout.nodeWidth / graphLayout.width) * 100}%`,
+                          height: `${graphLayout.nodeHeight}px`,
                         }}
                       >
                         <div className="space-y-2">
                           <div className="flex items-center justify-between gap-3">
-                            <Badge variant={selected ? "secondary" : "outline"} className="text-[10px] uppercase tracking-[0.18em]">
+                            <Badge variant={selected ? "secondary" : "outline"} className="text-[10px] uppercase tracking-[0.16em]">
                               {typeLabel[node.normalizedType]}
                             </Badge>
                             <Icon className="size-4 shrink-0 text-muted-foreground" />
@@ -581,14 +468,14 @@ export function CurriculumGraphWorkspace({
                             <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                               Step {node.sequenceIndex + 1}
                             </p>
-                            <p className="mt-1 max-h-[3.9rem] overflow-hidden text-sm font-semibold leading-5 text-foreground">
+                            <p className="mt-2 line-clamp-3 text-sm font-semibold leading-5 text-foreground">
                               {node.title}
                             </p>
                           </div>
                         </div>
                         <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
                           <span>{node.children.length} next</span>
-                          {node.code ? <span className="truncate font-medium">{node.code}</span> : <span>{countSkills(node)} skills</span>}
+                          <span>{countSkills(node)} skills</span>
                         </div>
                       </button>
                     );
@@ -596,46 +483,45 @@ export function CurriculumGraphWorkspace({
                 </div>
               </div>
             </div>
-          </CardContent>
-        </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">What this graph is showing</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-3 md:grid-cols-3">
-            <div className="rounded-2xl border border-border/70 bg-background/70 p-4">
-              <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                <Sparkles className="size-4 text-primary" />
-                Explicit connections
+            <div className="mt-4 space-y-3 md:hidden">
+              <p className="text-sm text-muted-foreground">
+                The full graph is designed for a wider canvas. On smaller screens, use the domain
+                selector above and the current branch list below.
               </p>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                Each edge is a real parent-child relationship from the normalized curriculum tree.
-              </p>
+              <div className="grid gap-3">
+                {graphLayout.nodes.map((position) => {
+                  const node = position.node;
+                  const selected = node.id === selectedNode.id;
+
+                  return (
+                    <button
+                      key={node.id}
+                      type="button"
+                      onClick={() => handleNodeClick(node)}
+                      className={cn(
+                        "rounded-[22px] border p-4 text-left transition-colors",
+                        nodeSurface[node.normalizedType],
+                        selected && "border-primary bg-primary/12 shadow-[var(--shadow-active)]",
+                      )}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                            {typeLabel[node.normalizedType]} • Step {node.sequenceIndex + 1}
+                          </p>
+                          <p className="mt-2 text-sm font-semibold leading-5 text-foreground">{node.title}</p>
+                        </div>
+                        <Badge variant="outline">{countSkills(node)} skills</Badge>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-            <div className="rounded-2xl border border-border/70 bg-background/70 p-4">
-              <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                <LocateFixed className="size-4 text-primary" />
-                Branch focus
-              </p>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                Focus on any node to redraw the canvas around that branch instead of reading every
-                sibling at once.
-              </p>
-            </div>
-            <div className="rounded-2xl border border-border/70 bg-background/70 p-4">
-              <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                <ArrowRight className="size-4 text-primary" />
-                Ordered flow
-              </p>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                Sequence numbers stay visible on every node, so hierarchy and execution order are
-                readable at the same time.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
