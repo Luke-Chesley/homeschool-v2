@@ -14,6 +14,7 @@
 - At the start of every session, check whether the main checkout is already serving on `http://localhost:3000`. If it is not running, start it from `/home/luke/Desktop/homeschool-v2` with `corepack pnpm dev` or `make dev` before browser-based validation.
 - `corepack pnpm dev` or `make dev`: start the main checkout's Next.js dev server on `http://localhost:3000`.
 - For any branch worktree under `.worktrees/`, never use `http://localhost:3000`; start Next.js on a unique alternate port such as `corepack pnpm dev -- --port 3001` and point browser tools at that port.
+- For feature work that needs review, prefer keeping the change on its branch worktree server first and share that alternate URL for approval before merging anything back to `main`.
 - `corepack pnpm build`: build the production app.
 - `corepack pnpm start`: run the production build locally.
 - `corepack pnpm typecheck`: run TypeScript checks; use this before finishing changes.
@@ -40,10 +41,12 @@
 - Use `/home/luke/Desktop/homeschool-v2` as the canonical `main` checkout. When work is ready to merge, merge it there. Do not rely on a separate `-main` directory.
 - Before making code changes, create a dedicated `git worktree` from `main` and do your work there. Multiple agents may be working in parallel, so do not share a checkout when switching branches.
 - Create branch worktrees under `.worktrees/`, for example `git worktree add ./.worktrees/<task-name> -b <branch-name> main`, then run all commands from that worktree path.
+- For new feature work, default to this review flow: create a fresh worktree, run that branch on its own non-`3000` port, let the user review the branch URL, and keep the branch isolated until the user explicitly approves merging to `main`.
 - Git only allows one worktree to have a branch checked out at a time. If `git switch main` fails because `main` is already checked out at `/home/luke/Desktop/homeschool-v2`, that is expected; use the main checkout directory instead of switching another worktree to `main`.
 - Treat `/home/luke/Desktop/homeschool-v2` as the only checkout allowed to own the default localhost session. Any branch worktree that needs a dev server or browser automation must choose a different port so it does not take over the user's main browser view.
 - Useful checks: `git worktree list` shows which directory owns each branch, and `git branch --show-current` confirms which branch the current directory is on.
-- When your work is complete, merge your branch back into `main`, resolve any conflicts, and remove the temporary worktree if it is no longer needed, for example `git worktree remove ./.worktrees/<task-name>`.
+- Do not merge a feature branch back into `main` automatically. Merge only after the user has reviewed the branch build and explicitly approved the merge.
+- Once a merge is explicitly approved and completed, remove the temporary worktree if it is no longer needed, for example `git worktree remove ./.worktrees/<task-name>`.
 - Keep commits focused by feature or plan slice.
 - PRs should include a short description, affected routes/modules, verification steps, and screenshots for UI changes.
 

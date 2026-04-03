@@ -33,9 +33,9 @@ export function GlobalPageTabs() {
   const pathname = usePathname();
 
   return (
-    <div className="sticky top-0 z-40 border-b border-border/60 bg-background/75 backdrop-blur-xl">
+    <div className="sticky top-0 z-40 border-b border-border/70 bg-background/95">
       <div className="mx-auto flex h-[var(--global-tabs-height)] max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
-        <nav className="flex min-w-0 items-center gap-2 overflow-x-auto" aria-label="Global sections">
+        <nav className="flex min-w-0 items-center gap-5 overflow-x-auto" aria-label="Global sections">
           {globalPageTabs.map((tab) => {
             const active =
               tab.href === "/sample-activity"
@@ -47,10 +47,10 @@ export function GlobalPageTabs() {
                 key={tab.href}
                 href={tab.href}
                 className={cn(
-                  "inline-flex h-10 shrink-0 items-center rounded-full border px-4 text-sm font-medium transition-colors",
+                  "inline-flex h-11 shrink-0 items-center border-b-2 px-0 text-sm transition-colors",
                   active
-                    ? "border-primary/25 bg-primary/12 text-foreground shadow-[var(--shadow-active)]"
-                    : "border-border/50 bg-card/55 text-muted-foreground hover:border-border/70 hover:bg-card/80 hover:text-foreground",
+                    ? "border-primary text-foreground"
+                    : "border-transparent text-muted-foreground hover:border-border hover:text-foreground",
                 )}
               >
                 {tab.label}

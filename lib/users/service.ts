@@ -159,15 +159,17 @@ export async function getWorkspaceContext(options?: {
   learnerId?: string | null;
 }): Promise<AppWorkspace> {
   await ensureDatabaseReady();
-  const organization =
+  let organization =
     options?.organizationId != null
       ? await getDb().query.organizations.findFirst({
           where: eq(organizations.id, options.organizationId),
         })
-      : await ensureAppOrganization();
+      : null;
 
+  // Cookies can point at deleted/demo organizations. Recover to a valid workspace instead of
+  // throwing from every parent route.
   if (!organization) {
-    throw new Error("Organization not found.");
+    organization = await ensureAppOrganization();
   }
 
   const learners = await listLearnersForOrganization(organization.id);

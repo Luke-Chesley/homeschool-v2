@@ -70,8 +70,19 @@ export interface TrackingSummary {
   needsAttentionCount: number;
 }
 
+export interface TrackingCurriculumContext {
+  sourceId: string;
+  sourceTitle: string;
+  selectionReason: string;
+  weekStartDate?: string;
+  scheduledItemCount: number;
+  totalNodeCount: number;
+  totalSkillCount: number;
+}
+
 export interface TrackingDashboard {
   learner: TrackingLearnerSummary;
+  curriculum: TrackingCurriculumContext | null;
   summary: TrackingSummary;
   outcomes: TrackingOutcome[];
   observations: ObservationEntry[];

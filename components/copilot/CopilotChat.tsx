@@ -135,18 +135,11 @@ export function CopilotChat({ sessionId: initialSessionId, initialMessages = [],
 
   return (
     <div className={cn("flex min-w-0 flex-col h-full", className)}>
-      {/* Message list */}
       <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-4">
         {messages.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-full gap-3 text-center">
-            <p className="text-lg font-serif font-semibold text-foreground/70">
-              How can I help?
-            </p>
-            <p className="text-sm text-muted-foreground max-w-xs">
-              Ask about curriculum planning, lesson ideas, standards mapping, or anything else.
-            </p>
-            {/* Suggested prompts */}
-            <div className="flex flex-wrap justify-center gap-2 mt-2">
+          <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
+            <p className="font-serif text-2xl text-foreground/80">Ask for the next move.</p>
+            <div className="mt-1 flex flex-wrap justify-center gap-2">
               {[
                 "Draft a lesson on fractions for grade 4",
                 "What standards cover place value?",
@@ -157,7 +150,7 @@ export function CopilotChat({ sessionId: initialSessionId, initialMessages = [],
                   key={prompt}
                   type="button"
                   onClick={() => sendMessage(prompt)}
-                  className="rounded-full border border-border/60 bg-card/70 px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/60 transition-colors"
+                  className="rounded-md border border-border/70 bg-background px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted/45"
                 >
                   {prompt}
                 </button>
@@ -170,25 +163,21 @@ export function CopilotChat({ sessionId: initialSessionId, initialMessages = [],
           <ChatMessage key={idx} message={msg} />
         ))}
 
-        {/* Streaming message */}
         {streamingContent !== null && (
           <div className="flex gap-3">
-            <div className="shrink-0 flex size-8 items-center justify-center rounded-full bg-secondary/25 text-secondary-foreground text-xs font-semibold">
+            <div className="shrink-0 flex size-8 items-center justify-center rounded-md bg-secondary/25 text-secondary-foreground text-xs font-medium">
               AI
             </div>
-            <div className="max-w-[85%] rounded-2xl rounded-tl-sm border border-border/60 bg-card/80 px-4 py-3 text-sm leading-relaxed break-words whitespace-pre-wrap">
+            <div className="max-w-[85%] rounded-lg border border-border/60 bg-card px-4 py-3 text-sm leading-relaxed break-words whitespace-pre-wrap">
               {streamingContent}
               <span className="inline-block w-1.5 h-4 bg-primary/60 ml-0.5 animate-pulse" />
             </div>
           </div>
         )}
 
-        {/* Pending actions */}
         {actions.length > 0 && (
           <div className="flex flex-col gap-2">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide px-2">
-              Suggested actions
-            </p>
+            <p className="px-2 text-xs font-medium text-muted-foreground">Suggested actions</p>
             {actions.map((action) => (
               <CopilotActionCard
                 key={action.id}
@@ -201,7 +190,7 @@ export function CopilotChat({ sessionId: initialSessionId, initialMessages = [],
         )}
 
         {error && (
-          <div className="rounded-xl bg-destructive/10 border border-destructive/20 px-4 py-3 text-sm text-destructive">
+          <div className="rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             {error}
           </div>
         )}
@@ -209,7 +198,6 @@ export function CopilotChat({ sessionId: initialSessionId, initialMessages = [],
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input */}
       <div className="border-t border-border/60 p-4">
         <ChatInput onSend={sendMessage} disabled={loading} />
       </div>
