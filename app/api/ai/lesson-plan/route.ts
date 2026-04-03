@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 import { requireAppSession } from "@/lib/app-session/server";
-import { getTodayWorkspace } from "@/lib/planning/today-service";
+import {
+  buildTodayLessonDraftFingerprint,
+  getTodayWorkspace,
+  saveTodayLessonDraft,
+} from "@/lib/planning/today-service";
 import { buildLessonDraftPromptPreview, generateLessonDraft } from "@/lib/ai/task-service";
 
 const RequestSchema = z.object({
@@ -110,10 +114,20 @@ export async function POST(req: NextRequest) {
   }
 
   const result = await generateLessonDraft(lessonDraftInput);
-
-  return NextResponse.json({
+  const savedDraft = await saveTodayLessonDraft({
+    organizationId: session.organization.id,
+    learnerId: session.activeLearner.id,
+    date,
+    sourceId: workspaceResult.sourceId,
+    sourceTitle,
+    routeFingerprint: buildTodayLessonDraftFingerprint(workspace.items.map((item) => item.id)),
     markdown: result.output,
     promptVersion: result.lineage.promptRef.version,
+  });
+
+  return NextResponse.json({
+    markdown: savedDraft.markdown,
+    promptVersion: savedDraft.promptVersion,
     sourceTitle,
     date,
     summary: {

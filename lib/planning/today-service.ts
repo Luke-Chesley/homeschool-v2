@@ -1,9 +1,14 @@
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 
 import { getCurriculumTree, listCurriculumNodes, listCurriculumSources } from "@/lib/curriculum/service";
 import { getDb } from "@/lib/db/server";
-import { routeOverrideEvents, weeklyRouteItems, weeklyRoutes } from "@/lib/db/schema";
-import type { DailyWorkspace, PlanItem, WeeklyRouteItem } from "@/lib/planning/types";
+import { planDays, plans, routeOverrideEvents, weeklyRouteItems, weeklyRoutes } from "@/lib/db/schema";
+import type {
+  DailyWorkspace,
+  DailyWorkspaceLessonDraft,
+  PlanItem,
+  WeeklyRouteItem,
+} from "@/lib/planning/types";
 import type { AppWorkspace } from "@/lib/users/service";
 import { getOrCreateWeeklyRouteBoardForLearner } from "@/lib/planning/weekly-route-service";
 import type { WeeklyRouteBoard } from "@/lib/curriculum-routing";
@@ -11,11 +16,17 @@ import { toWeekStartDate } from "@/lib/curriculum-routing";
 import { buildCopilotPlanningContext } from "@/lib/planning/copilot-snapshot";
 
 const DEFAULT_UNSCHEDULED_ITEM_COUNT = 4;
+const TODAY_WORKSPACE_PLAN_PURPOSE = "today_workspace";
+const TODAY_LESSON_DRAFTS_KEY = "todayLessonDrafts";
 
 function addDays(baseDate: string, days: number) {
   const date = new Date(`${baseDate}T12:00:00.000Z`);
   date.setUTCDate(date.getUTCDate() + days);
   return date.toISOString().slice(0, 10);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function formatPlannerDate(date: string) {
@@ -24,6 +35,211 @@ function formatPlannerDate(date: string) {
     month: "short",
     day: "numeric",
   }).format(new Date(`${date}T12:00:00`));
+}
+
+export function buildTodayLessonDraftFingerprint(itemIds: string[]) {
+  return itemIds.join("::");
+}
+
+function readLessonDraftFromMetadata(
+  metadata: Record<string, unknown> | null | undefined,
+  sourceId: string,
+  routeFingerprint: string,
+): DailyWorkspaceLessonDraft | null {
+  if (!isRecord(metadata)) {
+    return null;
+  }
+
+  const draftSources = metadata[TODAY_LESSON_DRAFTS_KEY];
+  if (!isRecord(draftSources)) {
+    return null;
+  }
+
+  const sourceDrafts = draftSources[sourceId];
+  if (!isRecord(sourceDrafts)) {
+    return null;
+  }
+
+  const candidate = sourceDrafts[routeFingerprint];
+  if (!isRecord(candidate) || typeof candidate.markdown !== "string") {
+    return null;
+  }
+
+  return {
+    markdown: candidate.markdown,
+    sourceId: typeof candidate.sourceId === "string" ? candidate.sourceId : sourceId,
+    sourceTitle: typeof candidate.sourceTitle === "string" ? candidate.sourceTitle : "Curriculum",
+    routeFingerprint:
+      typeof candidate.routeFingerprint === "string"
+        ? candidate.routeFingerprint
+        : routeFingerprint,
+    promptVersion:
+      typeof candidate.promptVersion === "string" ? candidate.promptVersion : undefined,
+    savedAt:
+      typeof candidate.savedAt === "string"
+        ? candidate.savedAt
+        : new Date().toISOString(),
+  };
+}
+
+async function getTodayWorkspacePlan(organizationId: string, learnerId: string) {
+  const db = getDb();
+  const learnerPlans = await db
+    .select()
+    .from(plans)
+    .where(and(eq(plans.organizationId, organizationId), eq(plans.learnerId, learnerId)))
+    .orderBy(desc(plans.updatedAt), desc(plans.createdAt));
+
+  return (
+    learnerPlans.find(
+      (plan) =>
+        isRecord(plan.metadata) &&
+        plan.metadata.purpose === TODAY_WORKSPACE_PLAN_PURPOSE,
+    ) ?? null
+  );
+}
+
+async function getOrCreateTodayWorkspacePlan(organizationId: string, learnerId: string) {
+  const existingPlan = await getTodayWorkspacePlan(organizationId, learnerId);
+  if (existingPlan) {
+    return existingPlan;
+  }
+
+  const db = getDb();
+  const [createdPlan] = await db
+    .insert(plans)
+    .values({
+      organizationId,
+      learnerId,
+      title: "Today workspace",
+      status: "active",
+      metadata: {
+        purpose: TODAY_WORKSPACE_PLAN_PURPOSE,
+      },
+    })
+    .returning();
+
+  return createdPlan;
+}
+
+async function getTodayWorkspaceDay(params: {
+  organizationId: string;
+  learnerId: string;
+  date: string;
+}) {
+  const workspacePlan = await getTodayWorkspacePlan(params.organizationId, params.learnerId);
+  if (!workspacePlan) {
+    return null;
+  }
+
+  const db = getDb();
+  return (
+    (await db.query.planDays.findFirst({
+      where: and(eq(planDays.planId, workspacePlan.id), eq(planDays.date, params.date)),
+    })) ?? null
+  );
+}
+
+async function getOrCreateTodayWorkspaceDay(params: {
+  organizationId: string;
+  learnerId: string;
+  date: string;
+}) {
+  const workspacePlan = await getOrCreateTodayWorkspacePlan(params.organizationId, params.learnerId);
+  const db = getDb();
+  const existingDay = await db.query.planDays.findFirst({
+    where: and(eq(planDays.planId, workspacePlan.id), eq(planDays.date, params.date)),
+  });
+
+  if (existingDay) {
+    return existingDay;
+  }
+
+  const [createdDay] = await db
+    .insert(planDays)
+    .values({
+      planId: workspacePlan.id,
+      date: params.date,
+      status: "planned",
+      metadata: {},
+    })
+    .returning();
+
+  return createdDay;
+}
+
+export async function getSavedTodayLessonDraft(params: {
+  organizationId: string;
+  learnerId: string;
+  date: string;
+  sourceId: string;
+  routeFingerprint: string;
+}) {
+  if (!params.routeFingerprint) {
+    return null;
+  }
+
+  const day = await getTodayWorkspaceDay(params);
+  if (!day) {
+    return null;
+  }
+
+  return readLessonDraftFromMetadata(day.metadata, params.sourceId, params.routeFingerprint);
+}
+
+export async function saveTodayLessonDraft(params: {
+  organizationId: string;
+  learnerId: string;
+  date: string;
+  sourceId: string;
+  sourceTitle: string;
+  routeFingerprint: string;
+  markdown: string;
+  promptVersion?: string;
+}) {
+  const day = await getOrCreateTodayWorkspaceDay(params);
+  const db = getDb();
+  const metadata = isRecord(day.metadata) ? day.metadata : {};
+  const draftSources = isRecord(metadata[TODAY_LESSON_DRAFTS_KEY])
+    ? (metadata[TODAY_LESSON_DRAFTS_KEY] as Record<string, unknown>)
+    : {};
+  const sourceDrafts = isRecord(draftSources[params.sourceId])
+    ? (draftSources[params.sourceId] as Record<string, unknown>)
+    : {};
+  const savedAt = new Date().toISOString();
+
+  await db
+    .update(planDays)
+    .set({
+      metadata: {
+        ...metadata,
+        [TODAY_LESSON_DRAFTS_KEY]: {
+          ...draftSources,
+          [params.sourceId]: {
+            ...sourceDrafts,
+            [params.routeFingerprint]: {
+              markdown: params.markdown,
+              sourceId: params.sourceId,
+              sourceTitle: params.sourceTitle,
+              routeFingerprint: params.routeFingerprint,
+              promptVersion: params.promptVersion ?? null,
+              savedAt,
+            },
+          },
+        },
+      },
+      updatedAt: new Date(savedAt),
+    })
+    .where(eq(planDays.id, day.id));
+
+  return {
+    markdown: params.markdown,
+    sourceId: params.sourceId,
+    sourceTitle: params.sourceTitle,
+    routeFingerprint: params.routeFingerprint,
+    promptVersion: params.promptVersion,
+    savedAt,
+  } satisfies DailyWorkspaceLessonDraft;
 }
 
 function mapRouteStateToPlanStatus(state: WeeklyRouteItem["state"]): PlanItem["status"] {
@@ -296,6 +512,7 @@ export async function getTodayWorkspace(params: {
         familyNotes: [],
         recoveryOptions: [],
         alternatesByPlanItemId: {},
+        lessonDraft: null,
       },
     };
   }
@@ -340,6 +557,7 @@ export async function getTodayWorkspace(params: {
         familyNotes: [],
         recoveryOptions: [],
         alternatesByPlanItemId: {},
+        lessonDraft: null,
       },
     };
   }
@@ -352,6 +570,14 @@ export async function getTodayWorkspace(params: {
       nodeById.get(item.skillNodeId),
     ),
   );
+  const routeFingerprint = buildTodayLessonDraftFingerprint(selectedPlans.map((item) => item.id));
+  const savedLessonDraft = await getSavedTodayLessonDraft({
+    organizationId: params.organizationId,
+    learnerId: params.learnerId,
+    date: params.date,
+    sourceId: selectedSource.id,
+    routeFingerprint,
+  });
   const alternateItems = getAlternateItems(board, selectedRouteItems.map((item) => item.id));
   const alternatesByPlanItemId = Object.fromEntries(
     selectedPlans.map((planItem) => [
@@ -386,6 +612,7 @@ export async function getTodayWorkspace(params: {
     familyNotes: buildFamilyNotes(selectedSource.title, selectedPlans),
     recoveryOptions: [],
     alternatesByPlanItemId,
+    lessonDraft: savedLessonDraft,
   };
 
   return {
