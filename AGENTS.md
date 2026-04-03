@@ -29,6 +29,23 @@
 - Prefer small, feature-local modules under `lib/<domain>` and `components/<domain>`.
 - Keep Tailwind utility usage consistent with current patterns; shared primitives live in `components/ui`.
 
+## Frontend Design Guardrails
+- Default to a daily-first interaction model. `Today` is the operational center of the app, and planning, curriculum, tracking, and copilot should feel like supporting workspaces around that center rather than separate products with their own heavy intros.
+- Keep parent chrome quiet. Use the existing fixed left workspace rail plus a compact top bar. Do not reintroduce floating sidebars, oversized shells, large hero headers, or repeated explanatory headers on every page.
+- Keep learner surfaces even simpler than parent surfaces. The learner home should read like a clean daily queue with obvious next actions, not a dashboard or a management screen.
+- Cut copy aggressively. Interface text should help the user choose, act, or recover. Remove decorative descriptions, repeated summaries, “what this screen does” paragraphs, and redundant labels.
+- Prefer direct labels over clever labels. Route names like `Today`, `Planning`, `Curriculum`, `Tracking`, and `Copilot` are the model. Avoid ornamental product copy inside the app.
+- Keep navigation shallow and stable. Users should be able to move between `Today`, `Planning`, `Curriculum`, `Tracking`, and `Copilot` without mode confusion or nested navigation stacks.
+- Use cards sparingly and make them plain. Prefer small radii, light borders, quiet backgrounds, and restrained shadows. Do not bring back glassmorphism, giant rounded corners, glow effects, gradient shells, or “premium dashboard” styling.
+- Keep actions obvious and local. A surface should expose the next relevant action near the content it affects instead of introducing separate “insight,” “summary,” or “control” panels.
+- Prefer one compact control over many repeated controls. Example: use a single state select when that is clearer than several state buttons repeated for every row.
+- Treat AI as embedded assistance, not as the main visual identity. Copilot should be chat-first, contextual, and quiet. Avoid hype-heavy AI framing, oversized AI panels, or extra explanatory scaffolding.
+- Preserve the current token-driven visual tone in `app/globals.css` and `components/ui/*`: smaller radii, flatter surfaces, simple borders, and minimal motion. Changes to shared primitives should be deliberate because they affect the whole app.
+- Avoid dashboard filler. Do not add KPI grids, fake charts, trend cards, “insight” badges, decorative status pills, or right-rail summary panels unless they serve a real workflow need.
+- Internal pages should not use landing-page composition. No hero sections, no marketing-style blocks, and no oversized narrative panels inside the parent or learner app.
+- When editing or adding a page, optimize first for scanability on laptop width. The page should read cleanly in a quick vertical pass with a small number of visual layers and a clear primary task.
+- For new UI work, check the existing `Today`, `Planning`, `Curriculum`, learner, and `Copilot` pages first and extend those patterns before inventing new layout languages.
+
 ## Testing Guidelines
 - There is no formal test suite yet; the minimum gate is `corepack pnpm typecheck`, and UI changes should also run `bash ./scripts/verify-before-merge.sh` before merge completion.
 - Before opening browser tools or running UI checks, confirm whether the shared main server on `localhost:3000` is already available and reuse it when possible.
