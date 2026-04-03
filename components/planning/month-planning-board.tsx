@@ -518,7 +518,7 @@ export function MonthPlanningBoard({ month }: MonthPlanningBoardProps) {
 
           <CardContent>
             <div className="overflow-x-auto pb-2">
-              <div className="min-w-[980px] space-y-3">
+              <div className="min-w-0 space-y-3 xl:min-w-[980px]">
                 <div className="grid grid-cols-7 gap-3">
                   {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((label) => (
                     <div
