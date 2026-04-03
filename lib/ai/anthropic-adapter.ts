@@ -61,19 +61,31 @@ export class AnthropicAdapter implements AiProviderAdapter {
 
   async completeJson<T>(options: StructuredCompletionOptions<T>): Promise<T | null> {
     if (options.outputSchema) {
-      const request = this.buildRequest(options);
-      const message = await this.client.messages.parse({
-        ...request,
-        output_config: {
-          format: zodOutputFormat(options.outputSchema),
-        },
-      });
+      try {
+        const request = this.buildRequest(options);
+        const message = await this.client.messages.parse({
+          ...request,
+          output_config: {
+            format: zodOutputFormat(options.outputSchema),
+          },
+        });
 
-      return message.parsed_output;
+        if (message.parsed_output) {
+          return message.parsed_output;
+        }
+      } catch (error) {
+        console.warn("[ai/anthropic] Structured parse failed, falling back to validated JSON.", error);
+      }
     }
 
     const response = await this.complete(options);
-    return safeParseJson<T>(response.content);
+    const parsed = safeParseJson<T>(response.content);
+    if (!parsed || !options.outputSchema) {
+      return parsed;
+    }
+
+    const validated = options.outputSchema.safeParse(parsed);
+    return validated.success ? validated.data : null;
   }
 
   private buildRequest(options: CompletionOptions) {

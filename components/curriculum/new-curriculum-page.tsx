@@ -55,23 +55,31 @@ export function NewCurriculumClientPage({
   }
 
   return (
-    <div className="flex flex-col gap-8 px-6 py-8 max-w-2xl mx-auto">
-      <div className="flex items-center gap-3">
-        <Link href="/curriculum">
-          <Button variant="ghost" size="icon" aria-label="Back">
-            <ArrowLeft className="size-4" />
-          </Button>
-        </Link>
-        <h1 className="font-serif text-3xl font-semibold tracking-tight">
-          Add Curriculum
-        </h1>
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-4 py-8 sm:px-6 lg:px-8">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <Link href="/curriculum">
+            <Button variant="ghost" size="icon" aria-label="Back">
+              <ArrowLeft className="size-4" />
+            </Button>
+          </Link>
+          <div className="space-y-1">
+            <h1 className="font-serif text-3xl font-semibold tracking-tight sm:text-4xl">
+              Add Curriculum
+            </h1>
+            <p className="max-w-3xl text-sm text-muted-foreground sm:text-base">
+              Start from a source you already have, or let the AI shape a curriculum tree and
+              teachable lesson flow from a live planning conversation.
+            </p>
+          </div>
+        </div>
       </div>
 
-      <Card>
-        <CardHeader>
+      <Card className="overflow-hidden border-border/70 bg-card/90 shadow-sm">
+        <CardHeader className="border-b border-border/60 bg-muted/20">
           <CardTitle>Choose an entry point</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-4 sm:p-6">
           {error && (
             <p className="mb-4 rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
               {error}
