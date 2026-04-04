@@ -29,7 +29,6 @@ function toWeekStartDate(inputDate?: string) {
 }
 
 function getPlanningControls(pathname: string, searchParams: URLSearchParams) {
-  const sourceId = searchParams.get("sourceId") ?? undefined;
   const date = searchParams.get("date") ?? new Date().toISOString().slice(0, 10);
   const weekStartDate = searchParams.get("weekStartDate") ?? toWeekStartDate(date);
   const dayDateMatch = pathname.match(/^\/planning\/day\/([^/]+)/);
@@ -37,26 +36,14 @@ function getPlanningControls(pathname: string, searchParams: URLSearchParams) {
 
   const monthParams = new URLSearchParams();
   monthParams.set("month", date);
-  if (sourceId) {
-    monthParams.set("sourceId", sourceId);
-  }
 
   const weekParams = new URLSearchParams();
   weekParams.set("weekStartDate", weekStartDate);
-  if (sourceId) {
-    weekParams.set("sourceId", sourceId);
-  }
 
   const dayParams = new URLSearchParams();
-  if (sourceId) {
-    dayParams.set("sourceId", sourceId);
-  }
 
   const todayParams = new URLSearchParams();
   todayParams.set("date", date);
-  if (sourceId) {
-    todayParams.set("sourceId", sourceId);
-  }
 
   return [
     {

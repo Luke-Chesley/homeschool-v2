@@ -12,15 +12,25 @@ import { CurriculumTree } from "./curriculum-tree";
 
 interface CurriculumOverviewProps {
   sources: CurriculumSource[];
-  selectedSourceId: string;
+  activeSourceId: string;
+  onActivateSource: (formData: FormData) => Promise<void>;
   tree: CurriculumTreeData;
 }
 
-export function CurriculumOverview({ sources, selectedSourceId, tree }: CurriculumOverviewProps) {
+export function CurriculumOverview({
+  sources,
+  activeSourceId,
+  onActivateSource,
+  tree,
+}: CurriculumOverviewProps) {
   return (
     <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
       <div className="space-y-4">
-        <CurriculumSourceSelector sources={sources} selectedSourceId={selectedSourceId} />
+        <CurriculumSourceSelector
+          sources={sources}
+          activeSourceId={activeSourceId}
+          onActivateSource={onActivateSource}
+        />
         <Card>
           <div className="space-y-3 p-4 text-sm">
             <p className="font-medium text-foreground">{tree.source.title}</p>
@@ -59,7 +69,7 @@ export function CurriculumOverview({ sources, selectedSourceId, tree }: Curricul
                   </p>
                 </div>
                 <Link
-                  href={`/curriculum/graph?sourceId=${selectedSourceId}`}
+                  href={`/curriculum/graph?sourceId=${activeSourceId}`}
                   className={cn(buttonVariants({ size: "sm" }), "w-full justify-center lg:w-auto")}
                 >
                   Open graph view
@@ -79,7 +89,7 @@ export function CurriculumOverview({ sources, selectedSourceId, tree }: Curricul
         </div>
       </Card>
 
-      <CurriculumRefinementWidget sourceId={selectedSourceId} sourceTitle={tree.source.title} />
+      <CurriculumRefinementWidget sourceId={activeSourceId} sourceTitle={tree.source.title} />
     </div>
   );
 }

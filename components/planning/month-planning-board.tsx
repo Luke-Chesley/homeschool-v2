@@ -216,12 +216,10 @@ function DayCell({
 function BacklogBucket({
   week,
   items,
-  monthSourceId,
   isSaving,
 }: {
   week: MonthlyPlanWeek;
   items: WeeklyRouteBoardItem[];
-  monthSourceId: string;
   isSaving: boolean;
 }) {
   const columnId = `unassigned:${week.weeklyRouteId}`;
@@ -240,7 +238,7 @@ function BacklogBucket({
           <p className="text-xs text-muted-foreground">Unscheduled route items for this week.</p>
         </div>
         <Link
-          href={`/planning?sourceId=${monthSourceId}&weekStartDate=${week.weekStartDate}`}
+          href={`/planning?weekStartDate=${week.weekStartDate}`}
           className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "h-8 px-2")}
         >
           Open week
@@ -577,7 +575,7 @@ export function MonthPlanningBoard({ month }: MonthPlanningBoardProps) {
               </div>
               {firstWeek ? (
                 <Link
-                  href={`/planning?sourceId=${month.sourceId}&weekStartDate=${firstWeek.weekStartDate}`}
+                  href={`/planning?weekStartDate=${firstWeek.weekStartDate}`}
                   className={cn(buttonVariants({ variant: "default" }), "w-full")}
                 >
                   Open the first week
@@ -605,7 +603,6 @@ export function MonthPlanningBoard({ month }: MonthPlanningBoardProps) {
                       key={week.weekStartDate}
                       week={week}
                       items={items}
-                      monthSourceId={month.sourceId}
                       isSaving={isSaving}
                     />
                   );

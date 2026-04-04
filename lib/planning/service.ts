@@ -2,7 +2,7 @@ import "server-only";
 
 import { eq } from "drizzle-orm";
 
-import { listCurriculumSources } from "@/lib/curriculum/service";
+import { getLiveCurriculumSource } from "@/lib/curriculum/service";
 import { toWeekStartDate } from "@/lib/curriculum-routing";
 import { getDb } from "@/lib/db/server";
 import { weeklyRouteItems } from "@/lib/db/schema";
@@ -117,16 +117,13 @@ export async function getPlanningDayView(params: {
   learnerId: string;
   learnerName: string;
   date: string;
-  sourceId?: string;
 }): Promise<{
   day: PlanDay;
   sourceId: string;
   sourceTitle: string;
   weekStartDate: string;
 } | null> {
-  const sources = await listCurriculumSources(params.organizationId);
-  const source =
-    (params.sourceId ? sources.find((entry) => entry.id === params.sourceId) : null) ?? sources[0];
+  const source = await getLiveCurriculumSource(params.organizationId);
 
   if (!source) {
     return null;
@@ -137,7 +134,6 @@ export async function getPlanningDayView(params: {
     learnerId: params.learnerId,
     learnerName: params.learnerName,
     date: params.date,
-    sourceId: source.id,
   });
 
   if (!workspaceResult) {

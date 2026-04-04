@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 
 import { getDb } from "@/lib/db/server";
 import {
@@ -6,7 +6,10 @@ import {
   curriculumNodes,
   curriculumSkillPrerequisites,
   curriculumSources,
+  organizationPlatformSettings,
+  organizations,
 } from "@/lib/db/schema";
+import { ensureOrganizationPlatformSettings } from "@/lib/platform/settings";
 
 import type { CurriculumAiGeneratedArtifact } from "./ai-draft";
 import { loadLocalCurriculumJson, type ImportedCurriculumDocument } from "./local-json-import";
@@ -62,6 +65,27 @@ function mapSource(record: {
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
   };
+}
+
+function getActiveCurriculumSourceId(metadata: Record<string, unknown> | null | undefined) {
+  return typeof metadata?.activeCurriculumSourceId === "string"
+    ? metadata.activeCurriculumSourceId
+    : undefined;
+}
+
+async function ensureOrganizationSettingsRow(organizationId: string) {
+  const organization = await getDb().query.organizations.findFirst({
+    where: (table, { eq }) => eq(table.id, organizationId),
+  });
+
+  if (!organization) {
+    throw new Error(`Organization not found: ${organizationId}`);
+  }
+
+  await ensureOrganizationPlatformSettings({
+    id: organization.id,
+    type: organization.type,
+  });
 }
 
 function mapNode(record: typeof curriculumNodes.$inferSelect): CurriculumNode {
@@ -378,6 +402,74 @@ export async function listCurriculumSources(householdId: string): Promise<Curric
   return sources.map(mapSource);
 }
 
+export async function getLiveCurriculumSource(householdId: string): Promise<CurriculumSource | null> {
+  const [settings, sources] = await Promise.all([
+    getDb().query.organizationPlatformSettings.findFirst({
+      where: (table, { eq }) => eq(table.organizationId, householdId),
+    }),
+    getDb().query.curriculumSources.findMany({
+      where: (table, { eq }) => eq(table.organizationId, householdId),
+      orderBy: (table, { desc }) => [desc(table.updatedAt), desc(table.createdAt)],
+    }),
+  ]);
+
+  if (sources.length === 0) {
+    return null;
+  }
+
+  const activeSourceId = getActiveCurriculumSourceId(settings?.metadata);
+  if (activeSourceId) {
+    const activeSource = sources.find((source) => source.id === activeSourceId);
+    if (activeSource) {
+      return mapSource(activeSource);
+    }
+  }
+
+  return mapSource(sources[0]);
+}
+
+export async function setLiveCurriculumSource(householdId: string, sourceId: string | null) {
+  await ensureOrganizationSettingsRow(householdId);
+
+  if (sourceId != null && sourceId.length === 0) {
+    throw new Error("CurriculumSource id is required.");
+  }
+
+  const source =
+    sourceId != null
+      ? await getDb().query.curriculumSources.findFirst({
+          where: (table, { and, eq }) =>
+            and(eq(table.id, sourceId), eq(table.organizationId, householdId)),
+        })
+      : null;
+
+  if (sourceId != null && sourceId.length > 0 && !source) {
+    throw new Error(`CurriculumSource not found: ${sourceId}`);
+  }
+
+  const settings = await getDb().query.organizationPlatformSettings.findFirst({
+    where: (table, { eq }) => eq(table.organizationId, householdId),
+  });
+
+  if (!settings) {
+    throw new Error(`Organization platform settings not found for: ${householdId}`);
+  }
+
+  await getDb()
+    .update(organizationPlatformSettings)
+    .set({
+      metadata: {
+        ...(settings.metadata ?? {}),
+        activeCurriculumSourceId: sourceId,
+        activeCurriculumUpdatedAt: new Date().toISOString(),
+      },
+      updatedAt: new Date(),
+    })
+    .where(eq(organizationPlatformSettings.organizationId, householdId));
+
+  return source ? mapSource(source) : null;
+}
+
 export async function getCurriculumSource(id: string, householdId?: string) {
   const source = await getDb().query.curriculumSources.findFirst({
     where: (table, { and, eq }) =>
@@ -549,6 +641,25 @@ export async function deleteCurriculumSource(id: string, organizationId: string)
     .delete(curriculumSources)
     .where(and(eq(curriculumSources.id, id), eq(curriculumSources.organizationId, organizationId)))
     .returning();
+
+  const settings = await getDb().query.organizationPlatformSettings.findFirst({
+    where: (table, { eq }) => eq(table.organizationId, organizationId),
+  });
+
+  const activeSourceId = getActiveCurriculumSourceId(settings?.metadata);
+  if (deleted && activeSourceId === id && settings) {
+    await getDb()
+      .update(organizationPlatformSettings)
+      .set({
+        metadata: {
+          ...(settings.metadata ?? {}),
+          activeCurriculumSourceId: null,
+          activeCurriculumUpdatedAt: new Date().toISOString(),
+        },
+        updatedAt: new Date(),
+      })
+      .where(eq(organizationPlatformSettings.organizationId, organizationId));
+  }
 
   return deleted ? mapSource(deleted) : null;
 }

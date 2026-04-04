@@ -2,8 +2,9 @@ import { notFound, redirect } from "next/navigation";
 
 import { DayPlanView } from "@/components/planning/day-plan-view";
 import { PlanningShell } from "@/components/planning/planning-shell";
+import { Card } from "@/components/ui/card";
 import { requireAppSession } from "@/lib/app-session/server";
-import { listCurriculumSources } from "@/lib/curriculum/service";
+import { getLiveCurriculumSource } from "@/lib/curriculum/service";
 import {
   getPlanningDayView,
   selectRouteItemForPlanningDay,
@@ -15,7 +16,6 @@ interface PlanningDayPageProps {
   }>;
   searchParams: Promise<{
     selectRouteItemId?: string | string[];
-    sourceId?: string | string[];
   }>;
 }
 
@@ -30,16 +30,7 @@ export default async function PlanningDayPage({
     typeof resolvedSearchParams.selectRouteItemId === "string"
       ? resolvedSearchParams.selectRouteItemId
       : undefined;
-  const requestedSourceId =
-    typeof resolvedSearchParams.sourceId === "string"
-      ? resolvedSearchParams.sourceId
-      : undefined;
-
-  const sources = await listCurriculumSources(session.organization.id);
-  const selectedSourceId =
-    requestedSourceId && sources.some((source) => source.id === requestedSourceId)
-      ? requestedSourceId
-      : sources[0]?.id;
+  const liveSource = await getLiveCurriculumSource(session.organization.id);
 
   if (selectedRouteItemId) {
     await selectRouteItemForPlanningDay({
@@ -47,10 +38,11 @@ export default async function PlanningDayPage({
       date,
       weeklyRouteItemId: selectedRouteItemId,
     });
-    const redirectSourceQuery = selectedSourceId
-      ? `?sourceId=${encodeURIComponent(selectedSourceId)}`
-      : "";
-    redirect(`/planning/day/${date}${redirectSourceQuery}`);
+    redirect(`/planning/day/${date}`);
+  }
+
+  if (!liveSource) {
+    notFound();
   }
 
   const result = await getPlanningDayView({
@@ -58,7 +50,6 @@ export default async function PlanningDayPage({
     learnerId: session.activeLearner.id,
     learnerName: session.activeLearner.displayName,
     date,
-    sourceId: selectedSourceId,
   });
 
   if (!result) {
@@ -67,6 +58,16 @@ export default async function PlanningDayPage({
 
   return (
     <PlanningShell>
+      <Card className="mb-4">
+        <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-1">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+              Live curriculum
+            </p>
+            <p className="font-medium text-foreground">{liveSource.title}</p>
+          </div>
+        </div>
+      </Card>
       <DayPlanView day={result.day} />
     </PlanningShell>
   );
