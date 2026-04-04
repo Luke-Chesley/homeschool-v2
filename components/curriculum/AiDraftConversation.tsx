@@ -38,6 +38,8 @@ export function AiDraftConversation({
 
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
   const bootstrappedRef = React.useRef(false);
+  const userMessageCount = messages.filter((message) => message.role === "user").length;
+  const canGenerateDraft = state?.readiness === "ready" || userMessageCount >= 2;
 
   React.useEffect(() => {
     if (bootstrappedRef.current) {
@@ -270,11 +272,11 @@ export function AiDraftConversation({
                 value={state?.capturedRequirements.structurePreferences}
               />
 
-              {state?.missingInformation?.length ? (
+              {Boolean(state?.missingInformation?.length) && state?.readiness !== "ready" ? (
                 <div className="space-y-2">
                   <p className="text-sm font-medium">Still unclear</p>
                   <div className="flex flex-wrap gap-2">
-                    {state.missingInformation.map((item) => (
+                    {state?.missingInformation?.map((item) => (
                       <Badge key={item} variant="outline" className="rounded-full capitalize">
                         {item}
                       </Badge>
@@ -298,7 +300,7 @@ export function AiDraftConversation({
                 <Button
                   type="button"
                   onClick={handleCreate}
-                  disabled={creating || sending || loadingInitial || state?.readiness !== "ready"}
+                  disabled={creating || sending || loadingInitial || !canGenerateDraft}
                 >
                   {creating ? "Generating curriculum…" : "Generate curriculum"}
                   <ArrowRight className="size-4" />
