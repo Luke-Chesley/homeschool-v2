@@ -43,6 +43,7 @@ const UNSCHEDULED_BLOCKING_SKILL_STATUSES = new Set<SkillStatus>([
 const UNFINISHED_SCHEDULED_STATUSES = new Set<SkillStatus>(["scheduled", "in_progress"]);
 
 const CAPACITY_STATES = new Set<WeeklyRouteItemState>(["queued", "scheduled", "in_progress"]);
+const WEEKDAY_COUNT = 5;
 
 type RouteBoardContext = {
   sourceId: string;
@@ -56,6 +57,7 @@ type RouteItemProjection = {
   id: string;
   skillNodeId: string;
   currentPosition: number;
+  scheduledDate: string | null;
   state: WeeklyRouteItemState;
   manualOverrideKind: WeeklyRouteManualOverrideKind;
 };
@@ -75,6 +77,31 @@ export function toWeekStartDate(inputDate?: string): string {
   const offset = (weekday + 6) % 7;
   normalized.setUTCDate(normalized.getUTCDate() - offset);
   return normalized.toISOString().slice(0, 10);
+}
+
+function addDays(baseDate: string, days: number) {
+  const date = parseDateOrThrow(baseDate);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function buildWeekDates(weekStartDate: string) {
+  return Array.from({ length: WEEKDAY_COUNT }, (_, index) => addDays(weekStartDate, index));
+}
+
+function buildSuggestedScheduledDates(params: {
+  weekStartDate: string;
+  itemCount: number;
+  targetItemsPerDay: number;
+  planningDayCount: number;
+}) {
+  const weekdays = buildWeekDates(params.weekStartDate).slice(0, params.planningDayCount);
+  const targetItemsPerDay = Math.max(1, params.targetItemsPerDay);
+
+  return Array.from({ length: params.itemCount }, (_, index) => {
+    const dayIndex = Math.floor(index / targetItemsPerDay);
+    return weekdays[dayIndex] ?? null;
+  });
 }
 
 function readNumber(value: unknown): number | null {
@@ -188,29 +215,55 @@ function mapDailySelection(item: WeeklyRouteBoardItem): WeeklyRouteDailySelectio
   };
 }
 
+function getScheduledConflictKey(item: WeeklyRouteBoardItem) {
+  if (!item.scheduledDate) {
+    return null;
+  }
+
+  return `${item.skillNodeId}::${item.scheduledDate}`;
+}
+
 function computeConflicts(
   items: WeeklyRouteBoardItem[],
   context: RouteBoardContext,
 ): WeeklyRouteConflict[] {
   const conflicts: WeeklyRouteConflict[] = [];
-  const bySkillNodeId = new Map<string, WeeklyRouteBoardItem[]>();
-  const firstItemBySkillNodeId = new Map<string, WeeklyRouteBoardItem>();
+  const byScheduledSkillKey = new Map<string, WeeklyRouteBoardItem[]>();
+  const itemsBySkillNodeId = new Map<string, WeeklyRouteBoardItem[]>();
+  const firstActivePositionBySkillNodeId = new Map<string, number>();
 
   for (const item of items) {
-    const existing = bySkillNodeId.get(item.skillNodeId) ?? [];
+    const skillEntries = itemsBySkillNodeId.get(item.skillNodeId) ?? [];
+    skillEntries.push(item);
+    itemsBySkillNodeId.set(item.skillNodeId, skillEntries);
+
+    if (item.state !== "removed") {
+      const existingFirst = firstActivePositionBySkillNodeId.get(item.skillNodeId);
+      if (existingFirst == null || item.currentPosition < existingFirst) {
+        firstActivePositionBySkillNodeId.set(item.skillNodeId, item.currentPosition);
+      }
+    }
+
+    const conflictKey = getScheduledConflictKey(item);
+    if (!conflictKey) {
+      continue;
+    }
+
+    const existing = byScheduledSkillKey.get(conflictKey) ?? [];
     existing.push(item);
-    bySkillNodeId.set(item.skillNodeId, existing);
+    byScheduledSkillKey.set(conflictKey, existing);
   }
 
-  for (const [skillNodeId, itemGroup] of bySkillNodeId) {
+  for (const [skillKey, itemGroup] of byScheduledSkillKey) {
     const ordered = [...itemGroup].sort((left, right) => left.currentPosition - right.currentPosition);
-    firstItemBySkillNodeId.set(skillNodeId, ordered[0]);
+    const separatorIndex = skillKey.indexOf("::");
+    const skillNodeId = separatorIndex >= 0 ? skillKey.slice(0, separatorIndex) : skillKey;
     if (ordered.length > 1) {
       conflicts.push({
         type: "item_scheduled_twice",
         affectedItemIds: ordered.map((entry) => entry.id),
         blockingSkillNodeIds: [skillNodeId],
-        explanation: "This skill appears multiple times in the same weekly route.",
+        explanation: "This skill is scheduled multiple times on the same day.",
         suggestedRepairActions: ["drop_duplicate"],
         keepOverrideAllowed: false,
       });
@@ -238,12 +291,17 @@ function computeConflicts(
     if (isSkillComplete(status)) {
       return true;
     }
-    const routeItem = firstItemBySkillNodeId.get(skillNodeId);
-    return routeItem?.state === "done";
+    const routeItems = itemsBySkillNodeId.get(skillNodeId) ?? [];
+    return routeItems.some((routeItem) => routeItem.state === "done");
   };
 
   for (const item of items) {
     if (item.state === "removed") {
+      continue;
+    }
+
+    const firstActivePosition = firstActivePositionBySkillNodeId.get(item.skillNodeId);
+    if (firstActivePosition != null && item.currentPosition > firstActivePosition) {
       continue;
     }
 
@@ -271,7 +329,10 @@ function computeConflicts(
       });
 
       const movedAhead = predecessorBlocked.some((skillNodeId) => {
-        const predecessorItem = firstItemBySkillNodeId.get(skillNodeId);
+        const predecessorItems = itemsBySkillNodeId.get(skillNodeId) ?? [];
+        const predecessorItem = predecessorItems
+          .filter((entry) => entry.state !== "done" && entry.state !== "removed")
+          .sort((left, right) => right.currentPosition - left.currentPosition)[0];
         if (!predecessorItem) {
           return true;
         }
@@ -555,18 +616,30 @@ function buildRecommendations(params: {
   nodes: typeof curriculumNodes.$inferSelect[];
   prerequisites: CurriculumPrerequisiteRecord[];
   skillStateBySkillNodeId: Map<string, SkillStatus>;
-}): { orderedSkillNodeIds: string[]; targetItemsPerWeek: number; generationBasis: Record<string, unknown> } {
+}): {
+  orderedSkillNodeIds: string[];
+  targetItemsPerWeek: number;
+  targetItemsPerDay: number;
+  planningDayCount: number;
+  generationBasis: Record<string, unknown>;
+} {
   const { profile, activeBranchActivations, nodes, prerequisites, skillStateBySkillNodeId } = params;
   const targetItemsPerWeek = getTargetItemsPerWeek(profile);
+  const targetItemsPerDay = Math.max(1, profile?.targetItemsPerDay ?? 1);
+  const planningDayCount = getPlanningDayCount(profile);
 
   if (activeBranchActivations.length === 0) {
     return {
       orderedSkillNodeIds: [],
       targetItemsPerWeek,
+      targetItemsPerDay,
+      planningDayCount,
       generationBasis: {
         algorithmVersion: "2026-03-31-agent-b-v1",
         reason: "no_active_branch_activations",
         targetItemsPerWeek,
+        targetItemsPerDay,
+        planningDayCount,
       },
     };
   }
@@ -684,9 +757,13 @@ function buildRecommendations(params: {
   return {
     orderedSkillNodeIds,
     targetItemsPerWeek,
+    targetItemsPerDay,
+    planningDayCount,
     generationBasis: {
       algorithmVersion: "2026-03-31-agent-b-v1",
       targetItemsPerWeek,
+      targetItemsPerDay,
+      planningDayCount,
       branchCount: branchInputs.length,
       weightedBranchCycle,
       selectedCount: orderedSkillNodeIds.length,
@@ -699,8 +776,17 @@ async function persistGeneratedRoute(params: {
   sourceId: string;
   weekStartDate: string;
   orderedSkillNodeIds: string[];
+  targetItemsPerDay: number;
+  planningDayCount: number;
   generationBasis: Record<string, unknown>;
 }) {
+  const scheduledDates = buildSuggestedScheduledDates({
+    weekStartDate: params.weekStartDate,
+    itemCount: params.orderedSkillNodeIds.length,
+    targetItemsPerDay: params.targetItemsPerDay,
+    planningDayCount: params.planningDayCount,
+  });
+
   return getDb().transaction(async (tx) => {
     const [route] = await tx
       .insert(weeklyRoutes)
@@ -733,10 +819,10 @@ async function persistGeneratedRoute(params: {
           skillNodeId,
           recommendedPosition: index,
           currentPosition: index,
-          scheduledDate: null,
+          scheduledDate: scheduledDates[index] ?? null,
           manualOverrideKind: "none",
           manualOverrideNote: null,
-          state: "queued",
+          state: scheduledDates[index] ? "scheduled" : "queued",
         }),
       );
 
@@ -794,6 +880,8 @@ export async function generateWeeklyRoute(params: {
     sourceId: params.sourceId,
     weekStartDate,
     orderedSkillNodeIds: recommendation.orderedSkillNodeIds,
+    targetItemsPerDay: recommendation.targetItemsPerDay,
+    planningDayCount: recommendation.planningDayCount,
     generationBasis: recommendation.generationBasis,
   });
 
@@ -893,6 +981,7 @@ function toProjection(items: WeeklyRouteBoardItem[]): RouteItemProjection[] {
       id: item.id,
       skillNodeId: item.skillNodeId,
       currentPosition: item.currentPosition,
+      scheduledDate: item.scheduledDate,
       state: item.state,
       manualOverrideKind: item.manualOverrideKind,
     }))
@@ -938,11 +1027,16 @@ function buildRepairPreview(params: {
     operations.push(operation);
   };
 
-  const firstBySkillNodeId = new Map<string, string>();
+  const firstByScheduledSkillKey = new Map<string, string>();
   for (const entry of projected) {
-    const firstItemId = firstBySkillNodeId.get(entry.skillNodeId);
+    const conflictKey = entry.scheduledDate ? `${entry.skillNodeId}::${entry.scheduledDate}` : null;
+    if (!conflictKey) {
+      continue;
+    }
+
+    const firstItemId = firstByScheduledSkillKey.get(conflictKey);
     if (!firstItemId) {
-      firstBySkillNodeId.set(entry.skillNodeId, entry.id);
+      firstByScheduledSkillKey.set(conflictKey, entry.id);
       continue;
     }
 
@@ -954,7 +1048,7 @@ function buildRepairPreview(params: {
       recordOperation({
         action: "drop_duplicate",
         itemId: entry.id,
-        reason: "Duplicate scheduled skill in weekly route.",
+        reason: "Duplicate scheduled skill on the same day.",
         fromPosition: entry.currentPosition,
         toPosition: entry.currentPosition,
         fromState,
@@ -965,16 +1059,28 @@ function buildRepairPreview(params: {
     }
   }
 
+  const firstActivePositionBySkillNodeId = new Map<string, number>();
+  for (const entry of projected) {
+    if (entry.state === "removed") {
+      continue;
+    }
+
+    const existingFirst = firstActivePositionBySkillNodeId.get(entry.skillNodeId);
+    if (existingFirst == null || entry.currentPosition < existingFirst) {
+      firstActivePositionBySkillNodeId.set(entry.skillNodeId, entry.currentPosition);
+    }
+  }
+
   let movedForDependencies = true;
   while (movedForDependencies) {
     movedForDependencies = false;
     projected = normalizeProjectedPositions(projected);
 
-    const projectedBySkillNodeId = new Map<string, RouteItemProjection>();
+    const projectedBySkillNodeId = new Map<string, RouteItemProjection[]>();
     for (const entry of projected) {
-      if (!projectedBySkillNodeId.has(entry.skillNodeId)) {
-        projectedBySkillNodeId.set(entry.skillNodeId, entry);
-      }
+      const existing = projectedBySkillNodeId.get(entry.skillNodeId) ?? [];
+      existing.push(entry);
+      projectedBySkillNodeId.set(entry.skillNodeId, existing);
     }
 
     const isResolved = (skillNodeId: string) => {
@@ -982,12 +1088,17 @@ function buildRepairPreview(params: {
       if (isSkillComplete(status)) {
         return true;
       }
-      const routeItem = projectedBySkillNodeId.get(skillNodeId);
-      return routeItem?.state === "done";
+      const routeItems = projectedBySkillNodeId.get(skillNodeId) ?? [];
+      return routeItems.some((routeItem) => routeItem.state === "done");
     };
 
     for (const entry of projected) {
       if (entry.state === "removed") {
+        continue;
+      }
+
+      const firstActivePosition = firstActivePositionBySkillNodeId.get(entry.skillNodeId);
+      if (firstActivePosition != null && entry.currentPosition > firstActivePosition) {
         continue;
       }
 
@@ -998,9 +1109,11 @@ function buildRepairPreview(params: {
 
       const blockingPositions = dependencySkillNodeIds
         .filter((skillNodeId) => !isResolved(skillNodeId))
-        .map((skillNodeId) => projectedBySkillNodeId.get(skillNodeId))
-        .filter((value): value is RouteItemProjection => value != null && value.state !== "removed")
-        .map((value) => value.currentPosition);
+        .flatMap((skillNodeId) =>
+          (projectedBySkillNodeId.get(skillNodeId) ?? [])
+            .filter((value) => value.state !== "removed")
+            .map((value) => value.currentPosition),
+        );
 
       if (blockingPositions.length === 0) {
         continue;

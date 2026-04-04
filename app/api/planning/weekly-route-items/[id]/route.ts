@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { requireAppSession } from "@/lib/app-session/server";
 import {
+  duplicateWeeklyRouteItem,
   moveWeeklyRouteItem,
   updateWeeklyRouteItemState,
 } from "@/lib/planning/weekly-route-service";
@@ -15,6 +16,7 @@ const UpdateWeeklyRouteItemSchema = z.object({
   targetIndex: z.number().int().nonnegative().optional(),
   state: WeeklyRouteItemStateSchema.optional(),
   manualOverrideNote: z.string().max(500).optional(),
+  duplicateTargetDate: z.string().nullable().optional(),
 });
 
 interface RouteProps {
@@ -41,7 +43,15 @@ export async function PATCH(req: NextRequest, { params }: RouteProps) {
     }
 
     const board =
-      parsed.data.state && parsed.data.targetIndex == null
+      parsed.data.duplicateTargetDate !== undefined
+        ? await duplicateWeeklyRouteItem({
+            learnerId: session.activeLearner.id,
+            weeklyRouteId: parsed.data.weeklyRouteId,
+            weeklyRouteItemId: id,
+            targetScheduledDate: parsed.data.duplicateTargetDate,
+            manualOverrideNote: parsed.data.manualOverrideNote,
+          })
+        : parsed.data.state && parsed.data.targetIndex == null
         ? await updateWeeklyRouteItemState({
             learnerId: session.activeLearner.id,
             weeklyRouteId: parsed.data.weeklyRouteId,

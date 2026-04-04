@@ -14,7 +14,7 @@ import {
 } from "@dnd-kit/core";
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical } from "lucide-react";
+import { Copy, GripVertical } from "lucide-react";
 
 import { buttonVariants } from "@/components/ui/button";
 import type { WeeklyRouteBoard, WeeklyRouteBoardItem } from "@/lib/curriculum-routing";
@@ -104,12 +104,16 @@ function SortableRouteItem({
   item,
   conflicted,
   isSaving,
+  canRepeat,
   onChangeState,
+  onDuplicate,
 }: {
   item: WeeklyRouteBoardItem;
   conflicted: boolean;
   isSaving: boolean;
+  canRepeat: boolean;
   onChangeState: (itemId: string, state: WeeklyRouteBoardItem["state"]) => Promise<void>;
+  onDuplicate: (itemId: string, targetScheduledDate: string) => Promise<void>;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.id,
@@ -163,6 +167,25 @@ function SortableRouteItem({
               </Badge>
             ) : null}
           </div>
+          {canRepeat ? (
+            <button
+              type="button"
+              disabled={isSaving}
+              className={cn(
+                buttonVariants({ variant: "outline", size: "sm" }),
+                "mt-1 w-fit gap-2",
+              )}
+              onClick={() => {
+                if (!item.scheduledDate) {
+                  return;
+                }
+                void onDuplicate(item.id, addDays(item.scheduledDate, 1));
+              }}
+            >
+              <Copy className="size-4" />
+              Repeat
+            </button>
+          ) : null}
         </div>
 
         <button
@@ -184,13 +207,17 @@ function RouteColumn({
   items,
   conflictedItemIds,
   isSaving,
+  weekDates,
   onChangeState,
+  onDuplicate,
 }: {
   columnId: ColumnId;
   items: WeeklyRouteBoardItem[];
   conflictedItemIds: Set<string>;
   isSaving: boolean;
+  weekDates: string[];
   onChangeState: (itemId: string, state: WeeklyRouteBoardItem["state"]) => Promise<void>;
+  onDuplicate: (itemId: string, targetScheduledDate: string) => Promise<void>;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: columnId });
 
@@ -216,7 +243,13 @@ function RouteColumn({
                 item={item}
                 conflicted={conflictedItemIds.has(item.id)}
                 isSaving={isSaving}
+                canRepeat={
+                  item.state !== "removed" &&
+                  item.scheduledDate != null &&
+                  weekDates.includes(addDays(item.scheduledDate, 1))
+                }
                 onChangeState={onChangeState}
+                onDuplicate={onDuplicate}
               />
             ))
           )}
@@ -334,6 +367,56 @@ export function WeeklyRouteBoard({ initialBoard, weekStartDate }: WeeklyRouteBoa
     } catch (updateError) {
       console.error(updateError);
       setError("Could not save this move. The board was restored.");
+      if (snapshotRef.current) {
+        setBoard(snapshotRef.current.board);
+        columnsRef.current = snapshotRef.current.columns;
+        setColumns(snapshotRef.current.columns);
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const persistDuplicate = async (itemId: string, targetScheduledDate: string) => {
+    const item = board.items.find((entry) => entry.id === itemId);
+    if (!item) {
+      return;
+    }
+
+    try {
+      setError(null);
+      setIsSaving(true);
+      snapshotRef.current = {
+        board,
+        columns: columnsRef.current,
+      };
+
+      const response = await fetch(`/api/planning/weekly-route-items/${itemId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          weeklyRouteId: board.summary.weeklyRouteId,
+          duplicateTargetDate: targetScheduledDate,
+        }),
+      });
+
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(payload?.error ?? "Failed to duplicate the route item.");
+      }
+
+      const updatedBoard = (await response.json()) as WeeklyRouteBoard;
+      resetFromServerBoard(updatedBoard);
+    } catch (updateError) {
+      console.error(updateError);
+      setError(
+        updateError instanceof Error
+          ? updateError.message
+          : "Could not duplicate this item. The board was restored.",
+      );
+
       if (snapshotRef.current) {
         setBoard(snapshotRef.current.board);
         columnsRef.current = snapshotRef.current.columns;
@@ -503,7 +586,9 @@ export function WeeklyRouteBoard({ initialBoard, weekStartDate }: WeeklyRouteBoa
                 items={items}
                 conflictedItemIds={conflictedItemIds}
                 isSaving={isSaving}
+                weekDates={weekDates}
                 onChangeState={persistState}
+                onDuplicate={persistDuplicate}
               />
             );
           })}

@@ -270,9 +270,10 @@ export const weeklyRouteItems = pgTable(
     ...timestamps(),
   },
   (table) => ({
-    weeklyRouteItemUnique: uniqueIndex("weekly_route_items_route_skill_idx").on(
+    weeklyRouteItemUnique: uniqueIndex("weekly_route_items_route_skill_date_idx").on(
       table.weeklyRouteId,
       table.skillNodeId,
+      table.scheduledDate,
     ),
   }),
 );
