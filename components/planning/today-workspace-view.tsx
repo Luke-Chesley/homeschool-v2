@@ -19,6 +19,7 @@ interface TodayWorkspaceViewProps {
 interface TodayRouteItemsSectionProps {
   workspace: DailyWorkspace;
   sourceId?: string;
+  repeatTomorrowAllowed?: boolean;
 }
 
 function formatMinutes(minutes: number) {
@@ -45,8 +46,14 @@ function getReviewLabel(reviewState?: string | null) {
   return reviewState.replaceAll("_", " ");
 }
 
+function canRepeatToTomorrow(date: string) {
+  const day = new Date(`${date}T12:00:00.000Z`).getUTCDay();
+  return day >= 1 && day <= 4;
+}
+
 export function TodayWorkspaceView({ workspace, sourceId }: TodayWorkspaceViewProps) {
   const [lessonDraft, setLessonDraft] = useState<string | null>(workspace.lessonDraft?.markdown ?? null);
+  const repeatTomorrowAllowed = canRepeatToTomorrow(workspace.date);
 
   useEffect(() => {
     setLessonDraft(workspace.lessonDraft?.markdown ?? null);
@@ -77,7 +84,12 @@ export function TodayWorkspaceView({ workspace, sourceId }: TodayWorkspaceViewPr
   if (lessonDraft) {
     return (
       <div className="grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)_320px] xl:items-start">
-        <TodayRouteItemsSection workspace={workspace} sourceId={sourceId} compact />
+        <TodayRouteItemsSection
+          workspace={workspace}
+          sourceId={sourceId}
+          repeatTomorrowAllowed={repeatTomorrowAllowed}
+          compact
+        />
         <TodayLessonDraftArticle workspace={workspace} markdown={lessonDraft} />
         <TodayLessonPlanSection
           workspace={workspace}
@@ -93,7 +105,11 @@ export function TodayWorkspaceView({ workspace, sourceId }: TodayWorkspaceViewPr
 
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1.3fr)_minmax(340px,0.9fr)] xl:items-start">
-      <TodayRouteItemsSection workspace={workspace} sourceId={sourceId} />
+      <TodayRouteItemsSection
+        workspace={workspace}
+        sourceId={sourceId}
+        repeatTomorrowAllowed={repeatTomorrowAllowed}
+      />
       <TodayLessonPlanSection
         workspace={workspace}
         sourceId={sourceId}
@@ -107,6 +123,7 @@ export function TodayWorkspaceView({ workspace, sourceId }: TodayWorkspaceViewPr
 export function TodayRouteItemsSection({
   workspace,
   sourceId,
+  repeatTomorrowAllowed = false,
   compact = false,
 }: TodayRouteItemsSectionProps & { compact?: boolean }) {
   const totalMinutes = workspace.items.reduce((sum, item) => sum + item.estimatedMinutes, 0);
@@ -159,6 +176,14 @@ export function TodayRouteItemsSection({
                     >
                       Complete
                     </Link>
+                    {repeatTomorrowAllowed ? (
+                      <Link
+                        href={`/today?date=${workspace.date}&action=repeat_tomorrow&planItemId=${item.id}`}
+                        className={buttonVariants({ variant: "outline", size: "sm" })}
+                      >
+                        Repeat
+                      </Link>
+                    ) : null}
                     {alternate ? (
                       <Link
                         href={`/today?date=${workspace.date}&action=swap_with_alternate&planItemId=${item.id}&alternateWeeklyRouteItemId=${alternate.id}`}
@@ -249,6 +274,14 @@ export function TodayRouteItemsSection({
                     >
                       Tomorrow
                     </Link>
+                    {repeatTomorrowAllowed ? (
+                      <Link
+                        href={`/today?date=${workspace.date}&action=repeat_tomorrow&planItemId=${item.id}`}
+                        className={buttonVariants({ variant: "outline", size: "sm" })}
+                      >
+                        Repeat
+                      </Link>
+                    ) : null}
                     {alternate ? (
                       <Link
                         href={`/today?date=${workspace.date}&action=swap_with_alternate&planItemId=${item.id}&alternateWeeklyRouteItemId=${alternate.id}`}

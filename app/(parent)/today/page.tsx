@@ -10,6 +10,7 @@ import { getLiveCurriculumSource } from "@/lib/curriculum/service";
 import {
   completeTodayPlanItem,
   getTodayWorkspace,
+  repeatTodayPlanItemTomorrow,
   pushTodayPlanItemToTomorrow,
   removeTodayPlanItem,
   swapTodayPlanItemWithAlternate,
@@ -79,6 +80,12 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
       });
     } else if (action === "push_to_tomorrow") {
       await pushTodayPlanItemToTomorrow(
+        session.activeLearner.id,
+        planItemId,
+        date ?? new Date().toISOString().slice(0, 10),
+      );
+    } else if (action === "repeat_tomorrow") {
+      await repeatTodayPlanItemTomorrow(
         session.activeLearner.id,
         planItemId,
         date ?? new Date().toISOString().slice(0, 10),

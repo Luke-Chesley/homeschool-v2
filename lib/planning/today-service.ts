@@ -27,7 +27,7 @@ import type {
 } from "@/lib/planning/types";
 import { completeSessionWorkspace, ensureSessionWorkspace } from "@/lib/session-workspace/service";
 import type { AppWorkspace } from "@/lib/users/service";
-import { getOrCreateWeeklyRouteBoardForLearner } from "@/lib/planning/weekly-route-service";
+import { duplicateWeeklyRouteItem, getOrCreateWeeklyRouteBoardForLearner } from "@/lib/planning/weekly-route-service";
 import type { WeeklyRouteBoard } from "@/lib/curriculum-routing";
 import { toWeekStartDate } from "@/lib/curriculum-routing";
 import { buildCopilotPlanningContext } from "@/lib/planning/copilot-snapshot";
@@ -1075,6 +1075,23 @@ export async function pushTodayPlanItemToTomorrow(
         toDate: withinWeek ? tomorrow : null,
       },
     };
+  });
+}
+
+export async function repeatTodayPlanItemTomorrow(
+  learnerId: string,
+  weeklyRouteItemId: string,
+  date: string,
+) {
+  const targetDate = addDays(date, 1);
+  const { route } = await loadWeeklyRouteItem(learnerId, weeklyRouteItemId);
+
+  await duplicateWeeklyRouteItem({
+    learnerId,
+    weeklyRouteId: route.id,
+    weeklyRouteItemId,
+    targetScheduledDate: targetDate,
+    manualOverrideNote: `Repeated from ${date} to ${targetDate}.`,
   });
 }
 

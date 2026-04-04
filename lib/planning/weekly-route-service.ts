@@ -17,6 +17,7 @@ import {
 } from "@/lib/db/schema";
 
 type WeeklyRouteItemRow = typeof weeklyRouteItems.$inferSelect;
+type WeeklyRouteRecord = typeof weeklyRoutes.$inferSelect;
 type WeeklyRouteOverrideKind = WeeklyRouteItemRow["manualOverrideKind"];
 
 const WEEKDAY_COUNT = 5;
@@ -38,6 +39,62 @@ function addDays(baseDate: string, days: number): string {
 
 function buildWeekdayDates(weekStartDate: string) {
   return Array.from({ length: WEEKDAY_COUNT }, (_, index) => addDays(weekStartDate, index));
+}
+
+async function ensureSuggestedWeeklyRouteSchedule(route: WeeklyRouteRecord) {
+  const db = getDb();
+  const rows = await db.query.weeklyRouteItems.findMany({
+    where: eq(weeklyRouteItems.weeklyRouteId, route.id),
+    orderBy: [asc(weeklyRouteItems.currentPosition), asc(weeklyRouteItems.createdAt)],
+  });
+
+  const weekdayDates = buildWeekdayDates(route.weekStartDate);
+  const occupiedDates = new Set(
+    rows.filter((row) => row.scheduledDate != null).map((row) => row.scheduledDate as string),
+  );
+  const occupiedSkillDateKeys = new Set(
+    rows
+      .filter((row) => row.scheduledDate != null)
+      .map((row) => `${row.skillNodeId}::${row.scheduledDate}`),
+  );
+
+  const openDates = weekdayDates.filter((date) => !occupiedDates.has(date));
+  const unscheduledRows = rows.filter((row) => row.state !== "removed" && row.scheduledDate == null);
+  const assignments: Array<{ id: string; scheduledDate: string }> = [];
+
+  for (const row of unscheduledRows) {
+    const nextDate = openDates.find(
+      (date) =>
+        !occupiedDates.has(date) &&
+        !occupiedSkillDateKeys.has(`${row.skillNodeId}::${date}`),
+    );
+    if (!nextDate) {
+      continue;
+    }
+
+    assignments.push({ id: row.id, scheduledDate: nextDate });
+    occupiedDates.add(nextDate);
+    occupiedSkillDateKeys.add(`${row.skillNodeId}::${nextDate}`);
+  }
+
+  if (assignments.length === 0) {
+    return false;
+  }
+
+  await db.transaction(async (tx) => {
+    for (const assignment of assignments) {
+      await tx
+        .update(weeklyRouteItems)
+        .set({
+          scheduledDate: assignment.scheduledDate,
+          state: "scheduled",
+          updatedAt: new Date(),
+        })
+        .where(eq(weeklyRouteItems.id, assignment.id));
+    }
+  });
+
+  return true;
 }
 
 function toColumnKey(scheduledDate: string | null, weekdayDates: string[]) {
@@ -90,6 +147,26 @@ export async function getOrCreateWeeklyRouteBoardForLearner(params: {
           weekStartDate,
         });
         return { weekStartDate, board: regenerated };
+      }
+    }
+
+    if (existing.items.some((item) => item.state !== "removed" && item.scheduledDate == null)) {
+      const route = await getDb().query.weeklyRoutes.findFirst({
+        where: and(
+          eq(weeklyRoutes.id, existing.summary.weeklyRouteId),
+          eq(weeklyRoutes.learnerId, params.learnerId),
+        ),
+      });
+
+      if (route && (await ensureSuggestedWeeklyRouteSchedule(route))) {
+        const refreshed = await getWeeklyRouteBoardById({
+          learnerId: params.learnerId,
+          weeklyRouteId: existing.summary.weeklyRouteId,
+        });
+
+        if (refreshed) {
+          return { weekStartDate, board: refreshed };
+        }
       }
     }
 
@@ -211,6 +288,16 @@ export async function moveWeeklyRouteItem(params: {
       throw new Error("Scheduled date must be within this week (Monday-Friday).");
     }
 
+    const sameDayDuplicate = rows.find(
+      (row) =>
+        row.id !== movingItem.id &&
+        row.skillNodeId === movingItem.skillNodeId &&
+        row.scheduledDate === (targetColumnKey === "unassigned" ? null : targetColumnKey),
+    );
+    if (sameDayDuplicate) {
+      throw new Error("This skill is already scheduled for that day.");
+    }
+
     const columnOrder = ["unassigned", ...weekdayDates];
     const itemsByColumn = new Map<string, string[]>();
     for (const columnKey of columnOrder) {
@@ -324,10 +411,6 @@ export async function moveWeeklyRouteItem(params: {
     orderBy: [asc(weeklyRouteItems.currentPosition), asc(weeklyRouteItems.createdAt)],
   });
 
-  if (targetRows.some((row) => row.skillNodeId === movingItem.skillNodeId)) {
-    throw new Error("Target week already contains this curriculum item.");
-  }
-
   const sourceWeekdayDates = buildWeekdayDates(route.weekStartDate);
   const targetWeekdayDates = buildWeekdayDates(targetRoute.weekStartDate);
   const targetColumnKey =
@@ -337,6 +420,16 @@ export async function moveWeeklyRouteItem(params: {
 
   if (params.targetScheduledDate != null && targetColumnKey === "unassigned") {
     throw new Error("Scheduled date must be within the target week (Monday-Friday).");
+  }
+
+  const sameDayDuplicate = targetRows.find(
+    (row) =>
+      row.id !== movingItem.id &&
+      row.skillNodeId === movingItem.skillNodeId &&
+      row.scheduledDate === (targetColumnKey === "unassigned" ? null : targetColumnKey),
+  );
+  if (sameDayDuplicate) {
+    throw new Error("This skill is already scheduled for that day.");
   }
 
   const sourceColumnOrder = ["unassigned", ...sourceWeekdayDates];
@@ -484,6 +577,106 @@ export async function moveWeeklyRouteItem(params: {
   }
 
   return board;
+}
+
+export async function duplicateWeeklyRouteItem(params: {
+  learnerId: string;
+  weeklyRouteId: string;
+  weeklyRouteItemId: string;
+  targetScheduledDate?: string | null;
+  manualOverrideNote?: string;
+}): Promise<WeeklyRouteBoard> {
+  const db = getDb();
+  const route = await db.query.weeklyRoutes.findFirst({
+    where: and(eq(weeklyRoutes.id, params.weeklyRouteId), eq(weeklyRoutes.learnerId, params.learnerId)),
+  });
+
+  if (!route) {
+    throw new Error("Weekly route not found.");
+  }
+
+  const rows = await db.query.weeklyRouteItems.findMany({
+    where: eq(weeklyRouteItems.weeklyRouteId, route.id),
+    orderBy: [asc(weeklyRouteItems.currentPosition), asc(weeklyRouteItems.createdAt)],
+  });
+
+  const sourceItem = rows.find((row) => row.id === params.weeklyRouteItemId);
+  if (!sourceItem) {
+    throw new Error("Weekly route item not found.");
+  }
+
+  const targetScheduledDate = params.targetScheduledDate ?? sourceItem.scheduledDate ?? null;
+  if (targetScheduledDate != null && targetScheduledDate === sourceItem.scheduledDate) {
+    throw new Error("This skill is already scheduled for that day.");
+  }
+
+  const sameDayDuplicate = rows.find(
+    (row) =>
+      row.id !== sourceItem.id &&
+      row.skillNodeId === sourceItem.skillNodeId &&
+      row.scheduledDate === targetScheduledDate,
+  );
+
+  if (sameDayDuplicate) {
+    throw new Error("This skill is already scheduled for that day.");
+  }
+
+  const insertPosition = Math.max(0, Math.min(sourceItem.currentPosition + 1, rows.length));
+  const shiftedRows = rows
+    .filter((row) => row.currentPosition >= insertPosition)
+    .sort((left, right) => right.currentPosition - left.currentPosition);
+
+  await db.transaction(async (tx) => {
+    for (const row of shiftedRows) {
+      await tx
+        .update(weeklyRouteItems)
+        .set({
+          currentPosition: row.currentPosition + 1,
+          updatedAt: new Date(),
+        })
+        .where(eq(weeklyRouteItems.id, row.id));
+    }
+
+    const [created] = await tx
+      .insert(weeklyRouteItems)
+      .values({
+        weeklyRouteId: route.id,
+        learnerId: params.learnerId,
+        skillNodeId: sourceItem.skillNodeId,
+        recommendedPosition: insertPosition,
+        currentPosition: insertPosition,
+        scheduledDate: targetScheduledDate,
+        manualOverrideKind: targetScheduledDate ? "pinned" : sourceItem.manualOverrideKind,
+        manualOverrideNote:
+          params.manualOverrideNote ??
+          `Repeated from ${sourceItem.scheduledDate ?? "the route"}${targetScheduledDate ? ` to ${targetScheduledDate}` : ""}.`,
+        state: targetScheduledDate ? "scheduled" : sourceItem.state,
+        metadata: {
+          repeatedFromWeeklyRouteItemId: sourceItem.id,
+          repeatScheduledDate: targetScheduledDate,
+        },
+      })
+      .returning();
+
+    await tx.insert(routeOverrideEvents).values({
+      learnerId: params.learnerId,
+      weeklyRouteItemId: created.id,
+      eventType: "repair_applied",
+      payload: {
+        action: "duplicate",
+        sourceWeeklyRouteItemId: sourceItem.id,
+        sourceScheduledDate: sourceItem.scheduledDate,
+        targetScheduledDate,
+        targetPosition: insertPosition,
+      },
+      createdByAdultUserId: null,
+    });
+  });
+
+  return (await getWeeklyRouteBoardById({
+    learnerId: params.learnerId,
+    weeklyRouteId: params.weeklyRouteId,
+  }))!;
 }
 
 export async function updateWeeklyRouteItemState(params: {
