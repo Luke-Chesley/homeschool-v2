@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { CalendarClock, CalendarDays, LayoutDashboard, Sparkles } from "lucide-react";
 
 import { PlanningShell } from "@/components/planning/planning-shell";
 import { TodayWorkspaceView } from "@/components/planning/today-workspace-view";
@@ -8,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireAppSession } from "@/lib/app-session/server";
 import { listCurriculumSources } from "@/lib/curriculum/service";
-import { toWeekStartDate } from "@/lib/curriculum-routing";
 import {
   completeTodayPlanItem,
   getTodayWorkspace,
@@ -58,11 +56,7 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
 
   if (sources.length === 0) {
     return (
-      <PlanningShell
-        currentView="today"
-        title="Today"
-        description={session.activeLearner.displayName}
-      >
+      <PlanningShell>
         <Card>
           <CardHeader>
             <CardTitle>No curriculum source</CardTitle>
@@ -117,35 +111,6 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
   }
 
   const todayDate = date ?? new Date().toISOString().slice(0, 10);
-  const todayWeekStartDate = toWeekStartDate(todayDate);
-  const navItems = selectedSourceId
-    ? [
-        {
-          href: `/planning/month?sourceId=${selectedSourceId}&month=${encodeURIComponent(todayDate)}`,
-          label: "Month planning",
-          view: "month" as const,
-          icon: CalendarDays,
-        },
-        {
-          href: `/planning?sourceId=${selectedSourceId}&weekStartDate=${encodeURIComponent(todayWeekStartDate)}`,
-          label: "Weekly planning",
-          view: "week" as const,
-          icon: CalendarClock,
-        },
-        {
-          href: `/planning/day/${todayWeekStartDate}`,
-          label: "Daily plan",
-          view: "day" as const,
-          icon: LayoutDashboard,
-        },
-        {
-          href: `/today?date=${encodeURIComponent(todayDate)}${selectedSourceId ? `&sourceId=${encodeURIComponent(selectedSourceId)}` : ""}`,
-          label: "Today workspace",
-          view: "today" as const,
-          icon: Sparkles,
-        },
-      ]
-    : undefined;
   const workspaceResult = await getTodayWorkspace({
     organizationId: session.organization.id,
     learnerId: session.activeLearner.id,
@@ -158,42 +123,16 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
     notFound();
   }
 
-  const { workspace, sourceTitle } = workspaceResult;
+  const { workspace } = workspaceResult;
   const totalMinutes = workspace.items.reduce((sum, item) => sum + item.estimatedMinutes, 0);
 
   return (
-    <PlanningShell
-      currentView="today"
-      title="Today"
-      description={`${workspace.learner.name} · ${sourceTitle}`}
-      navItems={navItems}
-      headerSupplement={
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-            <span>{formatLongDate(workspace.date)}</span>
-            <span>{workspace.items.length} items</span>
-            <span>{totalMinutes} min</span>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button asChild size="sm" variant="outline">
-              <Link href={`/curriculum${selectedSourceId ? `?sourceId=${encodeURIComponent(selectedSourceId)}` : ""}`}>
-                Curriculum
-              </Link>
-            </Button>
-            <Button asChild size="sm" variant="outline">
-              <Link href={`/planning?sourceId=${encodeURIComponent(selectedSourceId ?? "")}&weekStartDate=${encodeURIComponent(todayWeekStartDate)}`}>
-                Week plan
-              </Link>
-            </Button>
-            <Button asChild size="sm" variant="secondary">
-              <Link href={`/copilot?sourceId=${encodeURIComponent(selectedSourceId ?? "")}&date=${encodeURIComponent(workspace.date)}`}>
-                Ask AI
-              </Link>
-            </Button>
-          </div>
-        </div>
-      }
-    >
+    <PlanningShell>
+      <div className="mb-5 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+        <span>{formatLongDate(workspace.date)}</span>
+        <span>{workspace.items.length} items</span>
+        <span>{totalMinutes} min</span>
+      </div>
       <TodayWorkspaceView workspace={workspace} sourceId={selectedSourceId} />
     </PlanningShell>
   );

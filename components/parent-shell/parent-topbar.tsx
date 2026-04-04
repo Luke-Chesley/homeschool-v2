@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { Menu } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { parentPrimaryNav } from "@/components/navigation/parent-nav-config";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 type ParentTopbarProps = {
   activeLearnerName: string;
@@ -13,16 +15,88 @@ type ParentTopbarProps = {
   onOpenMenu: () => void;
 };
 
+function toWeekStartDate(inputDate?: string) {
+  const base = inputDate ? new Date(`${inputDate}T12:00:00.000Z`) : new Date();
+  if (Number.isNaN(base.getTime())) {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  const normalized = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate()));
+  const weekday = normalized.getUTCDay();
+  const offset = (weekday + 6) % 7;
+  normalized.setUTCDate(normalized.getUTCDate() - offset);
+  return normalized.toISOString().slice(0, 10);
+}
+
+function getPlanningControls(pathname: string, searchParams: URLSearchParams) {
+  const sourceId = searchParams.get("sourceId") ?? undefined;
+  const date = searchParams.get("date") ?? new Date().toISOString().slice(0, 10);
+  const weekStartDate = searchParams.get("weekStartDate") ?? toWeekStartDate(date);
+  const dayDateMatch = pathname.match(/^\/planning\/day\/([^/]+)/);
+  const dayDate = dayDateMatch?.[1] ?? date;
+
+  const monthParams = new URLSearchParams();
+  monthParams.set("month", date);
+  if (sourceId) {
+    monthParams.set("sourceId", sourceId);
+  }
+
+  const weekParams = new URLSearchParams();
+  weekParams.set("weekStartDate", weekStartDate);
+  if (sourceId) {
+    weekParams.set("sourceId", sourceId);
+  }
+
+  const dayParams = new URLSearchParams();
+  if (sourceId) {
+    dayParams.set("sourceId", sourceId);
+  }
+
+  const todayParams = new URLSearchParams();
+  todayParams.set("date", date);
+  if (sourceId) {
+    todayParams.set("sourceId", sourceId);
+  }
+
+  return [
+    {
+      href: `/planning/month?${monthParams.toString()}`,
+      label: "Month planning",
+      active: pathname.startsWith("/planning/month"),
+    },
+    {
+      href: `/planning?${weekParams.toString()}`,
+      label: "Weekly planning",
+      active: pathname === "/planning",
+    },
+    {
+      href: `/planning/day/${dayDate}${dayParams.toString() ? `?${dayParams.toString()}` : ""}`,
+      label: "Daily plan",
+      active: pathname.startsWith("/planning/day/"),
+    },
+    {
+      href: `/today?${todayParams.toString()}`,
+      label: "Today workspace",
+      active: pathname.startsWith("/today"),
+    },
+  ] as const;
+}
+
 export function ParentTopbar({ activeLearnerName, learnerLabel, onOpenMenu }: ParentTopbarProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const activeSection =
     parentPrimaryNav.find(
       (item) => pathname === item.href || pathname.startsWith(`${item.matchPrefix}/`),
     ) ?? parentPrimaryNav[0];
+  const planningControls =
+    pathname.startsWith("/today") || pathname.startsWith("/planning")
+      ? getPlanningControls(pathname, new URLSearchParams(searchParams.toString()))
+      : [];
 
   return (
     <div className="border-b border-border/70 bg-background/96 px-4 py-3 sm:px-6">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
         <div className="min-w-0">
           <p className="text-xs text-muted-foreground">
             {learnerLabel} · {activeLearnerName}
@@ -30,13 +104,37 @@ export function ParentTopbar({ activeLearnerName, learnerLabel, onOpenMenu }: Pa
           <h1 className="font-serif text-2xl leading-tight">{activeSection.label}</h1>
         </div>
 
-        <div className="flex shrink-0 items-center gap-2">
-          <Link href="/today" className="hidden text-sm text-muted-foreground transition-colors hover:text-foreground sm:inline-flex">
-            Daily view
-          </Link>
-          <Link href="/copilot" className="hidden text-sm text-muted-foreground transition-colors hover:text-foreground sm:inline-flex">
-            AI
-          </Link>
+        <div className="flex min-w-0 flex-wrap items-center gap-2 xl:justify-end">
+          {planningControls.map((control) => (
+            <Link
+              key={control.href}
+              href={control.href}
+              className={cn(
+                buttonVariants({ variant: control.active ? "secondary" : "outline", size: "sm" }),
+                "shrink-0",
+              )}
+            >
+              {control.label}
+            </Link>
+          ))}
+
+          {pathname.startsWith("/curriculum") ? (
+            <>
+              <Link
+                href="/curriculum/manage"
+                className={buttonVariants({ variant: "outline", size: "sm" })}
+              >
+                Manage sources
+              </Link>
+              <Link
+                href="/curriculum/new"
+                className={buttonVariants({ variant: "default", size: "sm" })}
+              >
+                Add curriculum
+              </Link>
+            </>
+          ) : null}
+
           <Button
             variant="outline"
             size="icon"

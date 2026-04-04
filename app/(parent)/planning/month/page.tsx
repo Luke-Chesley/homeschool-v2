@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { CalendarClock, CalendarDays, LayoutDashboard, Sparkles } from "lucide-react";
 
 import { CurriculumSourceSelector } from "@/components/curriculum/curriculum-source-selector";
 import { MonthPlanningBoard } from "@/components/planning/month-planning-board";
@@ -9,7 +8,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireAppSession } from "@/lib/app-session/server";
 import { listCurriculumSources } from "@/lib/curriculum/service";
 import { getMonthlyPlanningView } from "@/lib/planning/month-service";
-import { toWeekStartDate } from "@/lib/curriculum-routing";
 
 interface PlanningMonthPageProps {
   searchParams: Promise<{ sourceId?: string; month?: string }>;
@@ -22,11 +20,7 @@ export default async function PlanningMonthPage({ searchParams }: PlanningMonthP
 
   if (sources.length === 0) {
     return (
-      <PlanningShell
-        currentView="month"
-        title={`${session.activeLearner.displayName}'s month plan`}
-        description="Import a curriculum source before opening the month view."
-      >
+      <PlanningShell>
         <Card>
           <CardHeader>
             <CardTitle>No curriculum source available</CardTitle>
@@ -50,7 +44,6 @@ export default async function PlanningMonthPage({ searchParams }: PlanningMonthP
       : sources[0].id;
   const selectedSource = sources.find((source) => source.id === selectedSourceId) ?? sources[0];
   const monthAnchorDate = params.month ?? new Date().toISOString().slice(0, 10);
-  const monthWeekStartDate = toWeekStartDate(monthAnchorDate);
 
   const month = await getMonthlyPlanningView({
     learnerId: session.activeLearner.id,
@@ -60,40 +53,8 @@ export default async function PlanningMonthPage({ searchParams }: PlanningMonthP
     monthDate: monthAnchorDate,
   });
 
-  const navItems = [
-    {
-      href: `/planning/month?sourceId=${selectedSourceId}&month=${encodeURIComponent(month.monthStartDate)}`,
-      label: "Month planning",
-      view: "month" as const,
-      icon: CalendarDays,
-    },
-    {
-      href: `/planning?sourceId=${selectedSourceId}&weekStartDate=${encodeURIComponent(monthWeekStartDate)}`,
-      label: "Weekly planning",
-      view: "week" as const,
-      icon: CalendarClock,
-    },
-    {
-      href: `/planning/day/${monthWeekStartDate}`,
-      label: "Daily plan",
-      view: "day" as const,
-      icon: LayoutDashboard,
-    },
-    {
-      href: `/today?sourceId=${selectedSourceId}`,
-      label: "Today workspace",
-      view: "today" as const,
-      icon: Sparkles,
-    },
-  ];
-
   return (
-    <PlanningShell
-      currentView="month"
-      title={`${month.monthLabel} plan for ${session.activeLearner.displayName}`}
-      description={`Broad placement view for ${selectedSource.title}. Review how the curriculum lands across the month before tightening individual weeks.`}
-      navItems={navItems}
-    >
+    <PlanningShell>
       <div className="grid gap-6">
         <CurriculumSourceSelector
           sources={sources}
