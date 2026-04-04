@@ -46,8 +46,15 @@ function registerConfiguredAdapters() {
 
   if (routing.providerId === "ollama" && !adapters.has("ollama")) {
     const baseURL = process.env.OLLAMA_BASE_URL?.trim() ?? "http://localhost:11434";
-    const authToken = process.env.OLLAMA_AUTH_TOKEN?.trim() ?? "ollama";
-    const adapter = (ollamaAdapter ??= new OllamaAdapter({ baseURL, authToken }));
+    const authToken = process.env.OLLAMA_AUTH_TOKEN?.trim() || undefined;
+    const numCtx = parseOptionalPositiveInteger(process.env.OLLAMA_NUM_CTX);
+    const keepAlive = parseOptionalKeepAlive(process.env.OLLAMA_KEEP_ALIVE);
+    const adapter = (ollamaAdapter ??= new OllamaAdapter({
+      baseURL,
+      authToken,
+      numCtx,
+      keepAlive,
+    }));
     registerAdapter(adapter);
   }
 }
@@ -76,4 +83,27 @@ export function getAdapterForTask(taskName: AiTaskName): AiProviderAdapter {
 export function listRegisteredProviders(): string[] {
   registerConfiguredAdapters();
   return [...adapters.keys()];
+}
+
+function parseOptionalPositiveInteger(value: string | undefined): number | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  const parsed = Number.parseInt(value.trim(), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function parseOptionalKeepAlive(value: string | undefined): string | number | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) && `${parsed}` === trimmed ? parsed : trimmed;
 }
