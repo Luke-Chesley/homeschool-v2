@@ -235,7 +235,7 @@ function buildFallbackChatTurn(params: {
 }): CurriculumAiChatTurn {
   const capturedRequirements = inferCapturedRequirements(params.messages);
   const missingInformation = getMissingRequirements(capturedRequirements);
-  const readiness = deriveFallbackReadiness(capturedRequirements, missingInformation);
+  const readiness = deriveFallbackReadiness(capturedRequirements);
 
   if (params.messages.length === 0) {
     return {
@@ -463,18 +463,13 @@ function getMissingRequirements(requirements: CurriculumAiCapturedRequirements) 
 
 function deriveFallbackReadiness(
   requirements: CurriculumAiCapturedRequirements,
-  missingInformation: string[],
 ) {
   const hasCoreContext =
     Boolean(requirements.topic) &&
     Boolean(requirements.goals) &&
     Boolean(requirements.learnerProfile);
-  const hasPlanningContext = Boolean(requirements.timeframe) || Boolean(requirements.constraints);
-  const onlyOptionalGaps = missingInformation.every(
-    (item) => item === "assessment" || item === "structure",
-  );
 
-  return hasCoreContext && (hasPlanningContext || onlyOptionalGaps) ? "ready" : "gathering";
+  return hasCoreContext ? "ready" : "gathering";
 }
 
 function buildFallbackQuestion(
@@ -513,7 +508,7 @@ function buildFallbackReadyMessage(requirements: CurriculumAiCapturedRequirement
   ].filter(Boolean);
 
   const summary = fragments.length > 0 ? fragments.join(", ") : "I have the key planning context";
-  return `I have enough to build this curriculum now. From what you’ve shared, ${summary}. If that sounds right, I can generate the domain-to-skill structure and the first unit-and-lesson sequence.`;
+  return `I have enough to build this curriculum now. From what you’ve shared, ${summary}. I’ll fill in the pacing, assessment, and structure with reasonable defaults if they were not specified. If that sounds right, I can generate the domain-to-skill structure and the first unit-and-lesson sequence.`;
 }
 
 function buildRequirementSummary(requirements: CurriculumAiCapturedRequirements) {
@@ -640,25 +635,32 @@ function extractTopicLabel(value: string) {
   }
 
   const firstSentence = splitIntoSentences(value)[0] ?? value;
-  const curriculumMatch = firstSentence.match(
-    /(?:want|need|build|create|design|make)\s+(?:a|an)?\s*(.+?)\s+curriculum\b/i,
-  );
+  const normalized = firstSentence
+    .replace(
+      /^i\s+(?:want|need)\s+to\s+(?:build|create|design|make|learn|study|explore)\s+/i,
+      "",
+    )
+    .replace(
+      /^we\s+(?:want|need)\s+to\s+(?:build|create|design|make|learn|study|explore)\s+/i,
+      "",
+    )
+    .replace(/^i\s+(?:want|need)\s+(?:a|an)?\s+/i, "")
+    .replace(/^please\s+(?:help\s+)?(?:me\s+)?(?:build|create|design|make)\s+/i, "")
+    .trim();
+
+  const curriculumMatch = normalized.match(/^(?:a|an|the)?\s*(.+?)\s+curriculum\b/i);
   if (curriculumMatch?.[1]) {
     return cleanTopicFragment(curriculumMatch[1]);
   }
 
-  const learnMatch = firstSentence.match(
-    /(?:want|need)\s+to\s+(?:learn|study|explore)\s+(?:about\s+)?(.+)/i,
+  const learnMatch = normalized.match(
+    /^(?:to\s+)?(?:learn|study|explore)\s+(?:about\s+)?(.+)/i,
   );
   if (learnMatch?.[1]) {
     return cleanTopicFragment(learnMatch[1]);
   }
 
-  const cleaned = firstSentence
-    .replace(/^we\s+(want|need)\s+to\s+(learn|study|explore)\s+/i, "")
-    .replace(/^i\s+(want|need)\s+to\s+(learn|study|explore|build)\s+(about\s+)?/i, "")
-    .replace(/^please\s+(help|make|create)\s+(me\s+)?(a\s+)?/i, "")
-    .replace(/^curriculum\s+(for|about)\s+/i, "")
+  const cleaned = normalized
     .replace(/^about\s+/i, "")
     .replace(/^an?\s+/i, "")
     .trim()
@@ -732,7 +734,10 @@ function toTitleCase(value: string) {
 }
 
 function toSentenceFragment(value: string) {
-  return value.trim().replace(/[.?!]+$/, "");
+  return value
+    .trim()
+    .replace(/^(?:i['’]?d like it to|i want it to|i want to|we want to|the goal is to)\s+/i, "")
+    .replace(/[.?!]+$/, "");
 }
 
 function normalizeTimeframePhrase(value: string) {
