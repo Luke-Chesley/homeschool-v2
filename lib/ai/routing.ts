@@ -39,6 +39,8 @@ export function getAiRoutingConfig(): ModelRoutingConfig {
         ? {
             "curriculum.intake": env.AI_CHAT_MODEL ?? "claude-sonnet-4-5",
             "curriculum.generate": env.AI_GENERATION_MODEL ?? "claude-sonnet-4-5",
+            "curriculum.revise": env.AI_GENERATION_MODEL ?? "claude-sonnet-4-5",
+            "curriculum.title": env.AI_FAST_MODEL ?? "claude-haiku-4-5",
             "chat.answer": env.AI_CHAT_MODEL ?? "claude-sonnet-4-5",
             "lesson.draft": env.AI_GENERATION_MODEL ?? "claude-sonnet-4-5",
             "worksheet.generate": env.AI_GENERATION_MODEL ?? "claude-sonnet-4-5",

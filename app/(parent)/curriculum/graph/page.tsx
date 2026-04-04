@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 
 import { CurriculumEmptyState } from "@/components/curriculum/curriculum-empty-state";
 import { CurriculumGraphWorkspace } from "@/components/curriculum/curriculum-graph-workspace";
+import { CurriculumRefinementWidget } from "@/components/curriculum/CurriculumRefinementWidget";
 import { buttonVariants } from "@/components/ui/button";
 import { requireAppSession } from "@/lib/app-session/server";
 import { getCurriculumTree, listCurriculumSources } from "@/lib/curriculum/service";
@@ -87,6 +88,7 @@ export default async function CurriculumGraphPage({ searchParams }: CurriculumGr
         selectedSourceId={selectedSourceId}
         tree={tree}
       />
+      <CurriculumRefinementWidget sourceId={selectedSourceId} sourceTitle={tree.source.title} />
     </main>
   );
 }

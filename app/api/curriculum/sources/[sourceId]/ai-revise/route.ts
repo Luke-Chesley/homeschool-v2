@@ -1,0 +1,42 @@
+import { NextRequest, NextResponse } from "next/server";
+
+import { requireAppSession } from "@/lib/app-session/server";
+import {
+  CurriculumAiRevisionRequestSchema,
+  CurriculumAiRevisionResponseSchema,
+} from "@/lib/curriculum/ai-draft";
+import { reviseCurriculumFromConversation } from "@/lib/curriculum/ai-draft-service";
+
+interface RouteContext {
+  params: Promise<{
+    sourceId: string;
+  }>;
+}
+
+export async function POST(req: NextRequest, { params }: RouteContext) {
+  try {
+    const body = await req.json();
+    const parsed = CurriculumAiRevisionRequestSchema.safeParse(body);
+
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Invalid input", issues: parsed.error.flatten() },
+        { status: 400 },
+      );
+    }
+
+    const session = await requireAppSession();
+    const { sourceId } = await params;
+    const revised = await reviseCurriculumFromConversation({
+      householdId: session.organization.id,
+      sourceId,
+      learner: session.activeLearner,
+      messages: parsed.data.messages,
+    });
+
+    return NextResponse.json(CurriculumAiRevisionResponseSchema.parse(revised));
+  } catch (error) {
+    console.error("[api/curriculum/sources/[sourceId]/ai-revise POST]", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
