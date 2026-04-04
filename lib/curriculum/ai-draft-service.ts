@@ -399,22 +399,34 @@ async function generateCurriculumRevisionDecision(params: {
     snapshot: params.snapshot,
   });
 
-  if (!revisionPlan || revisionPlan.action === "clarify") {
-    return {
-      assistantMessage:
-        revisionPlan?.assistantMessage ?? buildGenericRevisionClarificationMessage(messages),
-      action: "clarify",
-      changeSummary: revisionPlan?.changeSummary ?? [],
-    };
+  if (revisionPlan?.action === "apply") {
+    return applyCurriculumRevisionPlan({
+      learner: params.learner,
+      messages,
+      snapshot: params.snapshot,
+      revisionPlan,
+      revisionPreference,
+    });
   }
 
-  return applyCurriculumRevisionPlan({
+  const fallbackTurn = await buildFallbackRevisionTurn({
     learner: params.learner,
     messages,
     snapshot: params.snapshot,
-    revisionPlan,
     revisionPreference,
+    revisionPlan,
   });
+
+  if (fallbackTurn) {
+    return fallbackTurn;
+  }
+
+  return {
+    assistantMessage:
+      revisionPlan?.assistantMessage ?? buildGenericRevisionClarificationMessage(messages),
+    action: "clarify",
+    changeSummary: revisionPlan?.changeSummary ?? [],
+  };
 }
 
 function inferRevisionPlanFromConversation(params: {
@@ -2871,8 +2883,8 @@ async function buildFallbackRevisionTurn(params: {
   revisionPreference: RevisionPreference | null;
   revisionPlan?: CurriculumAiRevisionPlan | null;
 }): Promise<CurriculumAiRevisionTurn | null> {
-  const shouldApply = params.revisionPlan
-    ? params.revisionPlan.action === "apply"
+  const shouldApply = params.revisionPlan?.action === "apply"
+    ? true
     : shouldAutoApplyRevision(params.messages, params.revisionPreference);
 
   if (!shouldApply) {
@@ -3008,7 +3020,7 @@ function hasTargetedRevisionDirection(messages: ChatMessage[]) {
 }
 
 function isConcreteTargetedRevisionMessage(message: string) {
-  return /\b(shorten|shorter|lengthen|longer|simplify|simpler|condense|trim|reduce|increase|tighten|streamline|refine|adjust|rename|retitle|split|split up|smaller skills|subskills|break down|pacing|timeline|materials?|lesson structure|opening lessons|teaching approach|goal group|strand|skill|title)\b/i.test(
+  return /\b(shorten|shorter|lengthen|longer|simplify|simpler|condense|trim|reduce|increase|tighten|streamline|refine|adjust|rename|retitle|split|split up|smaller skills|subskills|break down|focus(?:ed|es|ing)?|narrow(?:er)?|sharpen(?: up)?|clean up|polish|improve|better|more concise|less repetitive|pacing|timeline|materials?|lesson structure|opening lessons|teaching approach|goal group|strand|skill|title)\b/i.test(
     message,
   );
 }
