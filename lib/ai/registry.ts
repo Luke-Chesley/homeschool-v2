@@ -6,11 +6,13 @@ import "server-only";
  * Maps provider IDs to adapter instances. This is the single integration
  * point for adding new AI providers.
  *
- * Integration point: register real adapters (AnthropicAdapter, OpenAIAdapter)
- * here when API keys are provisioned. The interface is stable.
+ * Integration point: register real adapters (AnthropicAdapter, OllamaAdapter,
+ * OpenAIAdapter) here when credentials or local endpoints are provisioned.
+ * The interface is stable.
  */
 
 import { AnthropicAdapter } from "./anthropic-adapter";
+import { OllamaAdapter } from "./ollama-adapter";
 import type { AiProviderAdapter } from "./provider-adapter";
 import { getMockAdapter } from "./mock-adapter";
 import { getAiRoutingConfig } from "./routing";
@@ -22,6 +24,7 @@ import type { AiTaskName } from "./types";
 
 const adapters = new Map<string, AiProviderAdapter>();
 let anthropicAdapter: AnthropicAdapter | null = null;
+let ollamaAdapter: OllamaAdapter | null = null;
 
 function registerAdapter(adapter: AiProviderAdapter) {
   adapters.set(adapter.providerId, adapter);
@@ -31,13 +34,22 @@ function registerAdapter(adapter: AiProviderAdapter) {
 registerAdapter(getMockAdapter());
 
 function registerConfiguredAdapters() {
-  const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
-  if (!apiKey || adapters.has("anthropic")) {
-    return;
+  const routing = getAiRoutingConfig();
+
+  if (routing.providerId === "anthropic" && !adapters.has("anthropic")) {
+    const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
+    if (apiKey) {
+      const adapter = (anthropicAdapter ??= new AnthropicAdapter({ apiKey }));
+      registerAdapter(adapter);
+    }
   }
 
-  anthropicAdapter ??= new AnthropicAdapter({ apiKey });
-  registerAdapter(anthropicAdapter);
+  if (routing.providerId === "ollama" && !adapters.has("ollama")) {
+    const baseURL = process.env.OLLAMA_BASE_URL?.trim() ?? "http://localhost:11434";
+    const authToken = process.env.OLLAMA_AUTH_TOKEN?.trim() ?? "ollama";
+    const adapter = (ollamaAdapter ??= new OllamaAdapter({ baseURL, authToken }));
+    registerAdapter(adapter);
+  }
 }
 
 // ---------------------------------------------------------------------------
