@@ -6,6 +6,7 @@ import { ArrowLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CurriculumExportCard } from "@/components/curriculum/CurriculumExportCard";
 import { CurriculumRefinementWidget } from "@/components/curriculum/CurriculumRefinementWidget";
 import { CurriculumTree } from "@/components/curriculum/CurriculumTree";
 import { requireAppSession } from "@/lib/app-session/server";
@@ -28,6 +29,16 @@ export default async function CurriculumSourcePage({ params }: Props) {
   const estimatedSessionCount = outline.reduce(
     (total, unit) => total + (unit.estimatedSessions ?? unit.lessons.length),
     0,
+  );
+  const exportText = JSON.stringify(
+    {
+      generatedAt: new Date().toISOString(),
+      source,
+      tree,
+      outline,
+    },
+    null,
+    2,
   );
 
   return (
@@ -124,6 +135,8 @@ export default async function CurriculumSourcePage({ params }: Props) {
               </Link>
             </CardContent>
           </Card>
+
+          <CurriculumExportCard title="Export" text={exportText} />
 
           <Card>
             <CardHeader className="pb-2">

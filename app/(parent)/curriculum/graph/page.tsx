@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
 import { CurriculumEmptyState } from "@/components/curriculum/curriculum-empty-state";
+import { CurriculumExportCard } from "@/components/curriculum/CurriculumExportCard";
 import { CurriculumGraphWorkspace } from "@/components/curriculum/curriculum-graph-workspace";
 import { CurriculumRefinementWidget } from "@/components/curriculum/CurriculumRefinementWidget";
 import { buttonVariants } from "@/components/ui/button";
@@ -11,6 +12,7 @@ import {
   getCurriculumTree,
   getLiveCurriculumSource,
   listCurriculumSources,
+  listCurriculumOutline,
 } from "@/lib/curriculum/service";
 import { cn } from "@/lib/utils";
 
@@ -73,6 +75,18 @@ export default async function CurriculumGraphPage({ searchParams }: CurriculumGr
     );
   }
 
+  const outline = await listCurriculumOutline(selectedSourceId);
+  const exportText = JSON.stringify(
+    {
+      generatedAt: new Date().toISOString(),
+      source: tree.source,
+      tree,
+      outline,
+    },
+    null,
+    2,
+  );
+
   return (
     <main className="mx-auto flex w-full max-w-[1700px] flex-col gap-6 px-6 py-8 sm:px-8">
       <header className="space-y-3">
@@ -93,6 +107,7 @@ export default async function CurriculumGraphPage({ searchParams }: CurriculumGr
         selectedSourceId={selectedSourceId}
         tree={tree}
       />
+      <CurriculumExportCard title="Export" text={exportText} />
       <CurriculumRefinementWidget sourceId={selectedSourceId} sourceTitle={tree.source.title} />
     </main>
   );
