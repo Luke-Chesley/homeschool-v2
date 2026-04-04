@@ -19,6 +19,8 @@ const serverEnvSchema = publicEnvSchema.extend({
   DATABASE_URL: z.string().min(1),
   OPENAI_API_KEY: optionalNonEmptyString,
   ANTHROPIC_API_KEY: optionalNonEmptyString,
+  OLLAMA_BASE_URL: optionalNonEmptyString,
+  OLLAMA_AUTH_TOKEN: optionalNonEmptyString,
   INNGEST_BASE_URL: z.string().url().default("http://127.0.0.1:8288"),
   INNGEST_EVENT_KEY: z.string().min(1),
   INNGEST_SIGNING_KEY: z.string().min(1),

@@ -162,4 +162,5 @@ If you are trying to find the source of behavior, these are the usual starting p
 - Branch worktrees under `.worktrees/` should use their own ports.
 - The minimum verification gate is currently `corepack pnpm typecheck`.
 - Before merging a branch back to `main`, run `bash ./scripts/verify-before-merge.sh` from the target checkout so the typecheck and UI smoke test both pass.
+- Ollama local AI works through `AI_PROVIDER=ollama` plus `OLLAMA_BASE_URL=http://localhost:11434` and `OLLAMA_AUTH_TOKEN=ollama` in `.env.local`.
 - If major structure or subsystem ownership changes, update this README in the same task.

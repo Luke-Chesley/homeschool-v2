@@ -13,17 +13,27 @@ import type { ChatMessage } from "./types";
 const DEFAULT_MAX_TOKENS = 1024;
 
 export interface AnthropicAdapterOptions {
-  apiKey: string;
+  apiKey?: string;
+  authToken?: string;
+  baseURL?: string;
+  providerId?: string;
+  displayName?: string;
 }
 
 export class AnthropicAdapter implements AiProviderAdapter {
-  readonly providerId = "anthropic";
-  readonly displayName = "Anthropic";
+  readonly providerId: string;
+  readonly displayName: string;
 
   private readonly client: Anthropic;
 
   constructor(options: AnthropicAdapterOptions) {
-    this.client = new Anthropic({ apiKey: options.apiKey });
+    this.providerId = options.providerId ?? "anthropic";
+    this.displayName = options.displayName ?? "Anthropic";
+    this.client = new Anthropic({
+      apiKey: options.apiKey ?? undefined,
+      authToken: options.authToken ?? undefined,
+      baseURL: options.baseURL ?? undefined,
+    });
   }
 
   async complete(options: CompletionOptions): Promise<CompletionResult> {
