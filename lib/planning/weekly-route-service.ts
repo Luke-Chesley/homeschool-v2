@@ -238,14 +238,25 @@ async function ensureDefaultBranchActivations(params: {
     },
   }));
 
-  await db.insert(learnerBranchActivations).values(
-    inserts.map((row) => ({
-      ...row,
-      status: row.status ?? "active",
-    })),
-  );
+  await db
+    .insert(learnerBranchActivations)
+    .values(
+      inserts.map((row) => ({
+        ...row,
+        status: row.status ?? "active",
+      })),
+    )
+    .onConflictDoNothing();
 
-  return true;
+  const activations = await db.query.learnerBranchActivations.findMany({
+    where: and(
+      eq(learnerBranchActivations.learnerId, params.learnerId),
+      eq(learnerBranchActivations.sourceId, params.sourceId),
+    ),
+    limit: 1,
+  });
+
+  return activations.length > 0;
 }
 
 export async function moveWeeklyRouteItem(params: {
