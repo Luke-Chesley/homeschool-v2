@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { CalendarClock, CalendarDays, LayoutDashboard, Sparkles } from "lucide-react";
 
 import { CurriculumSourceSelector } from "@/components/curriculum/curriculum-source-selector";
 import { WeeklyRouteBoard } from "@/components/planning/weekly-route-board";
@@ -21,10 +20,7 @@ export default async function PlanningPage({ searchParams }: PlanningPageProps) 
 
   if (sources.length === 0) {
     return (
-      <main className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-5 py-6 sm:px-6 lg:px-8">
-        <header className="border-b border-border/70 pb-4">
-          <h1 className="font-serif text-3xl leading-tight tracking-tight">Planning</h1>
-        </header>
+      <PlanningShell>
         <Card>
           <CardHeader>
             <CardTitle>No curriculum source</CardTitle>
@@ -38,7 +34,7 @@ export default async function PlanningPage({ searchParams }: PlanningPageProps) 
             </Button>
           </CardContent>
         </Card>
-      </main>
+      </PlanningShell>
     );
   }
 
@@ -53,40 +49,8 @@ export default async function PlanningPage({ searchParams }: PlanningPageProps) 
     weekStartDate: params.weekStartDate,
   });
 
-  const navItems = [
-    {
-      href: `/planning/month?sourceId=${selectedSourceId}&month=${encodeURIComponent(weekStartDate)}`,
-      label: "Month planning",
-      view: "month" as const,
-      icon: CalendarDays,
-    },
-    {
-      href: `/planning?sourceId=${selectedSourceId}&weekStartDate=${encodeURIComponent(weekStartDate)}`,
-      label: "Weekly planning",
-      view: "week" as const,
-      icon: CalendarClock,
-    },
-    {
-      href: `/planning/day/${weekStartDate}`,
-      label: "Daily plan",
-      view: "day" as const,
-      icon: LayoutDashboard,
-    },
-    {
-      href: `/today?sourceId=${selectedSourceId}`,
-      label: "Today workspace",
-      view: "today" as const,
-      icon: Sparkles,
-    },
-  ];
-
   return (
-    <PlanningShell
-      currentView="week"
-      title="Planning"
-      description={session.activeLearner.displayName}
-      navItems={navItems}
-    >
+    <PlanningShell>
       <div className="grid gap-6 2xl:grid-cols-[320px_minmax(0,1fr)]">
         <CurriculumSourceSelector
           sources={sources}

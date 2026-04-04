@@ -1,5 +1,4 @@
 import { notFound, redirect } from "next/navigation";
-import { CalendarClock, CalendarDays, LayoutDashboard, Sparkles } from "lucide-react";
 
 import { DayPlanView } from "@/components/planning/day-plan-view";
 import { PlanningShell } from "@/components/planning/planning-shell";
@@ -66,40 +65,8 @@ export default async function PlanningDayPage({
     notFound();
   }
 
-  const navItems = [
-    {
-      href: `/planning/month?sourceId=${result.sourceId}&month=${encodeURIComponent(date)}`,
-      label: "Month planning",
-      view: "month" as const,
-      icon: CalendarDays,
-    },
-    {
-      href: `/planning?sourceId=${result.sourceId}&weekStartDate=${encodeURIComponent(result.weekStartDate)}`,
-      label: "Weekly planning",
-      view: "week" as const,
-      icon: CalendarClock,
-    },
-    {
-      href: `/planning/day/${date}?sourceId=${encodeURIComponent(result.sourceId)}`,
-      label: "Daily plan",
-      view: "day" as const,
-      icon: LayoutDashboard,
-    },
-    {
-      href: `/today?date=${encodeURIComponent(date)}&sourceId=${encodeURIComponent(result.sourceId)}`,
-      label: "Today workspace",
-      view: "today" as const,
-      icon: Sparkles,
-    },
-  ];
-
   return (
-    <PlanningShell
-      currentView="day"
-      title="Daily plan"
-      description={`${session.activeLearner.displayName} · ${result.sourceTitle}`}
-      navItems={navItems}
-    >
+    <PlanningShell>
       <DayPlanView day={result.day} />
     </PlanningShell>
   );
