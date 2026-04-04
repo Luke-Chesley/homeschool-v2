@@ -130,6 +130,47 @@ export type CurriculumAiCreateResponse = z.infer<typeof CurriculumAiCreateRespon
 
 export const CurriculumAiRevisionActionSchema = z.enum(["clarify", "apply"]);
 
+export const CurriculumAiRevisionScopeSchema = z.enum(["targeted", "broader"]);
+
+export const CurriculumAiRevisionOperationSchema = z.enum([
+  "split",
+  "rename",
+  "adjust",
+  "broader",
+]);
+
+export const CurriculumAiRevisionPlanSchema = z
+  .object({
+    assistantMessage: z.string().trim().min(1).max(1_500),
+    action: CurriculumAiRevisionActionSchema,
+    scope: CurriculumAiRevisionScopeSchema,
+    operation: CurriculumAiRevisionOperationSchema,
+    changeSummary: z.array(z.string().trim().min(1).max(220)).max(8).default([]),
+    revisionBrief: z.string().trim().min(1).max(2_000).optional(),
+    targetPath: z.array(z.string().trim().min(1).max(180)).max(8).default([]),
+    replacementTitles: z.array(z.string().trim().min(1).max(180)).max(8).default([]),
+    missingDetail: z.string().trim().min(1).max(500).optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.action === "apply" && !value.revisionBrief) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "revisionBrief is required when action is apply",
+        path: ["revisionBrief"],
+      });
+    }
+
+    if (value.action === "apply" && value.operation === "rename" && value.replacementTitles.length < 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "replacementTitles must include the new title for a rename revision",
+        path: ["replacementTitles"],
+      });
+    }
+  });
+
+export type CurriculumAiRevisionPlan = z.infer<typeof CurriculumAiRevisionPlanSchema>;
+
 export const CurriculumAiRevisionTurnSchema = z
   .object({
     assistantMessage: z.string().trim().min(1).max(1_500),

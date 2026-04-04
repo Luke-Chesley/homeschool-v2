@@ -8,6 +8,7 @@ import { resolvePrompt } from "@/lib/prompts/store";
 import {
   buildCurriculumGenerationPrompt,
   buildCurriculumIntakePrompt,
+  buildCurriculumRevisionPlanPrompt,
   buildCurriculumRevisionPrompt,
   buildCurriculumTitlePrompt,
   CURRICULUM_GENERATION_PROMPT_VERSION,
@@ -29,12 +30,14 @@ import {
   CurriculumAiCapturedRequirementsSchema,
   CurriculumAiChatTurnSchema,
   CurriculumAiGeneratedArtifactSchema,
+  CurriculumAiRevisionPlanSchema,
   CurriculumAiRevisionTurnSchema,
   type CurriculumAiPacing,
   type CurriculumAiCapturedRequirements,
   type CurriculumAiChatMessage,
   type CurriculumAiChatTurn,
   type CurriculumAiGeneratedArtifact,
+  type CurriculumAiRevisionPlan,
   type CurriculumAiRevisionTurn,
 } from "./ai-draft";
 
@@ -73,9 +76,59 @@ interface CurriculumRevisionSnapshot {
 
 interface PromptCurriculumNode {
   title: string;
-  normalizedType: string;
+  type: string;
   description?: string;
   children: PromptCurriculumNode[];
+}
+
+interface SerializedCurriculumNodeForPrompt {
+  title: string;
+  normalizedType: string;
+  description?: string;
+  children: SerializedCurriculumNodeForPrompt[];
+}
+
+interface RevisionSnapshotNode {
+  type?: string;
+  title?: string;
+  description?: string;
+  children?: RevisionSnapshotNode[];
+}
+
+interface RevisionTargetCandidate {
+  path: string[];
+  title: string;
+  type: string;
+  score: number;
+}
+
+interface RevisionSnapshotOutlineLesson {
+  title?: unknown;
+  description?: unknown;
+  subject?: unknown;
+  estimatedMinutes?: unknown;
+  materials?: unknown;
+  objectives?: unknown;
+  linkedSkillTitles?: unknown;
+}
+
+interface RevisionSnapshotOutlineUnit {
+  title?: unknown;
+  description?: unknown;
+  estimatedWeeks?: unknown;
+  estimatedSessions?: unknown;
+  lessons: RevisionSnapshotOutlineLesson[];
+}
+
+type RevisionDocumentNode = string | string[] | { [key: string]: RevisionDocumentNode };
+
+interface RevisionSkillLeafLocation {
+  kind: "array" | "object";
+  container: string[] | Record<string, RevisionDocumentNode>;
+  index?: number;
+  key?: string;
+  title: string;
+  description?: string;
 }
 
 export async function continueCurriculumAiDraftConversation(params: {
@@ -251,32 +304,327 @@ async function generateCurriculumArtifact(params: {
   });
 }
 
+async function generateCurriculumRevisionPlan(params: {
+  learner: AppLearner;
+  messages: ChatMessage[];
+  snapshot: CurriculumRevisionSnapshot;
+}): Promise<CurriculumAiRevisionPlan | null> {
+  const prompt = await resolvePrompt("curriculum.revise", CURRICULUM_REVISION_PROMPT_VERSION);
+  const adapter = getAdapterForTask("curriculum.revise");
+  const model = getModelForTask("curriculum.revise", getAiRoutingConfig());
+  const messages = params.messages;
+  const curriculumSummary = buildRevisionSnapshotSummary(params.snapshot);
+  const latestParentRequest = getLatestParentRequest(messages);
+  const targetCandidatesSummary = buildRevisionTargetCandidatesSummary(
+    params.snapshot,
+    latestParentRequest,
+  );
+
+  const correctionNotes: string[][] = [
+    [],
+    [
+      "Decide whether the request is clear enough to apply without guessing.",
+      "If the request names a concrete change, choose apply and describe the target path clearly.",
+      "If the request is vague, ask one precise follow-up that names the missing detail.",
+    ],
+  ];
+
+  for (const notes of correctionNotes) {
+    try {
+      const parsedPlan = (await adapter.completeJson({
+        model,
+        temperature: 0.2,
+        systemPrompt: prompt.systemPrompt,
+        outputSchema: CurriculumAiRevisionPlanSchema,
+        messages: [
+          {
+            role: "user",
+            content: `${buildCurriculumRevisionPlanPrompt({
+              learnerName: params.learner.displayName,
+              currentCurriculum: params.snapshot,
+              currentCurriculumSummary: curriculumSummary,
+              currentRequest: latestParentRequest,
+              targetCandidatesSummary,
+              messages,
+            })}${notes.length > 0 ? `\n\nCorrection notes:\n${notes.map((note, index) => `${index + 1}. ${note}`).join("\n")}` : ""}`,
+          },
+        ],
+      })) as CurriculumAiRevisionPlan | null;
+
+      if (!parsedPlan) {
+        continue;
+      }
+
+      return sanitizeRevisionPlan(parsedPlan);
+    } catch (error) {
+      console.error("[curriculum/ai-draft] Curriculum revision planning failed, retrying.", error);
+    }
+  }
+
+  return null;
+}
+
 async function generateCurriculumRevisionDecision(params: {
   learner: AppLearner;
   messages: CurriculumAiChatMessage[];
   snapshot: CurriculumRevisionSnapshot;
 }): Promise<CurriculumAiRevisionTurn> {
+  const messages = normalizeMessages(params.messages);
+  const revisionPreference = inferRevisionPreference(messages);
+  const inferredRevisionPlan = inferRevisionPlanFromConversation({
+    messages,
+    snapshot: params.snapshot,
+  });
+  if (inferredRevisionPlan) {
+    if (inferredRevisionPlan.action === "clarify") {
+      return {
+        assistantMessage: inferredRevisionPlan.assistantMessage,
+        action: "clarify",
+        changeSummary: inferredRevisionPlan.changeSummary,
+      };
+    }
+
+    return await applyCurriculumRevisionPlan({
+      learner: params.learner,
+      messages,
+      snapshot: params.snapshot,
+      revisionPlan: inferredRevisionPlan,
+      revisionPreference,
+    });
+  }
+
+  const revisionPlan = await generateCurriculumRevisionPlan({
+    learner: params.learner,
+    messages,
+    snapshot: params.snapshot,
+  });
+
+  if (!revisionPlan || revisionPlan.action === "clarify") {
+    return {
+      assistantMessage:
+        revisionPlan?.assistantMessage ?? buildGenericRevisionClarificationMessage(messages),
+      action: "clarify",
+      changeSummary: revisionPlan?.changeSummary ?? [],
+    };
+  }
+
+  return applyCurriculumRevisionPlan({
+    learner: params.learner,
+    messages,
+    snapshot: params.snapshot,
+    revisionPlan,
+    revisionPreference,
+  });
+}
+
+function inferRevisionPlanFromConversation(params: {
+  messages: ChatMessage[];
+  snapshot: CurriculumRevisionSnapshot;
+}): CurriculumAiRevisionPlan | null {
+  const latestRequest = getLatestParentRequest(params.messages);
+  if (!latestRequest) {
+    return null;
+  }
+
+  if (isPreferenceOnlyRevisionMessage(latestRequest)) {
+    return {
+      assistantMessage: buildTargetedRevisionClarificationMessage(params.messages),
+      action: "clarify",
+      scope: "targeted",
+      operation: "adjust",
+      changeSummary: [],
+      targetPath: [],
+      replacementTitles: [],
+      missingDetail: "The request only chose a revision mode, not a concrete edit.",
+    };
+  }
+
+  const revisionOperation = inferLocalRevisionOperation(latestRequest);
+  const targetCandidates = collectRevisionTargetCandidates(
+    params.snapshot.structure as unknown as RevisionSnapshotNode[],
+    latestRequest,
+  ).sort((left, right) => right.score - left.score || left.path.length - right.path.length);
+  const wantsSkillLevelTarget = /\b(skill|skills|subskill|subskills|smaller skills?)\b/i.test(
+    latestRequest,
+  );
+  const candidatePool = wantsSkillLevelTarget
+    ? targetCandidates.filter((candidate) => candidate.type === "skill")
+    : targetCandidates;
+  const bestTarget = candidatePool[0] ?? targetCandidates[0] ?? null;
+  const hasConcreteTarget = Boolean(bestTarget && bestTarget.score >= 12);
+
+  if (revisionOperation === "broader") {
+    return {
+      assistantMessage: `I will make a broader rewrite of ${params.snapshot.source.title}.`,
+      action: "apply",
+      scope: "broader",
+      operation: "broader",
+      changeSummary: ["Broader rewrite requested."],
+      revisionBrief: `Rewrite ${params.snapshot.source.title} more broadly while preserving coherence.`,
+      targetPath: bestTarget ? bestTarget.path : [],
+      replacementTitles: [],
+    };
+  }
+
+  if (!hasConcreteTarget) {
+    return null;
+  }
+
+  if (revisionOperation === "rename") {
+    const replacementTitle = extractRequestedRenameTitle(latestRequest);
+    if (!replacementTitle) {
+      return null;
+    }
+
+    return {
+      assistantMessage: `I will rename ${bestTarget!.path.join(" > ")} as requested.`,
+      action: "apply",
+      scope: "targeted",
+      operation: "rename",
+      changeSummary: [`Rename ${bestTarget!.path.join(" > ")}.`],
+      revisionBrief: latestRequest,
+      targetPath: bestTarget!.path,
+      replacementTitles: [replacementTitle],
+    };
+  }
+
+  if (revisionOperation === "split" || revisionOperation === "adjust") {
+    return {
+      assistantMessage: `I will revise ${bestTarget.path.join(" > ")} as requested.`,
+      action: "apply",
+      scope: "targeted",
+      operation: revisionOperation,
+      changeSummary: [latestRequest],
+      revisionBrief: latestRequest,
+      targetPath: bestTarget.path,
+      replacementTitles: [],
+    };
+  }
+
+  return null;
+}
+
+function inferLocalRevisionOperation(requestText: string) {
+  if (/\b(split(?: up)?|break down|separate|divide)\b/i.test(requestText)) {
+    return "split" as const;
+  }
+
+  if (/\b(rename|retitle|new title|title update|title)\b/i.test(requestText)) {
+    return "rename" as const;
+  }
+
+  if (/\b(broader rewrite|rewrite it|rewrite the structure|rebuild it|start over|replace the structure)\b/i.test(requestText)) {
+    return "broader" as const;
+  }
+
+  if (/\b(shorten|shorter|lengthen|longer|simplify|simpler|condense|trim|reduce|increase|tighten|streamline|refine|adjust)\b/i.test(requestText)) {
+    return "adjust" as const;
+  }
+
+  return "unknown" as const;
+}
+
+function extractRequestedRenameTitle(requestText: string) {
+  const quoted = requestText.match(/["“](.+?)["”]/)?.[1]?.trim();
+  if (quoted) {
+    return quoted;
+  }
+
+  const explicit = requestText.match(/\brename(?: it| this)? to\s+(.+?)(?:[.!?]|$)/i)?.[1]?.trim();
+  if (explicit) {
+    return explicit;
+  }
+
+  return null;
+}
+
+function inferRevisionOperation(requestText: string) {
+  if (/\b(split(?: up)?|break down|separate|divide)\b/i.test(requestText)) {
+    return { kind: "split" as const };
+  }
+
+  if (/\b(rename|retitle|new title|title update|title)\b/i.test(requestText)) {
+    return { kind: "rename" as const };
+  }
+
+  if (/\b(shorten|shorter|lengthen|longer|simplify|simpler|condense|trim|reduce|increase|tighten|streamline|refine|adjust)\b/i.test(requestText)) {
+    return { kind: "adjust" as const };
+  }
+
+  if (/\b(broader rewrite|broader rewrite please|rewrite it|rewrite the structure|rebuild it|start over|replace the structure)\b/i.test(requestText)) {
+    return { kind: "broader" as const };
+  }
+
+  return { kind: "unknown" as const };
+}
+
+function inferRevisionScope(requestText: string): "targeted" | "broader" {
+  if (/\b(broader rewrite|broader rewrite please|rewrite it|rewrite the structure|rebuild it|start over|replace the structure)\b/i.test(requestText)) {
+    return "broader";
+  }
+
+  return "targeted";
+}
+
+function buildRevisionBriefForOperation(operation: "split" | "rename" | "adjust", targetLabel: string, requestText: string) {
+  if (operation === "split") {
+    return `Split ${targetLabel} into smaller skills based on the requested change.`;
+  }
+
+  if (operation === "rename") {
+    return `Rename ${targetLabel} to better match the parent's request.`;
+  }
+
+  if (/\b(shorten|shorter|condense|trim|reduce|tighten|simplify|simpler)\b/i.test(requestText)) {
+    return `Shorten and simplify ${targetLabel}.`;
+  }
+
+  if (/\b(lengthen|longer|expand|deepen|increase)\b/i.test(requestText)) {
+    return `Expand ${targetLabel} with more room for practice and pacing.`;
+  }
+
+  return `Refine ${targetLabel} to match the parent's requested adjustment.`;
+}
+
+async function applyCurriculumRevisionPlan(params: {
+  learner: AppLearner;
+  messages: ChatMessage[];
+  snapshot: CurriculumRevisionSnapshot;
+  revisionPlan: CurriculumAiRevisionPlan;
+  revisionPreference: RevisionPreference | null;
+}): Promise<CurriculumAiRevisionTurn> {
+  const targetedTurn = buildTargetedRevisionTurnFromPlan({
+    learner: params.learner,
+    messages: params.messages,
+    snapshot: params.snapshot,
+    revisionPlan: params.revisionPlan,
+  });
+  if (targetedTurn) {
+    return targetedTurn;
+  }
+
   const prompt = await resolvePrompt("curriculum.revise", CURRICULUM_REVISION_PROMPT_VERSION);
   const adapter = getAdapterForTask("curriculum.revise");
   const model = getModelForTask("curriculum.revise", getAiRoutingConfig());
-  const messages = normalizeMessages(params.messages);
-  const revisionPreference = inferRevisionPreference(messages);
-  const canAutoApplyBroaderRewrite = shouldAutoApplyBroaderRewrite(messages, revisionPreference);
+  const curriculumSummary = buildRevisionSnapshotSummary(params.snapshot);
+  const latestParentRequest = getLatestParentRequest(params.messages);
+  const targetCandidatesSummary = buildRevisionTargetCandidatesSummary(
+    params.snapshot,
+    latestParentRequest,
+  );
+  const snapshotStructureSignature = buildRevisionStructureSignatureFromSnapshot(
+    params.snapshot.structure as unknown as RevisionSnapshotNode[],
+  );
   const correctionNotes: string[][] = [
     [],
     [
       "If you apply a revision, return the full artifact with explicit pacing coverage.",
-      "Do not ask a vague clarification question when the parent's request is specific enough to apply.",
-      "Do not collapse a long plan into only a few skills or lessons.",
-      ...(revisionPreference
-        ? [
-            "The parent has already answered whether this should stay targeted or become a broader rewrite. Do not ask that preference question again.",
-          ]
-        : []),
-      ...(canAutoApplyBroaderRewrite
-        ? [
-            "The parent has already given enough direction for a broader rewrite. Apply it instead of asking the same clarification again.",
-          ]
+      "Do not ask for clarification when the revision plan already identifies the target and scope.",
+      "Preserve what should stay and only change what the revision plan requests.",
+      "If the first attempt leaves the tree shape unchanged, revise the structure instead of repeating it.",
+      `Revision brief: ${params.revisionPlan.revisionBrief ?? ""}`,
+      ...(params.revisionPlan.targetPath.length > 0
+        ? [`Target path: ${params.revisionPlan.targetPath.join(" > ")}`]
         : []),
     ],
   ];
@@ -294,7 +642,18 @@ async function generateCurriculumRevisionDecision(params: {
             content: `${buildCurriculumRevisionPrompt({
               learnerName: params.learner.displayName,
               currentCurriculum: params.snapshot,
-              messages,
+              currentCurriculumSummary: curriculumSummary,
+              currentRequest: latestParentRequest,
+              targetCandidatesSummary,
+              messages: params.messages,
+              revisionPlan: {
+                scope: params.revisionPlan.scope,
+                operation: params.revisionPlan.operation,
+                changeSummary: params.revisionPlan.changeSummary,
+                revisionBrief: params.revisionPlan.revisionBrief ?? "",
+                targetPath: params.revisionPlan.targetPath,
+                replacementTitles: params.revisionPlan.replacementTitles,
+              },
             })}${notes.length > 0 ? `\n\nCorrection notes:\n${notes.map((note, index) => `${index + 1}. ${note}`).join("\n")}` : ""}`,
           },
         ],
@@ -305,29 +664,27 @@ async function generateCurriculumRevisionDecision(params: {
       }
 
       const sanitizedTurn = sanitizeRevisionTurn(parsedTurn);
-
-      if (
-        sanitizedTurn.action === "clarify" &&
-        canAutoApplyBroaderRewrite &&
-        isPreferenceClarificationMessage(sanitizedTurn.assistantMessage)
-      ) {
-        continue;
-      }
-
       if (sanitizedTurn.action === "clarify") {
-        return sanitizedTurn;
+        continue;
       }
 
       sanitizedTurn.artifact = await finalizeCurriculumTitle({
         artifact: sanitizedTurn.artifact!,
         learner: params.learner,
-        messages,
+        messages: params.messages,
       });
+
+      if (
+        buildRevisionStructureSignatureFromDocument(sanitizedTurn.artifact.document) ===
+        snapshotStructureSignature
+      ) {
+        continue;
+      }
 
       const coverageIssues = getArtifactCoverageIssues(
         sanitizedTurn.artifact!,
-        messages,
-        inferRequestedPacing(messages, inferCapturedRequirements(messages)),
+        params.messages,
+        inferRequestedPacing(params.messages, inferCapturedRequirements(params.messages)),
       );
 
       if (coverageIssues.length === 0) {
@@ -340,9 +697,10 @@ async function generateCurriculumRevisionDecision(params: {
 
   const fallbackTurn = await buildFallbackRevisionTurn({
     learner: params.learner,
-    messages,
+    messages: params.messages,
     snapshot: params.snapshot,
-    revisionPreference,
+    revisionPreference: params.revisionPreference,
+    revisionPlan: params.revisionPlan,
   });
 
   if (fallbackTurn) {
@@ -350,11 +708,1180 @@ async function generateCurriculumRevisionDecision(params: {
   }
 
   return {
-    assistantMessage:
-      "I can revise this, but I need one sharper instruction first. Tell me whether you want to preserve the current structure and make a targeted adjustment, or replace it with a broader rewrite.",
+    assistantMessage: buildGenericRevisionClarificationMessage(params.messages),
     action: "clarify",
     changeSummary: [],
   };
+}
+
+interface RevisionConversationPlan {
+  mode: "apply" | "clarify";
+  preference: RevisionPreference | null;
+  clarificationMessage: string;
+  splitSkillTarget: string | null;
+}
+
+function classifyRevisionConversation(messages: ChatMessage[]): RevisionConversationPlan {
+  const userMessages = collectUserMessages(messages);
+  const splitSkillTarget = extractSplitSkillTarget(userMessages);
+  const hasExplicitBroaderPreference = userMessages.some(isExplicitBroaderRevisionMessage);
+  const hasConcreteTargetedRequest = userMessages.some(isConcreteTargetedRevisionMessage);
+  const hasExplicitTargetedPreference = userMessages.some(isExplicitTargetedRevisionMessage);
+
+  if (hasExplicitBroaderPreference) {
+    return {
+      mode: "apply" as const,
+      preference: "broader" as const,
+      clarificationMessage: "",
+      splitSkillTarget,
+    };
+  }
+
+  if (hasConcreteTargetedRequest) {
+    return {
+      mode: "apply" as const,
+      preference: "targeted" as const,
+      clarificationMessage: "",
+      splitSkillTarget,
+    };
+  }
+
+  if (hasExplicitTargetedPreference) {
+    return {
+      mode: "clarify" as const,
+      preference: "targeted" as const,
+      clarificationMessage: buildTargetedRevisionClarificationMessage(messages),
+      splitSkillTarget,
+    };
+  }
+
+  return {
+    mode: "clarify" as const,
+    preference: null,
+    clarificationMessage: buildGenericRevisionClarificationMessage(messages),
+    splitSkillTarget,
+  };
+}
+
+function isExplicitTargetedRevisionMessage(message: string) {
+  const value = message.trim().toLowerCase();
+  return (
+    /^1[.!?]*$/.test(value) ||
+    /\b(targeted adjustment|targeted change|preserve the current structure|keep the current structure)\b/i.test(
+      value,
+    )
+  );
+}
+
+function isExplicitBroaderRevisionMessage(message: string) {
+  const value = message.trim().toLowerCase();
+  return (
+    /^2[.!?]*$/.test(value) ||
+    /\b(broader rewrite|broader rewrite please|rewrite it|rewrite the structure|rebuild it|start over|replace the structure)\b/i.test(
+      value,
+    )
+  );
+}
+
+function buildTargetedRevisionClarificationMessage(messages: ChatMessage[]) {
+  const title = inferRevisionTopicTitle(messages);
+  return `What part of ${title} should I adjust? For example, pacing, lesson structure, specific skills, materials, or the title.`;
+}
+
+function buildConcreteRevisionClarificationMessage(messages: ChatMessage[]) {
+  const splitTarget = extractSplitSkillTarget(collectUserMessages(messages));
+  if (splitTarget) {
+    return `I can split ${toSentenceFragment(splitTarget)} into smaller skills, but I need to match it to the current curriculum first. Which exact skill should I break down?`;
+  }
+
+  return buildGenericRevisionClarificationMessage(messages);
+}
+
+function buildGenericRevisionClarificationMessage(messages: ChatMessage[]) {
+  const title = inferRevisionTopicTitle(messages);
+  return `What would you like me to change about ${title}?`;
+}
+
+function inferRevisionTopicTitle(messages: ChatMessage[]) {
+  const opening = collectUserMessages(messages)[0] ?? "";
+  const topic = extractTopicLabel(opening);
+  return topic ? toSentenceFragment(topic) : "this curriculum";
+}
+
+function applyRevisionFixups(params: {
+  artifact: CurriculumAiGeneratedArtifact;
+  messages: ChatMessage[];
+  snapshot: CurriculumRevisionSnapshot;
+}): CurriculumAiGeneratedArtifact | null {
+  const splitTarget = extractSplitSkillTarget(params.messages);
+  const shouldPreserveTitle = Boolean(splitTarget);
+  const next = cloneArtifact(params.artifact);
+
+  if (shouldPreserveTitle && next.source.title !== params.snapshot.source.title) {
+    next.source.title = params.snapshot.source.title;
+  }
+
+  if (!splitTarget) {
+    return next;
+  }
+
+  const target = findBestSkillLeaf(next.document, splitTarget);
+  if (!target) {
+    return null;
+  }
+
+  const splitTitles = buildSplitSkillTitles(target.title, splitTarget);
+  if (splitTitles.length < 2) {
+    return null;
+  }
+
+  replaceSkillLeafInDocument(next.document, target, splitTitles);
+  replaceLinkedSkillTitles(next.units, target.title, splitTitles);
+
+  if (shouldPreserveTitle && next.source.title !== params.snapshot.source.title) {
+    next.source.title = params.snapshot.source.title;
+  }
+
+  return next;
+}
+
+function buildDeterministicSplitRevisionTurn(params: {
+  learner: AppLearner;
+  messages: ChatMessage[];
+  snapshot: CurriculumRevisionSnapshot;
+  revisionPreference: RevisionPreference | null;
+  splitSkillTarget: string | null;
+}): CurriculumAiRevisionTurn | null {
+  if (!params.splitSkillTarget) {
+    return null;
+  }
+
+  const splitNode = findBestRevisionStructureNode(
+    params.snapshot.structure as unknown as PromptCurriculumNode[],
+    params.splitSkillTarget,
+  );
+  if (!splitNode) {
+    return null;
+  }
+
+  const splitTitles = buildSplitSkillTitles(splitNode.title, params.splitSkillTarget);
+  if (splitTitles.length < 2) {
+    return null;
+  }
+
+  const artifact = sanitizeArtifact(
+    buildRevisionArtifactFromSnapshot({
+      snapshot: params.snapshot,
+      splitNodeTitle: splitNode.title,
+      splitTitles,
+      revisionPreference: params.revisionPreference,
+      messages: params.messages,
+    }),
+  );
+
+  return {
+    assistantMessage: buildDeterministicSplitRevisionAssistantMessage(splitNode.title, splitTitles),
+    action: "apply",
+    changeSummary: buildDeterministicSplitRevisionChangeSummary(splitNode.title, splitTitles),
+    artifact,
+  };
+}
+
+function buildRevisionArtifactFromSnapshot(params: {
+  snapshot: CurriculumRevisionSnapshot;
+  splitNodeTitle: string;
+  splitTitles: string[];
+  revisionPreference: RevisionPreference | null;
+  messages: ChatMessage[];
+}): CurriculumAiGeneratedArtifact {
+  const document = buildRevisionDocumentFromStructure(
+    params.snapshot.structure as unknown as PromptCurriculumNode[],
+    params.splitNodeTitle,
+    params.splitTitles,
+  );
+
+  const outline = params.snapshot.outline as unknown as RevisionSnapshotOutlineUnit[];
+  const units = outline.map((unit, unitIndex) => ({
+    title: typeof unit.title === "string" && unit.title.trim() ? unit.title.trim() : `Unit ${unitIndex + 1}`,
+    description:
+      typeof unit.description === "string" && unit.description.trim()
+        ? unit.description.trim()
+        : `Updated unit sequence for ${params.snapshot.source.title}.`,
+    estimatedWeeks: typeof unit.estimatedWeeks === "number" ? unit.estimatedWeeks : undefined,
+    estimatedSessions:
+      typeof unit.estimatedSessions === "number" ? unit.estimatedSessions : undefined,
+    lessons: unit.lessons.map((lesson, lessonIndex) => {
+      const linkedSkillTitles = Array.isArray(lesson.linkedSkillTitles)
+        ? uniqueNonEmpty([
+            ...(lesson.linkedSkillTitles as string[]).filter(
+              (title) => title !== params.splitNodeTitle,
+            ),
+            ...(lesson.linkedSkillTitles.includes(params.splitNodeTitle) ? params.splitTitles : []),
+          ])
+        : [];
+      const materials = Array.isArray(lesson.materials) ? uniqueNonEmpty(lesson.materials as string[]) : [];
+      const objectives = Array.isArray(lesson.objectives) ? uniqueNonEmpty(lesson.objectives as string[]) : [];
+
+      return {
+        title:
+          typeof lesson.title === "string" && lesson.title.trim()
+            ? lesson.title.trim()
+            : `Lesson ${lessonIndex + 1}`,
+        description:
+          typeof lesson.description === "string" && lesson.description.trim()
+            ? lesson.description.trim()
+            : `Lesson aligned to ${params.snapshot.source.title}.`,
+        subject:
+          typeof lesson.subject === "string" && lesson.subject.trim()
+            ? lesson.subject.trim()
+            : undefined,
+        estimatedMinutes:
+          typeof lesson.estimatedMinutes === "number" ? lesson.estimatedMinutes : undefined,
+        materials,
+        objectives,
+        linkedSkillTitles,
+      };
+    }),
+  }));
+
+  return {
+    source: {
+      title: params.snapshot.source.title,
+      description:
+        params.snapshot.source.description ??
+        `Targeted revision of ${params.snapshot.source.title}.`,
+      subjects: params.snapshot.source.subjects,
+      gradeLevels: params.snapshot.source.gradeLevels,
+      academicYear: undefined,
+      summary:
+        params.snapshot.source.description ??
+        `Targeted revision of ${params.snapshot.source.title}.`,
+      teachingApproach:
+        "Keep the existing sequence in place while splitting the requested skill into smaller, easier-to-read steps.",
+      successSignals: [
+        "The revised branch shows the requested skill broken into smaller visible leaves.",
+        "Linked lessons point at the updated skill titles.",
+        "The rest of the curriculum structure stays intact.",
+      ],
+      parentNotes: [
+        "Preserve the surrounding curriculum structure unless the request explicitly asks for a broader rewrite.",
+      ],
+      rationale: [
+        "This revision is intentionally narrow so the change is obvious in the curriculum graph.",
+        "The current outline and lesson links are carried forward with the requested skill split applied.",
+      ],
+    },
+    intakeSummary: `Targeted revision applied to ${params.snapshot.source.title}.`,
+    pacing: {
+      totalWeeks:
+        typeof params.snapshot.counts.estimatedSessionCount === "number"
+          ? Math.max(1, Math.ceil(params.snapshot.counts.estimatedSessionCount / 2))
+          : undefined,
+      sessionsPerWeek: undefined,
+      sessionMinutes: undefined,
+      totalSessions:
+        typeof params.snapshot.counts.estimatedSessionCount === "number"
+          ? params.snapshot.counts.estimatedSessionCount
+          : undefined,
+      coverageStrategy:
+        "Keep the current pacing in place and preserve the existing outline while applying the requested targeted split.",
+      coverageNotes: [
+        "Only the requested branch is narrowed into smaller skills.",
+        "The surrounding units and lessons remain intact.",
+      ],
+    },
+    document,
+    units,
+  };
+}
+
+function buildTargetedRevisionTurnFromPlan(params: {
+  learner: AppLearner;
+  messages: ChatMessage[];
+  snapshot: CurriculumRevisionSnapshot;
+  revisionPlan: CurriculumAiRevisionPlan;
+}): CurriculumAiRevisionTurn | null {
+  if (params.revisionPlan.scope !== "targeted" || params.revisionPlan.operation === "broader") {
+    return null;
+  }
+
+  const artifact = buildTargetedRevisionArtifactFromSnapshot({
+    snapshot: params.snapshot,
+    revisionPlan: params.revisionPlan,
+  });
+  if (!artifact) {
+    return null;
+  }
+
+  return {
+    assistantMessage: buildTargetedRevisionAssistantMessage(params.revisionPlan, artifact),
+    action: "apply",
+    changeSummary: buildTargetedRevisionChangeSummary(params.revisionPlan),
+    artifact,
+  };
+}
+
+function buildTargetedRevisionArtifactFromSnapshot(params: {
+  snapshot: CurriculumRevisionSnapshot;
+  revisionPlan: CurriculumAiRevisionPlan;
+}): CurriculumAiGeneratedArtifact | null {
+  const document = buildRevisionDocumentFromSnapshotStructure(
+    params.snapshot.structure as unknown as RevisionSnapshotNode[],
+  );
+  const targetPath = params.revisionPlan.targetPath;
+  const targetNode = targetPath.length
+    ? findRevisionStructureNodeByPath(
+        params.snapshot.structure as unknown as RevisionSnapshotNode[],
+        targetPath,
+      )
+    : null;
+
+  if (targetPath.length === 0) {
+    if (params.revisionPlan.operation === "rename" || params.revisionPlan.operation === "adjust") {
+      const source = buildRevisionSourceFieldsFromSnapshot(params.snapshot, params.revisionPlan);
+      const units = buildRevisionUnitsFromSnapshot(
+        params.snapshot,
+        params.snapshot.source.title,
+        [],
+        params.revisionPlan,
+      );
+
+      return {
+        source,
+        intakeSummary: buildRevisionIntakeSummary(params.snapshot, params.revisionPlan),
+        pacing: buildRevisionPacingFromSnapshot(params.snapshot, params.revisionPlan),
+        document,
+        units,
+      };
+    }
+
+    return null;
+  }
+
+  if (!targetNode) {
+    return null;
+  }
+
+  const targetTitle =
+    typeof targetNode.title === "string" && targetNode.title.trim() ? targetNode.title.trim() : "";
+  if (!targetTitle) {
+    return null;
+  }
+  const targetDescription =
+    typeof targetNode.description === "string" && targetNode.description.trim()
+      ? targetNode.description.trim()
+      : undefined;
+
+  if (params.revisionPlan.operation === "split") {
+    const replacementTitles = uniqueNonEmpty(
+      params.revisionPlan.replacementTitles.length >= 2
+        ? params.revisionPlan.replacementTitles
+        : buildGenericSplitReplacementTitles(targetTitle),
+    );
+    if (replacementTitles.length < 2) {
+      return null;
+    }
+
+    const replacementDescriptions = buildGenericSplitReplacementDescriptions(
+      targetTitle,
+      targetDescription,
+      replacementTitles,
+      params.revisionPlan.revisionBrief ?? "",
+    );
+    if (
+      !replaceRevisionDocumentBranch(document, targetPath, buildSplitRevisionBranch(replacementTitles, replacementDescriptions))
+    ) {
+      return null;
+    }
+
+    const source = buildRevisionSourceFieldsFromSnapshot(params.snapshot, params.revisionPlan);
+    const units = buildRevisionUnitsFromSnapshot(
+      params.snapshot,
+      targetTitle,
+      replacementTitles,
+      params.revisionPlan,
+    );
+    return {
+      source,
+      intakeSummary: buildRevisionIntakeSummary(params.snapshot, params.revisionPlan),
+      pacing: buildRevisionPacingFromSnapshot(params.snapshot, params.revisionPlan),
+      document,
+      units,
+    };
+  }
+
+  if (params.revisionPlan.operation === "rename") {
+    const replacementTitle =
+      params.revisionPlan.replacementTitles[0]?.trim() ||
+      buildGenericRenameTitle(targetTitle, params.revisionPlan.revisionBrief ?? "");
+    if (!replacementTitle) {
+      return null;
+    }
+
+    if (!renameRevisionDocumentBranch(document, targetPath, replacementTitle)) {
+      return null;
+    }
+
+    const source = buildRevisionSourceFieldsFromSnapshot(params.snapshot, params.revisionPlan);
+    const units = buildRevisionUnitsFromSnapshot(
+      params.snapshot,
+      targetTitle,
+      [replacementTitle],
+      params.revisionPlan,
+    );
+    return {
+      source,
+      intakeSummary: buildRevisionIntakeSummary(params.snapshot, params.revisionPlan),
+      pacing: buildRevisionPacingFromSnapshot(params.snapshot, params.revisionPlan),
+      document,
+      units,
+    };
+  }
+
+  if (params.revisionPlan.operation === "adjust") {
+    const adjustedDescription = buildGenericAdjustedDescription(
+      targetTitle,
+      targetDescription,
+      params.revisionPlan.revisionBrief ?? "",
+    );
+    if (!replaceRevisionDocumentBranch(document, targetPath, adjustedDescription)) {
+      return null;
+    }
+
+    const source = buildRevisionSourceFieldsFromSnapshot(params.snapshot, params.revisionPlan);
+    const units = buildRevisionUnitsFromSnapshot(
+      params.snapshot,
+      targetTitle,
+      [],
+      params.revisionPlan,
+    );
+    return {
+      source,
+      intakeSummary: buildRevisionIntakeSummary(params.snapshot, params.revisionPlan),
+      pacing: buildRevisionPacingFromSnapshot(params.snapshot, params.revisionPlan),
+      document,
+      units,
+    };
+  }
+
+  return null;
+}
+
+function buildRevisionDocumentFromSnapshotStructure(
+  nodes: RevisionSnapshotNode[],
+): Record<string, RevisionDocumentNode> {
+  const document: Record<string, RevisionDocumentNode> = {};
+  for (const node of nodes) {
+    const title = typeof node.title === "string" ? node.title.trim() : "";
+    if (!title) {
+      continue;
+    }
+
+    document[title] = buildRevisionDocumentFromSnapshotNode(node);
+  }
+
+  return document;
+}
+
+function buildRevisionDocumentFromSnapshotNode(node: RevisionSnapshotNode): RevisionDocumentNode {
+  const children = Array.isArray(node.children) ? node.children : [];
+  if (children.length === 0) {
+    return typeof node.description === "string" && node.description.trim()
+      ? node.description.trim()
+      : typeof node.title === "string"
+        ? node.title.trim()
+        : "";
+  }
+
+  const next: Record<string, RevisionDocumentNode> = {};
+  for (const child of children) {
+    const title = typeof child.title === "string" ? child.title.trim() : "";
+    if (!title) {
+      continue;
+    }
+
+    next[title] = buildRevisionDocumentFromSnapshotNode(child);
+  }
+
+  return next;
+}
+
+function findRevisionStructureNodeByPath(
+  nodes: RevisionSnapshotNode[],
+  targetPath: string[],
+): RevisionSnapshotNode | null {
+  let currentNodes = nodes;
+  let current: RevisionSnapshotNode | null = null;
+
+  for (const segment of targetPath) {
+    current = currentNodes.find(
+      (node) =>
+        typeof node.title === "string" &&
+        normalizeForComparison(node.title) === normalizeForComparison(segment),
+    ) ?? null;
+    if (!current) {
+      return null;
+    }
+
+    currentNodes = Array.isArray(current.children) ? current.children : [];
+  }
+
+  return current;
+}
+
+function replaceRevisionDocumentBranch(
+  document: Record<string, RevisionDocumentNode>,
+  targetPath: string[],
+  replacement: RevisionDocumentNode,
+) {
+  const location = getRevisionDocumentLocation(document, targetPath);
+  if (!location) {
+    return false;
+  }
+
+  location.container[location.key] = replacement;
+  return true;
+}
+
+function renameRevisionDocumentBranch(
+  document: Record<string, RevisionDocumentNode>,
+  targetPath: string[],
+  replacementTitle: string,
+) {
+  const location = getRevisionDocumentLocation(document, targetPath);
+  if (!location) {
+    return false;
+  }
+
+  const existing = location.container[location.key];
+  delete location.container[location.key];
+  location.container[replacementTitle] = existing;
+  return true;
+}
+
+function getRevisionDocumentLocation(
+  document: Record<string, RevisionDocumentNode>,
+  targetPath: string[],
+) {
+  if (targetPath.length === 0) {
+    return null;
+  }
+
+  let container: Record<string, RevisionDocumentNode> = document;
+  for (const segment of targetPath.slice(0, -1)) {
+    const next = container[segment];
+    if (!next || typeof next === "string" || Array.isArray(next)) {
+      return null;
+    }
+    container = next as Record<string, RevisionDocumentNode>;
+  }
+
+  const key = targetPath[targetPath.length - 1];
+  if (!(key in container)) {
+    const fallbackKey = Object.keys(container).find(
+      (candidate) => normalizeForComparison(candidate) === normalizeForComparison(key),
+    );
+    if (!fallbackKey) {
+      return null;
+    }
+
+    return {
+      container,
+      key: fallbackKey,
+      value: container[fallbackKey],
+    };
+  }
+
+  return {
+    container,
+    key,
+    value: container[key],
+  };
+}
+
+function buildSplitRevisionBranch(
+  replacementTitles: string[],
+  replacementDescriptions: string[],
+): Record<string, RevisionDocumentNode> {
+  const branch: Record<string, RevisionDocumentNode> = {};
+  for (const [index, title] of replacementTitles.entries()) {
+    branch[title] = replacementDescriptions[index] ?? "";
+  }
+
+  return branch;
+}
+
+function buildRevisionSourceFieldsFromSnapshot(
+  snapshot: CurriculumRevisionSnapshot,
+  revisionPlan: CurriculumAiRevisionPlan,
+): CurriculumAiGeneratedArtifact["source"] {
+  const isRename = revisionPlan.operation === "rename" && revisionPlan.targetPath.length === 0;
+  const title = isRename && revisionPlan.replacementTitles[0]
+    ? revisionPlan.replacementTitles[0]
+    : snapshot.source.title;
+  const summary = revisionPlan.revisionBrief?.trim() || snapshot.source.description || `Revision of ${snapshot.source.title}.`;
+  const targeted = revisionPlan.scope === "targeted";
+
+  return {
+    title,
+    description: snapshot.source.description || `Targeted revision of ${snapshot.source.title}.`,
+    subjects: snapshot.source.subjects,
+    gradeLevels: snapshot.source.gradeLevels,
+    academicYear: undefined,
+    summary,
+    teachingApproach: targeted
+      ? "Keep the existing sequence in place and apply the requested targeted revision."
+      : "Rework the curriculum more broadly while keeping the learning arc coherent.",
+    successSignals:
+      revisionPlan.operation === "split"
+        ? [
+            "The selected branch is visibly broken into smaller skills.",
+            "Linked lessons point at the updated skill titles.",
+            "The rest of the curriculum stays intact.",
+          ]
+        : revisionPlan.operation === "rename"
+          ? [
+              "The selected branch uses the new wording consistently.",
+              "Linked lessons reflect the renamed branch.",
+              "The curriculum structure still reads cleanly.",
+            ]
+          : [
+              "The requested revision is reflected in the curriculum structure.",
+              "The outline still reads like a teachable sequence.",
+              "The revision preserves coherence across units and lessons.",
+            ],
+    parentNotes: targeted
+      ? ["Preserve surrounding structure unless the request explicitly asks for a broader rewrite."]
+      : ["Use a broader revision only when the request clearly asks for it."],
+    rationale: targeted
+      ? ["This revision is intentionally narrow so the requested change is easy to see."]
+      : ["The revision expands beyond one branch because the parent requested a broader rewrite."],
+  };
+}
+
+function buildRevisionIntakeSummary(
+  snapshot: CurriculumRevisionSnapshot,
+  revisionPlan: CurriculumAiRevisionPlan,
+) {
+  if (revisionPlan.revisionBrief?.trim()) {
+    return revisionPlan.revisionBrief.trim();
+  }
+
+  return `Revision applied to ${snapshot.source.title}.`;
+}
+
+function buildRevisionPacingFromSnapshot(
+  snapshot: CurriculumRevisionSnapshot,
+  revisionPlan: CurriculumAiRevisionPlan,
+): CurriculumAiGeneratedArtifact["pacing"] {
+  const totalSessions =
+    snapshot.counts.estimatedSessionCount > 0 ? snapshot.counts.estimatedSessionCount : undefined;
+  return {
+    totalWeeks: totalSessions ? Math.max(1, Math.ceil(totalSessions / 5)) : undefined,
+    sessionsPerWeek: undefined,
+    sessionMinutes: undefined,
+    totalSessions,
+    coverageStrategy: revisionPlan.scope === "targeted"
+      ? "Preserve the existing pacing while applying the requested local revision."
+      : "Keep the pacing coherent while rewriting the curriculum more broadly.",
+    coverageNotes:
+      revisionPlan.operation === "split"
+        ? [
+            "Only the requested branch is broken into smaller skills.",
+            "The surrounding units and lessons remain intact.",
+          ]
+        : [
+            "The revision keeps the sequence teachable and coherent.",
+          ],
+  };
+}
+
+function buildRevisionUnitsFromSnapshot(
+  snapshot: CurriculumRevisionSnapshot,
+  targetTitle: string,
+  replacementTitles: string[],
+  revisionPlan: CurriculumAiRevisionPlan,
+): CurriculumAiGeneratedArtifact["units"] {
+  const outline = snapshot.outline as unknown as RevisionSnapshotOutlineUnit[];
+
+  return outline.map((unit, unitIndex) => ({
+    title:
+      typeof unit.title === "string" && unit.title.trim()
+        ? unit.title.trim()
+        : `Unit ${unitIndex + 1}`,
+    description:
+      typeof unit.description === "string" && unit.description.trim()
+        ? unit.description.trim()
+        : `Updated unit sequence for ${snapshot.source.title}.`,
+    estimatedWeeks: typeof unit.estimatedWeeks === "number" ? unit.estimatedWeeks : undefined,
+    estimatedSessions: typeof unit.estimatedSessions === "number" ? unit.estimatedSessions : undefined,
+    lessons: unit.lessons.map((lesson: RevisionSnapshotOutlineLesson, lessonIndex: number) => {
+      const linkedSkillTitles = Array.isArray(lesson.linkedSkillTitles)
+        ? uniqueNonEmpty([
+            ...lesson.linkedSkillTitles.filter((title: string) => title !== targetTitle),
+            ...(lesson.linkedSkillTitles.includes(targetTitle) ? replacementTitles : []),
+          ])
+        : [];
+
+      return {
+        title:
+          typeof lesson.title === "string" && lesson.title.trim()
+            ? lesson.title.trim()
+            : `Lesson ${lessonIndex + 1}`,
+        description:
+          typeof lesson.description === "string" && lesson.description.trim()
+            ? lesson.description.trim()
+            : `Lesson aligned to ${snapshot.source.title}.`,
+        subject:
+          typeof lesson.subject === "string" && lesson.subject.trim()
+            ? lesson.subject.trim()
+            : undefined,
+        estimatedMinutes:
+          typeof lesson.estimatedMinutes === "number" ? lesson.estimatedMinutes : undefined,
+        materials: [],
+        objectives: [],
+        linkedSkillTitles,
+      };
+    }),
+  }));
+}
+
+function buildTargetedRevisionAssistantMessage(
+  revisionPlan: CurriculumAiRevisionPlan,
+  artifact: CurriculumAiGeneratedArtifact,
+) {
+  const targetLabel = revisionPlan.targetPath.length > 0 ? revisionPlan.targetPath.join(" > ") : artifact.source.title;
+
+  if (revisionPlan.operation === "split") {
+    return `I split ${targetLabel} into smaller skills and updated the curriculum map.`;
+  }
+
+  if (revisionPlan.operation === "rename") {
+    return `I renamed ${targetLabel} and updated the curriculum map.`;
+  }
+
+  return `I adjusted ${targetLabel} and updated the curriculum map.`;
+}
+
+function buildTargetedRevisionChangeSummary(revisionPlan: CurriculumAiRevisionPlan) {
+  const targetLabel =
+    revisionPlan.targetPath.length > 0 ? revisionPlan.targetPath.join(" > ") : "the curriculum";
+
+  if (revisionPlan.operation === "split") {
+    return uniqueNonEmpty(
+      [
+        `Split ${targetLabel} into smaller skills.`,
+        revisionPlan.replacementTitles.length > 0
+          ? `Updated linked lessons to point at ${revisionPlan.replacementTitles.join(", ")}.`
+          : "",
+      ].filter(Boolean),
+    );
+  }
+
+  if (revisionPlan.operation === "rename") {
+    return uniqueNonEmpty(
+      [
+        `Renamed ${targetLabel}.`,
+        revisionPlan.replacementTitles[0]
+          ? `Updated the curriculum map to use ${revisionPlan.replacementTitles[0]}.`
+          : "",
+      ].filter(Boolean),
+    );
+  }
+
+  return [`Adjusted ${targetLabel} to match the requested change.`];
+}
+
+function buildGenericSplitReplacementTitles(title: string) {
+  const compact = title.replace(/\s+/g, " ").trim();
+  const parts = compact
+    .split(/,\s*|\s+and\s+/i)
+    .map((part) => part.trim().replace(/^(?:and|or)\s+/i, ""))
+    .filter(Boolean);
+
+  if (parts.length >= 2) {
+    return parts.slice(0, 5);
+  }
+
+  const base = compact.replace(/\b(skill|skills)\b/i, "").replace(/\s+/g, " ").trim();
+  if (!base) {
+    return [];
+  }
+
+  const lowerBase = base.toLowerCase();
+  return [
+    `Build foundations for ${lowerBase}`,
+    `Practice ${lowerBase} in examples`,
+    `Apply ${lowerBase} independently`,
+  ];
+}
+
+function buildGenericSplitReplacementDescriptions(
+  originalTitle: string,
+  originalDescription: string | undefined,
+  replacementTitles: string[],
+  revisionBrief: string,
+) {
+  return replacementTitles.map((title, index) => {
+    const hint = revisionBrief.trim() || originalDescription?.trim() || `A smaller step for ${originalTitle.toLowerCase()}.`;
+    if (index === 0) {
+      return `${hint} Start with ${title.toLowerCase()}.`;
+    }
+    return `${hint} Continue with ${title.toLowerCase()}.`;
+  });
+}
+
+function buildGenericRenameTitle(originalTitle: string, revisionBrief: string) {
+  const brief = revisionBrief.trim();
+  if (brief) {
+    const extracted = brief.match(/(?:rename|retitle|rename to)\s+(.*)$/i)?.[1]?.trim();
+    if (extracted) {
+      return extracted.replace(/[.]+$/, "");
+    }
+  }
+
+  return originalTitle;
+}
+
+function buildGenericAdjustedDescription(
+  originalTitle: string,
+  originalDescription: string | undefined,
+  revisionBrief: string,
+) {
+  const brief = revisionBrief.trim();
+  if (brief) {
+    return `${originalDescription?.trim() || originalTitle}. Revised to match: ${brief}`;
+  }
+
+  return originalDescription?.trim() || `Revised version of ${originalTitle}.`;
+}
+
+function buildRevisionDocumentFromStructure(
+  nodes: PromptCurriculumNode[],
+  splitNodeTitle: string,
+  splitTitles: string[],
+): Record<string, RevisionDocumentNode> {
+  const document: Record<string, RevisionDocumentNode> = {};
+
+  for (const node of nodes) {
+    if (node.type === "skill" && titlesMatch(node.title, splitNodeTitle)) {
+      const descriptions = buildSplitSkillDescriptions(node.title, node.description, splitTitles);
+      for (const [index, title] of splitTitles.entries()) {
+        document[title] = descriptions[index] ?? "";
+      }
+      continue;
+    }
+
+    document[node.title] = buildRevisionDocumentNode(node, splitNodeTitle, splitTitles);
+  }
+
+  return document;
+}
+
+function buildRevisionDocumentNode(
+  node: PromptCurriculumNode,
+  splitNodeTitle: string,
+  splitTitles: string[],
+): RevisionDocumentNode {
+  if (node.type === "skill" || node.children.length === 0) {
+    return node.description?.trim() || node.title;
+  }
+
+  const next: Record<string, RevisionDocumentNode> = {};
+  for (const child of node.children) {
+    if (child.type === "skill" && titlesMatch(child.title, splitNodeTitle)) {
+      const descriptions = buildSplitSkillDescriptions(child.title, child.description, splitTitles);
+      for (const [index, title] of splitTitles.entries()) {
+        next[title] = descriptions[index] ?? "";
+      }
+      continue;
+    }
+
+    next[child.title] = buildRevisionDocumentNode(child, splitNodeTitle, splitTitles);
+  }
+
+  return next;
+}
+
+function findBestRevisionStructureNode(
+  nodes: PromptCurriculumNode[],
+  targetText: string,
+): PromptCurriculumNode | null {
+  let best: PromptCurriculumNode | null = null;
+  let bestScore = 0;
+
+  const visit = (node: PromptCurriculumNode) => {
+    if (node.type === "skill") {
+      const score = scoreSkillMatch(node.title, targetText) + scoreSkillMatch(node.description ?? "", targetText) / 2;
+      if (score > bestScore) {
+        bestScore = score;
+        best = node;
+      }
+    }
+
+    for (const child of node.children) {
+      visit(child);
+    }
+  };
+
+  for (const node of nodes) {
+    visit(node);
+  }
+
+  return bestScore >= 8 ? best : null;
+}
+
+function titlesMatch(left: string, right: string) {
+  return normalizeForComparison(left) === normalizeForComparison(right);
+}
+
+function buildDeterministicSplitRevisionAssistantMessage(splitNodeTitle: string, splitTitles: string[]) {
+  return `I split ${splitNodeTitle} into ${splitTitles.length} smaller skills and updated the curriculum map.`;
+}
+
+function buildDeterministicSplitRevisionChangeSummary(splitNodeTitle: string, splitTitles: string[]) {
+  return [
+    `Split ${splitNodeTitle} into ${splitTitles.length} smaller skills.`,
+    `Updated linked lessons to point at ${splitTitles.join(", ")}.`,
+  ];
+}
+
+function cloneArtifact(artifact: CurriculumAiGeneratedArtifact): CurriculumAiGeneratedArtifact {
+  return JSON.parse(JSON.stringify(artifact)) as CurriculumAiGeneratedArtifact;
+}
+
+function extractSplitSkillTarget(messages: Array<string | ChatMessage>) {
+  const combined = messages
+    .map((message) => (typeof message === "string" ? message : message.content))
+    .join(" ");
+  const splitMatch = combined.match(
+    /\b(?:split(?: up)?|break down|separate|divide)\s+(?:the\s+)?(.+?)(?:\s+(?:into|to)\s+(?:smaller\s+)?(?:skills?|parts?|subskills?)|[.!?]|$)/i,
+  );
+
+  if (splitMatch?.[1]) {
+    return splitMatch[1].replace(/\s+/g, " ").trim();
+  }
+
+  return null;
+}
+
+function shouldPreserveRevisionTitle(messages: ChatMessage[]) {
+  const requestText = collectUserMessages(messages).join(" ").toLowerCase();
+  return !/\b(rename|retitle|new title|change the title|title update|title)\b/i.test(requestText);
+}
+
+function findBestSkillLeaf(
+  document: RevisionDocumentNode,
+  targetText: string,
+): RevisionSkillLeafLocation | null {
+  let best: RevisionSkillLeafLocation | null = null;
+  let bestScore = 0;
+
+  const visit = (node: RevisionDocumentNode, container?: RevisionSkillLeafLocation["container"]) => {
+    if (typeof node === "string") {
+      if (Array.isArray(container)) {
+        const score = scoreSkillMatch(node, targetText);
+        if (score > bestScore) {
+          bestScore = score;
+          best = {
+            kind: "array",
+            container,
+            index: container.indexOf(node),
+            title: node,
+          };
+        }
+      }
+      return;
+    }
+
+    if (Array.isArray(node)) {
+      for (const item of node) {
+        visit(item, node);
+      }
+      return;
+    }
+
+    if (!node || typeof node !== "object") {
+      return;
+    }
+
+    for (const [key, value] of Object.entries(node)) {
+      if (typeof value === "string") {
+        const score = scoreSkillMatch(key, targetText) + scoreSkillMatch(value, targetText) / 2;
+        if (score > bestScore) {
+          bestScore = score;
+          best = {
+            kind: "object",
+            container: node,
+            key,
+            title: key,
+            description: value,
+          };
+        }
+        continue;
+      }
+
+      visit(value, node);
+    }
+  };
+
+  visit(document);
+  return bestScore >= 8 ? best : null;
+}
+
+function scoreSkillMatch(title: string, targetText: string) {
+  const normalizedTitle = normalizeForComparison(title);
+  const normalizedTarget = normalizeForComparison(targetText);
+  if (!normalizedTitle || !normalizedTarget) {
+    return 0;
+  }
+
+  if (normalizedTitle === normalizedTarget) {
+    return 100;
+  }
+
+  let score = 0;
+  if (normalizedTitle.includes(normalizedTarget) || normalizedTarget.includes(normalizedTitle)) {
+    score += 40;
+  }
+
+  const titleTokens = normalizedTitle.split(" ");
+  const targetTokens = normalizedTarget.split(" ");
+  for (const targetToken of targetTokens) {
+    if (targetToken.length < 4) continue;
+    const targetStem = stemSkillToken(targetToken);
+    for (const titleToken of titleTokens) {
+      const titleStem = stemSkillToken(titleToken);
+      if (titleToken === targetToken) {
+        score += 12;
+      } else if (
+        titleToken.startsWith(targetToken) ||
+        targetToken.startsWith(titleToken) ||
+        (titleStem && targetStem && titleStem === targetStem)
+      ) {
+        score += 8;
+      }
+    }
+  }
+
+  return score;
+}
+
+function stemSkillToken(token: string) {
+  return token
+    .replace(/(ing|edly|edly|ed|es|s)$/i, "")
+    .replace(/e$/i, "")
+    .trim();
+}
+
+function buildSplitSkillTitles(title: string, _targetText: string) {
+  const compact = title.replace(/\s+/g, " ").trim();
+  const parts = compact
+    .split(/,\s*|\s+and\s+/i)
+    .map((part) => part.trim().replace(/^(?:and|or)\s+/i, ""))
+    .filter(Boolean);
+
+  if (parts.length >= 2) {
+    const lead = getSkillVerbPrefix(parts[0]);
+
+    if (lead) {
+      return parts.map((part, index) => {
+        const cleanedPart =
+          index === 0
+            ? part.replace(new RegExp(`^${escapeRegExp(lead)}\\s+`, "i"), "")
+            : part.replace(/^(?:and|or)\s+/i, "");
+        const leaf = cleanedPart.trim();
+        return leaf ? `${lead} ${leaf}`.replace(/\s+/g, " ").trim() : part;
+      });
+    }
+  }
+
+  const base = compact
+    .replace(/\b(skill|skills)\b/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (base) {
+    return [
+      `Build foundations for ${base.toLowerCase()}`,
+      `Practice ${base.toLowerCase()} in examples`,
+      `Apply ${base.toLowerCase()} independently`,
+    ];
+  }
+
+  return [];
+}
+
+function getSkillVerbPrefix(title: string) {
+  const words = title.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) {
+    return "";
+  }
+
+  if (
+    words.length >= 2 &&
+    ["up", "out", "in", "on", "off", "for", "with", "to"].includes(words[1].toLowerCase())
+  ) {
+    return `${words[0]} ${words[1]}`;
+  }
+
+  return words[0];
+}
+
+function replaceSkillLeafInDocument(
+  document: RevisionDocumentNode,
+  target: RevisionSkillLeafLocation,
+  replacementTitles: string[],
+) {
+  if (target.kind === "array") {
+    const index = target.index ?? -1;
+    if (index < 0) {
+      return;
+    }
+
+    const replacements = replacementTitles.map((title) => title.trim()).filter(Boolean);
+    (target.container as string[]).splice(index, 1, ...replacements);
+    return;
+  }
+
+  if (target.kind === "object" && target.key) {
+    const descriptions = buildSplitSkillDescriptions(target.title, target.description, replacementTitles);
+    const container = target.container as Record<string, RevisionDocumentNode>;
+    delete container[target.key];
+    for (const [index, title] of replacementTitles.entries()) {
+      const description = descriptions[index];
+      container[title] = description ? description : "";
+    }
+  }
+}
+
+function buildSplitSkillDescriptions(
+  originalTitle: string,
+  originalDescription: string | undefined,
+  replacementTitles: string[],
+) {
+  return replacementTitles.map((title) => {
+    return originalDescription?.trim() || `Practice ${title.toLowerCase()} in a smaller, focused step.`;
+  });
+}
+
+function replaceLinkedSkillTitles(units: CurriculumAiGeneratedArtifact["units"], targetTitle: string, replacementTitles: string[]) {
+  for (const unit of units) {
+    for (const lesson of unit.lessons) {
+      if (!lesson.linkedSkillTitles.includes(targetTitle)) {
+        continue;
+      }
+
+      lesson.linkedSkillTitles = uniqueNonEmpty([
+        ...lesson.linkedSkillTitles.filter((title) => title !== targetTitle),
+        ...replacementTitles,
+      ]);
+    }
+  }
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 async function finalizeCurriculumTitle(params: {
@@ -497,7 +2024,126 @@ async function buildCurriculumRevisionSnapshot(sourceId: string, householdId: st
   } satisfies CurriculumRevisionSnapshot;
 }
 
-function serializeCurriculumNodeForPrompt(node: PromptCurriculumNode): Record<string, unknown> {
+function buildRevisionSnapshotSummary(snapshot: CurriculumRevisionSnapshot) {
+  const domainTitles = snapshot.structure
+    .map((node) => (typeof node.title === "string" ? node.title : null))
+    .filter((title): title is string => Boolean(title));
+  const unitTitles = snapshot.outline
+    .map((unit) => (typeof unit.title === "string" ? unit.title : null))
+    .filter((title): title is string => Boolean(title));
+
+  return [
+    `Source title: ${snapshot.source.title}`,
+    snapshot.source.description ? `Source summary: ${snapshot.source.description}` : null,
+    snapshot.counts.unitCount > 0 ? `Units: ${unitTitles.join(" | ")}` : null,
+    snapshot.counts.skillCount > 0 ? `Top-level structure: ${domainTitles.join(" | ")}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function getLatestParentRequest(messages: ChatMessage[]) {
+  for (const message of [...messages].reverse()) {
+    if (message.role === "user" && message.content.trim()) {
+      return message.content.trim();
+    }
+  }
+
+  return "";
+}
+
+function buildRevisionStructureSignatureFromSnapshot(nodes: RevisionSnapshotNode[]) {
+  return nodes.map(buildRevisionStructureSignatureFromSnapshotNode).join("|");
+}
+
+function buildRevisionStructureSignatureFromSnapshotNode(node: RevisionSnapshotNode): string {
+  const title = typeof node.title === "string" ? node.title.trim() : "";
+  const children = Array.isArray(node.children) ? node.children : [];
+  return `${title}{${children.map(buildRevisionStructureSignatureFromSnapshotNode).join("|")}}`;
+}
+
+function buildRevisionStructureSignatureFromDocument(node: RevisionDocumentNode): string {
+  if (typeof node === "string") {
+    return node.trim();
+  }
+
+  if (Array.isArray(node)) {
+    return `[${node.map(buildRevisionStructureSignatureFromDocument).join("|")}]`;
+  }
+
+  return `{${Object.entries(node)
+    .map(([key, value]) => `${key}${buildRevisionStructureSignatureFromDocument(value)}`)
+    .join("|")}}`;
+}
+
+function buildRevisionTargetCandidatesSummary(
+  snapshot: CurriculumRevisionSnapshot,
+  requestText: string,
+) {
+  const candidates = collectRevisionTargetCandidates(
+    snapshot.structure as unknown as RevisionSnapshotNode[],
+    requestText,
+  )
+    .sort((left, right) => right.score - left.score || left.path.length - right.path.length)
+    .slice(0, 6);
+
+  return candidates
+    .map(
+      (candidate, index) =>
+        `${index + 1}. ${candidate.path.join(" > ")} [${candidate.type}]`,
+    )
+    .join("\n");
+}
+
+function collectRevisionTargetCandidates(
+  nodes: RevisionSnapshotNode[],
+  requestText: string,
+  path: string[] = [],
+) {
+  const candidates: RevisionTargetCandidate[] = [];
+
+  for (const node of nodes) {
+    const title = typeof node.title === "string" ? node.title.trim() : "";
+    if (!title) {
+      continue;
+    }
+
+    const nextPath = [...path, title];
+    const type = typeof node.type === "string" ? node.type : "node";
+    let score = scoreSkillMatch(title, requestText);
+
+    if (typeof node.description === "string" && node.description.trim()) {
+      score += Math.round(scoreSkillMatch(node.description, requestText) / 2);
+    }
+
+    if (type === "skill") {
+      score += 20;
+    } else if (type === "goal_group") {
+      score += 10;
+    } else if (type === "strand") {
+      score += 4;
+    }
+
+    score += Math.min(nextPath.length, 4);
+
+    candidates.push({
+      path: nextPath,
+      title,
+      type,
+      score,
+    });
+
+    if (Array.isArray(node.children) && node.children.length > 0) {
+      candidates.push(...collectRevisionTargetCandidates(node.children, requestText, nextPath));
+    }
+  }
+
+  return candidates;
+}
+
+function serializeCurriculumNodeForPrompt(
+  node: SerializedCurriculumNodeForPrompt,
+): Record<string, unknown> {
   return {
     type: node.normalizedType,
     title: node.title,
@@ -594,6 +2240,20 @@ function sanitizeRevisionTurn(turn: CurriculumAiRevisionTurn): CurriculumAiRevis
     assistantMessage: turn.assistantMessage.trim(),
     changeSummary: uniqueNonEmpty(turn.changeSummary),
     artifact: turn.artifact ? sanitizeArtifact(turn.artifact) : undefined,
+  };
+}
+
+function sanitizeRevisionPlan(plan: CurriculumAiRevisionPlan): CurriculumAiRevisionPlan {
+  return {
+    assistantMessage: plan.assistantMessage.trim(),
+    action: plan.action,
+    scope: plan.scope,
+    operation: plan.operation,
+    changeSummary: uniqueNonEmpty(plan.changeSummary),
+    revisionBrief: plan.revisionBrief?.trim() || undefined,
+    targetPath: uniqueNonEmpty(plan.targetPath),
+    replacementTitles: uniqueNonEmpty(plan.replacementTitles),
+    missingDetail: plan.missingDetail?.trim() || undefined,
   };
 }
 
@@ -1209,24 +2869,43 @@ async function buildFallbackRevisionTurn(params: {
   messages: ChatMessage[];
   snapshot: CurriculumRevisionSnapshot;
   revisionPreference: RevisionPreference | null;
+  revisionPlan?: CurriculumAiRevisionPlan | null;
 }): Promise<CurriculumAiRevisionTurn | null> {
-  if (!shouldAutoApplyBroaderRewrite(params.messages, params.revisionPreference)) {
+  const shouldApply = params.revisionPlan
+    ? params.revisionPlan.action === "apply"
+    : shouldAutoApplyRevision(params.messages, params.revisionPreference);
+
+  if (!shouldApply) {
     return null;
   }
 
   const artifact = await finalizeCurriculumTitle({
     artifact: buildFallbackArtifact({
       learner: params.learner,
-      messages: buildFallbackRevisionSeedMessages(params.snapshot, params.messages),
+      messages: buildFallbackRevisionSeedMessages(
+        params.snapshot,
+        params.messages,
+        params.revisionPlan ?? null,
+      ),
     }),
     learner: params.learner,
     messages: params.messages,
   });
 
   return {
-    assistantMessage: buildFallbackRevisionAssistantMessage(params.messages, artifact),
+    assistantMessage: buildFallbackRevisionAssistantMessage(
+      params.messages,
+      artifact,
+      params.revisionPreference,
+      params.revisionPlan ?? null,
+    ),
     action: "apply",
-    changeSummary: buildFallbackRevisionChangeSummary(params.messages, artifact),
+    changeSummary: buildFallbackRevisionChangeSummary(
+      params.messages,
+      artifact,
+      params.revisionPreference,
+      params.revisionPlan ?? null,
+    ),
     artifact,
   };
 }
@@ -1247,10 +2926,7 @@ function firstMatch(value: string, pattern: RegExp) {
 }
 
 function inferRevisionPreference(messages: ChatMessage[]): RevisionPreference | null {
-  const assistantAskedPreference = messages.some(
-    (message) =>
-      message.role === "assistant" && isPreferenceClarificationMessage(message.content),
-  );
+  const assistantAskedPreference = hasPreferenceClarificationFromAssistant(messages);
 
   for (const message of [...messages].reverse()) {
     if (message.role !== "user") {
@@ -1275,9 +2951,20 @@ function inferRevisionPreference(messages: ChatMessage[]): RevisionPreference | 
     ) {
       return "targeted";
     }
+
+    if (isConcreteTargetedRevisionMessage(value)) {
+      return "targeted";
+    }
   }
 
   return null;
+}
+
+function shouldAutoApplyTargetedRevision(
+  messages: ChatMessage[],
+  revisionPreference: RevisionPreference | null,
+) {
+  return revisionPreference === "targeted" && hasTargetedRevisionDirection(messages);
 }
 
 function shouldAutoApplyBroaderRewrite(
@@ -1285,6 +2972,21 @@ function shouldAutoApplyBroaderRewrite(
   revisionPreference: RevisionPreference | null,
 ) {
   return revisionPreference === "broader" && hasConcreteRevisionDirection(messages);
+}
+
+function shouldAutoApplyRevision(
+  messages: ChatMessage[],
+  revisionPreference: RevisionPreference | null,
+) {
+  return shouldAutoApplyBroaderRewrite(messages, revisionPreference) ||
+    shouldAutoApplyTargetedRevision(messages, revisionPreference);
+}
+
+function hasPreferenceClarificationFromAssistant(messages: ChatMessage[]) {
+  return messages.some(
+    (message) =>
+      message.role === "assistant" && isPreferenceClarificationMessage(message.content),
+  );
 }
 
 function hasConcreteRevisionDirection(messages: ChatMessage[]) {
@@ -1299,13 +3001,25 @@ function hasConcreteRevisionDirection(messages: ChatMessage[]) {
     );
 }
 
+function hasTargetedRevisionDirection(messages: ChatMessage[]) {
+  return collectUserMessages(messages)
+    .filter((message) => !isPreferenceOnlyRevisionMessage(message))
+    .some(isConcreteTargetedRevisionMessage);
+}
+
+function isConcreteTargetedRevisionMessage(message: string) {
+  return /\b(shorten|shorter|lengthen|longer|simplify|simpler|condense|trim|reduce|increase|tighten|streamline|refine|adjust|rename|retitle|split|split up|smaller skills|subskills|break down|pacing|timeline|materials?|lesson structure|opening lessons|teaching approach|goal group|strand|skill|title)\b/i.test(
+    message,
+  );
+}
+
 function isPreferenceOnlyRevisionMessage(message: string) {
   const value = message.trim().toLowerCase();
   return (
     /^1[.!?]*$/.test(value) ||
     /^2[.!?]*$/.test(value) ||
-    /^targeted adjustment(?: please)?[.!?]*$/.test(value) ||
-    /^broader rewrite(?: please)?[.!?]*$/.test(value)
+    /^(?:just\s+|please\s+|make\s+|do\s+|a\s+|the\s+|one\s+)*targeted adjustment(?: please)?[.!?]*$/.test(value) ||
+    /^(?:just\s+|please\s+|make\s+|do\s+|a\s+|the\s+|one\s+)*broader rewrite(?: please)?[.!?]*$/.test(value)
   );
 }
 
@@ -1316,6 +3030,7 @@ function isPreferenceClarificationMessage(message: string) {
 function buildFallbackRevisionSeedMessages(
   snapshot: CurriculumRevisionSnapshot,
   messages: ChatMessage[],
+  revisionPlan: CurriculumAiRevisionPlan | null,
 ): ChatMessage[] {
   const topic = inferRevisionTopic(snapshot);
   const revisionRequest = collectUserMessages(messages)
@@ -1334,13 +3049,14 @@ function buildFallbackRevisionSeedMessages(
       role: "user",
       content: [
         `We want to teach ${topic}.`,
+        revisionRequest ? `Requested revision: ${revisionRequest}.` : null,
+        revisionPlan?.revisionBrief ? `Revision brief: ${revisionPlan.revisionBrief}.` : null,
         `Current curriculum title: ${snapshot.source.title}.`,
         snapshot.source.description ? `Current summary: ${snapshot.source.description}.` : null,
         snapshot.counts.estimatedSessionCount > 0
           ? `Current outline covers about ${snapshot.counts.estimatedSessionCount} sessions.`
           : null,
         unitTitles ? `Current units include ${unitTitles}.` : null,
-        revisionRequest ? `Requested rewrite: ${revisionRequest}.` : null,
       ]
         .filter(Boolean)
         .join(" "),
@@ -1367,9 +3083,24 @@ function inferRevisionTopic(snapshot: CurriculumRevisionSnapshot) {
 function buildFallbackRevisionAssistantMessage(
   messages: ChatMessage[],
   artifact: CurriculumAiGeneratedArtifact,
+  revisionPreference: RevisionPreference | null,
+  revisionPlan: CurriculumAiRevisionPlan | null,
 ) {
   const requestText = collectUserMessages(messages).join(" ").toLowerCase();
+  const revisionLead =
+    revisionPlan?.scope === "targeted" || revisionPreference === "targeted"
+      ? "targeted revision"
+      : "broader rewrite";
   const details = [
+    /\b(shorten|shorter|lengthen|longer|simplify|simpler|condense|trim|reduce|increase|tighten|streamline|refine|adjust|rename|retitle|pacing|timeline|materials?|lesson structure|opening lessons|teaching approach|goal group|strand|skill|title)\b/i.test(
+      requestText,
+    )
+      ? /\b(shorten|shorter|condense|trim|reduce|tighten|simplify|simpler)\b/i.test(requestText)
+        ? "refocused the pacing and simplified the opening lessons"
+        : /\b(lengthen|longer|expand|deepen|increase)\b/i.test(requestText)
+          ? "expanded the pacing and added more room for practice"
+          : "refined the early lesson sequence"
+      : null,
     /foundation|core ideas?/.test(requestText)
       ? "expanded the foundations and core ideas"
       : null,
@@ -1379,17 +3110,33 @@ function buildFallbackRevisionAssistantMessage(
   ].filter(Boolean);
 
   return details.length > 0
-    ? `I applied a broader rewrite, ${details.join(", ")}, and refreshed the curriculum structure so it is ready to use.`
-    : "I applied a broader rewrite and refreshed the curriculum structure so it is ready to use.";
+    ? `I applied a ${revisionLead}, ${details.join(", ")}, and refreshed the curriculum structure so it is ready to use.`
+    : `I applied a ${revisionLead} and refreshed the curriculum structure so it is ready to use.`;
 }
 
 function buildFallbackRevisionChangeSummary(
   messages: ChatMessage[],
   artifact: CurriculumAiGeneratedArtifact,
+  revisionPreference: RevisionPreference | null,
+  revisionPlan: CurriculumAiRevisionPlan | null,
 ) {
   const requestText = collectUserMessages(messages).join(" ").toLowerCase();
+  const revisionLead =
+    revisionPlan?.scope === "targeted" || revisionPreference === "targeted"
+      ? "Applied a targeted revision to the curriculum structure."
+      : "Applied a broader rewrite to the curriculum structure.";
   const summary = [
-    "Applied a broader rewrite to the curriculum structure.",
+    revisionLead,
+    revisionPlan?.revisionBrief ? `Planned change: ${revisionPlan.revisionBrief}` : null,
+    /\b(shorten|shorter|lengthen|longer|simplify|simpler|condense|trim|reduce|increase|tighten|streamline|refine|adjust|rename|retitle|pacing|timeline|materials?|lesson structure|opening lessons|teaching approach|goal group|strand|skill|title)\b/i.test(
+      requestText,
+    )
+      ? /\b(shorten|shorter|condense|trim|reduce|tighten|simplify|simpler)\b/i.test(requestText)
+        ? "Shortened and simplified the opening stretch so the curriculum feels lighter."
+        : /\b(lengthen|longer|expand|deepen|increase)\b/i.test(requestText)
+          ? "Expanded the pacing so the curriculum has more room to breathe."
+          : "Refined the early lesson sequence to better match the requested change."
+      : null,
     /foundation|core ideas?/.test(requestText)
       ? "Expanded the foundations so the opening stretch carries more core ideas."
       : null,

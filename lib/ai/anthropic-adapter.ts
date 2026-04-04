@@ -1,7 +1,6 @@
 import "server-only";
 
 import Anthropic from "@anthropic-ai/sdk";
-import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import type {
   AiProviderAdapter,
   CompletionOptions,
@@ -60,24 +59,6 @@ export class AnthropicAdapter implements AiProviderAdapter {
   }
 
   async completeJson<T>(options: StructuredCompletionOptions<T>): Promise<T | null> {
-    if (options.outputSchema) {
-      try {
-        const request = this.buildRequest(options);
-        const message = await this.client.messages.parse({
-          ...request,
-          output_config: {
-            format: zodOutputFormat(options.outputSchema),
-          },
-        });
-
-        if (message.parsed_output) {
-          return message.parsed_output;
-        }
-      } catch (error) {
-        console.warn("[ai/anthropic] Structured parse failed, falling back to validated JSON.", error);
-      }
-    }
-
     const response = await this.complete(options);
     const parsed = safeParseJson<T>(response.content);
     if (!parsed || !options.outputSchema) {
