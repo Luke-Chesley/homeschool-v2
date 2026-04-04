@@ -7,7 +7,11 @@ import { CurriculumGraphWorkspace } from "@/components/curriculum/curriculum-gra
 import { CurriculumRefinementWidget } from "@/components/curriculum/CurriculumRefinementWidget";
 import { buttonVariants } from "@/components/ui/button";
 import { requireAppSession } from "@/lib/app-session/server";
-import { getCurriculumTree, listCurriculumSources } from "@/lib/curriculum/service";
+import {
+  getCurriculumTree,
+  getLiveCurriculumSource,
+  listCurriculumSources,
+} from "@/lib/curriculum/service";
 import { cn } from "@/lib/utils";
 
 export const metadata = {
@@ -22,6 +26,7 @@ export default async function CurriculumGraphPage({ searchParams }: CurriculumGr
   const session = await requireAppSession();
   const params = await searchParams;
   const sources = await listCurriculumSources(session.organization.id);
+  const activeSource = await getLiveCurriculumSource(session.organization.id);
 
   if (sources.length === 0) {
     return (
@@ -46,7 +51,7 @@ export default async function CurriculumGraphPage({ searchParams }: CurriculumGr
   const selectedSourceId =
     params.sourceId && sources.some((source) => source.id === params.sourceId)
       ? params.sourceId
-      : sources[0].id;
+      : activeSource?.id ?? sources[0].id;
   const tree = await getCurriculumTree(selectedSourceId, session.organization.id);
 
   if (!tree) {
@@ -71,7 +76,7 @@ export default async function CurriculumGraphPage({ searchParams }: CurriculumGr
   return (
     <main className="mx-auto flex w-full max-w-[1700px] flex-col gap-6 px-6 py-8 sm:px-8">
       <header className="space-y-3">
-        <Link href={`/curriculum?sourceId=${selectedSourceId}`} className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "w-fit px-3")}>
+        <Link href="/curriculum" className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "w-fit px-3")}>
           <ArrowLeft className="size-4" />
           Back to curriculum
         </Link>

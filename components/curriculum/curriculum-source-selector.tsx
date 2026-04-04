@@ -1,48 +1,41 @@
 import Link from "next/link";
 
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import type { CurriculumSource } from "@/lib/curriculum/types";
 import { cn } from "@/lib/utils";
 
 interface CurriculumSourceSelectorProps {
   sources: CurriculumSource[];
-  selectedSourceId: string;
-  basePath?: string;
-  weekStartDate?: string;
-  month?: string;
+  activeSourceId: string;
+  onActivateSource: (formData: FormData) => Promise<void>;
 }
 
 export function CurriculumSourceSelector({
   sources,
-  selectedSourceId,
-  basePath = "/curriculum",
-  weekStartDate,
-  month,
+  activeSourceId,
+  onActivateSource,
 }: CurriculumSourceSelectorProps) {
   return (
     <Card className="min-w-0">
-      <div className="min-w-0 space-y-2 p-4">
-        <p className="text-sm font-medium text-foreground">Sources</p>
+      <div className="min-w-0 space-y-3 p-4">
+        <div className="space-y-1">
+          <p className="text-sm font-medium text-foreground">Live curriculum</p>
+          <p className="text-xs text-muted-foreground">
+            Planning, today, and tracking all read from the source marked live here.
+          </p>
+        </div>
         {sources.map((source) => {
-          const selected = source.id === selectedSourceId;
-          const params = new URLSearchParams({ sourceId: source.id });
-          if (weekStartDate) {
-            params.set("weekStartDate", weekStartDate);
-          }
-          if (month) {
-            params.set("month", month);
-          }
-          const href = `${basePath}?${params.toString()}`;
+          const selected = source.id === activeSourceId;
 
           return (
-            <Link
+            <div
               key={source.id}
-              href={href}
               className={cn(
-                "flex w-full min-w-0 items-center justify-between gap-3 rounded-lg border px-3 py-2.5 transition-colors",
+                "flex w-full min-w-0 items-center justify-between gap-3 rounded-lg border px-3 py-2.5",
                 selected
                   ? "border-primary/25 bg-primary/8"
-                  : "border-border/70 bg-background hover:bg-muted/40",
+                  : "border-border/70 bg-background",
               )}
             >
               <div className="min-w-0 flex-1">
@@ -51,10 +44,30 @@ export function CurriculumSourceSelector({
                   {source.kind.replace("_", " ")} · v{source.importVersion}
                 </p>
               </div>
-              <span className="shrink-0 text-xs text-muted-foreground">
-                {selected ? "Current" : "Open"}
-              </span>
-            </Link>
+              <div className="flex shrink-0 items-center gap-2">
+                <Link
+                  href={`/curriculum/${source.id}`}
+                  className={cn(
+                    "rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors",
+                    "border-border/70 bg-background text-foreground hover:bg-muted/40",
+                  )}
+                >
+                  Open
+                </Link>
+                <form action={onActivateSource}>
+                  <input type="hidden" name="sourceId" value={source.id} />
+                  <Button
+                    type="submit"
+                    size="sm"
+                    variant={selected ? "secondary" : "outline"}
+                    disabled={selected}
+                    className="h-8"
+                  >
+                    {selected ? "Live" : "Set live"}
+                  </Button>
+                </form>
+              </div>
+            </div>
           );
         })}
       </div>

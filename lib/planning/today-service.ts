@@ -1,6 +1,11 @@
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 
-import { getCurriculumTree, listCurriculumNodes, listCurriculumSources } from "@/lib/curriculum/service";
+import {
+  getCurriculumTree,
+  getLiveCurriculumSource,
+  listCurriculumNodes,
+  listCurriculumSources,
+} from "@/lib/curriculum/service";
 import { getDb } from "@/lib/db/server";
 import {
   evidenceRecords,
@@ -686,19 +691,16 @@ function buildArtifactSlots(sourceTitle: string, selectedItems: PlanItem[]) {
 
 async function resolveSourceContext(params: {
   organizationId: string;
-  sourceId?: string;
 }) {
   const sources = await listCurriculumSources(params.organizationId);
   if (sources.length === 0) {
     return { sources, selectedSource: null };
   }
 
-  const selectedSource =
-    params.sourceId && sources.some((source) => source.id === params.sourceId)
-      ? sources.find((source) => source.id === params.sourceId) ?? sources[0]
-      : sources[0];
-
-  return { sources, selectedSource };
+  return {
+    sources,
+    selectedSource: await getLiveCurriculumSource(params.organizationId),
+  };
 }
 
 export async function getTodayWorkspace(params: {
@@ -706,7 +708,6 @@ export async function getTodayWorkspace(params: {
   learnerId: string;
   learnerName: string;
   date: string;
-  sourceId?: string;
 }): Promise<{
   workspace: DailyWorkspace;
   sourceId: string;
@@ -715,7 +716,6 @@ export async function getTodayWorkspace(params: {
 } | null> {
   const { selectedSource } = await resolveSourceContext({
     organizationId: params.organizationId,
-    sourceId: params.sourceId,
   });
 
   if (!selectedSource) {

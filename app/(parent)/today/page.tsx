@@ -6,7 +6,7 @@ import { TodayWorkspaceView } from "@/components/planning/today-workspace-view";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireAppSession } from "@/lib/app-session/server";
-import { listCurriculumSources } from "@/lib/curriculum/service";
+import { getLiveCurriculumSource } from "@/lib/curriculum/service";
 import {
   completeTodayPlanItem,
   getTodayWorkspace,
@@ -18,7 +18,6 @@ import {
 interface TodayPageProps {
   searchParams: Promise<{
     date?: string | string[];
-    sourceId?: string | string[];
     action?: string | string[];
     planItemId?: string | string[];
     alternateWeeklyRouteItemId?: string | string[];
@@ -38,8 +37,6 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
   const resolvedSearchParams = await searchParams;
   const date =
     typeof resolvedSearchParams.date === "string" ? resolvedSearchParams.date : undefined;
-  const sourceId =
-    typeof resolvedSearchParams.sourceId === "string" ? resolvedSearchParams.sourceId : undefined;
   const action =
     typeof resolvedSearchParams.action === "string" ? resolvedSearchParams.action : undefined;
   const planItemId =
@@ -50,11 +47,9 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
     typeof resolvedSearchParams.alternateWeeklyRouteItemId === "string"
       ? resolvedSearchParams.alternateWeeklyRouteItemId
       : undefined;
-  const sources = await listCurriculumSources(session.organization.id);
-  const selectedSourceId =
-    sourceId && sources.some((source) => source.id === sourceId) ? sourceId : sources[0]?.id;
+  const liveSource = await getLiveCurriculumSource(session.organization.id);
 
-  if (sources.length === 0) {
+  if (!liveSource) {
     return (
       <PlanningShell>
         <Card>
@@ -104,10 +99,7 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
     }
 
     const redirectQuery = date ? `?date=${encodeURIComponent(date)}` : "";
-    const sourceQuery = selectedSourceId
-      ? `${redirectQuery ? "&" : "?"}sourceId=${encodeURIComponent(selectedSourceId)}`
-      : "";
-    redirect(`/today${redirectQuery}${sourceQuery}`);
+    redirect(`/today${redirectQuery}`);
   }
 
   const todayDate = date ?? new Date().toISOString().slice(0, 10);
@@ -116,7 +108,6 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
     learnerId: session.activeLearner.id,
     learnerName: session.activeLearner.displayName,
     date: todayDate,
-    sourceId: selectedSourceId,
   });
 
   if (!workspaceResult) {
@@ -129,11 +120,12 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
   return (
     <PlanningShell>
       <div className="mb-5 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+        <span className="font-medium text-foreground">Live curriculum: {liveSource.title}</span>
         <span>{formatLongDate(workspace.date)}</span>
         <span>{workspace.items.length} items</span>
         <span>{totalMinutes} min</span>
       </div>
-      <TodayWorkspaceView workspace={workspace} sourceId={selectedSourceId} />
+      <TodayWorkspaceView workspace={workspace} sourceId={liveSource.id} />
     </PlanningShell>
   );
 }

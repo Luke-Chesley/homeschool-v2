@@ -12,7 +12,6 @@ import { buildLessonDraftPromptPreview, generateLessonDraft } from "@/lib/ai/tas
 
 const RequestSchema = z.object({
   date: z.string().optional(),
-  sourceId: z.string().optional(),
   debug: z.boolean().optional(),
 });
 
@@ -36,7 +35,6 @@ export async function POST(req: NextRequest) {
     learnerId: session.activeLearner.id,
     learnerName: session.activeLearner.displayName,
     date,
-    sourceId: parsed.data.sourceId,
   });
 
   if (!workspaceResult || workspaceResult.workspace.items.length === 0) {
@@ -66,7 +64,7 @@ export async function POST(req: NextRequest) {
     context: {
       learnerId: workspace.learner.id,
       learnerName: workspace.learner.name,
-      curriculumSourceId: workspace.items[0]?.curriculum?.sourceId ?? parsed.data.sourceId,
+      curriculumSourceId: workspaceResult.sourceId,
       lessonId: workspace.leadItem.curriculum?.weeklyRouteItemId,
       standardIds: workspace.items.flatMap((item) => item.standards),
       goalIds: workspace.items.flatMap((item) => item.goals),

@@ -208,7 +208,6 @@ export async function ensurePublishedActivitiesForLearner(params: {
   organizationId: string;
   learnerId: string;
   learnerName: string;
-  sourceId?: string;
   date?: string;
 }) {
   const repos = createRepositories(getDb());
@@ -220,7 +219,6 @@ export async function ensurePublishedActivitiesForLearner(params: {
     learnerId: params.learnerId,
     learnerName: params.learnerName,
     date,
-    sourceId: params.sourceId,
   });
 
   if (!workspaceResult) {

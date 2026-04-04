@@ -3,7 +3,7 @@ import { CopilotPromptPreview } from "@/components/copilot/CopilotPromptPreview"
 import { Card } from "@/components/ui/card";
 import type { CopilotContext } from "@/lib/ai/types";
 import { requireAppSession } from "@/lib/app-session/server";
-import { listCurriculumSources } from "@/lib/curriculum/service";
+import { getLiveCurriculumSource } from "@/lib/curriculum/service";
 import { toWeekStartDate } from "@/lib/curriculum-routing";
 import { resolvePrompt } from "@/lib/prompts/store";
 import { buildCopilotPlanningContext } from "@/lib/planning/copilot-snapshot";
@@ -18,7 +18,6 @@ interface Props {
     learnerId?: string;
     learnerName?: string;
     lessonId?: string;
-    sourceId?: string;
     date?: string;
   }>;
 }
@@ -26,35 +25,31 @@ interface Props {
 export default async function CopilotPage({ searchParams }: Props) {
   const session = await requireAppSession();
   const params = await searchParams;
-  const sources = await listCurriculumSources(session.organization.id);
-
-  const selectedSourceId =
-    params.sourceId && sources.some((source) => source.id === params.sourceId)
-      ? params.sourceId
-      : sources[0]?.id;
+  const liveSource = await getLiveCurriculumSource(session.organization.id);
+  const liveSourceId = liveSource?.id;
   const selectedWeekStartDate = toWeekStartDate(params.date);
-  const planningContext =
-    selectedSourceId != null
-      ? await getOrCreateWeeklyRouteBoardForLearner({
-          learnerId: session.activeLearner.id,
-          sourceId: selectedSourceId,
-          weekStartDate: selectedWeekStartDate,
-        })
-      : null;
-  const snapshot = planningContext
-    ? buildCopilotPlanningContext({
-        board: planningContext.board,
+  const planningContext = liveSourceId
+    ? await getOrCreateWeeklyRouteBoardForLearner({
         learnerId: session.activeLearner.id,
-        learnerName: session.activeLearner.displayName,
-        sourceId: selectedSourceId,
-        selectedDate: params.date,
+        sourceId: liveSourceId,
+        weekStartDate: selectedWeekStartDate,
       })
     : null;
+  const snapshot =
+    planningContext && liveSourceId
+      ? buildCopilotPlanningContext({
+          board: planningContext.board,
+          learnerId: session.activeLearner.id,
+          learnerName: session.activeLearner.displayName,
+          sourceId: liveSourceId,
+          selectedDate: params.date,
+        })
+      : null;
 
   const context: CopilotContext = {
     learnerId: session.activeLearner.id,
     learnerName: session.activeLearner.displayName,
-    curriculumSourceId: selectedSourceId,
+    curriculumSourceId: liveSource?.id,
     lessonId: params.lessonId,
     standardIds: [],
     goalIds: [],
@@ -80,7 +75,7 @@ export default async function CopilotPage({ searchParams }: Props) {
               <p className="font-medium text-foreground">Current context</p>
               <div className="space-y-2 text-muted-foreground">
                 <p>Learner: {context.learnerName}</p>
-                <p>Source: {context.curriculumSourceId ? "Attached" : "None"}</p>
+                <p>Source: {liveSource?.title ?? "None"}</p>
                 <p>Day: {context.dailyWorkspaceSnapshot ? "Attached" : "None"}</p>
                 <p>Week: {context.weeklyPlanningSnapshot ? "Attached" : "None"}</p>
               </div>

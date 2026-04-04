@@ -34,7 +34,7 @@ export function TrackingOverview({ dashboard }: { dashboard: TrackingDashboard }
             {dashboard.curriculum ? (
               <div className="space-y-2 rounded-[1.2rem] border border-border/70 bg-background/70 p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                  Active objective set
+                  Live curriculum
                 </p>
                 <p className="font-semibold text-foreground">{dashboard.curriculum.sourceTitle}</p>
                 <p className="text-sm leading-6">

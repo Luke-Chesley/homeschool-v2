@@ -33,25 +33,30 @@ export default async function CurriculumManagePage({
   searchParams,
 }: CurriculumManagePageProps) {
   const session = await requireAppSession();
+  const organizationId = session.organization.id;
   const params = await searchParams;
-  const sources = await listCurriculumSources(session.organization.id);
+  const sources = await listCurriculumSources(organizationId);
   const deletedTitle = typeof params.deleted === "string" ? params.deleted : undefined;
   const hasError = typeof params.error === "string";
 
   async function deleteAction(formData: FormData) {
     "use server";
 
-    const session = await requireAppSession();
     const sourceId = formData.get("sourceId");
 
     if (typeof sourceId !== "string" || sourceId.length === 0) {
       redirect("/curriculum/manage?error=missing-source");
     }
 
-    const deleted = await deleteCurriculumSource(sourceId, session.organization.id);
+    const deleted = await deleteCurriculumSource(sourceId, organizationId);
 
     revalidatePath("/curriculum");
     revalidatePath("/curriculum/manage");
+    revalidatePath("/planning");
+    revalidatePath("/planning/month");
+    revalidatePath("/today");
+    revalidatePath("/tracking");
+    revalidatePath("/copilot");
 
     if (!deleted) {
       redirect("/curriculum/manage?error=not-found");
@@ -166,7 +171,7 @@ export default async function CurriculumManagePage({
                     <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
                       <span>Updated {formatUpdatedDate(source.updatedAt)}</span>
                       <Link
-                        href={`/curriculum?sourceId=${encodeURIComponent(source.id)}`}
+                        href={`/curriculum/${encodeURIComponent(source.id)}`}
                         className="font-medium text-foreground underline-offset-4 hover:underline"
                       >
                         Open in curriculum view

@@ -3,6 +3,7 @@ import "server-only";
 import { and, desc, eq, inArray } from "drizzle-orm";
 
 import { getDb } from "@/lib/db/server";
+import { getLiveCurriculumSource } from "@/lib/curriculum/service";
 import {
   curriculumNodes,
   curriculumSources,
@@ -163,49 +164,23 @@ async function resolveActiveCurriculumContext(params: {
   learnerId: string;
 }): Promise<TrackingCurriculumContext | null> {
   const db = getDb();
+  const liveSource = await getLiveCurriculumSource(params.organizationId);
 
   const latestWeeklyRoute = await db.query.weeklyRoutes.findFirst({
     where: and(eq(weeklyRoutes.learnerId, params.learnerId), eq(weeklyRoutes.status, "active")),
     orderBy: [desc(weeklyRoutes.weekStartDate), desc(weeklyRoutes.createdAt)],
   });
 
-  if (latestWeeklyRoute) {
+  if (liveSource) {
     return buildCurriculumContext({
-      sourceId: latestWeeklyRoute.sourceId,
-      selectionReason: "Latest weekly route",
-      weekStartDate: latestWeeklyRoute.weekStartDate,
-      weeklyRouteId: latestWeeklyRoute.id,
-    });
-  }
-
-  const learnerScopedSource = await db.query.curriculumSources.findFirst({
-    where: and(
-      eq(curriculumSources.organizationId, params.organizationId),
-      eq(curriculumSources.learnerId, params.learnerId),
-      eq(curriculumSources.status, "active"),
-    ),
-    orderBy: [desc(curriculumSources.updatedAt), desc(curriculumSources.createdAt)],
-  });
-
-  if (learnerScopedSource) {
-    return buildCurriculumContext({
-      sourceId: learnerScopedSource.id,
-      selectionReason: "Learner-scoped active curriculum",
-    });
-  }
-
-  const organizationScopedSource = await db.query.curriculumSources.findFirst({
-    where: and(
-      eq(curriculumSources.organizationId, params.organizationId),
-      eq(curriculumSources.status, "active"),
-    ),
-    orderBy: [desc(curriculumSources.updatedAt), desc(curriculumSources.createdAt)],
-  });
-
-  if (organizationScopedSource) {
-    return buildCurriculumContext({
-      sourceId: organizationScopedSource.id,
-      selectionReason: "Most recent household curriculum",
+      sourceId: liveSource.id,
+      selectionReason: "Live curriculum",
+      ...(latestWeeklyRoute && latestWeeklyRoute.sourceId === liveSource.id
+        ? {
+            weekStartDate: latestWeeklyRoute.weekStartDate,
+            weeklyRouteId: latestWeeklyRoute.id,
+          }
+        : {}),
     });
   }
 

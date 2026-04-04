@@ -36,7 +36,7 @@ export function CurriculumEmptyState({ householdId }: CurriculumEmptyStateProps)
         }
 
         const source = (await response.json()) as { id: string };
-        router.push(`/curriculum?sourceId=${source.id}`);
+        router.push(`/curriculum/${source.id}`);
         router.refresh();
       } catch (importError) {
         console.error(importError);

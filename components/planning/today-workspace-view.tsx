@@ -154,14 +154,14 @@ export function TodayRouteItemsSection({
                       </Link>
                     ) : null}
                     <Link
-                      href={`/today?date=${workspace.date}${sourceId ? `&sourceId=${sourceId}` : ""}&action=complete&planItemId=${item.id}`}
+                      href={`/today?date=${workspace.date}&action=complete&planItemId=${item.id}`}
                       className={buttonVariants({ variant: "default", size: "sm" })}
                     >
                       Complete
                     </Link>
                     {alternate ? (
                       <Link
-                        href={`/today?date=${workspace.date}${sourceId ? `&sourceId=${sourceId}` : ""}&action=swap_with_alternate&planItemId=${item.id}&alternateWeeklyRouteItemId=${alternate.id}`}
+                        href={`/today?date=${workspace.date}&action=swap_with_alternate&planItemId=${item.id}&alternateWeeklyRouteItemId=${alternate.id}`}
                         className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "text-muted-foreground")}
                       >
                         Swap
@@ -238,20 +238,20 @@ export function TodayRouteItemsSection({
                       </Link>
                     ) : null}
                     <Link
-                      href={`/today?date=${workspace.date}${sourceId ? `&sourceId=${sourceId}` : ""}&action=complete&planItemId=${item.id}`}
+                      href={`/today?date=${workspace.date}&action=complete&planItemId=${item.id}`}
                       className={buttonVariants({ variant: "default", size: "sm" })}
                     >
                       Complete
                     </Link>
                     <Link
-                      href={`/today?date=${workspace.date}${sourceId ? `&sourceId=${sourceId}` : ""}&action=push_to_tomorrow&planItemId=${item.id}`}
+                      href={`/today?date=${workspace.date}&action=push_to_tomorrow&planItemId=${item.id}`}
                       className={buttonVariants({ variant: "outline", size: "sm" })}
                     >
                       Tomorrow
                     </Link>
                     {alternate ? (
                       <Link
-                        href={`/today?date=${workspace.date}${sourceId ? `&sourceId=${sourceId}` : ""}&action=swap_with_alternate&planItemId=${item.id}&alternateWeeklyRouteItemId=${alternate.id}`}
+                        href={`/today?date=${workspace.date}&action=swap_with_alternate&planItemId=${item.id}&alternateWeeklyRouteItemId=${alternate.id}`}
                         className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "text-muted-foreground")}
                       >
                         Swap
