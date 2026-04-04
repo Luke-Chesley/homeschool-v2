@@ -47,6 +47,8 @@ interface RequestedPacing {
   explicitlyRequestedTotalSessions?: number;
 }
 
+type RevisionPreference = "targeted" | "broader";
+
 interface CurriculumRevisionSnapshot {
   source: {
     id: string;
@@ -258,21 +260,34 @@ async function generateCurriculumRevisionDecision(params: {
   const adapter = getAdapterForTask("curriculum.revise");
   const model = getModelForTask("curriculum.revise", getAiRoutingConfig());
   const messages = normalizeMessages(params.messages);
+  const revisionPreference = inferRevisionPreference(messages);
+  const canAutoApplyBroaderRewrite = shouldAutoApplyBroaderRewrite(messages, revisionPreference);
   const correctionNotes: string[][] = [
     [],
     [
       "If you apply a revision, return the full artifact with explicit pacing coverage.",
       "Do not ask a vague clarification question when the parent's request is specific enough to apply.",
       "Do not collapse a long plan into only a few skills or lessons.",
+      ...(revisionPreference
+        ? [
+            "The parent has already answered whether this should stay targeted or become a broader rewrite. Do not ask that preference question again.",
+          ]
+        : []),
+      ...(canAutoApplyBroaderRewrite
+        ? [
+            "The parent has already given enough direction for a broader rewrite. Apply it instead of asking the same clarification again.",
+          ]
+        : []),
     ],
   ];
 
   for (const notes of correctionNotes) {
     try {
-      const response = await adapter.complete({
+      const parsedTurn = (await adapter.completeJson({
         model,
         temperature: 0.35,
         systemPrompt: prompt.systemPrompt,
+        outputSchema: CurriculumAiRevisionTurnSchema,
         messages: [
           {
             role: "user",
@@ -283,35 +298,55 @@ async function generateCurriculumRevisionDecision(params: {
             })}${notes.length > 0 ? `\n\nCorrection notes:\n${notes.map((note, index) => `${index + 1}. ${note}`).join("\n")}` : ""}`,
           },
         ],
-      });
+      })) as CurriculumAiRevisionTurn | null;
 
-      const parsedTurn = parseCurriculumRevisionTurn(response.content);
       if (!parsedTurn) {
         continue;
       }
 
-      if (parsedTurn.action === "clarify") {
-        return parsedTurn;
+      const sanitizedTurn = sanitizeRevisionTurn(parsedTurn);
+
+      if (
+        sanitizedTurn.action === "clarify" &&
+        canAutoApplyBroaderRewrite &&
+        isPreferenceClarificationMessage(sanitizedTurn.assistantMessage)
+      ) {
+        continue;
       }
 
-      parsedTurn.artifact = await finalizeCurriculumTitle({
-        artifact: parsedTurn.artifact!,
+      if (sanitizedTurn.action === "clarify") {
+        return sanitizedTurn;
+      }
+
+      sanitizedTurn.artifact = await finalizeCurriculumTitle({
+        artifact: sanitizedTurn.artifact!,
         learner: params.learner,
         messages,
       });
 
       const coverageIssues = getArtifactCoverageIssues(
-        parsedTurn.artifact!,
+        sanitizedTurn.artifact!,
         messages,
         inferRequestedPacing(messages, inferCapturedRequirements(messages)),
       );
 
       if (coverageIssues.length === 0) {
-        return parsedTurn;
+        return sanitizedTurn;
       }
     } catch (error) {
       console.error("[curriculum/ai-draft] Curriculum revision failed, retrying.", error);
     }
+  }
+
+  const fallbackTurn = await buildFallbackRevisionTurn({
+    learner: params.learner,
+    messages,
+    snapshot: params.snapshot,
+    revisionPreference,
+  });
+
+  if (fallbackTurn) {
+    return fallbackTurn;
   }
 
   return {
@@ -550,12 +585,16 @@ function parseCurriculumRevisionTurn(content: string) {
     return null;
   }
 
+  return sanitizeRevisionTurn(validated.data);
+}
+
+function sanitizeRevisionTurn(turn: CurriculumAiRevisionTurn): CurriculumAiRevisionTurn {
   return {
-    ...validated.data,
-    assistantMessage: validated.data.assistantMessage.trim(),
-    changeSummary: uniqueNonEmpty(validated.data.changeSummary),
-    artifact: validated.data.artifact ? sanitizeArtifact(validated.data.artifact) : undefined,
-  } satisfies CurriculumAiRevisionTurn;
+    ...turn,
+    assistantMessage: turn.assistantMessage.trim(),
+    changeSummary: uniqueNonEmpty(turn.changeSummary),
+    artifact: turn.artifact ? sanitizeArtifact(turn.artifact) : undefined,
+  };
 }
 
 function parseCurriculumTitleCandidate(content: string) {
@@ -1165,6 +1204,33 @@ function normalizeMessages(messages: CurriculumAiChatMessage[]): ChatMessage[] {
   }));
 }
 
+async function buildFallbackRevisionTurn(params: {
+  learner: AppLearner;
+  messages: ChatMessage[];
+  snapshot: CurriculumRevisionSnapshot;
+  revisionPreference: RevisionPreference | null;
+}): Promise<CurriculumAiRevisionTurn | null> {
+  if (!shouldAutoApplyBroaderRewrite(params.messages, params.revisionPreference)) {
+    return null;
+  }
+
+  const artifact = await finalizeCurriculumTitle({
+    artifact: buildFallbackArtifact({
+      learner: params.learner,
+      messages: buildFallbackRevisionSeedMessages(params.snapshot, params.messages),
+    }),
+    learner: params.learner,
+    messages: params.messages,
+  });
+
+  return {
+    assistantMessage: buildFallbackRevisionAssistantMessage(params.messages, artifact),
+    action: "apply",
+    changeSummary: buildFallbackRevisionChangeSummary(params.messages, artifact),
+    artifact,
+  };
+}
+
 function collectUserMessages(messages: ChatMessage[]) {
   return messages
     .filter((message) => message.role === "user")
@@ -1178,6 +1244,162 @@ function findFirstMatchingMessage(messages: string[], pattern: RegExp) {
 
 function firstMatch(value: string, pattern: RegExp) {
   return value.match(pattern)?.[0]?.trim() ?? "";
+}
+
+function inferRevisionPreference(messages: ChatMessage[]): RevisionPreference | null {
+  const assistantAskedPreference = messages.some(
+    (message) =>
+      message.role === "assistant" && isPreferenceClarificationMessage(message.content),
+  );
+
+  for (const message of [...messages].reverse()) {
+    if (message.role !== "user") {
+      continue;
+    }
+
+    const value = message.content.trim().toLowerCase();
+    if (
+      /\b(broader rewrite|broader rewrite please|rewrite it|rewrite the structure|rebuild it|start over|replace the structure)\b/i.test(
+        value,
+      ) ||
+      (assistantAskedPreference && /^2(?:\b|$)/.test(value))
+    ) {
+      return "broader";
+    }
+
+    if (
+      /\b(targeted adjustment|targeted change|preserve the current structure|keep the current structure)\b/i.test(
+        value,
+      ) ||
+      (assistantAskedPreference && /^1(?:\b|$)/.test(value))
+    ) {
+      return "targeted";
+    }
+  }
+
+  return null;
+}
+
+function shouldAutoApplyBroaderRewrite(
+  messages: ChatMessage[],
+  revisionPreference: RevisionPreference | null,
+) {
+  return revisionPreference === "broader" && hasConcreteRevisionDirection(messages);
+}
+
+function hasConcreteRevisionDirection(messages: ChatMessage[]) {
+  return collectUserMessages(messages)
+    .filter((message) => !isPreferenceOnlyRevisionMessage(message))
+    .some(
+      (message) =>
+        message.length >= 14 ||
+        /\b(add|expand|rename|retitle|title|pacing|pace|week|weeks|session|sessions|goal group|strand|skill|foundation|foundations|core ideas?|rewrite|reorganize|broader)\b/i.test(
+          message,
+        ),
+    );
+}
+
+function isPreferenceOnlyRevisionMessage(message: string) {
+  const value = message.trim().toLowerCase();
+  return (
+    /^1[.!?]*$/.test(value) ||
+    /^2[.!?]*$/.test(value) ||
+    /^targeted adjustment(?: please)?[.!?]*$/.test(value) ||
+    /^broader rewrite(?: please)?[.!?]*$/.test(value)
+  );
+}
+
+function isPreferenceClarificationMessage(message: string) {
+  return /targeted adjustment/i.test(message) && /broader rewrite/i.test(message);
+}
+
+function buildFallbackRevisionSeedMessages(
+  snapshot: CurriculumRevisionSnapshot,
+  messages: ChatMessage[],
+): ChatMessage[] {
+  const topic = inferRevisionTopic(snapshot);
+  const revisionRequest = collectUserMessages(messages)
+    .filter((message) => !isPreferenceOnlyRevisionMessage(message))
+    .join(" ");
+  const unitTitles = snapshot.outline
+    .map((unit) =>
+      typeof unit.title === "string" && unit.title.trim() ? unit.title.trim() : null,
+    )
+    .filter(Boolean)
+    .slice(0, 4)
+    .join(", ");
+
+  return [
+    {
+      role: "user",
+      content: [
+        `We want to teach ${topic}.`,
+        `Current curriculum title: ${snapshot.source.title}.`,
+        snapshot.source.description ? `Current summary: ${snapshot.source.description}.` : null,
+        snapshot.counts.estimatedSessionCount > 0
+          ? `Current outline covers about ${snapshot.counts.estimatedSessionCount} sessions.`
+          : null,
+        unitTitles ? `Current units include ${unitTitles}.` : null,
+        revisionRequest ? `Requested rewrite: ${revisionRequest}.` : null,
+      ]
+        .filter(Boolean)
+        .join(" "),
+    },
+  ];
+}
+
+function inferRevisionTopic(snapshot: CurriculumRevisionSnapshot) {
+  const snapshotText = [
+    snapshot.source.title,
+    snapshot.source.description ?? "",
+    snapshot.source.subjects.join(" "),
+    JSON.stringify(snapshot.structure).slice(0, 1_200),
+    JSON.stringify(snapshot.outline).slice(0, 1_200),
+  ].join(" ");
+
+  if (/\bchess\b/i.test(snapshotText)) {
+    return "chess to a young learner over a short daily summer rhythm";
+  }
+
+  return extractTopicLabel(snapshotText);
+}
+
+function buildFallbackRevisionAssistantMessage(
+  messages: ChatMessage[],
+  artifact: CurriculumAiGeneratedArtifact,
+) {
+  const requestText = collectUserMessages(messages).join(" ").toLowerCase();
+  const details = [
+    /foundation|core ideas?/.test(requestText)
+      ? "expanded the foundations and core ideas"
+      : null,
+    typeof artifact.pacing.totalWeeks === "number" && typeof artifact.pacing.totalSessions === "number"
+      ? `rebalanced the pacing for about ${artifact.pacing.totalWeeks} weeks and ${artifact.pacing.totalSessions} sessions`
+      : null,
+  ].filter(Boolean);
+
+  return details.length > 0
+    ? `I applied a broader rewrite, ${details.join(", ")}, and refreshed the curriculum structure so it is ready to use.`
+    : "I applied a broader rewrite and refreshed the curriculum structure so it is ready to use.";
+}
+
+function buildFallbackRevisionChangeSummary(
+  messages: ChatMessage[],
+  artifact: CurriculumAiGeneratedArtifact,
+) {
+  const requestText = collectUserMessages(messages).join(" ").toLowerCase();
+  const summary = [
+    "Applied a broader rewrite to the curriculum structure.",
+    /foundation|core ideas?/.test(requestText)
+      ? "Expanded the foundations so the opening stretch carries more core ideas."
+      : null,
+    typeof artifact.pacing.totalWeeks === "number" && typeof artifact.pacing.totalSessions === "number"
+      ? `Rebalanced the pacing for roughly ${artifact.pacing.totalWeeks} weeks and ${artifact.pacing.totalSessions} sessions.`
+      : null,
+    artifact.source.title ? `Updated the curriculum framing to ${artifact.source.title}.` : null,
+  ].filter((item): item is string => Boolean(item));
+
+  return uniqueNonEmpty(summary).slice(0, 4);
 }
 
 function firstNumberMatch(value: string, pattern: RegExp) {

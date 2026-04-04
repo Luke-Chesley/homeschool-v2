@@ -46,7 +46,7 @@ export function CurriculumRefinementWidget({
     setResponse(null);
     setError(null);
     setSubmitting(false);
-  }, [sourceId, sourceTitle]);
+  }, [sourceId]);
 
   async function handleSend(content: string) {
     const userMessage: CurriculumAiChatMessage = {
