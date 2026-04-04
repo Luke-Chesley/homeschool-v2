@@ -102,6 +102,7 @@ export const CurriculumUnitSchema = z.object({
   description: z.string().optional(),
   sequence: z.number().int().nonnegative(),
   estimatedWeeks: z.number().optional(),
+  estimatedSessions: z.number().int().positive().optional(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });

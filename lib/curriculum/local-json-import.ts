@@ -23,6 +23,7 @@ export interface ImportedCurriculumDocument {
     title: string;
     description?: string;
     estimatedWeeks?: number;
+    estimatedSessions?: number;
     lessons: Array<{
       title: string;
       description?: string;

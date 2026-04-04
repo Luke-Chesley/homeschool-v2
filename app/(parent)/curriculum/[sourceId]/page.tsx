@@ -6,6 +6,7 @@ import { ArrowLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CurriculumRefinementWidget } from "@/components/curriculum/CurriculumRefinementWidget";
 import { CurriculumTree } from "@/components/curriculum/CurriculumTree";
 import { requireAppSession } from "@/lib/app-session/server";
 import { getCurriculumTree, listCurriculumOutline } from "@/lib/curriculum/service";
@@ -24,6 +25,10 @@ export default async function CurriculumSourcePage({ params }: Props) {
   const { source } = tree;
   const outline = await listCurriculumOutline(sourceId);
   const lessonCount = outline.reduce((total, unit) => total + unit.lessons.length, 0);
+  const estimatedSessionCount = outline.reduce(
+    (total, unit) => total + (unit.estimatedSessions ?? unit.lessons.length),
+    0,
+  );
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-8 px-6 py-8">
@@ -75,6 +80,7 @@ export default async function CurriculumSourcePage({ params }: Props) {
               <span>{tree.skillCount} skills</span>
               <span>{outline.length} units</span>
               <span>{lessonCount} lessons</span>
+              <span>{estimatedSessionCount} estimated sessions</span>
             </div>
           </div>
           {tree.rootNodes.length === 0 ? (
@@ -137,6 +143,9 @@ export default async function CurriculumSourcePage({ params }: Props) {
                     ) : null}
                     <p className="mt-2 text-xs text-muted-foreground">
                       {unit.lessons.length} lessons
+                      {typeof unit.estimatedSessions === "number"
+                        ? ` · ${unit.estimatedSessions} sessions`
+                        : ""}
                       {typeof unit.estimatedWeeks === "number"
                         ? ` · ${unit.estimatedWeeks} week${unit.estimatedWeeks === 1 ? "" : "s"}`
                         : ""}
@@ -160,6 +169,8 @@ export default async function CurriculumSourcePage({ params }: Props) {
           </Card>
         </div>
       </div>
+
+      <CurriculumRefinementWidget sourceId={sourceId} sourceTitle={source.title} />
     </div>
   );
 }

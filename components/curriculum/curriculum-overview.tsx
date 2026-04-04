@@ -7,6 +7,7 @@ import type { CurriculumSource, CurriculumTree as CurriculumTreeData } from "@/l
 import { cn } from "@/lib/utils";
 
 import { CurriculumSourceSelector } from "./curriculum-source-selector";
+import { CurriculumRefinementWidget } from "./CurriculumRefinementWidget";
 import { CurriculumTree } from "./curriculum-tree";
 
 interface CurriculumOverviewProps {
@@ -77,6 +78,8 @@ export function CurriculumOverview({ sources, selectedSourceId, tree }: Curricul
           )}
         </div>
       </Card>
+
+      <CurriculumRefinementWidget sourceId={selectedSourceId} sourceTitle={tree.source.title} />
     </div>
   );
 }

@@ -140,6 +140,7 @@ export interface CreatedAiDraftCurriculumResult {
   skillCount: number;
   unitCount: number;
   lessonCount: number;
+  estimatedSessionCount: number;
 }
 
 async function createSourceRecord(
@@ -174,6 +175,40 @@ async function createSourceRecord(
   return source;
 }
 
+function countEstimatedSessions(units: ImportedCurriculumDocument["units"] = []) {
+  return units.reduce((total, unit) => total + (unit.estimatedSessions ?? unit.lessons.length), 0);
+}
+
+function toImportedCurriculumDocumentFromAiArtifact(
+  artifact: CurriculumAiGeneratedArtifact,
+  kind: CreateCurriculumSourceInput["kind"] = "ai_draft",
+): ImportedCurriculumDocument {
+  return {
+    title: artifact.source.title,
+    description: artifact.source.description,
+    kind,
+    academicYear: artifact.source.academicYear,
+    subjects: artifact.source.subjects,
+    gradeLevels: artifact.source.gradeLevels,
+    document: artifact.document,
+    units: artifact.units,
+    metadata: {
+      intakeSummary: artifact.intakeSummary,
+      teachingApproach: artifact.source.teachingApproach,
+      successSignals: artifact.source.successSignals,
+      parentNotes: artifact.source.parentNotes,
+      rationale: artifact.source.rationale,
+      pacing: artifact.pacing,
+      generatedUnitCount: artifact.units.length,
+      generatedLessonCount: artifact.units.reduce(
+        (total, unit) => total + unit.lessons.length,
+        0,
+      ),
+      generatedEstimatedSessionCount: countEstimatedSessions(artifact.units),
+    },
+  };
+}
+
 async function replaceCurriculumOutline(
   tx: Pick<ReturnType<typeof getDb>, "delete" | "insert">,
   sourceId: string,
@@ -196,6 +231,7 @@ async function replaceCurriculumOutline(
         position: unitIndex,
         metadata: {
           estimatedWeeks: unit.estimatedWeeks ?? null,
+          estimatedSessions: unit.estimatedSessions ?? null,
         },
       })
       .returning();
@@ -401,28 +437,7 @@ export async function createCurriculumSourceFromAiDraftArtifact(params: {
   householdId: string;
   artifact: CurriculumAiGeneratedArtifact;
 }): Promise<CreatedAiDraftCurriculumResult> {
-  const imported: ImportedCurriculumDocument = {
-    title: params.artifact.source.title,
-    description: params.artifact.source.description,
-    kind: "ai_draft",
-    academicYear: params.artifact.source.academicYear,
-    subjects: params.artifact.source.subjects,
-    gradeLevels: params.artifact.source.gradeLevels,
-    document: params.artifact.document,
-    units: params.artifact.units,
-    metadata: {
-      intakeSummary: params.artifact.intakeSummary,
-      teachingApproach: params.artifact.source.teachingApproach,
-      successSignals: params.artifact.source.successSignals,
-      parentNotes: params.artifact.source.parentNotes,
-      rationale: params.artifact.source.rationale,
-      generatedUnitCount: params.artifact.units.length,
-      generatedLessonCount: params.artifact.units.reduce(
-        (total, unit) => total + unit.lessons.length,
-        0,
-      ),
-    },
-  };
+  const imported = toImportedCurriculumDocumentFromAiArtifact(params.artifact, "ai_draft");
 
   const source = await createSourceRecord(
     {
@@ -450,6 +465,7 @@ export async function createCurriculumSourceFromAiDraftArtifact(params: {
       skillCount: tree?.skillCount ?? 0,
       unitCount: outline.length,
       lessonCount,
+      estimatedSessionCount: countEstimatedSessions(imported.units),
     };
   } catch (error) {
     await getDb()
@@ -461,6 +477,40 @@ export async function createCurriculumSourceFromAiDraftArtifact(params: {
       .where(eq(curriculumSources.id, source.id));
     throw error;
   }
+}
+
+export async function applyAiDraftArtifactToCurriculumSource(params: {
+  sourceId: string;
+  householdId: string;
+  artifact: CurriculumAiGeneratedArtifact;
+}): Promise<CreatedAiDraftCurriculumResult> {
+  const existing = await getCurriculumSource(params.sourceId, params.householdId);
+  if (!existing) {
+    throw new Error(`CurriculumSource not found: ${params.sourceId}`);
+  }
+
+  const imported = toImportedCurriculumDocumentFromAiArtifact(params.artifact, existing.kind);
+  await importNormalizedTree(params.sourceId, imported, {
+    metadata: {
+      ...(imported.metadata ?? {}),
+      lastAiRevisionAt: new Date().toISOString(),
+    },
+  });
+
+  const updated = await getCurriculumSource(params.sourceId, params.householdId);
+  const tree = await getCurriculumTree(params.sourceId, params.householdId);
+  const outline = await listCurriculumOutline(params.sourceId);
+  const lessonCount = outline.reduce((total, unit) => total + unit.lessons.length, 0);
+
+  return {
+    sourceId: params.sourceId,
+    sourceTitle: updated?.title ?? params.artifact.source.title,
+    nodeCount: tree?.nodeCount ?? 0,
+    skillCount: tree?.skillCount ?? 0,
+    unitCount: outline.length,
+    lessonCount,
+    estimatedSessionCount: countEstimatedSessions(imported.units),
+  };
 }
 
 export async function updateCurriculumSource(
@@ -543,6 +593,10 @@ export async function listCurriculumUnits(sourceId: string) {
       sequence: item.position,
       estimatedWeeks:
         typeof item.metadata.estimatedWeeks === "number" ? item.metadata.estimatedWeeks : undefined,
+      estimatedSessions:
+        typeof item.metadata.estimatedSessions === "number"
+          ? item.metadata.estimatedSessions
+          : undefined,
       createdAt: item.createdAt.toISOString(),
       updatedAt: item.updatedAt.toISOString(),
     }));
@@ -563,6 +617,7 @@ export async function createCurriculumUnit(input: CreateCurriculumUnitInput) {
       position: input.sequence,
       metadata: {
         estimatedWeeks: input.estimatedWeeks ?? null,
+        estimatedSessions: input.estimatedSessions ?? null,
       },
     })
     .returning();
@@ -575,6 +630,10 @@ export async function createCurriculumUnit(input: CreateCurriculumUnitInput) {
     sequence: unit.position,
     estimatedWeeks:
       typeof unit.metadata.estimatedWeeks === "number" ? unit.metadata.estimatedWeeks : undefined,
+    estimatedSessions:
+      typeof unit.metadata.estimatedSessions === "number"
+        ? unit.metadata.estimatedSessions
+        : undefined,
     createdAt: unit.createdAt.toISOString(),
     updatedAt: unit.updatedAt.toISOString(),
   };
@@ -598,6 +657,7 @@ export async function updateCurriculumUnit(
       metadata: {
         ...(existing.metadata ?? {}),
         estimatedWeeks: patch.estimatedWeeks ?? existing.metadata.estimatedWeeks ?? null,
+        estimatedSessions: patch.estimatedSessions ?? existing.metadata.estimatedSessions ?? null,
       },
       updatedAt: new Date(),
     })
@@ -612,6 +672,10 @@ export async function updateCurriculumUnit(
     sequence: unit.position,
     estimatedWeeks:
       typeof unit.metadata.estimatedWeeks === "number" ? unit.metadata.estimatedWeeks : undefined,
+    estimatedSessions:
+      typeof unit.metadata.estimatedSessions === "number"
+        ? unit.metadata.estimatedSessions
+        : undefined,
     createdAt: unit.createdAt.toISOString(),
     updatedAt: unit.updatedAt.toISOString(),
   };

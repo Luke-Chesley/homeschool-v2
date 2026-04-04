@@ -8,6 +8,10 @@ import {
   CURRICULUM_GENERATION_SYSTEM_PROMPT,
   CURRICULUM_INTAKE_PROMPT_VERSION,
   CURRICULUM_INTAKE_SYSTEM_PROMPT,
+  CURRICULUM_REVISION_PROMPT_VERSION,
+  CURRICULUM_REVISION_SYSTEM_PROMPT,
+  CURRICULUM_TITLE_PROMPT_VERSION,
+  CURRICULUM_TITLE_SYSTEM_PROMPT,
 } from "@/lib/prompts/curriculum-draft";
 import {
   LESSON_DRAFT_PROMPT_VERSION,
@@ -43,6 +47,18 @@ const STATIC_PROMPTS: PromptRecord[] = [
     version: CURRICULUM_GENERATION_PROMPT_VERSION,
     systemPrompt: CURRICULUM_GENERATION_SYSTEM_PROMPT,
     notes: "Structured curriculum tree and lesson outline generation",
+  },
+  {
+    task: "curriculum.revise",
+    version: CURRICULUM_REVISION_PROMPT_VERSION,
+    systemPrompt: CURRICULUM_REVISION_SYSTEM_PROMPT,
+    notes: "Structured curriculum revision for existing sources",
+  },
+  {
+    task: "curriculum.title",
+    version: CURRICULUM_TITLE_PROMPT_VERSION,
+    systemPrompt: CURRICULUM_TITLE_SYSTEM_PROMPT,
+    notes: "Concise curriculum title generation",
   },
   {
     task: "chat.answer",

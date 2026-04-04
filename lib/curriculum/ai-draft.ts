@@ -64,10 +64,21 @@ type CurriculumJsonNode = string | string[] | { [key: string]: CurriculumJsonNod
 export const CurriculumAiDocumentNodeSchema: z.ZodType<CurriculumJsonNode> = z.lazy(() =>
   z.union([
     z.string().trim().min(1).max(240),
-    z.array(z.string().trim().min(1).max(240)).min(1).max(16),
+    z.array(z.string().trim().min(1).max(240)).min(1).max(24),
     z.record(z.string().trim().min(1).max(180), CurriculumAiDocumentNodeSchema),
   ]),
 );
+
+export const CurriculumAiPacingSchema = z.object({
+  totalWeeks: z.number().int().positive().max(104).optional(),
+  sessionsPerWeek: z.number().positive().max(14).optional(),
+  sessionMinutes: z.number().int().positive().max(240).optional(),
+  totalSessions: z.number().int().positive().max(500).optional(),
+  coverageStrategy: z.string().trim().min(1).max(800),
+  coverageNotes: z.array(z.string().trim().min(1).max(220)).max(8).default([]),
+});
+
+export type CurriculumAiPacing = z.infer<typeof CurriculumAiPacingSchema>;
 
 export const CurriculumAiLessonSchema = z.object({
   title: z.string().trim().min(1).max(180),
@@ -85,7 +96,8 @@ export const CurriculumAiUnitSchema = z.object({
   title: z.string().trim().min(1).max(180),
   description: z.string().trim().min(1).max(700),
   estimatedWeeks: z.number().positive().max(52).optional(),
-  lessons: z.array(CurriculumAiLessonSchema).min(1).max(12),
+  estimatedSessions: z.number().int().positive().max(160).optional(),
+  lessons: z.array(CurriculumAiLessonSchema).min(1).max(16),
 });
 
 export type CurriculumAiUnit = z.infer<typeof CurriculumAiUnitSchema>;
@@ -93,8 +105,9 @@ export type CurriculumAiUnit = z.infer<typeof CurriculumAiUnitSchema>;
 export const CurriculumAiGeneratedArtifactSchema = z.object({
   source: CurriculumAiDraftSummarySchema,
   intakeSummary: z.string().trim().min(1).max(1_500),
+  pacing: CurriculumAiPacingSchema,
   document: z.record(z.string().trim().min(1).max(180), CurriculumAiDocumentNodeSchema),
-  units: z.array(CurriculumAiUnitSchema).min(1).max(16),
+  units: z.array(CurriculumAiUnitSchema).min(1).max(20),
 });
 
 export type CurriculumAiGeneratedArtifact = z.infer<typeof CurriculumAiGeneratedArtifactSchema>;
@@ -110,6 +123,48 @@ export const CurriculumAiCreateResponseSchema = z.object({
   skillCount: z.number().int().nonnegative(),
   unitCount: z.number().int().nonnegative(),
   lessonCount: z.number().int().nonnegative(),
+  estimatedSessionCount: z.number().int().nonnegative(),
 });
 
 export type CurriculumAiCreateResponse = z.infer<typeof CurriculumAiCreateResponseSchema>;
+
+export const CurriculumAiRevisionActionSchema = z.enum(["clarify", "apply"]);
+
+export const CurriculumAiRevisionTurnSchema = z
+  .object({
+    assistantMessage: z.string().trim().min(1).max(1_500),
+    action: CurriculumAiRevisionActionSchema,
+    changeSummary: z.array(z.string().trim().min(1).max(220)).max(8).default([]),
+    artifact: CurriculumAiGeneratedArtifactSchema.optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.action === "apply" && !value.artifact) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "artifact is required when action is apply",
+        path: ["artifact"],
+      });
+    }
+  });
+
+export type CurriculumAiRevisionTurn = z.infer<typeof CurriculumAiRevisionTurnSchema>;
+
+export const CurriculumAiRevisionRequestSchema = z.object({
+  messages: z.array(CurriculumAiChatMessageSchema).max(30).min(1),
+});
+
+export const CurriculumAiRevisionResponseSchema = z.object({
+  assistantMessage: z.string().trim().min(1).max(1_500),
+  action: z.enum(["clarify", "applied"]),
+  changeSummary: z.array(z.string().trim().min(1).max(220)).max(8).default([]),
+  sourceId: z.string(),
+  sourceTitle: z.string(),
+  importVersion: z.number().int().positive().optional(),
+  nodeCount: z.number().int().nonnegative().optional(),
+  skillCount: z.number().int().nonnegative().optional(),
+  unitCount: z.number().int().nonnegative().optional(),
+  lessonCount: z.number().int().nonnegative().optional(),
+  estimatedSessionCount: z.number().int().nonnegative().optional(),
+});
+
+export type CurriculumAiRevisionResponse = z.infer<typeof CurriculumAiRevisionResponseSchema>;
