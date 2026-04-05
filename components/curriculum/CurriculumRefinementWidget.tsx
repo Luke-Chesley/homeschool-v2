@@ -5,6 +5,7 @@ import { Loader2, RefreshCcw, Sparkles, Wand2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { ChatInput } from "@/components/copilot/ChatInput";
+import { CurriculumRevisionPromptPreview } from "@/components/curriculum/CurriculumRevisionPromptPreview";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -147,6 +148,14 @@ export function CurriculumRefinementWidget({
                   <X className="size-4" />
                 </Button>
               </div>
+            </div>
+
+            <div className="border-b border-border/70 px-4 py-4">
+              <CurriculumRevisionPromptPreview
+                sourceId={sourceId}
+                sourceTitle={sourceTitle}
+                messages={messages}
+              />
             </div>
 
             <div className="max-h-[24rem] space-y-3 overflow-y-auto px-4">

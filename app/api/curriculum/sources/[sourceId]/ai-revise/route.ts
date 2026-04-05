@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 
 import { requireAppSession } from "@/lib/app-session/server";
 import {
   CurriculumAiRevisionRequestSchema,
   CurriculumAiRevisionResponseSchema,
 } from "@/lib/curriculum/ai-draft";
-import { reviseCurriculumFromConversation } from "@/lib/curriculum/ai-draft-service";
+import {
+  buildCurriculumRevisionPromptPreview,
+  reviseCurriculumFromConversation,
+} from "@/lib/curriculum/ai-draft-service";
+import { CURRICULUM_REVISION_PROMPT_VERSION } from "@/lib/prompts/curriculum-draft";
 
 interface RouteContext {
   params: Promise<{
@@ -13,10 +18,14 @@ interface RouteContext {
   }>;
 }
 
+const CurriculumAiRevisionDebugRequestSchema = CurriculumAiRevisionRequestSchema.extend({
+  debug: z.boolean().optional(),
+});
+
 export async function POST(req: NextRequest, { params }: RouteContext) {
   try {
     const body = await req.json();
-    const parsed = CurriculumAiRevisionRequestSchema.safeParse(body);
+    const parsed = CurriculumAiRevisionDebugRequestSchema.safeParse(body);
 
     if (!parsed.success) {
       return NextResponse.json(
@@ -27,6 +36,21 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
 
     const session = await requireAppSession();
     const { sourceId } = await params;
+
+    if (parsed.data.debug) {
+      const promptPreview = await buildCurriculumRevisionPromptPreview({
+        householdId: session.organization.id,
+        sourceId,
+        learner: session.activeLearner,
+        messages: parsed.data.messages,
+      });
+
+      return NextResponse.json({
+        promptVersion: CURRICULUM_REVISION_PROMPT_VERSION,
+        debug: promptPreview,
+      });
+    }
+
     const revised = await reviseCurriculumFromConversation({
       householdId: session.organization.id,
       sourceId,
