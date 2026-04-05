@@ -1,4 +1,4 @@
-import "server-only";
+import "@/lib/server-only";
 
 import type { AiTaskName } from "@/lib/ai/types";
 import { getRepositories } from "@/lib/db";

@@ -1,4 +1,4 @@
-import "server-only";
+import "@/lib/server-only";
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";

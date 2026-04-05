@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAppSession } from "@/lib/app-session/server";
 import {
   CurriculumAiCreateRequestSchema,
-  CurriculumAiCreateResponseSchema,
+  CurriculumAiCreateResultSchema,
 } from "@/lib/curriculum/ai-draft";
 import { createCurriculumFromConversation } from "@/lib/curriculum/ai-draft-service";
 
@@ -26,7 +26,10 @@ export async function POST(req: NextRequest) {
       messages: parsed.data.messages,
     });
 
-    return NextResponse.json(CurriculumAiCreateResponseSchema.parse(created));
+    const payload = CurriculumAiCreateResultSchema.parse(created);
+    return NextResponse.json(payload, {
+      status: payload.kind === "failure" ? 422 : 200,
+    });
   } catch (error) {
     console.error("[api/curriculum/ai-draft POST]", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

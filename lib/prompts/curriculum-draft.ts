@@ -1,9 +1,9 @@
 import type { ChatMessage } from "../ai/types.ts";
 
 export const CURRICULUM_INTAKE_PROMPT_VERSION = "2.2.0";
-export const CURRICULUM_GENERATION_PROMPT_VERSION = "3.1.0";
-export const CURRICULUM_REVISION_PROMPT_VERSION = "2.1.0";
-export const CURRICULUM_TITLE_PROMPT_VERSION = "1.0.0";
+export const CURRICULUM_GENERATION_PROMPT_VERSION = "3.2.0";
+export const CURRICULUM_REVISION_PROMPT_VERSION = "2.2.0";
+export const CURRICULUM_TITLE_PROMPT_VERSION = "1.1.0";
 
 export const CURRICULUM_INTAKE_SYSTEM_PROMPT = `You are an expert homeschool curriculum designer helping a parent shape a full curriculum.
 
@@ -68,7 +68,8 @@ Requirements:
 - Then produce a unit and lesson outline aligned to that skill progression.
 - The unit outline is not the final lesson plan. It should provide enough structure and pacing coverage for a later lesson-planning step.
 - Generate a concise, parent-facing curriculum title. Do not default to copying the parent's opening sentence or simply echoing the raw topic phrase.
-- Keep titles concrete and parent-facing.
+- If the subject is already clearly stated, the title may stay close to that subject phrase as long as it remains concise and human.
+- Keep titles concrete, short, and parent-facing.
 - Avoid filler domains or generic framework labels unless the conversation clearly supports them.
 - Prefer a small number of meaningful strands over taxonomy noise.
 - If the topic is narrow, one domain is fine. If it is interdisciplinary, multiple domains are fine.
@@ -150,6 +151,8 @@ Generation rules:
 - If the requested scope is long, the curriculum should usually include more than a handful of skills.
 - Lesson objectives and linked skills should correspond to the tree you generated.
 - Keep the curriculum matched to the requested scope. Do not inflate a short plan into a year-long scope.
+- Generate a concise, parent-facing curriculum title if the framing changes enough to warrant it.
+- If the subject is already clearly stated, the title may stay close to that subject phrase as long as it remains concise and human.
 - Use parent-usable wording, not standards jargon, unless the conversation clearly asks for formal academic language.
 - Do not include markdown fences.`;
 
@@ -178,6 +181,7 @@ Revision rules:
 - For rename requests, keep the structure the same and change wording only.
 - For targeted adjust requests, keep the change local unless a broader rewrite is requested.
 - Generate a concise, parent-facing curriculum title if the revision changes the framing enough to warrant it.
+- If the subject is already clearly stated, the title may stay close to that subject phrase as long as it remains concise and human.
 - Keep pacing believable. Use the pacing object and unit session budgets to show how the curriculum fills the requested time.
 - Do not assume one skill per session, but do not leave a long schedule supported by only a tiny set of skills.
 - If the parent asks to add goal groups, strands, or practice threads, incorporate them into the canonical tree rather than mentioning them only in prose.
@@ -450,6 +454,7 @@ ${input.correctionNotes && input.correctionNotes.length > 0 ? `Retry correction 
 export function buildCurriculumTitlePrompt(input: {
   learnerName: string;
   messages: ChatMessage[];
+  subject?: string;
   artifact: {
     source: {
       title: string;
@@ -483,6 +488,12 @@ ${transcript || "No conversation transcript was provided."}
 
 Curriculum artifact summary:
 ${JSON.stringify(input.artifact, null, 2)}
+
+${input.subject ? `Requested subject: ${input.subject}\n` : ""}
+Title rules:
+- Use the requested subject directly when it is already clean and concise.
+- Do not copy a full sentence or add decorative framing.
+- Keep the final title short, human, and immediately recognizable.
 
 Generate the best final curriculum title.`;
 }

@@ -4,7 +4,7 @@ import { z } from "zod";
 import { requireAppSession } from "@/lib/app-session/server";
 import {
   CurriculumAiRevisionRequestSchema,
-  CurriculumAiRevisionResponseSchema,
+  CurriculumAiRevisionResultSchema,
 } from "@/lib/curriculum/ai-draft";
 import {
   buildCurriculumRevisionPromptPreview,
@@ -58,7 +58,10 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       messages: parsed.data.messages,
     });
 
-    return NextResponse.json(CurriculumAiRevisionResponseSchema.parse(revised));
+    const payload = CurriculumAiRevisionResultSchema.parse(revised);
+    return NextResponse.json(payload, {
+      status: payload.kind === "failure" ? 422 : 200,
+    });
   } catch (error) {
     console.error("[api/curriculum/sources/[sourceId]/ai-revise POST]", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

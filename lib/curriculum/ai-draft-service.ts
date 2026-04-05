@@ -1,4 +1,4 @@
-import "server-only";
+import "@/lib/server-only";
 
 import { getAdapterForTask } from "@/lib/ai/registry";
 import { getModelForTask } from "@/lib/ai/provider-adapter";
@@ -26,25 +26,40 @@ import {
   listCurriculumOutline,
   type CreatedAiDraftCurriculumResult,
 } from "./service";
-import { buildFallbackCurriculumArtifact } from "./fallback";
 import {
   buildGranularityGuidance,
   inferCurriculumGranularityProfile,
   type RequestedPacing,
 } from "./granularity";
 import { assessCurriculumArtifactQuality } from "./quality";
+import {
+  extractRequestedSubjectLabel,
+  countWords,
+  hasWrapperLabelSignals,
+  isLikelySentenceLabel,
+  labelTokenOverlapScore,
+  normalizeCurriculumLabel,
+  normalizeForComparison,
+} from "./labels";
 import type { CurriculumTreeNode } from "./types";
 import {
   CurriculumAiCapturedRequirementsSchema,
   CurriculumAiChatTurnSchema,
   CurriculumAiGeneratedArtifactSchema,
+  CurriculumAiFailureResultSchema,
   type CurriculumAiRevisionPlan,
   CurriculumAiRevisionTurnSchema,
   type CurriculumAiPacing,
   type CurriculumAiCapturedRequirements,
   type CurriculumAiChatMessage,
   type CurriculumAiChatTurn,
+  type CurriculumAiDocumentNode,
   type CurriculumAiGeneratedArtifact,
+  type CurriculumAiCreateResult,
+  type CurriculumAiGenerateResult,
+  type CurriculumAiFailureResult,
+  type CurriculumAiFailureIssue,
+  type CurriculumAiRevisionResult,
   type CurriculumAiRevisionTurn,
 } from "./ai-draft";
 import {
@@ -213,16 +228,32 @@ export async function createCurriculumFromConversation(params: {
   householdId: string;
   learner: AppLearner;
   messages: CurriculumAiChatMessage[];
-}): Promise<CreatedAiDraftCurriculumResult> {
-  const artifact = await generateCurriculumArtifact({
+},
+  deps?: {
+    generate?: typeof generateCurriculumArtifact;
+    persist?: typeof createCurriculumSourceFromAiDraftArtifact;
+  },
+): Promise<CurriculumAiCreateResult> {
+  const generate = deps?.generate ?? generateCurriculumArtifact;
+  const persist = deps?.persist ?? createCurriculumSourceFromAiDraftArtifact;
+  const generation = await generate({
     learner: params.learner,
     messages: params.messages,
   });
 
-  return createCurriculumSourceFromAiDraftArtifact({
+  if (generation.kind === "failure") {
+    return generation;
+  }
+
+  const created = await persist({
     householdId: params.householdId,
-    artifact,
+    artifact: generation.artifact,
   });
+
+  return {
+    kind: "success",
+    ...created,
+  };
 }
 
 export async function reviseCurriculumFromConversation(params: {
@@ -230,24 +261,26 @@ export async function reviseCurriculumFromConversation(params: {
   sourceId: string;
   learner: AppLearner;
   messages: CurriculumAiChatMessage[];
-}): Promise<
-  | ({
-      assistantMessage: string;
-      action: "clarify";
-      changeSummary: string[];
-    } & Pick<CreatedAiDraftCurriculumResult, "sourceId" | "sourceTitle">)
-  | ({
-      assistantMessage: string;
-      action: "applied";
-      changeSummary: string[];
-    } & CreatedAiDraftCurriculumResult)
-> {
-  const snapshot = await buildCurriculumRevisionSnapshot(params.sourceId, params.householdId);
-  const decision = await generateCurriculumRevisionDecision({
+},
+  deps?: {
+    loadSnapshot?: typeof buildCurriculumRevisionSnapshot;
+    decide?: typeof generateCurriculumRevisionDecision;
+    persist?: typeof applyAiDraftArtifactToCurriculumSource;
+  },
+): Promise<CurriculumAiRevisionResult> {
+  const loadSnapshot = deps?.loadSnapshot ?? buildCurriculumRevisionSnapshot;
+  const snapshot = await loadSnapshot(params.sourceId, params.householdId);
+  const decide = deps?.decide ?? generateCurriculumRevisionDecision;
+  const persist = deps?.persist ?? applyAiDraftArtifactToCurriculumSource;
+  const decision = await decide({
     learner: params.learner,
     messages: params.messages,
     snapshot,
   });
+
+  if ("kind" in decision) {
+    return decision;
+  }
 
   if (decision.action === "clarify") {
     console.info("[curriculum/ai-draft] revision clarified", {
@@ -255,6 +288,7 @@ export async function reviseCurriculumFromConversation(params: {
       changeSummaryCount: decision.changeSummary.length,
     });
     return {
+      kind: "clarify",
       assistantMessage: decision.assistantMessage,
       action: "clarify",
       changeSummary: decision.changeSummary,
@@ -269,10 +303,32 @@ export async function reviseCurriculumFromConversation(params: {
     changeSummaryCount: decision.changeSummary.length,
   });
 
-  const created = await applyAiDraftArtifactToCurriculumSource({
+  if (!decision.artifact) {
+    return buildCurriculumFailureResult({
+      stage: "revision",
+      reason: "revision_failed",
+      userSafeMessage:
+        "I could not apply the revision because the model did not return a usable curriculum artifact.",
+      issues: [
+        {
+          code: "missing_artifact",
+          message: "The revision decision did not include an artifact for an apply action.",
+          path: [],
+        },
+      ],
+      attemptCount: 1,
+      retryable: true,
+      debugMetadata: {
+        sourceId: snapshot.source.id,
+        sourceTitle: snapshot.source.title,
+      },
+    });
+  }
+
+  const created = await persist({
     householdId: params.householdId,
     sourceId: params.sourceId,
-    artifact: decision.artifact!,
+    artifact: decision.artifact,
   });
 
   console.info("[curriculum/ai-draft] revision apply succeeded", {
@@ -288,6 +344,7 @@ export async function reviseCurriculumFromConversation(params: {
   });
 
   return {
+    kind: "applied",
     assistantMessage: decision.assistantMessage,
     action: "applied",
     changeSummary: decision.changeSummary,
@@ -319,17 +376,47 @@ export async function buildCurriculumRevisionPromptPreview(params: {
   };
 }
 
-async function generateCurriculumArtifact(params: {
+export async function generateCurriculumArtifact(
+  params: {
   learner: AppLearner;
   messages: CurriculumAiChatMessage[];
-}): Promise<CurriculumAiGeneratedArtifact> {
-  const prompt = await resolvePrompt("curriculum.generate", CURRICULUM_GENERATION_PROMPT_VERSION);
+},
+  deps?: {
+    resolvePrompt?: typeof resolvePrompt;
+    complete?: (options: any) => Promise<{ content: string }>;
+    titleComplete?: (options: any) => Promise<{ content: string }>;
+  },
+): Promise<CurriculumAiGenerateResult> {
+  const resolvePromptFn = deps?.resolvePrompt ?? resolvePrompt;
+  const prompt = await resolvePromptFn("curriculum.generate", CURRICULUM_GENERATION_PROMPT_VERSION);
   const adapter = getAdapterForTask("curriculum.generate");
   const model = getModelForTask("curriculum.generate", getAiRoutingConfig());
+  const complete = deps?.complete ?? ((options: any) => adapter.complete(options));
   const messages = normalizeMessages(params.messages);
   const capturedRequirements = inferCapturedRequirements(messages);
   const requestedPacing = inferRequestedPacing(messages, capturedRequirements);
-  const topic = extractTopicLabel(capturedRequirements.topic || collectUserMessages(messages)[0] || "Custom Study");
+  const topic = resolveGenerationTopic(capturedRequirements, messages);
+  if (!topic) {
+    return buildCurriculumFailureResult({
+      stage: "topic_extraction",
+      reason: "topic_extraction_failed",
+      userSafeMessage:
+        "I could not extract a clean subject for the curriculum. Please restate the topic as a short subject phrase.",
+      issues: [
+        {
+          code: "topic_extraction_failed",
+          message: "The request did not contain a clean subject phrase.",
+          path: ["source", "title"],
+        },
+      ],
+      attemptCount: 0,
+      retryable: true,
+      debugMetadata: {
+        promptVersion: CURRICULUM_GENERATION_PROMPT_VERSION,
+        capturedRequirements,
+      },
+    });
+  }
   const granularityProfile = inferCurriculumGranularityProfile({
     topic,
     requirements: capturedRequirements,
@@ -346,10 +433,14 @@ async function generateCurriculumArtifact(params: {
       "Generate a distinct curriculum title instead of copying the parent's opening message.",
     ],
   ];
+  let attempts = 0;
+  let stage: CurriculumAiFailureResult["stage"] = "generation";
+  let issues: CurriculumAiFailureIssue[] = [];
 
   for (const correctionNotes of attemptNotes) {
+    attempts += 1;
     try {
-      const response = await adapter.complete({
+      const response = await complete({
         model,
         temperature: 0.4,
         systemPrompt: prompt.systemPrompt,
@@ -369,16 +460,29 @@ async function generateCurriculumArtifact(params: {
       });
 
       const parsedArtifact = parseCurriculumGeneratedArtifact(response.content);
-      if (!parsedArtifact) {
+      if (parsedArtifact.kind !== "success") {
+        stage = parsedArtifact.kind === "parse_failure" ? "parse" : "schema";
+        issues = parsedArtifact.issues;
         continue;
       }
 
-      const artifact = await finalizeCurriculumTitle({
-        artifact: sanitizeArtifact(parsedArtifact),
+      const sanitizedArtifact = sanitizeArtifact(parsedArtifact.artifact);
+      const finalized = await finalizeCurriculumTitle({
+        artifact: sanitizedArtifact,
         learner: params.learner,
         messages,
-      });
-      const qualityIssues = assessCurriculumArtifactQuality(artifact, {
+        requestedSubject: topic,
+        requestText: collectUserMessages(messages).join(" "),
+      }, deps);
+
+      if (finalized.kind === "failure") {
+        stage = finalized.stage;
+        issues = finalized.issues;
+        continue;
+      }
+
+      const normalizedArtifact = normalizeCurriculumArtifactLabels(finalized.artifact);
+      const qualityIssues = assessCurriculumArtifactQuality(normalizedArtifact, {
         topicText: [
           topic,
           capturedRequirements.topic,
@@ -388,31 +492,73 @@ async function generateCurriculumArtifact(params: {
         ]
           .join(" ")
           .trim(),
+        requestText: collectUserMessages(messages).join(" "),
         granularity: granularityProfile,
         requestedPacing,
         learnerText: params.learner.displayName,
+        revisionMode: "generation",
       });
       if (qualityIssues.length === 0) {
-        return artifact;
+        return {
+          kind: "success",
+          artifact: normalizedArtifact,
+        };
       }
 
+      stage = "quality";
+      issues = qualityIssues.map((issue) => ({
+        code: issue.code,
+        message: issue.message,
+        path: issue.path ?? [],
+      }));
       console.warn("[curriculum/ai-draft] Artifact quality check failed, retrying.", {
         issues: qualityIssues.map((issue) => issue.message),
       });
     } catch (error) {
-      console.error("[curriculum/ai-draft] Artifact generation failed, retrying or using fallback.", error);
+      stage = "generation";
+      issues = [
+        {
+          code: "model_error",
+          message: error instanceof Error ? error.message : "The model call failed.",
+          path: [],
+        },
+      ];
+      console.error("[curriculum/ai-draft] Artifact generation failed, retrying.", error);
     }
   }
 
-  return finalizeCurriculumTitle({
-    artifact: buildFallbackCurriculumArtifact({
-      learner: params.learner,
+  return buildCurriculumFailureResult({
+    stage,
+    reason:
+      stage === "quality"
+        ? "quality_failed"
+        : stage === "parse"
+          ? "parse_failed"
+          : stage === "schema"
+            ? "schema_failed"
+            : stage === "title"
+              ? "title_failed"
+              : "generation_failed",
+    userSafeMessage:
+      stage === "quality"
+        ? "I could not produce a curriculum that passed the naming and teachability checks. Please make the topic or pacing a little clearer."
+        : stage === "parse"
+          ? "I could not parse a valid curriculum from the model response. Please try again."
+          : stage === "schema"
+            ? "I could not validate the curriculum structure from the model response. Please try again."
+            : stage === "title"
+              ? "I could not produce a clean curriculum title from the model response. Please restate the subject more directly."
+          : "I could not produce a valid curriculum from the model response. Please try again.",
+    issues,
+    attemptCount: attempts,
+    retryable: true,
+    debugMetadata: {
+      promptVersion: CURRICULUM_GENERATION_PROMPT_VERSION,
       topic,
       capturedRequirements,
       requestedPacing,
-    }),
-    learner: params.learner,
-    messages,
+      granularityProfile,
+    },
   });
 }
 
@@ -420,7 +566,7 @@ async function generateCurriculumRevisionDecision(params: {
   learner: AppLearner;
   messages: CurriculumAiChatMessage[];
   snapshot: CurriculumRevisionSnapshot;
-}): Promise<CurriculumAiRevisionTurn> {
+}): Promise<CurriculumAiRevisionTurn | CurriculumAiFailureResult> {
   const prompt = await resolvePrompt("curriculum.revise", CURRICULUM_REVISION_PROMPT_VERSION);
   const adapter = getAdapterForTask("curriculum.revise");
   const model = getModelForTask("curriculum.revise", getAiRoutingConfig());
@@ -492,6 +638,7 @@ async function generateCurriculumRevisionDecision(params: {
         ]
           .join(" ")
           .trim(),
+        requestText: normalizedMessages.map((message) => message.content).join(" "),
         granularity: revisionGranularityProfile,
         requestedPacing: {
           totalWeeks: params.snapshot.counts.estimatedSessionCount > 0
@@ -1874,33 +2021,92 @@ async function finalizeCurriculumTitle(params: {
   artifact: CurriculumAiGeneratedArtifact;
   learner: AppLearner;
   messages: ChatMessage[];
-}): Promise<CurriculumAiGeneratedArtifact> {
-  const currentIssues = getCurriculumTitleIssues(params.artifact.source.title, params.messages);
-  const proposedTitle = await generateCurriculumTitle({
-    artifact: params.artifact,
-    learner: params.learner,
-    messages: params.messages,
+  requestedSubject: string;
+  requestText: string;
+},
+deps?: {
+  resolvePrompt?: typeof resolvePrompt;
+  titleComplete?: (options: any) => Promise<{ content: string }>;
+}): Promise<
+  | {
+      kind: "success";
+      artifact: CurriculumAiGeneratedArtifact;
+    }
+  | CurriculumAiFailureResult
+> {
+  const currentIssues = getCurriculumTitleIssues({
+    title: params.artifact.source.title,
+    requestedSubject: params.requestedSubject,
+    requestText: params.requestText,
   });
 
-  if (proposedTitle && getCurriculumTitleIssues(proposedTitle, params.messages).length === 0) {
+  if (currentIssues.length === 0) {
     return {
-      ...params.artifact,
-      source: {
-        ...params.artifact.source,
-        title: proposedTitle,
+      kind: "success",
+      artifact: {
+        ...params.artifact,
+        source: {
+          ...params.artifact.source,
+          title: normalizeCurriculumLabel(params.artifact.source.title),
+        },
       },
     };
   }
 
-  if (currentIssues.length === 0) {
-    return params.artifact;
+  const proposedTitle = await generateCurriculumTitle({
+    artifact: params.artifact,
+    learner: params.learner,
+    messages: params.messages,
+    subject: params.requestedSubject,
+  }, deps);
+
+  if (!proposedTitle) {
+    return buildCurriculumFailureResult({
+      stage: "title",
+      reason: "title_failed",
+      userSafeMessage:
+        "I could not produce a clean curriculum title from the model output. Please restate the subject more directly.",
+      issues: currentIssues,
+      attemptCount: 1,
+      retryable: true,
+      debugMetadata: {
+        promptVersion: CURRICULUM_TITLE_PROMPT_VERSION,
+        requestedSubject: params.requestedSubject,
+        requestText: params.requestText,
+      },
+    });
+  }
+
+  const titleIssues = getCurriculumTitleIssues({
+    title: proposedTitle,
+    requestedSubject: params.requestedSubject,
+    requestText: params.requestText,
+  });
+  if (titleIssues.length > 0) {
+    return buildCurriculumFailureResult({
+      stage: "title",
+      reason: "title_failed",
+      userSafeMessage:
+        "I could not produce a clean curriculum title from the model output. Please restate the subject more directly.",
+      issues: titleIssues,
+      attemptCount: 1,
+      retryable: true,
+      debugMetadata: {
+        promptVersion: CURRICULUM_TITLE_PROMPT_VERSION,
+        requestedSubject: params.requestedSubject,
+        requestText: params.requestText,
+      },
+    });
   }
 
   return {
-    ...params.artifact,
-    source: {
-      ...params.artifact.source,
-      title: buildHeuristicCurriculumTitle(params.artifact, params.messages),
+    kind: "success",
+    artifact: {
+      ...params.artifact,
+      source: {
+        ...params.artifact.source,
+        title: normalizeCurriculumLabel(proposedTitle),
+      },
     },
   };
 }
@@ -1909,13 +2115,19 @@ async function generateCurriculumTitle(params: {
   artifact: CurriculumAiGeneratedArtifact;
   learner: AppLearner;
   messages: ChatMessage[];
+  subject: string;
+}, deps?: {
+  resolvePrompt?: typeof resolvePrompt;
+  titleComplete?: (options: any) => Promise<{ content: string }>;
 }) {
-  const prompt = await resolvePrompt("curriculum.title", CURRICULUM_TITLE_PROMPT_VERSION);
+  const resolvePromptFn = deps?.resolvePrompt ?? resolvePrompt;
+  const prompt = await resolvePromptFn("curriculum.title", CURRICULUM_TITLE_PROMPT_VERSION);
   const adapter = getAdapterForTask("curriculum.title");
   const model = getModelForTask("curriculum.title", getAiRoutingConfig());
+  const complete = deps?.titleComplete ?? ((options: any) => adapter.complete(options));
 
   try {
-    const response = await adapter.complete({
+    const response = await complete({
       model,
       temperature: 0.25,
       systemPrompt: prompt.systemPrompt,
@@ -1925,6 +2137,7 @@ async function generateCurriculumTitle(params: {
           content: buildCurriculumTitlePrompt({
             learnerName: params.learner.displayName,
             messages: params.messages,
+            subject: params.subject,
             artifact: {
               source: {
                 title: params.artifact.source.title,
@@ -1948,9 +2161,9 @@ async function generateCurriculumTitle(params: {
     });
 
     const parsed = parseCurriculumTitleCandidate(response.content);
-    return parsed?.trim() || null;
+    return parsed ? normalizeCurriculumLabel(parsed) : null;
   } catch (error) {
-    console.error("[curriculum/ai-draft] Title generation failed, using fallback title handling.", error);
+    console.error("[curriculum/ai-draft] Title generation failed.", error);
     return null;
   }
 }
@@ -2189,10 +2402,10 @@ function sanitizeChatTurn(turn: CurriculumAiChatTurn): CurriculumAiChatTurn {
 }
 
 function sanitizeArtifact(artifact: CurriculumAiGeneratedArtifact): CurriculumAiGeneratedArtifact {
-  return {
+  return normalizeCurriculumArtifactLabels({
     source: {
       ...artifact.source,
-      title: artifact.source.title.trim(),
+      title: normalizeCurriculumLabel(artifact.source.title),
       description: artifact.source.description.trim(),
       summary: artifact.source.summary.trim(),
       teachingApproach: artifact.source.teachingApproach.trim(),
@@ -2211,15 +2424,83 @@ function sanitizeArtifact(artifact: CurriculumAiGeneratedArtifact): CurriculumAi
       description: unit.description.trim(),
       lessons: unit.lessons.map((lesson) => ({
         ...lesson,
-        title: lesson.title.trim(),
+        title: normalizeCurriculumLabel(lesson.title),
         description: lesson.description.trim(),
         subject: lesson.subject?.trim() || undefined,
         materials: uniqueNonEmpty(lesson.materials),
         objectives: uniqueNonEmpty(lesson.objectives),
-        linkedSkillTitles: uniqueNonEmpty(lesson.linkedSkillTitles),
+        linkedSkillTitles: uniqueNonEmpty(lesson.linkedSkillTitles.map((title) => normalizeCurriculumLabel(title))),
+      })),
+    })),
+  });
+}
+
+function normalizeCurriculumArtifactLabels(
+  artifact: CurriculumAiGeneratedArtifact,
+): CurriculumAiGeneratedArtifact {
+  return {
+    ...artifact,
+    source: {
+      ...artifact.source,
+      title: normalizeCurriculumLabel(artifact.source.title),
+    },
+    document: normalizeCurriculumDocumentLabels(artifact.document),
+    units: artifact.units.map((unit) => ({
+      ...unit,
+      title: normalizeCurriculumLabel(unit.title),
+      lessons: unit.lessons.map((lesson) => ({
+        ...lesson,
+        title: normalizeCurriculumLabel(lesson.title),
+        subject: lesson.subject?.trim() || undefined,
+        linkedSkillTitles: uniqueNonEmpty(
+          lesson.linkedSkillTitles.map((title) => normalizeCurriculumLabel(title)),
+        ),
       })),
     })),
   };
+}
+
+function normalizeCurriculumDocumentLabels(
+  node: CurriculumAiGeneratedArtifact["document"],
+): CurriculumAiGeneratedArtifact["document"] {
+  const next: CurriculumAiGeneratedArtifact["document"] = {};
+
+  for (const [key, value] of Object.entries(node)) {
+    const normalizedKey = normalizeCurriculumLabel(key);
+    if (!normalizedKey) {
+      continue;
+    }
+
+    next[normalizedKey] = normalizeCurriculumDocumentValue(value);
+  }
+
+  return next;
+}
+
+function normalizeCurriculumDocumentValue(
+  value: unknown,
+): CurriculumAiDocumentNode {
+  if (typeof value === "string") {
+    return value.trim();
+  }
+
+  if (Array.isArray(value)) {
+    return uniqueNonEmpty(value.map((item) => normalizeCurriculumLabel(String(item ?? ""))));
+  }
+
+  if (value && typeof value === "object") {
+    const next: Record<string, unknown> = {};
+    for (const [key, child] of Object.entries(value)) {
+      const normalizedKey = normalizeCurriculumLabel(key);
+      if (!normalizedKey) {
+        continue;
+      }
+      next[normalizedKey] = normalizeCurriculumDocumentValue(child);
+    }
+    return next as CurriculumAiDocumentNode;
+  }
+
+  return typeof value === "string" ? value : "";
 }
 
 function parseCurriculumChatTurn(content: string) {
@@ -2234,14 +2515,49 @@ function parseCurriculumChatTurn(content: string) {
   return validated.success ? sanitizeChatTurn(validated.data) : null;
 }
 
-function parseCurriculumGeneratedArtifact(content: string) {
+export function parseCurriculumGeneratedArtifact(content: string):
+  | {
+      kind: "success";
+      artifact: CurriculumAiGeneratedArtifact;
+    }
+  | {
+      kind: "parse_failure";
+      issues: CurriculumAiFailureIssue[];
+    }
+  | {
+      kind: "schema_failure";
+      issues: CurriculumAiFailureIssue[];
+    } {
   const parsed = safeParseJson(content);
   if (!parsed) {
-    return null;
+    return {
+      kind: "parse_failure",
+      issues: [
+        {
+          code: "parse_failed",
+          message: "The model response could not be parsed as JSON.",
+          path: [],
+        },
+      ],
+    };
   }
 
   const validated = CurriculumAiGeneratedArtifactSchema.safeParse(parsed);
-  return validated.success ? validated.data : null;
+  if (!validated.success) {
+    return {
+      kind: "schema_failure",
+      issues: validated.error.issues.map((issue) => ({
+        code: "schema_failed",
+        message: issue.message,
+        path: issue.path.map((segment) => String(segment)),
+      })),
+    };
+  }
+
+  return {
+    kind: "success",
+    artifact: validated.data,
+  };
 }
 
 function parseCurriculumRevisionTurn(content: string) {
@@ -2342,7 +2658,7 @@ function normalizeChatTurnCandidate(value: unknown) {
   };
 }
 
-function buildFallbackChatTurn(params: {
+export function buildFallbackChatTurn(params: {
   learner: AppLearner;
   messages: ChatMessage[];
 }): CurriculumAiChatTurn {
@@ -2389,22 +2705,6 @@ function buildFallbackChatTurn(params: {
   };
 }
 
-function buildFallbackArtifact(params: {
-  learner: AppLearner;
-  messages: ChatMessage[];
-}): CurriculumAiGeneratedArtifact {
-  const capturedRequirements = inferCapturedRequirements(params.messages);
-  const requestedPacing = inferRequestedPacing(params.messages, capturedRequirements);
-  const topic = extractTopicLabel(capturedRequirements.topic || collectUserMessages(params.messages)[0] || "Custom Study");
-
-  return buildFallbackCurriculumArtifact({
-    learner: params.learner,
-    topic,
-    capturedRequirements,
-    requestedPacing,
-  });
-}
-
 function inferCapturedRequirements(messages: ChatMessage[]): CurriculumAiCapturedRequirements {
   const userMessages = collectUserMessages(messages);
   const combined = userMessages.join(" ");
@@ -2414,7 +2714,10 @@ function inferCapturedRequirements(messages: ChatMessage[]): CurriculumAiCapture
   const openingGoalRemainder = openingSentences.slice(1).join(" ").trim();
 
   const requirements = {
-    topic: extractTopicLabel(openingTopicSentence),
+    topic:
+      extractRequestedSubjectLabel(openingTopicSentence) ??
+      extractRequestedSubjectLabel(combined) ??
+      "",
     goals:
       openingGoalRemainder ||
       findFirstMatchingMessage(userMessages.slice(1), /(goal|by the end|want .* to|hope|outcome|master)/i) ||
@@ -2448,6 +2751,25 @@ function inferCapturedRequirements(messages: ChatMessage[]): CurriculumAiCapture
   };
 
   return sanitizeCapturedRequirements(requirements);
+}
+
+function resolveGenerationTopic(
+  requirements: CurriculumAiCapturedRequirements,
+  messages: ChatMessage[],
+) {
+  const candidates = [
+    requirements.topic,
+    extractRequestedSubjectLabel(collectUserMessages(messages).join(" ")),
+    extractRequestedSubjectLabel(messages.map((message) => message.content).join(" ")),
+  ];
+
+  for (const candidate of candidates) {
+    if (candidate) {
+      return candidate;
+    }
+  }
+
+  return "";
 }
 
 function sanitizeCapturedRequirements(
@@ -2618,53 +2940,76 @@ function countDocumentSkills(document: CurriculumAiGeneratedArtifact["document"]
   return countDocumentNodeSkills(document);
 }
 
-function getCurriculumTitleIssues(title: string, messages: ChatMessage[]) {
-  const issues: string[] = [];
-  const normalizedTitle = normalizeForComparison(title);
-  const opening = collectUserMessages(messages)[0] ?? "";
-  const topic = normalizeForComparison(
-    extractTopicLabel(inferCapturedRequirements(messages).topic || opening),
-  );
+function getCurriculumTitleIssues(params: {
+  title: string;
+  requestedSubject: string;
+  requestText: string;
+}) {
+  const issues: CurriculumAiFailureIssue[] = [];
+  const normalizedTitle = normalizeCurriculumLabel(params.title);
+  const normalizedSubject = normalizeCurriculumLabel(params.requestedSubject);
+  const normalizedRequest = normalizeForComparison(params.requestText);
 
-  if (!titleLooksDistinctFromOpeningMessage(title, messages)) {
-    issues.push("Title echoes the opening request.");
+  if (!normalizedTitle) {
+    issues.push({
+      code: "title_shape",
+      message: "The title is empty after normalization.",
+      path: ["source", "title"],
+    });
+    return issues;
   }
 
-  if (!normalizedTitle || normalizedTitle.split(" ").length < 2) {
-    issues.push("Title is too short or generic.");
+  if (countWords(normalizedTitle) > 8 || normalizedTitle.length > 60) {
+    issues.push({
+      code: "title_length",
+      message: `The title "${normalizedTitle}" is too long to be a usable label.`,
+      path: ["source", "title"],
+    });
   }
 
-  if (topic && (normalizedTitle === topic || normalizedTitle.startsWith(topic) || topic.startsWith(normalizedTitle))) {
-    issues.push("Title is too close to the raw topic label.");
+  if (isLikelySentenceLabel(normalizedTitle)) {
+    issues.push({
+      code: "title_shape",
+      message: `The title "${normalizedTitle}" reads like a sentence rather than a label.`,
+      path: ["source", "title"],
+    });
   }
 
-  if (/\b(curriculum|study|learning plan|skill path|custom study)\b/i.test(title) && normalizedTitle.split(" ").length <= 4) {
-    issues.push("Title still sounds like a placeholder.");
+  if (hasWrapperLabelSignals(normalizedTitle) && countWords(normalizedTitle) <= 4) {
+    issues.push({
+      code: "title_wrapper",
+      message: `The title "${normalizedTitle}" looks like wrapper language instead of a subject label.`,
+      path: ["source", "title"],
+    });
   }
 
-  return issues;
-}
-
-function buildHeuristicCurriculumTitle(
-  artifact: CurriculumAiGeneratedArtifact,
-  messages: ChatMessage[],
-) {
-  const topic = toTitleCase(
-    extractTopicLabel(inferCapturedRequirements(messages).topic || artifact.source.title),
-  );
-
-  if (artifact.units[0]?.title) {
-    const lead = artifact.units[0].title
-      .replace(/\b(foundations|guided practice|independent growth)\b/gi, "")
-      .replace(/\s+/g, " ")
-      .trim();
-
-    if (lead && getCurriculumTitleIssues(lead, messages).length === 0) {
-      return lead;
+  if (normalizedSubject) {
+    const titleComparison = normalizeForComparison(normalizedTitle);
+    const subjectComparison = normalizeForComparison(normalizedSubject);
+    if (
+      !titleComparison.includes(subjectComparison) &&
+      !subjectComparison.includes(titleComparison)
+    ) {
+      issues.push({
+        code: "title_topic_alignment",
+        message: `The title "${normalizedTitle}" is not clearly aligned to the subject "${normalizedSubject}".`,
+        path: ["source", "title"],
+      });
     }
   }
 
-  return `First Steps in ${topic}`;
+  if (normalizedRequest && normalizedRequest.length > 0) {
+    const overlap = labelTokenOverlapScore(normalizedTitle, params.requestText);
+    if (overlap >= 0.8 && countWords(params.requestText) > 8) {
+      issues.push({
+        code: "title_overlap",
+        message: `The title "${normalizedTitle}" overlaps too heavily with the raw request.`,
+        path: ["source", "title"],
+      });
+    }
+  }
+
+  return uniqueFailures(issues);
 }
 
 function countDocumentNodeSkills(node: unknown): number {
@@ -2741,15 +3086,6 @@ function titleLooksDistinctFromOpeningMessage(title: string, messages: ChatMessa
   return normalizedTitle !== normalizedOpening && !normalizedOpening.startsWith(normalizedTitle);
 }
 
-function normalizeForComparison(value: string) {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .replace(/\b(curriculum|plan|study|learn|build|create|make|for|my|child|please|help|me)\b/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 function normalizeMessages(messages: CurriculumAiChatMessage[]): ChatMessage[] {
   return messages.map((message) => ({
     role: message.role,
@@ -2757,53 +3093,36 @@ function normalizeMessages(messages: CurriculumAiChatMessage[]): ChatMessage[] {
   }));
 }
 
-async function buildFallbackRevisionTurn(params: {
-  learner: AppLearner;
-  messages: ChatMessage[];
-  snapshot: CurriculumRevisionSnapshot;
-  revisionPreference: RevisionPreference | null;
-  revisionPlan?: CurriculumAiRevisionPlan | null;
-}): Promise<CurriculumAiRevisionTurn | null> {
-  const shouldApply = params.revisionPlan?.action === "apply"
-    ? true
-    : shouldAutoApplyRevision(params.messages, params.revisionPreference);
-
-  if (!shouldApply) {
-    return null;
-  }
-
-  const capturedRequirements = inferCapturedRequirements(params.messages);
-  const requestedPacing = inferRequestedPacing(params.messages, capturedRequirements);
-  const topic = extractTopicLabel(
-    capturedRequirements.topic || inferRevisionTopic(params.snapshot) || params.snapshot.source.title,
-  );
-  const artifact = await finalizeCurriculumTitle({
-    artifact: buildFallbackCurriculumArtifact({
-      learner: params.learner,
-      topic,
-      capturedRequirements,
-      requestedPacing,
-    }),
-    learner: params.learner,
-    messages: params.messages,
+function buildCurriculumFailureResult(params: {
+  stage: CurriculumAiFailureResult["stage"];
+  reason: string;
+  userSafeMessage: string;
+  issues: CurriculumAiFailureIssue[];
+  attemptCount: number;
+  retryable: boolean;
+  debugMetadata?: Record<string, unknown>;
+}): CurriculumAiFailureResult {
+  const result = CurriculumAiFailureResultSchema.parse({
+    kind: "failure",
+    stage: params.stage,
+    reason: params.reason,
+    userSafeMessage: params.userSafeMessage,
+    issues: uniqueFailures(params.issues),
+    attemptCount: params.attemptCount,
+    retryable: params.retryable,
+    debugMetadata: params.debugMetadata,
   });
 
-  return {
-    assistantMessage: buildFallbackRevisionAssistantMessage(
-      params.messages,
-      artifact,
-      params.revisionPreference,
-      params.revisionPlan ?? null,
-    ),
-    action: "apply",
-    changeSummary: buildFallbackRevisionChangeSummary(
-      params.messages,
-      artifact,
-      params.revisionPreference,
-      params.revisionPlan ?? null,
-    ),
-    artifact,
-  };
+  console.warn("[curriculum/ai-draft] curriculum artifact failure", {
+    stage: result.stage,
+    reason: result.reason,
+    attemptCount: result.attemptCount,
+    retryable: result.retryable,
+    promptVersion: result.debugMetadata?.promptVersion,
+    issueSummary: result.issues.map((issue) => issue.message),
+  });
+
+  return result;
 }
 
 function collectUserMessages(messages: ChatMessage[]) {
@@ -2817,8 +3136,17 @@ function findFirstMatchingMessage(messages: string[], pattern: RegExp) {
   return messages.find((message) => pattern.test(message)) ?? null;
 }
 
+function firstNumberMatch(value: string, pattern: RegExp) {
+  const match = value.match(pattern)?.[1];
+  return match ? Number(match) : undefined;
+}
+
 function firstMatch(value: string, pattern: RegExp) {
   return value.match(pattern)?.[0]?.trim() ?? "";
+}
+
+function extractTopicLabel(value: string) {
+  return extractRequestedSubjectLabel(value) ?? "";
 }
 
 function inferRevisionPreference(messages: ChatMessage[]): RevisionPreference | null {
@@ -2922,351 +3250,25 @@ function isPreferenceOnlyRevisionMessage(message: string) {
 function isPreferenceClarificationMessage(message: string) {
   return /targeted adjustment/i.test(message) && /broader rewrite/i.test(message);
 }
-
-function buildFallbackRevisionSeedMessages(
-  snapshot: CurriculumRevisionSnapshot,
-  messages: ChatMessage[],
-  revisionPlan: CurriculumAiRevisionPlan | null,
-): ChatMessage[] {
-  const topic = inferRevisionTopic(snapshot);
-  const revisionRequest = collectUserMessages(messages)
-    .filter((message) => !isPreferenceOnlyRevisionMessage(message))
-    .join(" ");
-  const unitTitles = snapshot.outline
-    .map((unit) =>
-      typeof unit.title === "string" && unit.title.trim() ? unit.title.trim() : null,
-    )
-    .filter(Boolean)
-    .slice(0, 4)
-    .join(", ");
-
-  return [
-    {
-      role: "user",
-      content: [
-        `We want to teach ${topic}.`,
-        revisionRequest ? `Requested revision: ${revisionRequest}.` : null,
-        revisionPlan?.revisionBrief ? `Revision brief: ${revisionPlan.revisionBrief}.` : null,
-        `Current curriculum title: ${snapshot.source.title}.`,
-        snapshot.source.description ? `Current summary: ${snapshot.source.description}.` : null,
-        snapshot.counts.estimatedSessionCount > 0
-          ? `Current outline covers about ${snapshot.counts.estimatedSessionCount} sessions.`
-          : null,
-        unitTitles ? `Current units include ${unitTitles}.` : null,
-      ]
-        .filter(Boolean)
-        .join(" "),
-    },
-  ];
-}
-
-function inferRevisionTopic(snapshot: CurriculumRevisionSnapshot) {
-  const snapshotText = [
-    snapshot.source.title,
-    snapshot.source.description ?? "",
-    snapshot.source.subjects.join(" "),
-    JSON.stringify(snapshot.structure).slice(0, 1_200),
-    JSON.stringify(snapshot.outline).slice(0, 1_200),
-  ].join(" ");
-
-  return extractTopicLabel(snapshotText);
-}
-
-function buildFallbackRevisionAssistantMessage(
-  messages: ChatMessage[],
-  artifact: CurriculumAiGeneratedArtifact,
-  revisionPreference: RevisionPreference | null,
-  revisionPlan: CurriculumAiRevisionPlan | null,
-) {
-  const requestText = collectUserMessages(messages).join(" ").toLowerCase();
-  const revisionLead =
-    revisionPlan?.scope === "targeted" || revisionPreference === "targeted"
-      ? "targeted revision"
-      : "broader rewrite";
-  const details = [
-    /\b(shorten|shorter|lengthen|longer|simplify|simpler|condense|trim|reduce|increase|tighten|streamline|refine|adjust|rename|retitle|pacing|timeline|materials?|lesson structure|opening lessons|teaching approach|goal group|strand|skill|title)\b/i.test(
-      requestText,
-    )
-      ? /\b(shorten|shorter|condense|trim|reduce|tighten|simplify|simpler)\b/i.test(requestText)
-        ? "refocused the pacing and simplified the opening lessons"
-        : /\b(lengthen|longer|expand|deepen|increase)\b/i.test(requestText)
-          ? "expanded the pacing and added more room for practice"
-          : "refined the early lesson sequence"
-      : null,
-    /foundation|core ideas?/.test(requestText)
-      ? "expanded the foundations and core ideas"
-      : null,
-    typeof artifact.pacing.totalWeeks === "number" && typeof artifact.pacing.totalSessions === "number"
-      ? `rebalanced the pacing for about ${artifact.pacing.totalWeeks} weeks and ${artifact.pacing.totalSessions} sessions`
-      : null,
-  ].filter(Boolean);
-
-  return details.length > 0
-    ? `I applied a ${revisionLead}, ${details.join(", ")}, and refreshed the curriculum structure so it is ready to use.`
-    : `I applied a ${revisionLead} and refreshed the curriculum structure so it is ready to use.`;
-}
-
-function buildFallbackRevisionChangeSummary(
-  messages: ChatMessage[],
-  artifact: CurriculumAiGeneratedArtifact,
-  revisionPreference: RevisionPreference | null,
-  revisionPlan: CurriculumAiRevisionPlan | null,
-) {
-  const requestText = collectUserMessages(messages).join(" ").toLowerCase();
-  const revisionLead =
-    revisionPlan?.scope === "targeted" || revisionPreference === "targeted"
-      ? "Applied a targeted revision to the curriculum structure."
-      : "Applied a broader rewrite to the curriculum structure.";
-  const summary = [
-    revisionLead,
-    revisionPlan?.revisionBrief ? `Planned change: ${revisionPlan.revisionBrief}` : null,
-    /\b(shorten|shorter|lengthen|longer|simplify|simpler|condense|trim|reduce|increase|tighten|streamline|refine|adjust|rename|retitle|pacing|timeline|materials?|lesson structure|opening lessons|teaching approach|goal group|strand|skill|title)\b/i.test(
-      requestText,
-    )
-      ? /\b(shorten|shorter|condense|trim|reduce|tighten|simplify|simpler)\b/i.test(requestText)
-        ? "Shortened and simplified the opening stretch so the curriculum feels lighter."
-        : /\b(lengthen|longer|expand|deepen|increase)\b/i.test(requestText)
-          ? "Expanded the pacing so the curriculum has more room to breathe."
-          : "Refined the early lesson sequence to better match the requested change."
-      : null,
-    /foundation|core ideas?/.test(requestText)
-      ? "Expanded the foundations so the opening stretch carries more core ideas."
-      : null,
-    typeof artifact.pacing.totalWeeks === "number" && typeof artifact.pacing.totalSessions === "number"
-      ? `Rebalanced the pacing for roughly ${artifact.pacing.totalWeeks} weeks and ${artifact.pacing.totalSessions} sessions.`
-      : null,
-    artifact.source.title ? `Updated the curriculum framing to ${artifact.source.title}.` : null,
-  ].filter((item): item is string => Boolean(item));
-
-  return uniqueNonEmpty(summary).slice(0, 4);
-}
-
-function firstNumberMatch(value: string, pattern: RegExp) {
-  const match = value.match(pattern)?.[1];
-  return match ? Number(match) : undefined;
-}
-
-function buildFallbackSkills(
-  topic: string,
-  requirements: CurriculumAiCapturedRequirements,
-  requestedPacing: RequestedPacing,
-) {
-  const loweredTopic = topic.toLowerCase();
-  const targetSkillCount = determineFallbackSkillCount(requestedPacing);
-
-  const baseSkills = [
-    {
-      title: `Build core vocabulary in ${topic.toLowerCase()}`,
-      description: "Introduce the words and ideas the learner needs before deeper work begins.",
-    },
-    {
-      title: `Explain foundational concepts in ${topic.toLowerCase()}`,
-      description: "Connect big ideas in simple, memorable language.",
-    },
-    {
-      title: `Practice guided application in ${topic.toLowerCase()}`,
-      description: "Move from explanation to supported use through short tasks and examples.",
-    },
-    {
-      title: `Strengthen accuracy and fluency in ${topic.toLowerCase()}`,
-      description: "Revisit important skills until the learner can use them more smoothly.",
-    },
-    {
-      title: `Use feedback to improve work in ${topic.toLowerCase()}`,
-      description: "Build the habit of revising and trying again with specific guidance.",
-    },
-    {
-      title: `Apply ${topic.toLowerCase()} in new situations`,
-      description: "Shift from familiar routines to transfer and flexible use.",
-    },
-    {
-      title: `Show independent understanding of ${topic.toLowerCase()}`,
-      description: "Create opportunities for the learner to work with less prompting.",
-    },
-    {
-      title: requirements.goals
-        ? `Work toward the priority outcome: ${shorten(toSentenceFragment(requirements.goals), 90)}`
-        : `Reflect on progress and next steps in ${topic.toLowerCase()}`,
-      description: "Keep the visible end goal connected to the weekly work.",
-    },
-  ];
-
-  const expansions = [
-    {
-      title: `Review previous learning in ${topic.toLowerCase()}`,
-      description: "Use retrieval, review, and light spiral work so earlier learning sticks.",
-    },
-    {
-      title: `Talk through reasoning in ${topic.toLowerCase()}`,
-      description: "Make thinking visible through explanation, narration, or discussion.",
-    },
-    {
-      title: `Complete longer practice in ${topic.toLowerCase()}`,
-      description: "Sustain attention across slightly larger tasks or project pieces.",
-    },
-    {
-      title: `Use ${topic.toLowerCase()} more creatively`,
-      description: "Apply the same learning through open-ended or choice-based work.",
-    },
-  ];
-
-  return [...baseSkills, ...expansions].slice(0, Math.max(baseSkills.length, targetSkillCount));
-}
-
-function buildFallbackMaterials(topic: string, requirements: CurriculumAiCapturedRequirements) {
-  const materials: string[] = [];
-  const constraintsLower = requirements.constraints.toLowerCase();
-  if (constraintsLower.includes("book")) {
-    materials.push("family-selected reference book");
-  }
-  if (constraintsLower.includes("workbook")) {
-    materials.push("workbook or printed practice page");
-  }
-
-  return materials.length > 0 ? uniqueNonEmpty(materials) : ["notebook", "simple practice materials"];
-}
-
-function buildFallbackTitle(topic: string, requirements: CurriculumAiCapturedRequirements) {
-  const cleanTopic = toTitleCase(topic);
-  if (requirements.goals) {
-    return `${cleanTopic} Skill Path`;
-  }
-
-  return `${cleanTopic} Learning Journey`;
-}
-
-function determineFallbackSkillCount(requestedPacing: RequestedPacing) {
-  const targetSessions =
-    requestedPacing.explicitlyRequestedTotalSessions ??
-    requestedPacing.totalSessionsLowerBound ??
-    24;
-
-  return Math.max(6, Math.min(14, Math.ceil(targetSessions / 7)));
-}
-
-function estimateFallbackTotalSessions(requestedPacing: RequestedPacing, skillCount: number) {
-  if (typeof requestedPacing.explicitlyRequestedTotalSessions === "number") {
-    return requestedPacing.explicitlyRequestedTotalSessions;
-  }
-
-  if (typeof requestedPacing.totalSessionsLowerBound === "number") {
-    return requestedPacing.totalSessionsLowerBound;
-  }
-
-  return Math.max(skillCount * 4, 24);
-}
-
-function allocateSessionsAcrossUnits(totalSessions: number, unitCount: number) {
-  if (unitCount <= 0) {
-    return [];
-  }
-
-  const base = Math.max(1, Math.floor(totalSessions / unitCount));
-  const remainder = totalSessions % unitCount;
-  return Array.from({ length: unitCount }, (_, index) => base + (index < remainder ? 1 : 0));
-}
-
-function estimateLessonMinutes(timeframe: string) {
-  const match = timeframe.match(/(\d+)\s*minute/i);
-  return match?.[1] ? Number(match[1]) : 30;
-}
-
-function estimateWeeksPerUnit(timeframe: string, unitCount: number, index: number) {
-  const match = timeframe.match(/(\d+)\s*week/i);
-  if (!match?.[1]) {
-    return index === unitCount - 1 ? 1 : undefined;
-  }
-
-  const totalWeeks = Number(match[1]);
-  return Math.max(1, Math.round(totalWeeks / unitCount));
-}
-
-function extractTopicLabel(value: string) {
-  if (!value.trim()) {
-    return "";
-  }
-
-  const firstSentence = splitIntoSentences(value)[0] ?? value;
-  const normalized = firstSentence
-    .replace(
-      /^i\s+(?:want|need)\s+to\s+(?:build|create|design|make|learn|study|explore)\s+/i,
-      "",
-    )
-    .replace(
-      /^we\s+(?:want|need)\s+to\s+(?:build|create|design|make|learn|study|explore)\s+/i,
-      "",
-    )
-    .replace(/^i\s+(?:want|need)\s+(?:a|an)?\s+/i, "")
-    .replace(/^please\s+(?:help\s+)?(?:me\s+)?(?:build|create|design|make)\s+/i, "")
-    .trim();
-
-  const curriculumMatch = normalized.match(/^(?:a|an|the)?\s*(.+?)\s+curriculum\b/i);
-  if (curriculumMatch?.[1]) {
-    return cleanTopicFragment(curriculumMatch[1]);
-  }
-
-  const learnMatch = normalized.match(
-    /^(?:to\s+)?(?:learn|study|explore)\s+(?:about\s+)?(.+)/i,
-  );
-  if (learnMatch?.[1]) {
-    return cleanTopicFragment(learnMatch[1]);
-  }
-
-  const cleaned = normalized
-    .replace(/^about\s+/i, "")
-    .replace(/^an?\s+/i, "")
-    .trim()
-    .replace(/[.?!]+$/, "");
-
-  return cleaned.length > 0 ? cleaned : "Custom Study";
-}
-
-function inferSubjects(text: string) {
-  const value = text.toLowerCase();
-  const subjectMatches = [
-    { keywords: ["math", "algebra", "geometry", "fractions"], subject: "math" },
-    { keywords: ["science", "biology", "chemistry", "physics"], subject: "science" },
-    { keywords: ["history", "civics", "government"], subject: "history" },
-    { keywords: ["writing", "reading", "literature", "grammar"], subject: "language arts" },
-    { keywords: ["logic", "strategy"], subject: "strategy" },
-    { keywords: ["art", "drawing", "painting"], subject: "art" },
-    { keywords: ["nature", "outdoor", "habitat"], subject: "nature study" },
-    { keywords: ["coding", "programming", "computer"], subject: "technology" },
-  ];
-
-  const subjects = subjectMatches
-    .filter((entry) => entry.keywords.some((keyword) => value.includes(keyword)))
-    .map((entry) => entry.subject);
-
-  return subjects.length > 0 ? uniqueNonEmpty(subjects).slice(0, 4) : ["interdisciplinary"];
-}
-
-function inferGradeLevels(text: string) {
-  const value = text.toLowerCase();
-  const matches = new Set<string>();
-
-  const gradeRegexes = [
-    /\bgrade\s+(\d{1,2})\b/g,
-    /\b(\d{1,2})(?:st|nd|rd|th)\s+grade\b/g,
-  ];
-
-  for (const regex of gradeRegexes) {
-    for (const match of value.matchAll(regex)) {
-      if (match[1]) {
-        matches.add(match[1]);
-      }
-    }
-  }
-
-  if (value.includes("kindergarten")) matches.add("K");
-  if (value.includes("middle school")) matches.add("6-8");
-  if (value.includes("high school")) matches.add("9-12");
-
-  return [...matches].slice(0, 4);
-}
-
 function uniqueNonEmpty(values: string[]) {
   return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+}
+
+function uniqueFailures(values: CurriculumAiFailureIssue[]) {
+  const seen = new Set<string>();
+  const unique: CurriculumAiFailureIssue[] = [];
+
+  for (const value of values) {
+    const key = `${value.code}:${value.path.join(" > ")}:${value.message}`;
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    unique.push(value);
+  }
+
+  return unique;
 }
 
 function shorten(value: string, maxLength: number) {

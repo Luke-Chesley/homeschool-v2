@@ -1,6 +1,12 @@
 import type { ZodType } from "zod";
 
-import { CurriculumAiRevisionTurnSchema, type CurriculumAiRevisionTurn } from "./ai-draft.ts";
+import {
+  CurriculumAiFailureResultSchema,
+  CurriculumAiRevisionTurnSchema,
+  type CurriculumAiFailureIssue,
+  type CurriculumAiFailureResult,
+  type CurriculumAiRevisionTurn,
+} from "./ai-draft.ts";
 import {
   buildCurriculumRevisionPrompt,
   type CurriculumRevisionPromptSnapshot,
@@ -45,7 +51,7 @@ export async function runCurriculumRevisionDecision(params: {
   completeJson: RevisionModelClient["completeJson"];
   logger?: RevisionModelLogger;
   artifactQualityCheck?: (artifact: NonNullable<CurriculumAiRevisionTurn["artifact"]>) => string[];
-}): Promise<CurriculumAiRevisionTurn> {
+}): Promise<CurriculumAiRevisionTurn | CurriculumAiFailureResult> {
   const logger = params.logger ?? console;
   const messages = normalizeRevisionMessages(params.messages);
   const currentRequest = getLatestUserMessage(messages);
@@ -61,8 +67,12 @@ export async function runCurriculumRevisionDecision(params: {
     [],
     DEFAULT_CORRECTION_NOTES,
   ];
+  let attempts = 0;
+  let lastStage: CurriculumAiFailureResult["stage"] = "revision";
+  let lastIssues: CurriculumAiFailureIssue[] = [];
 
   for (const [attemptIndex, correctionNotes] of retryNotes.entries()) {
+    attempts += 1;
     logger.info("[curriculum/ai-draft] revision model attempt", {
       attempt: attemptIndex + 1,
       retried: attemptIndex > 0,
@@ -90,12 +100,11 @@ export async function runCurriculumRevisionDecision(params: {
 
       const validatedTurn = CurriculumAiRevisionTurnSchema.safeParse(parsedTurn);
       if (!validatedTurn.success) {
+        lastStage = "schema";
+        lastIssues = validatedTurn.error.issues.map(toFailureIssue);
         logger.warn("[curriculum/ai-draft] revision turn failed schema validation", {
           attempt: attemptIndex + 1,
-          issues: validatedTurn.error.issues.map((issue) => ({
-            path: issue.path.join("."),
-            message: issue.message,
-          })),
+          issues: lastIssues,
         });
         continue;
       }
@@ -106,6 +115,12 @@ export async function runCurriculumRevisionDecision(params: {
         if (params.artifactQualityCheck) {
           const qualityIssues = params.artifactQualityCheck(turn.artifact!);
           if (qualityIssues.length > 0) {
+            lastStage = "quality";
+            lastIssues = qualityIssues.map((message, index) => ({
+              code: "quality_failed",
+              message,
+              path: [String(index)],
+            }));
             logger.warn("[curriculum/ai-draft] revision artifact failed quality checks", {
               attempt: attemptIndex + 1,
               issues: qualityIssues,
@@ -134,6 +149,14 @@ export async function runCurriculumRevisionDecision(params: {
 
       return turn;
     } catch (error) {
+      lastStage = "revision";
+      lastIssues = [
+        {
+          code: "model_error",
+          message: error instanceof Error ? error.message : "The revision model call failed.",
+          path: [],
+        },
+      ];
       logger.warn("[curriculum/ai-draft] revision model attempt failed", {
         attempt: attemptIndex + 1,
         error,
@@ -141,15 +164,35 @@ export async function runCurriculumRevisionDecision(params: {
     }
   }
 
-  logger.error("[curriculum/ai-draft] revision model failed twice; returning clarify");
-  return {
-    assistantMessage:
-      "I couldn't produce a valid revision from the model output. Please restate the change in one sentence.",
-    action: "clarify",
-    changeSummary: [
-      "The revision request could not be applied from the current model output.",
-    ],
-  };
+  logger.error("[curriculum/ai-draft] revision model failed after retries", {
+    attempts,
+    stage: lastStage,
+    issueCount: lastIssues.length,
+    issueSummary: lastIssues.map((issue) => issue.message),
+  });
+
+  return CurriculumAiFailureResultSchema.parse({
+    kind: "failure",
+    stage: lastStage,
+    reason:
+      lastStage === "quality"
+        ? "quality_failed"
+        : lastStage === "schema"
+          ? "schema_failed"
+          : "revision_failed",
+    userSafeMessage:
+      lastStage === "quality"
+        ? "I could not apply the revision safely from the current model output. Please restate the change more concretely."
+        : "I couldn't produce a valid revision from the model output. Please restate the change in one sentence.",
+    issues: lastIssues,
+    attemptCount: attempts,
+    retryable: true,
+    debugMetadata: {
+      snapshotSummary,
+      currentRequest,
+      learnerName: params.learnerName,
+    },
+  });
 }
 
 export function buildRevisionPromptSummary(snapshot: CurriculumRevisionPromptSnapshot) {
@@ -192,6 +235,14 @@ function sanitizeRevisionTurn(turn: CurriculumAiRevisionTurn): CurriculumAiRevis
     assistantMessage: turn.assistantMessage.trim(),
     changeSummary: uniqueNonEmpty(turn.changeSummary),
     artifact: turn.artifact ? sanitizeRevisionArtifact(turn.artifact) : undefined,
+  };
+}
+
+function toFailureIssue(issue: { path: (string | number)[]; message: string }): CurriculumAiFailureIssue {
+  return {
+    code: "schema_failed",
+    message: issue.message,
+    path: issue.path.map((segment) => String(segment)),
   };
 }
 

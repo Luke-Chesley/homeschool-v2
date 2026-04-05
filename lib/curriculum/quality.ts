@@ -1,5 +1,11 @@
 import type { CurriculumAiGeneratedArtifact } from "./ai-draft.ts";
 import type { CurriculumGranularityProfile, RequestedPacing } from "./granularity.ts";
+import {
+  hasWrapperLabelSignals,
+  isLikelySentenceLabel,
+  labelTokenOverlapScore,
+  normalizeCurriculumLabel,
+} from "./labels.ts";
 
 export type CurriculumQualityIssueCode =
   | "topic_alignment"
@@ -9,7 +15,12 @@ export type CurriculumQualityIssueCode =
   | "teachability"
   | "assessment_visibility"
   | "practice_balance"
-  | "lesson_skill_alignment";
+  | "lesson_skill_alignment"
+  | "title_length"
+  | "title_shape"
+  | "title_topic_alignment"
+  | "title_overlap"
+  | "title_wrapper";
 
 export interface CurriculumQualityIssue {
   code: CurriculumQualityIssueCode;
@@ -19,6 +30,7 @@ export interface CurriculumQualityIssue {
 
 export interface CurriculumArtifactQualityContext {
   topicText: string;
+  requestText?: string;
   granularity: CurriculumGranularityProfile;
   requestedPacing?: RequestedPacing;
   learnerText?: string;
@@ -94,6 +106,13 @@ export function assessCurriculumArtifactQuality(
     issues.push(visibleAssessmentIssue);
   }
 
+  issues.push(
+    ...describeNamingIssues({
+      artifact,
+      context,
+    }),
+  );
+
   const practiceBalanceIssue = describePracticeBalance(artifact, lessons, totalSessions);
   if (practiceBalanceIssue) {
     issues.push(practiceBalanceIssue);
@@ -103,6 +122,199 @@ export function assessCurriculumArtifactQuality(
   issues.push(...alignmentIssues);
 
   return uniqueIssues(issues);
+}
+
+function describeNamingIssues(params: {
+  artifact: CurriculumAiGeneratedArtifact;
+  context: CurriculumArtifactQualityContext;
+}) {
+  const issues: CurriculumQualityIssue[] = [];
+  const topicText = params.context.topicText;
+  const requestText = params.context.requestText ?? "";
+
+  const sourceTitleIssue = assessLabelQuality({
+    label: params.artifact.source.title,
+    path: ["source", "title"],
+    role: "source title",
+    maxWords: 8,
+    maxChars: 60,
+    topicText,
+    requestText,
+  });
+  if (sourceTitleIssue) {
+    issues.push(sourceTitleIssue);
+  }
+
+  issues.push(
+    ...collectDocumentNamingIssues(params.artifact.document, {
+      topicText,
+      requestText,
+      skillMaxWords: params.context.granularity.maxSkillTitleWords,
+    }),
+  );
+
+  for (const [unitIndex, unit] of params.artifact.units.entries()) {
+    const unitIssue = assessLabelQuality({
+      label: unit.title,
+      path: ["units", String(unitIndex), "title"],
+      role: "unit",
+      maxWords: 7,
+      maxChars: 52,
+      topicText,
+      requestText,
+    });
+    if (unitIssue) {
+      issues.push(unitIssue);
+    }
+
+    for (const [lessonIndex, lesson] of unit.lessons.entries()) {
+      const lessonIssue = assessLabelQuality({
+        label: lesson.title,
+        path: ["units", String(unitIndex), "lessons", String(lessonIndex), "title"],
+        role: "lesson",
+        maxWords: 8,
+        maxChars: 60,
+        topicText,
+        requestText,
+      });
+      if (lessonIssue) {
+        issues.push(lessonIssue);
+      }
+    }
+  }
+
+  return uniqueIssues(issues);
+}
+
+function collectDocumentNamingIssues(
+  node: CurriculumAiGeneratedArtifact["document"],
+  context: {
+    topicText: string;
+    requestText: string;
+    skillMaxWords: number;
+  },
+  path: string[] = [],
+  depth = 0,
+): CurriculumQualityIssue[] {
+  const issues: CurriculumQualityIssue[] = [];
+  const role =
+    depth === 0 ? "domain" : depth === 1 ? "strand" : depth === 2 ? "goal group" : "skill";
+
+  for (const [title, value] of Object.entries(node)) {
+    const maxWords = depth === 0 ? 6 : depth === 1 ? 7 : depth === 2 ? 8 : context.skillMaxWords;
+    const maxChars = depth === 0 ? 36 : depth === 1 ? 48 : depth === 2 ? 56 : 72;
+    const issue = assessLabelQuality({
+      label: title,
+      path: [...path, title],
+      role,
+      maxWords,
+      maxChars,
+      topicText: context.topicText,
+      requestText: context.requestText,
+    });
+    if (issue) {
+      issues.push(issue);
+    }
+
+    if (Array.isArray(value)) {
+      for (const [index, item] of value.entries()) {
+        const skillIssue = assessLabelQuality({
+          label: item,
+          path: [...path, title, String(index)],
+          role: "skill",
+          maxWords: context.skillMaxWords,
+          maxChars: 72,
+          topicText: context.topicText,
+          requestText: context.requestText,
+        });
+        if (skillIssue) {
+          issues.push(skillIssue);
+        }
+      }
+      continue;
+    }
+
+    if (value && typeof value === "object") {
+      issues.push(
+        ...collectDocumentNamingIssues(
+          value as CurriculumAiGeneratedArtifact["document"],
+          context,
+          [...path, title],
+          depth + 1,
+        ),
+      );
+    }
+  }
+
+  return issues;
+}
+
+function assessLabelQuality(params: {
+  label: string;
+  path: string[];
+  role: string;
+  maxWords: number;
+  maxChars: number;
+  topicText: string;
+  requestText: string;
+}): CurriculumQualityIssue | null {
+  const normalized = normalizeCurriculumLabel(params.label);
+  if (!normalized) {
+    return {
+      code: "title_shape",
+      path: params.path,
+      message: `${params.role} title is empty after normalization.`,
+    };
+  }
+
+  if (normalized.length > params.maxChars || countWords(normalized) > params.maxWords) {
+    return {
+      code: "title_length",
+      path: params.path,
+      message: `${params.role} title "${normalized}" is too long to be a usable label.`,
+    };
+  }
+
+  if (isLikelySentenceLabel(normalized)) {
+    return {
+      code: "title_shape",
+      path: params.path,
+      message: `${params.role} title "${normalized}" reads like a sentence instead of a label.`,
+    };
+  }
+
+  if (hasWrapperLabelSignals(normalized) && countWords(normalized) <= 4) {
+    return {
+      code: "title_wrapper",
+      path: params.path,
+      message: `${params.role} title "${normalized}" looks like wrapper language instead of a usable label.`,
+    };
+  }
+
+  if (
+    params.topicText &&
+    (params.role === "source title" || params.role === "domain") &&
+    labelTokenOverlapScore(normalized, params.topicText) === 0
+  ) {
+    return {
+      code: "title_topic_alignment",
+      path: params.path,
+      message: `${params.role} title "${normalized}" is not clearly aligned to the requested topic.`,
+    };
+  }
+
+  if (params.requestText) {
+    const overlap = labelTokenOverlapScore(normalized, params.requestText);
+    if (overlap >= 0.8 && countWords(params.requestText) > 8) {
+      return {
+        code: "title_overlap",
+        path: params.path,
+        message: `${params.role} title "${normalized}" overlaps too heavily with the raw request.`,
+      };
+    }
+  }
+
+  return null;
 }
 
 function describeSkillBroadness(
