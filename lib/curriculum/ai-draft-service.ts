@@ -8,6 +8,7 @@ import { resolvePrompt } from "@/lib/prompts/store";
 import {
   buildCurriculumGenerationPrompt,
   buildCurriculumIntakePrompt,
+  buildCurriculumRevisionPrompt,
   buildCurriculumTitlePrompt,
   CURRICULUM_GENERATION_PROMPT_VERSION,
   CURRICULUM_INTAKE_PROMPT_VERSION,
@@ -293,6 +294,30 @@ export async function reviseCurriculumFromConversation(params: {
     action: "applied",
     changeSummary: decision.changeSummary,
     ...created,
+  };
+}
+
+export async function buildCurriculumRevisionPromptPreview(params: {
+  householdId: string;
+  sourceId: string;
+  learner: AppLearner;
+  messages: CurriculumAiChatMessage[];
+}): Promise<{
+  systemPrompt: string;
+  userPrompt: string;
+}> {
+  const snapshot = await buildCurriculumRevisionSnapshot(params.sourceId, params.householdId);
+  const prompt = await resolvePrompt("curriculum.revise", CURRICULUM_REVISION_PROMPT_VERSION);
+  const messages = normalizeMessages(params.messages);
+
+  return {
+    systemPrompt: prompt.systemPrompt,
+    userPrompt: buildCurriculumRevisionPrompt({
+      learnerName: params.learner.displayName,
+      currentCurriculum: snapshot as CurriculumRevisionPromptSnapshot,
+      currentRequest: getLatestParentRequest(messages),
+      messages,
+    }),
   };
 }
 
