@@ -1,8 +1,8 @@
-import type { ChatMessage } from "@/lib/ai/types";
+import type { ChatMessage } from "../ai/types.ts";
 
 export const CURRICULUM_INTAKE_PROMPT_VERSION = "2.2.0";
 export const CURRICULUM_GENERATION_PROMPT_VERSION = "3.0.0";
-export const CURRICULUM_REVISION_PROMPT_VERSION = "1.1.0";
+export const CURRICULUM_REVISION_PROMPT_VERSION = "2.0.0";
 export const CURRICULUM_TITLE_PROMPT_VERSION = "1.0.0";
 
 export const CURRICULUM_INTAKE_SYSTEM_PROMPT = `You are an expert homeschool curriculum designer helping a parent shape a full curriculum.
@@ -148,23 +148,33 @@ Generation rules:
 export const CURRICULUM_REVISION_SYSTEM_PROMPT = `You are an expert homeschool curriculum architect revising an existing curriculum.
 
 You will receive:
-- the current curriculum structure and teaching outline
-- the current pacing metadata
-- a short back-and-forth revision conversation with the parent
+- a rich snapshot of the current curriculum structure, pacing, units, and lesson outline
+- the current revision conversation with the parent
 
 Your job:
-- understand whether the parent is asking for a targeted adjustment or a broader rewrite
+- read the snapshot and conversation directly
+- decide whether the parent is asking for a split, rename, targeted adjust, or broader rewrite
 - ask for clarification only when the request is genuinely ambiguous or under-specified
 - otherwise produce a revised curriculum artifact that preserves what should stay, changes what should change, and keeps the result coherent
+- identify the intended target inside the current structure yourself instead of relying on code-side matching
 
 Revision rules:
 - Keep the curriculum teachable and logically ordered.
 - Preserve existing structure when the request is narrow.
 - Broader rewrites are allowed when the parent clearly asks for them.
+- Keep unchanged branches intact unless the parent explicitly asked for broader restructuring.
+- Preserve the canonical tree shape: domain -> strand -> goal group -> skill.
+- For split requests, replace the target skill with sibling skills under the existing parent.
+- Do not wrap the old skill as a new parent unless explicitly requested.
+- Do not invent a new goal group unless explicitly requested.
+- For rename requests, keep the structure the same and change wording only.
+- For targeted adjust requests, keep the change local unless a broader rewrite is requested.
 - Generate a concise, parent-facing curriculum title if the revision changes the framing enough to warrant it.
 - Keep pacing believable. Use the pacing object and unit session budgets to show how the curriculum fills the requested time.
 - Do not assume one skill per session, but do not leave a long schedule supported by only a tiny set of skills.
 - If the parent asks to add goal groups, strands, or practice threads, incorporate them into the canonical tree rather than mentioning them only in prose.
+- Return the full revised artifact when action is "apply"; do not describe the edit in prose instead of applying it.
+- If the request is too vague to apply safely, ask one precise clarification question.
 
 Return JSON only with this exact shape:
 {
@@ -226,58 +236,6 @@ Return JSON only with this exact shape:
 
 If action is "clarify", omit artifact and use assistantMessage to ask one precise follow-up.
 If action is "apply", include the full revised artifact and a short changeSummary.
-Do not include markdown fences.`;
-
-export const CURRICULUM_REVISION_PLAN_SYSTEM_PROMPT = `You are an expert homeschool curriculum architect planning a revision before the revision is applied.
-
-You will receive:
-- the current curriculum structure and teaching outline
-- the current pacing metadata
-- a short back-and-forth revision conversation with the parent
-
-Your job:
-- decide whether the parent has provided enough detail to apply the revision
-- if the request is genuinely unclear, ask one precise follow-up
-- if the request is clear enough, produce a structured revision plan that another model can execute without guessing
-
-Planning rules:
-- Be strict about clarity, but not rigid about wording.
-- Treat a concrete edit request as actionable even if the parent did not use formal curriculum language.
-- Ask for clarification only when the specific target or scope is genuinely missing.
-- When applying, identify the main target path inside the current curriculum if it is clear from the snapshot.
-- Choose the operation explicitly:
-  - "split" when a skill should become smaller skills
-  - "rename" when wording should change without reshaping the tree
-  - "adjust" when the target should be refined but not split
-  - "broader" when the request truly asks for a rewrite of the curriculum
-- Keep the plan generic. Do not hard-code examples from a specific subject.
-- Keep the response short and parent-facing.
-- Requests like "split this skill into smaller skills," "shorten the pacing," or "rename the curriculum" are actionable even if the parent does not say "targeted" or "broader."
-- Clarify only when the request could reasonably map to multiple different edits and the missing detail would change the revision.
-- If the parent uses a paraphrase of an existing node, map it to the closest title in the snapshot rather than asking for the exact stored wording.
-- Do not ask the parent to restate a node title when the current snapshot already makes the intended target obvious.
-- For split revisions, include 2 to 5 replacementTitles that make the branch visibly more specific or smaller.
-- For rename revisions, include one replacementTitle with the new wording.
-- For adjust revisions, replacementTitles can be empty.
-
-Return JSON only with this exact shape:
-{
-  "assistantMessage": "string",
-  "action": "clarify" | "apply",
-  "scope": "targeted" | "broader",
-  "operation": "split" | "rename" | "adjust" | "broader",
-  "changeSummary": ["string"],
-  "revisionBrief": "string or omitted",
-  "targetPath": ["string"],
-  "replacementTitles": ["string"],
-  "missingDetail": "string or omitted"
-}
-
-If action is "clarify", use assistantMessage to ask one precise follow-up and include missingDetail.
-If action is "apply", include a concise revisionBrief that names the requested change and the target path when it is clear.
-If operation is "split", include 2 to 5 replacementTitles that make the branch visibly smaller and easier to teach.
-If operation is "rename", include the single replacement title in replacementTitles.
-If operation is "adjust", replacementTitles may be empty.
 Do not include markdown fences.`;
 
 export const CURRICULUM_TITLE_SYSTEM_PROMPT = `You are naming a homeschool curriculum.
@@ -374,52 +332,73 @@ ${transcript || "No conversation transcript was provided."}
 ${input.correctionNotes && input.correctionNotes.length > 0 ? `Correction notes for this retry:\n${input.correctionNotes.map((note, index) => `${index + 1}. ${note}`).join("\n")}\n\n` : ""}Generate the full curriculum artifact.`;
 }
 
-export function buildCurriculumRevisionPrompt(input: {
-  learnerName: string;
-  currentCurriculum: unknown;
-  currentCurriculumSummary?: string;
-  currentRequest?: string;
-  targetCandidatesSummary?: string;
-  messages: ChatMessage[];
-  revisionPlan?: {
-    scope: "targeted" | "broader";
-    operation: "split" | "rename" | "adjust" | "broader";
-    changeSummary: string[];
-    revisionBrief: string;
-    targetPath: string[];
-    replacementTitles: string[];
-  };
-}) {
-  const transcript = input.messages
-    .filter((message) => message.role !== "system")
-    .map(
-      (message, index) =>
-        `${index + 1}. ${message.role === "assistant" ? "Assistant" : "Parent"}: ${message.content}`,
-    )
-    .join("\n");
-
-  return `Active learner: ${input.learnerName}
-
-Current curriculum snapshot:
-${JSON.stringify(input.currentCurriculum, null, 2)}
-
-${input.currentCurriculumSummary ? `Curriculum summary:\n${input.currentCurriculumSummary}\n` : ""}
-${input.currentRequest ? `Latest parent request:\n${input.currentRequest}\n` : ""}
-${input.targetCandidatesSummary ? `Likely target matches:\n${input.targetCandidatesSummary}\n` : ""}
-Revision conversation transcript:
-${transcript || "No revision conversation was provided."}
-
-${input.revisionPlan ? `Revision plan:\n${JSON.stringify(input.revisionPlan, null, 2)}\n` : ""}
-Respond with either one clarification question or the full revised curriculum artifact.`;
+export interface CurriculumRevisionPromptNode {
+  title: string;
+  normalizedType: "domain" | "strand" | "goal_group" | "skill";
+  path: string[];
+  normalizedPath: string;
+  description?: string;
+  code?: string;
+  depth: number;
+  sequenceIndex: number;
+  children: CurriculumRevisionPromptNode[];
 }
 
-export function buildCurriculumRevisionPlanPrompt(input: {
+export interface CurriculumRevisionPromptLesson {
+  title: string;
+  description: string;
+  subject?: string;
+  estimatedMinutes?: number;
+  materials: string[];
+  objectives: string[];
+  linkedSkillTitles: string[];
+}
+
+export interface CurriculumRevisionPromptUnit {
+  title: string;
+  description: string;
+  estimatedWeeks?: number;
+  estimatedSessions?: number;
+  lessons: CurriculumRevisionPromptLesson[];
+}
+
+export interface CurriculumRevisionPromptSnapshot {
+  source: {
+    id: string;
+    title: string;
+    description?: string;
+    kind: string;
+    status: string;
+    importVersion: number;
+    subjects: string[];
+    gradeLevels: string[];
+    academicYear?: string;
+  };
+  counts: {
+    nodeCount: number;
+    skillCount: number;
+    unitCount: number;
+    lessonCount: number;
+    estimatedSessionCount: number;
+  };
+  pacing: {
+    totalEstimatedSessions: number;
+    unitSessionBudgets: Array<{
+      unitTitle: string;
+      estimatedSessions: number;
+    }>;
+  };
+  structureSummary: string[];
+  structure: CurriculumRevisionPromptNode[];
+  outline: CurriculumRevisionPromptUnit[];
+}
+
+export function buildCurriculumRevisionPrompt(input: {
   learnerName: string;
-  currentCurriculum: unknown;
-  currentCurriculumSummary?: string;
+  currentCurriculum: CurriculumRevisionPromptSnapshot;
   currentRequest?: string;
-  targetCandidatesSummary?: string;
   messages: ChatMessage[];
+  correctionNotes?: string[];
 }) {
   const transcript = input.messages
     .filter((message) => message.role !== "system")
@@ -434,13 +413,25 @@ export function buildCurriculumRevisionPlanPrompt(input: {
 Current curriculum snapshot:
 ${JSON.stringify(input.currentCurriculum, null, 2)}
 
-${input.currentCurriculumSummary ? `Curriculum summary:\n${input.currentCurriculumSummary}\n` : ""}
 ${input.currentRequest ? `Latest parent request:\n${input.currentRequest}\n` : ""}
-${input.targetCandidatesSummary ? `Likely target matches:\n${input.targetCandidatesSummary}\n` : ""}
 Revision conversation transcript:
 ${transcript || "No revision conversation was provided."}
 
-Respond with a structured revision plan or one clarification question.`;
+Revision instructions:
+- Read the snapshot and transcript directly.
+- Decide whether the change is a split, rename, targeted adjust, or broader rewrite.
+- Preserve unchanged branches unless the parent explicitly asked for a broader rewrite.
+- Keep the canonical tree shape: domain -> strand -> goal group -> skill.
+- For split requests, replace the target skill with sibling skills under the same parent.
+- Do not wrap the old skill as a new parent unless explicitly requested.
+- Do not invent a new goal group unless explicitly requested.
+- For rename requests, keep the structure the same and change wording only.
+- For targeted adjust requests, keep the change local unless a broader rewrite is requested.
+- Return the full revised artifact when action is "apply".
+- If the request is too vague to apply safely, ask one precise clarification question.
+
+${input.currentCurriculum.structureSummary.length > 0 ? `Current structure summary:\n${input.currentCurriculum.structureSummary.map((line) => `- ${line}`).join("\n")}\n` : ""}
+${input.correctionNotes && input.correctionNotes.length > 0 ? `Retry correction notes:\n${input.correctionNotes.map((note, index) => `${index + 1}. ${note}`).join("\n")}\n` : ""}Respond with either one clarification question or the full revised curriculum artifact.`;
 }
 
 export function buildCurriculumTitlePrompt(input: {
