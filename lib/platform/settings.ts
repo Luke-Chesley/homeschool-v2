@@ -1,4 +1,4 @@
-import "server-only";
+import "@/lib/server-only";
 
 import { createRepositories } from "@/lib/db";
 import { ensureDatabaseReady, getDb } from "@/lib/db/server";

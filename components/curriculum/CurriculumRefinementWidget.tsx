@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import type {
   CurriculumAiChatMessage,
-  CurriculumAiRevisionResponse,
+  CurriculumAiRevisionResult,
 } from "@/lib/curriculum/ai-draft";
 import { cn } from "@/lib/utils";
 
@@ -38,7 +38,7 @@ export function CurriculumRefinementWidget({
   const [messages, setMessages] = React.useState<CurriculumAiChatMessage[]>([
     buildWelcomeMessage(sourceTitle),
   ]);
-  const [response, setResponse] = React.useState<CurriculumAiRevisionResponse | null>(null);
+  const [response, setResponse] = React.useState<CurriculumAiRevisionResult | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -71,20 +71,26 @@ export function CurriculumRefinementWidget({
         }),
       });
 
+      const payload = (await res.json()) as CurriculumAiRevisionResult;
+      setResponse(payload);
+
+      if (payload.kind === "failure") {
+        setError(payload.userSafeMessage);
+        return;
+      }
+
       if (!res.ok) {
         throw new Error("Failed to revise the curriculum.");
       }
 
-      const payload = (await res.json()) as CurriculumAiRevisionResponse;
       const assistantMessage: CurriculumAiChatMessage = {
         role: "assistant",
         content: payload.assistantMessage,
       };
 
       setMessages([...nextMessages, assistantMessage]);
-      setResponse(payload);
 
-      if (payload.action === "applied") {
+      if (payload.kind === "applied") {
         router.refresh();
       }
     } catch (requestError) {
@@ -115,7 +121,7 @@ export function CurriculumRefinementWidget({
                     <Sparkles className="size-3" />
                     Curriculum refine
                   </Badge>
-                  {response?.action === "applied" ? (
+                  {response?.kind === "applied" ? (
                     <Badge variant="outline" className="rounded-full">
                       Updated
                     </Badge>
@@ -190,7 +196,7 @@ export function CurriculumRefinementWidget({
               ) : null}
             </div>
 
-            {response?.changeSummary.length ? (
+            {response?.kind !== "failure" && response?.changeSummary?.length ? (
               <div className="space-y-2 border-t border-border/70 bg-muted/20 px-4 py-3">
                 <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
                   Latest change
@@ -202,7 +208,7 @@ export function CurriculumRefinementWidget({
                     </p>
                   ))}
                 </div>
-                {response.action === "applied" ? (
+                {response?.kind === "applied" ? (
                   <p className="text-xs text-muted-foreground">
                     {response.skillCount ?? 0} skills, {response.unitCount ?? 0} units,{" "}
                     {response.estimatedSessionCount ?? 0} estimated sessions.

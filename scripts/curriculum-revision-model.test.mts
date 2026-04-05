@@ -276,12 +276,13 @@ test("invalid model output retries once and then clarifies", async () => {
 
   assert.equal(calls.length, 2);
   assert.match(calls[1], /Retry correction notes:/);
-  assert.equal(result.action, "clarify");
-  assert.equal(result.changeSummary.length, 1);
-  assert.match(result.assistantMessage, /valid revision/i);
+  assert.equal(result.kind, "failure");
+  assert.equal(result.stage, "schema");
+  assert.equal(result.attemptCount, 2);
+  assert.match(result.userSafeMessage, /valid revision/i);
 });
 
-test("quality checks reject a broad revision artifact and retry before clarifying", async () => {
+test("quality checks reject a broad revision artifact and return failure", async () => {
   const calls = [];
   const logger = {
     info: () => {},
@@ -397,6 +398,8 @@ test("quality checks reject a broad revision artifact and retry before clarifyin
 
   assert.equal(calls.length, 2);
   assert.match(calls[1], /Retry correction notes:/);
-  assert.equal(result.action, "clarify");
-  assert.match(result.assistantMessage, /valid revision/i);
+  assert.equal(result.kind, "failure");
+  assert.equal(result.stage, "quality");
+  assert.equal(result.attemptCount, 2);
+  assert.match(result.userSafeMessage, /apply the revision safely/i);
 });

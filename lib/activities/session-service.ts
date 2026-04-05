@@ -1,4 +1,4 @@
-import "server-only";
+import "@/lib/server-only";
 
 import { getAttemptStore } from "./attempt-store";
 import type { ActivityAttempt, ActivityOutcome, ActivitySession, AttemptAnswer } from "./types";

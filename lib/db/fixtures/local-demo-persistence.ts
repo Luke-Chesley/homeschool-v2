@@ -1,4 +1,4 @@
-import "server-only";
+import "@/lib/server-only";
 
 import { FIXTURE_SESSIONS } from "@/lib/activities/fixtures";
 import { getRepositories } from "@/lib/db";

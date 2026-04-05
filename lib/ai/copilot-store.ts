@@ -1,4 +1,4 @@
-import "server-only";
+import "@/lib/server-only";
 
 import type { InferSelectModel } from "drizzle-orm";
 

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import type { CurriculumNodeType } from "@/lib/curriculum/types";
+import { normalizeCurriculumLabel } from "./labels.ts";
 
 type CurriculumJsonNode =
   | string
@@ -59,7 +60,7 @@ const SYNTHETIC_GOAL_GROUP_LABEL = "Skills";
 const SYNTHETIC_DOMAIN_LABEL = "Imported Curriculum";
 
 function cleanLabel(value: string) {
-  return value.replace(/^GOAL:\s*/i, "").replace(/\s+/g, " ").trim();
+  return normalizeCurriculumLabel(value);
 }
 
 function slugify(value: string) {
@@ -334,6 +335,7 @@ export function normalizeCurriculumDocument(args: {
         ...(rolePath.compressedSegments.length > 0
           ? {
               compressedStructure: {
+                compressedTitle: rolePath.goalGroup.title,
                 rawPath: leaf.rawPath,
                 rawContainerPath: leaf.rawContainerPath,
                 compressedSegments: rolePath.compressedSegments,
@@ -347,7 +349,15 @@ export function normalizeCurriculumDocument(args: {
         sourceLineage: leaf.rawPath.slice(0, 3),
         synthesized: rolePath.goalGroup.synthesized,
         compressedSegments: rolePath.compressedSegments,
-        compressedStructure: rolePath.compressedSegments.length > 0,
+        compressedStructure:
+          rolePath.compressedSegments.length > 0
+            ? {
+                compressedTitle: rolePath.goalGroup.title,
+                rawPath: leaf.rawPath,
+                rawContainerPath: leaf.rawContainerPath,
+                compressedSegments: rolePath.compressedSegments,
+              }
+            : null,
       },
     });
 

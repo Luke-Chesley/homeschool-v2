@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { buildFallbackChatTurn } from "../lib/curriculum/ai-draft-service.ts";
 import { normalizeCurriculumDocument } from "../lib/curriculum/normalization.ts";
-import { buildFallbackCurriculumArtifact } from "../lib/curriculum/fallback.ts";
 import {
   CURRICULUM_GENERATION_SYSTEM_PROMPT,
   buildCurriculumGenerationPrompt,
@@ -11,6 +11,10 @@ import {
   inferCurriculumGranularityProfile,
   buildGranularityGuidance,
 } from "../lib/curriculum/granularity.ts";
+import {
+  extractRequestedSubjectLabel,
+  normalizeCurriculumLabel,
+} from "../lib/curriculum/labels.ts";
 import { assessCurriculumArtifactQuality } from "../lib/curriculum/quality.ts";
 
 const noviceRequirements = {
@@ -92,30 +96,32 @@ test("granularity helper narrows novice short-session learners and broadens expe
   assert.ok(novice.maxSessionsPerSkill < advanced.maxSessionsPerSkill);
 });
 
-test("fallback artifact stays topic aligned and does not leak chess content", () => {
-  const artifact = buildFallbackCurriculumArtifact({
+test("topic extraction keeps labels short and subject-focused", () => {
+  const label = extractRequestedSubjectLabel(
+    "I want a 10 week curriculum for my 4th grader to study botany and plant structure with short sessions and hands-on work.",
+  );
+
+  assert.equal(label, "botany and plant structure");
+  assert.ok(label && label.split(/\s+/).length <= 5);
+  assert.doesNotMatch(label ?? "", /\b(curriculum|plan|session|sessions|learner|grader)\b/i);
+});
+
+test("label normalization removes wrapper noise without inventing new content", () => {
+  assert.equal(normalizeCurriculumLabel("  1.  Plant Structure  "), "Plant Structure");
+  assert.equal(normalizeCurriculumLabel("Goal: ecosystems"), "ecosystems");
+});
+
+test("intake fallback still asks a safe question when nothing is known", () => {
+  const turn = buildFallbackChatTurn({
     learner: {
       firstName: "Lina",
       displayName: "Lina",
     },
-    topic: "Botany",
-    capturedRequirements: noviceRequirements,
-    requestedPacing: {
-      totalWeeks: 8,
-      sessionsPerWeek: 2,
-      sessionMinutes: 20,
-      explicitlyRequestedTotalSessions: 16,
-    },
+    messages: [],
   });
 
-  const text = JSON.stringify(artifact).toLowerCase();
-  assert.match(artifact.source.title, /Botany/i);
-  assert.ok(Object.keys(artifact.document)[0]?.toLowerCase().includes("botany"));
-  assert.match(text, /ecosystems|botany/);
-  assert.doesNotMatch(
-    text,
-    /\bchess\b|\bking\b|\bqueen\b|\brook\b|\bbishop\b|\bknight\b|\bpawn\b|\bcastling\b|\ben passant\b/,
-  );
+  assert.equal(turn.state.readiness, "gathering");
+  assert.match(turn.assistantMessage, /What are you hoping to build/i);
 });
 
 test("quality checks flag overly broad skills and missing visible assessment", () => {
@@ -220,7 +226,11 @@ test("normalization preserves compressed source lineage for deeper imported tree
   const skill = normalized.nodes.find((node) => node.normalizedType === "skill");
 
   assert.ok(goalGroup);
-  assert.equal(goalGroup?.metadata.compressedStructure, true);
+  assert.equal(goalGroup?.metadata.compressedStructure?.compressedTitle, "Leaf anatomy / Shape study");
+  assert.deepEqual(goalGroup?.metadata.compressedStructure?.compressedSegments, [
+    "Leaf anatomy",
+    "Shape study",
+  ]);
   assert.ok(Array.isArray(goalGroup?.metadata.compressedSegments));
   assert.ok(goalGroup?.sourcePayload.compressedStructure);
   assert.ok(Array.isArray(skill?.metadata.rawPath));

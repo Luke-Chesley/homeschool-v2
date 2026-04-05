@@ -10,7 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import {
   type CurriculumAiChatMessage,
   type CurriculumAiChatTurn,
-  type CurriculumAiCreateResponse,
+  type CurriculumAiCreateResult,
   type CurriculumAiIntakeState,
 } from "@/lib/curriculum/ai-draft";
 import { cn } from "@/lib/utils";
@@ -123,11 +123,15 @@ export function AiDraftConversation({
         }),
       });
 
+      const payload = (await response.json()) as CurriculumAiCreateResult;
+      if (payload.kind === "failure") {
+        throw new Error(payload.userSafeMessage);
+      }
+
       if (!response.ok) {
         throw new Error("Failed to generate the curriculum.");
       }
 
-      const payload = (await response.json()) as CurriculumAiCreateResponse;
       onCreatedSourceId(payload.sourceId);
     } catch (requestError) {
       setError(

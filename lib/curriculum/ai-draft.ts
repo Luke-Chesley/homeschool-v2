@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { JsonRecordSchema } from "./types.ts";
+
 const CurriculumAiChatRoleSchema = z.enum(["user", "assistant"]);
 
 export const CurriculumAiChatMessageSchema = z.object({
@@ -111,6 +113,7 @@ export const CurriculumAiGeneratedArtifactSchema = z.object({
 });
 
 export type CurriculumAiGeneratedArtifact = z.infer<typeof CurriculumAiGeneratedArtifactSchema>;
+export type CurriculumAiDocumentNode = z.infer<typeof CurriculumAiDocumentNodeSchema>;
 
 export const CurriculumAiCreateRequestSchema = z.object({
   messages: z.array(CurriculumAiChatMessageSchema).max(40).min(2),
@@ -127,6 +130,69 @@ export const CurriculumAiCreateResponseSchema = z.object({
 });
 
 export type CurriculumAiCreateResponse = z.infer<typeof CurriculumAiCreateResponseSchema>;
+
+export const CurriculumAiFailureStageSchema = z.enum([
+  "topic_extraction",
+  "generation",
+  "parse",
+  "schema",
+  "title",
+  "quality",
+  "persistence",
+  "revision",
+]);
+
+export const CurriculumAiFailureIssueSchema = z.object({
+  code: z.string().trim().min(1).max(80),
+  message: z.string().trim().min(1).max(400),
+  path: z.array(z.string().trim().min(1).max(180)).max(12).default([]),
+});
+
+export type CurriculumAiFailureIssue = z.infer<typeof CurriculumAiFailureIssueSchema>;
+
+export const CurriculumAiFailureResultSchema = z.object({
+  kind: z.literal("failure"),
+  stage: CurriculumAiFailureStageSchema,
+  reason: z.string().trim().min(1).max(120),
+  userSafeMessage: z.string().trim().min(1).max(500),
+  issues: z.array(CurriculumAiFailureIssueSchema).max(24).default([]),
+  attemptCount: z.number().int().nonnegative(),
+  retryable: z.boolean(),
+  debugMetadata: JsonRecordSchema.optional(),
+});
+
+export type CurriculumAiFailureResult = z.infer<typeof CurriculumAiFailureResultSchema>;
+
+export const CurriculumAiCreateSuccessResponseSchema = CurriculumAiCreateResponseSchema.extend({
+  kind: z.literal("success"),
+});
+
+export type CurriculumAiCreateSuccessResponse = z.infer<
+  typeof CurriculumAiCreateSuccessResponseSchema
+>;
+
+export const CurriculumAiCreateResultSchema = z.union([
+  CurriculumAiCreateSuccessResponseSchema,
+  CurriculumAiFailureResultSchema,
+]);
+
+export type CurriculumAiCreateResult = z.infer<typeof CurriculumAiCreateResultSchema>;
+
+export const CurriculumAiGenerateSuccessResultSchema = z.object({
+  kind: z.literal("success"),
+  artifact: CurriculumAiGeneratedArtifactSchema,
+});
+
+export const CurriculumAiGenerateResultSchema = z.union([
+  CurriculumAiGenerateSuccessResultSchema,
+  CurriculumAiFailureResultSchema,
+]);
+
+export type CurriculumAiGenerateSuccessResult = z.infer<
+  typeof CurriculumAiGenerateSuccessResultSchema
+>;
+
+export type CurriculumAiGenerateResult = z.infer<typeof CurriculumAiGenerateResultSchema>;
 
 export const CurriculumAiRevisionActionSchema = z.enum(["clarify", "apply"]);
 
@@ -209,3 +275,35 @@ export const CurriculumAiRevisionResponseSchema = z.object({
 });
 
 export type CurriculumAiRevisionResponse = z.infer<typeof CurriculumAiRevisionResponseSchema>;
+
+export const CurriculumAiRevisionAppliedResponseSchema = CurriculumAiRevisionResponseSchema.extend({
+  kind: z.literal("applied"),
+});
+
+export const CurriculumAiRevisionClarifyResponseSchema = CurriculumAiRevisionResponseSchema.extend({
+  kind: z.literal("clarify"),
+});
+
+export const CurriculumAiRevisionFailureResultSchema = CurriculumAiFailureResultSchema.extend({
+  kind: z.literal("failure"),
+});
+
+export type CurriculumAiRevisionAppliedResponse = z.infer<
+  typeof CurriculumAiRevisionAppliedResponseSchema
+>;
+
+export type CurriculumAiRevisionClarifyResponse = z.infer<
+  typeof CurriculumAiRevisionClarifyResponseSchema
+>;
+
+export type CurriculumAiRevisionFailureResult = z.infer<
+  typeof CurriculumAiRevisionFailureResultSchema
+>;
+
+export const CurriculumAiRevisionResultSchema = z.union([
+  CurriculumAiRevisionAppliedResponseSchema,
+  CurriculumAiRevisionClarifyResponseSchema,
+  CurriculumAiRevisionFailureResultSchema,
+]);
+
+export type CurriculumAiRevisionResult = z.infer<typeof CurriculumAiRevisionResultSchema>;
