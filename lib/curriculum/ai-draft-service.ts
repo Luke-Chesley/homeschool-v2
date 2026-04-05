@@ -8,13 +8,12 @@ import { resolvePrompt } from "@/lib/prompts/store";
 import {
   buildCurriculumGenerationPrompt,
   buildCurriculumIntakePrompt,
-  buildCurriculumRevisionPlanPrompt,
-  buildCurriculumRevisionPrompt,
   buildCurriculumTitlePrompt,
   CURRICULUM_GENERATION_PROMPT_VERSION,
   CURRICULUM_INTAKE_PROMPT_VERSION,
   CURRICULUM_REVISION_PROMPT_VERSION,
   CURRICULUM_TITLE_PROMPT_VERSION,
+  type CurriculumRevisionPromptSnapshot,
 } from "@/lib/prompts/curriculum-draft";
 import type { AppLearner } from "@/lib/users/service";
 
@@ -26,20 +25,24 @@ import {
   listCurriculumOutline,
   type CreatedAiDraftCurriculumResult,
 } from "./service";
+import type { CurriculumTreeNode } from "./types";
 import {
   CurriculumAiCapturedRequirementsSchema,
   CurriculumAiChatTurnSchema,
   CurriculumAiGeneratedArtifactSchema,
-  CurriculumAiRevisionPlanSchema,
+  type CurriculumAiRevisionPlan,
   CurriculumAiRevisionTurnSchema,
   type CurriculumAiPacing,
   type CurriculumAiCapturedRequirements,
   type CurriculumAiChatMessage,
   type CurriculumAiChatTurn,
   type CurriculumAiGeneratedArtifact,
-  type CurriculumAiRevisionPlan,
   type CurriculumAiRevisionTurn,
 } from "./ai-draft";
+import {
+  buildRevisionPromptSummary,
+  runCurriculumRevisionDecision,
+} from "./revision-model";
 
 interface RequestedPacing {
   totalWeeks?: number;
@@ -58,9 +61,11 @@ interface CurriculumRevisionSnapshot {
     title: string;
     description?: string;
     kind: string;
+    status: string;
     importVersion: number;
     subjects: string[];
     gradeLevels: string[];
+    academicYear?: string;
   };
   counts: {
     nodeCount: number;
@@ -69,9 +74,43 @@ interface CurriculumRevisionSnapshot {
     lessonCount: number;
     estimatedSessionCount: number;
   };
-  pacing: Record<string, unknown>;
-  structure: Array<Record<string, unknown>>;
-  outline: Array<Record<string, unknown>>;
+  pacing: {
+    totalEstimatedSessions: number;
+    unitSessionBudgets: Array<{
+      unitTitle: string;
+      estimatedSessions: number;
+    }>;
+  };
+  structureSummary: string[];
+  structure: CurriculumRevisionSnapshotNode[];
+  outline: Array<{
+    title?: unknown;
+    description?: unknown;
+    subject?: unknown;
+    estimatedWeeks?: unknown;
+    estimatedSessions?: unknown;
+    lessons: Array<{
+      title?: unknown;
+      description?: unknown;
+      subject?: unknown;
+      estimatedMinutes?: unknown;
+      materials?: unknown;
+      objectives?: unknown;
+      linkedSkillTitles?: unknown;
+    }>;
+  }>;
+}
+
+interface CurriculumRevisionSnapshotNode {
+  title: string;
+  normalizedType: "domain" | "strand" | "goal_group" | "skill";
+  path: string[];
+  normalizedPath: string;
+  description?: string;
+  code?: string;
+  depth: number;
+  sequenceIndex: number;
+  children: CurriculumRevisionSnapshotNode[];
 }
 
 interface PromptCurriculumNode {
@@ -212,6 +251,10 @@ export async function reviseCurriculumFromConversation(params: {
   });
 
   if (decision.action === "clarify") {
+    console.info("[curriculum/ai-draft] revision clarified", {
+      sourceId: snapshot.source.id,
+      changeSummaryCount: decision.changeSummary.length,
+    });
     return {
       assistantMessage: decision.assistantMessage,
       action: "clarify",
@@ -221,10 +264,28 @@ export async function reviseCurriculumFromConversation(params: {
     };
   }
 
+  console.info("[curriculum/ai-draft] revision decision", {
+    sourceId: snapshot.source.id,
+    action: decision.action,
+    changeSummaryCount: decision.changeSummary.length,
+  });
+
   const created = await applyAiDraftArtifactToCurriculumSource({
     householdId: params.householdId,
     sourceId: params.sourceId,
     artifact: decision.artifact!,
+  });
+
+  console.info("[curriculum/ai-draft] revision apply succeeded", {
+    sourceId: snapshot.source.id,
+    beforeCounts: snapshot.counts,
+    afterCounts: {
+      nodeCount: created.nodeCount,
+      skillCount: created.skillCount,
+      unitCount: created.unitCount,
+      lessonCount: created.lessonCount,
+      estimatedSessionCount: created.estimatedSessionCount,
+    },
   });
 
   return {
@@ -304,129 +365,36 @@ async function generateCurriculumArtifact(params: {
   });
 }
 
-async function generateCurriculumRevisionPlan(params: {
-  learner: AppLearner;
-  messages: ChatMessage[];
-  snapshot: CurriculumRevisionSnapshot;
-}): Promise<CurriculumAiRevisionPlan | null> {
-  const prompt = await resolvePrompt("curriculum.revise", CURRICULUM_REVISION_PROMPT_VERSION);
-  const adapter = getAdapterForTask("curriculum.revise");
-  const model = getModelForTask("curriculum.revise", getAiRoutingConfig());
-  const messages = params.messages;
-  const curriculumSummary = buildRevisionSnapshotSummary(params.snapshot);
-  const latestParentRequest = getLatestParentRequest(messages);
-  const targetCandidatesSummary = buildRevisionTargetCandidatesSummary(
-    params.snapshot,
-    latestParentRequest,
-  );
-
-  const correctionNotes: string[][] = [
-    [],
-    [
-      "Decide whether the request is clear enough to apply without guessing.",
-      "If the request names a concrete change, choose apply and describe the target path clearly.",
-      "If the request is vague, ask one precise follow-up that names the missing detail.",
-    ],
-  ];
-
-  for (const notes of correctionNotes) {
-    try {
-      const parsedPlan = (await adapter.completeJson({
-        model,
-        temperature: 0.2,
-        systemPrompt: prompt.systemPrompt,
-        outputSchema: CurriculumAiRevisionPlanSchema,
-        messages: [
-          {
-            role: "user",
-            content: `${buildCurriculumRevisionPlanPrompt({
-              learnerName: params.learner.displayName,
-              currentCurriculum: params.snapshot,
-              currentCurriculumSummary: curriculumSummary,
-              currentRequest: latestParentRequest,
-              targetCandidatesSummary,
-              messages,
-            })}${notes.length > 0 ? `\n\nCorrection notes:\n${notes.map((note, index) => `${index + 1}. ${note}`).join("\n")}` : ""}`,
-          },
-        ],
-      })) as CurriculumAiRevisionPlan | null;
-
-      if (!parsedPlan) {
-        continue;
-      }
-
-      return sanitizeRevisionPlan(parsedPlan);
-    } catch (error) {
-      console.error("[curriculum/ai-draft] Curriculum revision planning failed, retrying.", error);
-    }
-  }
-
-  return null;
-}
-
 async function generateCurriculumRevisionDecision(params: {
   learner: AppLearner;
   messages: CurriculumAiChatMessage[];
   snapshot: CurriculumRevisionSnapshot;
 }): Promise<CurriculumAiRevisionTurn> {
-  const messages = normalizeMessages(params.messages);
-  const revisionPreference = inferRevisionPreference(messages);
-  const inferredRevisionPlan = inferRevisionPlanFromConversation({
-    messages,
-    snapshot: params.snapshot,
-  });
-  if (inferredRevisionPlan) {
-    if (inferredRevisionPlan.action === "clarify") {
-      return {
-        assistantMessage: inferredRevisionPlan.assistantMessage,
-        action: "clarify",
-        changeSummary: inferredRevisionPlan.changeSummary,
-      };
-    }
+  const prompt = await resolvePrompt("curriculum.revise", CURRICULUM_REVISION_PROMPT_VERSION);
+  const adapter = getAdapterForTask("curriculum.revise");
+  const model = getModelForTask("curriculum.revise", getAiRoutingConfig());
+  const normalizedMessages = normalizeMessages(params.messages);
+  const snapshotSummary = buildRevisionPromptSummary(
+    params.snapshot as CurriculumRevisionPromptSnapshot,
+  );
 
-    return await applyCurriculumRevisionPlan({
-      learner: params.learner,
-      messages,
-      snapshot: params.snapshot,
-      revisionPlan: inferredRevisionPlan,
-      revisionPreference,
-    });
-  }
-
-  const revisionPlan = await generateCurriculumRevisionPlan({
-    learner: params.learner,
-    messages,
-    snapshot: params.snapshot,
+  console.info("[curriculum/ai-draft] revision model orchestration", {
+    learner: params.learner.displayName,
+    sourceTitle: params.snapshot.source.title,
+    counts: params.snapshot.counts,
+    topLevelDomains: snapshotSummary.topLevelDomains,
+    unitTitles: snapshotSummary.unitTitles,
   });
 
-  if (revisionPlan?.action === "apply") {
-    return applyCurriculumRevisionPlan({
-      learner: params.learner,
-      messages,
-      snapshot: params.snapshot,
-      revisionPlan,
-      revisionPreference,
-    });
-  }
-
-  const fallbackTurn = await buildFallbackRevisionTurn({
-    learner: params.learner,
-    messages,
-    snapshot: params.snapshot,
-    revisionPreference,
-    revisionPlan,
+  return runCurriculumRevisionDecision({
+    learnerName: params.learner.displayName,
+    messages: normalizedMessages,
+    snapshot: params.snapshot as CurriculumRevisionPromptSnapshot,
+    model,
+    systemPrompt: prompt.systemPrompt,
+    completeJson: (options) => adapter.completeJson(options),
+    logger: console,
   });
-
-  if (fallbackTurn) {
-    return fallbackTurn;
-  }
-
-  return {
-    assistantMessage:
-      revisionPlan?.assistantMessage ?? buildGenericRevisionClarificationMessage(messages),
-    action: "clarify",
-    changeSummary: revisionPlan?.changeSummary ?? [],
-  };
 }
 
 function inferRevisionPlanFromConversation(params: {
@@ -605,122 +573,9 @@ async function applyCurriculumRevisionPlan(params: {
   revisionPlan: CurriculumAiRevisionPlan;
   revisionPreference: RevisionPreference | null;
 }): Promise<CurriculumAiRevisionTurn> {
-  const targetedTurn = buildTargetedRevisionTurnFromPlan({
-    learner: params.learner,
-    messages: params.messages,
-    snapshot: params.snapshot,
-    revisionPlan: params.revisionPlan,
-  });
-  if (targetedTurn) {
-    return targetedTurn;
-  }
-
-  const prompt = await resolvePrompt("curriculum.revise", CURRICULUM_REVISION_PROMPT_VERSION);
-  const adapter = getAdapterForTask("curriculum.revise");
-  const model = getModelForTask("curriculum.revise", getAiRoutingConfig());
-  const curriculumSummary = buildRevisionSnapshotSummary(params.snapshot);
-  const latestParentRequest = getLatestParentRequest(params.messages);
-  const targetCandidatesSummary = buildRevisionTargetCandidatesSummary(
-    params.snapshot,
-    latestParentRequest,
-  );
-  const snapshotStructureSignature = buildRevisionStructureSignatureFromSnapshot(
-    params.snapshot.structure as unknown as RevisionSnapshotNode[],
-  );
-  const correctionNotes: string[][] = [
-    [],
-    [
-      "If you apply a revision, return the full artifact with explicit pacing coverage.",
-      "Do not ask for clarification when the revision plan already identifies the target and scope.",
-      "Preserve what should stay and only change what the revision plan requests.",
-      "If the first attempt leaves the tree shape unchanged, revise the structure instead of repeating it.",
-      `Revision brief: ${params.revisionPlan.revisionBrief ?? ""}`,
-      ...(params.revisionPlan.targetPath.length > 0
-        ? [`Target path: ${params.revisionPlan.targetPath.join(" > ")}`]
-        : []),
-    ],
-  ];
-
-  for (const notes of correctionNotes) {
-    try {
-      const parsedTurn = (await adapter.completeJson({
-        model,
-        temperature: 0.35,
-        systemPrompt: prompt.systemPrompt,
-        outputSchema: CurriculumAiRevisionTurnSchema,
-        messages: [
-          {
-            role: "user",
-            content: `${buildCurriculumRevisionPrompt({
-              learnerName: params.learner.displayName,
-              currentCurriculum: params.snapshot,
-              currentCurriculumSummary: curriculumSummary,
-              currentRequest: latestParentRequest,
-              targetCandidatesSummary,
-              messages: params.messages,
-              revisionPlan: {
-                scope: params.revisionPlan.scope,
-                operation: params.revisionPlan.operation,
-                changeSummary: params.revisionPlan.changeSummary,
-                revisionBrief: params.revisionPlan.revisionBrief ?? "",
-                targetPath: params.revisionPlan.targetPath,
-                replacementTitles: params.revisionPlan.replacementTitles,
-              },
-            })}${notes.length > 0 ? `\n\nCorrection notes:\n${notes.map((note, index) => `${index + 1}. ${note}`).join("\n")}` : ""}`,
-          },
-        ],
-      })) as CurriculumAiRevisionTurn | null;
-
-      if (!parsedTurn) {
-        continue;
-      }
-
-      const sanitizedTurn = sanitizeRevisionTurn(parsedTurn);
-      if (sanitizedTurn.action === "clarify") {
-        continue;
-      }
-
-      sanitizedTurn.artifact = await finalizeCurriculumTitle({
-        artifact: sanitizedTurn.artifact!,
-        learner: params.learner,
-        messages: params.messages,
-      });
-
-      if (
-        buildRevisionStructureSignatureFromDocument(sanitizedTurn.artifact.document) ===
-        snapshotStructureSignature
-      ) {
-        continue;
-      }
-
-      const coverageIssues = getArtifactCoverageIssues(
-        sanitizedTurn.artifact!,
-        params.messages,
-        inferRequestedPacing(params.messages, inferCapturedRequirements(params.messages)),
-      );
-
-      if (coverageIssues.length === 0) {
-        return sanitizedTurn;
-      }
-    } catch (error) {
-      console.error("[curriculum/ai-draft] Curriculum revision failed, retrying.", error);
-    }
-  }
-
-  const fallbackTurn = await buildFallbackRevisionTurn({
-    learner: params.learner,
-    messages: params.messages,
-    snapshot: params.snapshot,
-    revisionPreference: params.revisionPreference,
-    revisionPlan: params.revisionPlan,
-  });
-
-  if (fallbackTurn) {
-    return fallbackTurn;
-  }
-
+  void params;
   return {
-    assistantMessage: buildGenericRevisionClarificationMessage(params.messages),
+    assistantMessage: "Revision planning is disabled in favor of the model-first revision path.",
     action: "clarify",
     changeSummary: [],
   };
@@ -2002,9 +1857,11 @@ async function buildCurriculumRevisionSnapshot(sourceId: string, householdId: st
       title: source.title,
       description: source.description,
       kind: source.kind,
+      status: source.status,
       importVersion: source.importVersion,
       subjects: source.subjects,
       gradeLevels: source.gradeLevels,
+      academicYear: source.academicYear,
     },
     counts: {
       nodeCount: tree.nodeCount,
@@ -2020,26 +1877,60 @@ async function buildCurriculumRevisionSnapshot(sourceId: string, householdId: st
         estimatedSessions: unit.estimatedSessions ?? unit.lessons.length,
       })),
     },
-    structure: tree.rootNodes.map(serializeCurriculumNodeForPrompt),
+    structureSummary: buildRevisionStructureSummary(tree.rootNodes),
+    structure: tree.rootNodes.map((node) => serializeCurriculumRevisionNode(node)),
     outline: outline.map((unit) => ({
       title: unit.title,
       description: unit.description,
+      subject: undefined,
       estimatedWeeks: unit.estimatedWeeks,
       estimatedSessions: unit.estimatedSessions,
       lessons: unit.lessons.map((lesson) => ({
         title: lesson.title,
         description: lesson.description,
+        subject: lesson.subject,
         estimatedMinutes: lesson.estimatedMinutes,
+        materials: lesson.materials,
+        objectives: lesson.objectives,
         linkedSkillTitles: lesson.linkedSkillTitles,
       })),
     })),
   } satisfies CurriculumRevisionSnapshot;
 }
 
+function buildRevisionStructureSummary(nodes: CurriculumTreeNode[], path: string[] = []) {
+  const lines: string[] = [];
+
+  for (const node of nodes) {
+    const currentPath = [...path, node.title];
+    lines.push(`${node.normalizedType}: ${currentPath.join(" > ")}`);
+    if (node.children.length > 0) {
+      lines.push(...buildRevisionStructureSummary(node.children, currentPath));
+    }
+  }
+
+  return lines;
+}
+
+function serializeCurriculumRevisionNode(
+  node: CurriculumTreeNode,
+  path: string[] = [],
+): CurriculumRevisionSnapshotNode {
+  const currentPath = [...path, node.title];
+  return {
+    title: node.title,
+    normalizedType: node.normalizedType,
+    path: currentPath,
+    normalizedPath: node.normalizedPath,
+    description: node.description ?? undefined,
+    code: node.code ?? undefined,
+    depth: node.depth,
+    sequenceIndex: node.sequenceIndex,
+    children: node.children.map((child) => serializeCurriculumRevisionNode(child, currentPath)),
+  };
+}
+
 function buildRevisionSnapshotSummary(snapshot: CurriculumRevisionSnapshot) {
-  const domainTitles = snapshot.structure
-    .map((node) => (typeof node.title === "string" ? node.title : null))
-    .filter((title): title is string => Boolean(title));
   const unitTitles = snapshot.outline
     .map((unit) => (typeof unit.title === "string" ? unit.title : null))
     .filter((title): title is string => Boolean(title));
@@ -2048,7 +1939,9 @@ function buildRevisionSnapshotSummary(snapshot: CurriculumRevisionSnapshot) {
     `Source title: ${snapshot.source.title}`,
     snapshot.source.description ? `Source summary: ${snapshot.source.description}` : null,
     snapshot.counts.unitCount > 0 ? `Units: ${unitTitles.join(" | ")}` : null,
-    snapshot.counts.skillCount > 0 ? `Top-level structure: ${domainTitles.join(" | ")}` : null,
+    snapshot.structureSummary.length > 0
+      ? `Top-level structure: ${snapshot.structureSummary.slice(0, 6).join(" | ")}`
+      : null,
   ]
     .filter(Boolean)
     .join("\n");
