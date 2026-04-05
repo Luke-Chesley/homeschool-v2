@@ -26,6 +26,13 @@ import {
   listCurriculumOutline,
   type CreatedAiDraftCurriculumResult,
 } from "./service";
+import { buildFallbackCurriculumArtifact } from "./fallback";
+import {
+  buildGranularityGuidance,
+  inferCurriculumGranularityProfile,
+  type RequestedPacing,
+} from "./granularity";
+import { assessCurriculumArtifactQuality } from "./quality";
 import type { CurriculumTreeNode } from "./types";
 import {
   CurriculumAiCapturedRequirementsSchema,
@@ -44,15 +51,6 @@ import {
   buildRevisionPromptSummary,
   runCurriculumRevisionDecision,
 } from "./revision-model";
-
-interface RequestedPacing {
-  totalWeeks?: number;
-  sessionsPerWeek?: number;
-  sessionMinutes?: number;
-  totalSessionsLowerBound?: number;
-  totalSessionsUpperBound?: number;
-  explicitlyRequestedTotalSessions?: number;
-}
 
 type RevisionPreference = "targeted" | "broader";
 
@@ -331,12 +329,20 @@ async function generateCurriculumArtifact(params: {
   const messages = normalizeMessages(params.messages);
   const capturedRequirements = inferCapturedRequirements(messages);
   const requestedPacing = inferRequestedPacing(messages, capturedRequirements);
+  const topic = extractTopicLabel(capturedRequirements.topic || collectUserMessages(messages)[0] || "Custom Study");
+  const granularityProfile = inferCurriculumGranularityProfile({
+    topic,
+    requirements: capturedRequirements,
+    pacing: requestedPacing,
+  });
 
   const attemptNotes: string[][] = [
     [],
     [
       "The previous draft was too shallow or too compressed for the requested pacing.",
-      "Keep the canonical skill tree concise, but add enough goal groups, skills, and unit session budgets to support the requested duration.",
+      "Preserve coherence and avoid taxonomy noise, but add as many goal groups and skills as needed for teachability and pacing realism.",
+      "Do not optimize for minimal node count.",
+      "If multiple procedures, rules, or misconception targets would be taught separately, split them into separate skills.",
       "Generate a distinct curriculum title instead of copying the parent's opening message.",
     ],
   ];
@@ -355,6 +361,7 @@ async function generateCurriculumArtifact(params: {
               messages,
               requirementHints: capturedRequirements,
               pacingExpectations: requestedPacing,
+              granularityGuidance: buildGranularityGuidance(granularityProfile),
               correctionNotes,
             }),
           },
@@ -371,19 +378,38 @@ async function generateCurriculumArtifact(params: {
         learner: params.learner,
         messages,
       });
-      const coverageIssues = getArtifactCoverageIssues(artifact, messages, requestedPacing);
-      if (coverageIssues.length === 0) {
+      const qualityIssues = assessCurriculumArtifactQuality(artifact, {
+        topicText: [
+          topic,
+          capturedRequirements.topic,
+          capturedRequirements.goals,
+          capturedRequirements.learnerProfile,
+          capturedRequirements.structurePreferences,
+        ]
+          .join(" ")
+          .trim(),
+        granularity: granularityProfile,
+        requestedPacing,
+        learnerText: params.learner.displayName,
+      });
+      if (qualityIssues.length === 0) {
         return artifact;
       }
+
+      console.warn("[curriculum/ai-draft] Artifact quality check failed, retrying.", {
+        issues: qualityIssues.map((issue) => issue.message),
+      });
     } catch (error) {
       console.error("[curriculum/ai-draft] Artifact generation failed, retrying or using fallback.", error);
     }
   }
 
   return finalizeCurriculumTitle({
-    artifact: buildFallbackArtifact({
+    artifact: buildFallbackCurriculumArtifact({
       learner: params.learner,
-      messages,
+      topic,
+      capturedRequirements,
+      requestedPacing,
     }),
     learner: params.learner,
     messages,
@@ -402,6 +428,43 @@ async function generateCurriculumRevisionDecision(params: {
   const snapshotSummary = buildRevisionPromptSummary(
     params.snapshot as CurriculumRevisionPromptSnapshot,
   );
+  const revisionTopic = extractTopicLabel(
+    [
+      params.snapshot.source.title,
+      params.snapshot.source.description ?? "",
+      normalizedMessages.map((message) => message.content).join(" "),
+    ].join(" "),
+  );
+  const revisionGranularityProfile = inferCurriculumGranularityProfile({
+    topic: revisionTopic,
+    requirements: {
+      topic: revisionTopic,
+      goals: getLatestParentRequest(normalizedMessages),
+      timeframe: "",
+      learnerProfile: "",
+      constraints: "",
+      teachingStyle: "",
+      assessment: "",
+      structurePreferences: "",
+    },
+    pacing: {
+      totalWeeks: params.snapshot.counts.estimatedSessionCount > 0
+        ? Math.max(1, Math.ceil(params.snapshot.counts.estimatedSessionCount / 4))
+        : undefined,
+      totalSessionsLowerBound:
+        params.snapshot.counts.estimatedSessionCount > 0
+          ? Math.max(1, Math.floor(params.snapshot.counts.estimatedSessionCount * 0.9))
+          : undefined,
+      totalSessionsUpperBound:
+        params.snapshot.counts.estimatedSessionCount > 0
+          ? Math.max(1, Math.ceil(params.snapshot.counts.estimatedSessionCount * 1.1))
+          : undefined,
+      explicitlyRequestedTotalSessions:
+        params.snapshot.counts.estimatedSessionCount > 0
+          ? params.snapshot.counts.estimatedSessionCount
+          : undefined,
+    },
+  });
 
   console.info("[curriculum/ai-draft] revision model orchestration", {
     learner: params.learner.displayName,
@@ -419,6 +482,37 @@ async function generateCurriculumRevisionDecision(params: {
     systemPrompt: prompt.systemPrompt,
     completeJson: (options) => adapter.completeJson(options),
     logger: console,
+    artifactQualityCheck: (artifact) =>
+      assessCurriculumArtifactQuality(artifact, {
+        topicText: [
+          revisionTopic,
+          params.snapshot.source.title,
+          params.snapshot.source.description ?? "",
+          normalizedMessages.map((message) => message.content).join(" "),
+        ]
+          .join(" ")
+          .trim(),
+        granularity: revisionGranularityProfile,
+        requestedPacing: {
+          totalWeeks: params.snapshot.counts.estimatedSessionCount > 0
+            ? Math.max(1, Math.ceil(params.snapshot.counts.estimatedSessionCount / 4))
+            : undefined,
+          totalSessionsLowerBound:
+            params.snapshot.counts.estimatedSessionCount > 0
+              ? Math.max(1, Math.floor(params.snapshot.counts.estimatedSessionCount * 0.9))
+              : undefined,
+          totalSessionsUpperBound:
+            params.snapshot.counts.estimatedSessionCount > 0
+              ? Math.max(1, Math.ceil(params.snapshot.counts.estimatedSessionCount * 1.1))
+              : undefined,
+          explicitlyRequestedTotalSessions:
+            params.snapshot.counts.estimatedSessionCount > 0
+              ? params.snapshot.counts.estimatedSessionCount
+              : undefined,
+        },
+        learnerText: params.learner.displayName,
+        revisionMode: "revision",
+      }).map((issue) => issue.message),
   });
 }
 
@@ -2302,139 +2396,12 @@ function buildFallbackArtifact(params: {
   const capturedRequirements = inferCapturedRequirements(params.messages);
   const requestedPacing = inferRequestedPacing(params.messages, capturedRequirements);
   const topic = extractTopicLabel(capturedRequirements.topic || collectUserMessages(params.messages)[0] || "Custom Study");
-  const title = buildFallbackTitle(topic, capturedRequirements);
-  const subjects = inferSubjects(
-    [
-      capturedRequirements.topic,
-      capturedRequirements.goals,
-      capturedRequirements.structurePreferences,
-    ].join(" "),
-  );
-  const gradeLevels = inferGradeLevels(
-    [
-      capturedRequirements.topic,
-      capturedRequirements.goals,
-      capturedRequirements.learnerProfile,
-    ].join(" "),
-  );
-  const skills = buildFallbackSkills(title, capturedRequirements, requestedPacing);
-  const skillGroups = chunk(skills, Math.max(3, Math.ceil(skills.length / 4)));
-  const estimatedTotalSessions = estimateFallbackTotalSessions(requestedPacing, skills.length);
-  const unitSessionBudgets = allocateSessionsAcrossUnits(estimatedTotalSessions, skillGroups.length);
-  const document = {
-    [title]: {
-      Foundations: {
-        "Core Ideas": Object.fromEntries(
-          (skillGroups[0] ?? skills).map((skill) => [skill.title, skill.description]),
-        ),
-      },
-      Practice: {
-        "Applied Work": Object.fromEntries(
-          (skillGroups[1] ?? skills.slice(0, 4)).map((skill) => [skill.title, skill.description]),
-        ),
-        "Independent Growth": Object.fromEntries(
-          (skillGroups[2] ?? skills.slice(Math.max(0, skills.length - 4))).map((skill) => [
-            skill.title,
-            skill.description,
-          ]),
-        ),
-        ...(skillGroups[3]
-          ? {
-              "Review and Transfer": Object.fromEntries(
-                skillGroups[3].map((skill) => [skill.title, skill.description]),
-              ),
-            }
-          : {}),
-      },
-    },
-  };
 
-  const units = skillGroups.map((group, index) => ({
-    title:
-      index === 0
-        ? `${title} Foundations`
-        : index === 1
-          ? `${title} Guided Practice`
-          : `${title} Independent Growth`,
-    description:
-      index === 0
-        ? `Build the essential vocabulary, concepts, and routines for ${title.toLowerCase()}.`
-        : index === 1
-          ? `Practice the main skills through short, teachable sessions with visible repetition.`
-        : `Apply the learning with more independence and visible progress checks.`,
-    estimatedWeeks: estimateWeeksPerUnit(capturedRequirements.timeframe, skillGroups.length, index),
-    estimatedSessions: unitSessionBudgets[index],
-    lessons: group.map((skill, lessonIndex) => ({
-      title:
-        lessonIndex === 0
-          ? `Introduction to ${skill.title}`
-          : `${skill.title} in practice`,
-      description: `Teach and rehearse ${skill.title.toLowerCase()} in a way that fits ${params.learner.firstName}'s pace and current readiness. ${skill.description}`,
-      subject: subjects[0],
-      estimatedMinutes: requestedPacing.sessionMinutes ?? estimateLessonMinutes(capturedRequirements.timeframe),
-      materials: buildFallbackMaterials(title, capturedRequirements),
-      objectives: [
-        `Explain or demonstrate ${skill.title.toLowerCase()}.`,
-        "Show visible progress through guided practice, discussion, or a short performance task.",
-      ],
-      linkedSkillTitles: [skill.title],
-    })),
-  }));
-
-  const normalizedTimeframe = normalizeTimeframePhrase(capturedRequirements.timeframe);
-  const goalFragment = toSentenceFragment(capturedRequirements.goals);
-
-  return sanitizeArtifact({
-    source: {
-      title,
-      description: [
-        `${params.learner.displayName} will work through a ${title.toLowerCase()} curriculum`,
-        normalizedTimeframe ? `paced around ${normalizedTimeframe}` : null,
-        goalFragment ? `with emphasis on ${shorten(goalFragment, 110)}` : null,
-      ]
-        .filter(Boolean)
-        .join(", ") + ".",
-      subjects,
-      gradeLevels,
-      academicYear: undefined,
-      summary:
-        `${params.learner.displayName} will build ${title.toLowerCase()} through a coherent sequence of skills, units, and lessons that match the family's requested pace and constraints.`,
-      teachingApproach:
-        "Use short, teachable lessons that connect new ideas to prior knowledge, guided practice, and visible reflection.",
-      successSignals: [
-        "The learner can explain and apply the main ideas with growing independence.",
-        "The parent can point to concrete lesson artifacts or performances that show progress.",
-        "The sequence remains sustainable within the stated time and prep constraints.",
-      ],
-      parentNotes: [
-        capturedRequirements.constraints
-          ? `Keep the routine aligned to these constraints: ${shorten(capturedRequirements.constraints, 120)}.`
-          : "Keep prep light and protect consistency over novelty.",
-        capturedRequirements.learnerProfile
-          ? `Differentiate from current readiness: ${shorten(capturedRequirements.learnerProfile, 120)}.`
-          : "Use short feedback loops so the learner's confidence stays visible.",
-      ].filter(Boolean) as string[],
-      rationale: [
-        "The curriculum is organized as a skill progression instead of a loose topic list.",
-        "Units and lessons are aligned to the requested goals, pace, and teaching constraints.",
-        "The outline leaves room for later lesson-plan generation without losing curricular coherence.",
-      ],
-    },
-    intakeSummary: buildRequirementSummary(capturedRequirements),
-    pacing: {
-      totalWeeks: requestedPacing.totalWeeks,
-      sessionsPerWeek: requestedPacing.sessionsPerWeek,
-      sessionMinutes: requestedPacing.sessionMinutes ?? estimateLessonMinutes(capturedRequirements.timeframe),
-      totalSessions: estimatedTotalSessions,
-      coverageStrategy:
-        "Use a repeating rhythm of direct teaching, guided practice, review, and light application so the curriculum can sustain the requested schedule without turning every session into a brand-new topic.",
-      coverageNotes: [
-        "Core skills repeat across multiple sessions so the learner gets rehearsal as well as first exposure.",
-        "Later units shift from introduction toward strategy, fluency, and transfer.",
-      ],
-    },
-    document,
-    units,
+  return buildFallbackCurriculumArtifact({
+    learner: params.learner,
+    topic,
+    capturedRequirements,
+    requestedPacing,
   });
 }
 
@@ -2686,10 +2653,6 @@ function buildHeuristicCurriculumTitle(
     extractTopicLabel(inferCapturedRequirements(messages).topic || artifact.source.title),
   );
 
-  if (topic.toLowerCase().includes("chess")) {
-    return "First Moves in Chess";
-  }
-
   if (artifact.units[0]?.title) {
     const lead = artifact.units[0].title
       .replace(/\b(foundations|guided practice|independent growth)\b/gi, "")
@@ -2809,14 +2772,17 @@ async function buildFallbackRevisionTurn(params: {
     return null;
   }
 
+  const capturedRequirements = inferCapturedRequirements(params.messages);
+  const requestedPacing = inferRequestedPacing(params.messages, capturedRequirements);
+  const topic = extractTopicLabel(
+    capturedRequirements.topic || inferRevisionTopic(params.snapshot) || params.snapshot.source.title,
+  );
   const artifact = await finalizeCurriculumTitle({
-    artifact: buildFallbackArtifact({
+    artifact: buildFallbackCurriculumArtifact({
       learner: params.learner,
-      messages: buildFallbackRevisionSeedMessages(
-        params.snapshot,
-        params.messages,
-        params.revisionPlan ?? null,
-      ),
+      topic,
+      capturedRequirements,
+      requestedPacing,
     }),
     learner: params.learner,
     messages: params.messages,
@@ -3003,10 +2969,6 @@ function inferRevisionTopic(snapshot: CurriculumRevisionSnapshot) {
     JSON.stringify(snapshot.outline).slice(0, 1_200),
   ].join(" ");
 
-  if (/\bchess\b/i.test(snapshotText)) {
-    return "chess to a young learner over a short daily summer rhythm";
-  }
-
   return extractTopicLabel(snapshotText);
 }
 
@@ -3092,59 +3054,6 @@ function buildFallbackSkills(
   const loweredTopic = topic.toLowerCase();
   const targetSkillCount = determineFallbackSkillCount(requestedPacing);
 
-  if (loweredTopic.includes("chess")) {
-    return [
-      {
-        title: "Set up the board and orient every piece correctly",
-        description: "Learn board direction, square colors, and where each piece starts.",
-      },
-      {
-        title: "Move the king, queen, rook, bishop, knight, and pawn legally",
-        description: "Practice legal moves and captures until they feel predictable.",
-      },
-      {
-        title: "Notice special rules like castling, en passant, and promotion",
-        description: "Use special moves in simple examples before expecting them in games.",
-      },
-      {
-        title: "Recognize check, checkmate, and stalemate",
-        description: "Tell the difference between danger, escape, and game-ending positions.",
-      },
-      {
-        title: "Protect pieces and spot loose pieces",
-        description: "Build the habit of asking what is defended and what is hanging.",
-      },
-      {
-        title: "Use opening habits that keep pieces active and the king safe",
-        description: "Connect quick development, center control, and early king safety.",
-      },
-      {
-        title: "Read the board one move ahead",
-        description: "Predict the next move and its consequence before moving a piece.",
-      },
-      {
-        title: "Spot simple tactics like forks, pins, and basic mates",
-        description: "Solve short patterns that reward noticing threats and opportunities.",
-      },
-      {
-        title: "Trade pieces with a purpose",
-        description: "Decide when a swap helps and when keeping tension is better.",
-      },
-      {
-        title: "Build short plans in the middlegame",
-        description: "Connect piece activity, targets, and safe attacking ideas.",
-      },
-      {
-        title: "Finish simple endgames with confidence",
-        description: "Practice basic king-and-pawn and major-piece checkmate patterns.",
-      },
-      {
-        title: "Reflect on games and learn from key moments",
-        description: "Talk through turning points, mistakes, and next steps after play.",
-      },
-    ].slice(0, Math.max(8, targetSkillCount));
-  }
-
   const baseSkills = [
     {
       title: `Build core vocabulary in ${topic.toLowerCase()}`,
@@ -3207,10 +3116,6 @@ function buildFallbackSkills(
 function buildFallbackMaterials(topic: string, requirements: CurriculumAiCapturedRequirements) {
   const materials: string[] = [];
   const constraintsLower = requirements.constraints.toLowerCase();
-
-  if (topic.toLowerCase().includes("chess")) {
-    materials.push("chess board", "pieces", "short practice positions");
-  }
   if (constraintsLower.includes("book")) {
     materials.push("family-selected reference book");
   }
@@ -3323,7 +3228,7 @@ function inferSubjects(text: string) {
     { keywords: ["science", "biology", "chemistry", "physics"], subject: "science" },
     { keywords: ["history", "civics", "government"], subject: "history" },
     { keywords: ["writing", "reading", "literature", "grammar"], subject: "language arts" },
-    { keywords: ["chess", "logic", "strategy"], subject: "strategy" },
+    { keywords: ["logic", "strategy"], subject: "strategy" },
     { keywords: ["art", "drawing", "painting"], subject: "art" },
     { keywords: ["nature", "outdoor", "habitat"], subject: "nature study" },
     { keywords: ["coding", "programming", "computer"], subject: "technology" },

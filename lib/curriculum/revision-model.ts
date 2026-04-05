@@ -32,6 +32,8 @@ const DEFAULT_CORRECTION_NOTES = [
   "Preserve the canonical tree shape.",
   "For split requests, replace the target skill with sibling skills under the same parent.",
   "Do not create a new goal group unless the request explicitly asks for one.",
+  "Preserve coherence and avoid taxonomy noise, but add as many goal groups and skills as needed for teachability and pacing realism.",
+  "If multiple procedures, rules, or misconception targets would be taught separately, split them into separate skills instead of compressing them into one node.",
 ];
 
 export async function runCurriculumRevisionDecision(params: {
@@ -42,6 +44,7 @@ export async function runCurriculumRevisionDecision(params: {
   systemPrompt: string;
   completeJson: RevisionModelClient["completeJson"];
   logger?: RevisionModelLogger;
+  artifactQualityCheck?: (artifact: NonNullable<CurriculumAiRevisionTurn["artifact"]>) => string[];
 }): Promise<CurriculumAiRevisionTurn> {
   const logger = params.logger ?? console;
   const messages = normalizeRevisionMessages(params.messages);
@@ -100,6 +103,16 @@ export async function runCurriculumRevisionDecision(params: {
       const turn = sanitizeRevisionTurn(validatedTurn.data);
       if (turn.action === "apply") {
         validateRevisionArtifactStructure(turn.artifact);
+        if (params.artifactQualityCheck) {
+          const qualityIssues = params.artifactQualityCheck(turn.artifact!);
+          if (qualityIssues.length > 0) {
+            logger.warn("[curriculum/ai-draft] revision artifact failed quality checks", {
+              attempt: attemptIndex + 1,
+              issues: qualityIssues,
+            });
+            continue;
+          }
+        }
       }
 
       logger.info("[curriculum/ai-draft] revision model response", {

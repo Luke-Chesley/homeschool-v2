@@ -3,6 +3,10 @@ import test from "node:test";
 
 import { runCurriculumRevisionDecision } from "../lib/curriculum/revision-model.ts";
 import {
+  inferCurriculumGranularityProfile,
+} from "../lib/curriculum/granularity.ts";
+import { assessCurriculumArtifactQuality } from "../lib/curriculum/quality.ts";
+import {
   buildCurriculumRevisionPrompt,
   type CurriculumRevisionPromptSnapshot,
 } from "../lib/prompts/curriculum-draft.ts";
@@ -196,6 +200,7 @@ test("revision prompt includes the rich snapshot and instructions", () => {
   assert.match(prompt, /Current structure summary:/);
   assert.match(prompt, /Revision instructions:/);
   assert.match(prompt, /Preserve unchanged branches unless the parent explicitly asked for a broader rewrite\./);
+  assert.match(prompt, /Preserve teachable granularity while keeping the tree coherent and free of taxonomy noise\./);
   assert.match(prompt, /Retry correction notes:/);
   assert.doesNotMatch(prompt, /Likely target matches:/);
   assert.doesNotMatch(prompt, /Revision plan:/);
@@ -273,5 +278,125 @@ test("invalid model output retries once and then clarifies", async () => {
   assert.match(calls[1], /Retry correction notes:/);
   assert.equal(result.action, "clarify");
   assert.equal(result.changeSummary.length, 1);
+  assert.match(result.assistantMessage, /valid revision/i);
+});
+
+test("quality checks reject a broad revision artifact and retry before clarifying", async () => {
+  const calls = [];
+  const logger = {
+    info: () => {},
+    warn: () => {},
+    error: () => {},
+  };
+
+  const broadArtifact = {
+    source: {
+      title: "Board Games Setup and Play",
+      description: "A very broad board games curriculum.",
+      subjects: ["Games"],
+      gradeLevels: ["3"],
+      academicYear: "2025-2026",
+      summary: "Teach everything about board games in one sequence.",
+      teachingApproach: "Use a broad sequence.",
+      successSignals: ["The learner understands board games."],
+      parentNotes: ["Keep it broad."],
+      rationale: ["One broad branch."],
+    },
+    intakeSummary: "Broad board games revision.",
+    pacing: {
+      totalWeeks: 2,
+      sessionsPerWeek: 4,
+      sessionMinutes: 30,
+      totalSessions: 8,
+      coverageStrategy: "Cover the whole topic.",
+      coverageNotes: ["Move quickly."],
+    },
+    document: {
+      "Board Games Setup and Play": {
+        "All of setup and play": {
+          "Set up the board, move every piece, notice every rule, and explain all outcomes": [
+            "Do everything at once",
+          ],
+        },
+      },
+    },
+    units: [
+      {
+        title: "Unit 1",
+        description: "A broad unit.",
+        estimatedWeeks: 2,
+        estimatedSessions: 8,
+        lessons: [
+          {
+            title: "Overview",
+            description: "Cover everything.",
+            subject: "Games",
+            estimatedMinutes: 30,
+            materials: ["board"],
+            objectives: [],
+            linkedSkillTitles: [
+              "Do everything at once",
+            ],
+          },
+        ],
+      },
+    ],
+  };
+
+  const result = await runCurriculumRevisionDecision({
+    learnerName: "Ava",
+    messages: [
+      {
+        role: "user",
+        content: "split the board skill into smaller skills",
+      },
+    ],
+    snapshot: baseSnapshot,
+    model: "mock-model",
+    systemPrompt: "system prompt",
+    completeJson: async (options) => {
+      calls.push(options.messages[0].content);
+      return {
+        assistantMessage: "Applied.",
+        action: "apply",
+        changeSummary: ["Applied revision."],
+        artifact: broadArtifact,
+      };
+    },
+    artifactQualityCheck: (artifact) =>
+      assessCurriculumArtifactQuality(artifact, {
+        topicText: "board games",
+        granularity: inferCurriculumGranularityProfile({
+          topic: "board games",
+          requirements: {
+            topic: "board games",
+            goals: "split the board skill into smaller skills",
+            timeframe: "",
+            learnerProfile: "young beginner",
+            constraints: "",
+            teachingStyle: "",
+            assessment: "",
+            structurePreferences: "",
+          },
+          pacing: {
+            totalWeeks: 2,
+            sessionsPerWeek: 4,
+            sessionMinutes: 30,
+            explicitlyRequestedTotalSessions: 8,
+          },
+        }),
+        requestedPacing: {
+          totalWeeks: 2,
+          sessionsPerWeek: 4,
+          sessionMinutes: 30,
+          explicitlyRequestedTotalSessions: 8,
+        },
+      }).map((issue) => issue.message),
+    logger,
+  });
+
+  assert.equal(calls.length, 2);
+  assert.match(calls[1], /Retry correction notes:/);
+  assert.equal(result.action, "clarify");
   assert.match(result.assistantMessage, /valid revision/i);
 });

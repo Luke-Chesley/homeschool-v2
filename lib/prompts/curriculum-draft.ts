@@ -1,8 +1,8 @@
 import type { ChatMessage } from "../ai/types.ts";
 
 export const CURRICULUM_INTAKE_PROMPT_VERSION = "2.2.0";
-export const CURRICULUM_GENERATION_PROMPT_VERSION = "3.0.0";
-export const CURRICULUM_REVISION_PROMPT_VERSION = "2.0.0";
+export const CURRICULUM_GENERATION_PROMPT_VERSION = "3.1.0";
+export const CURRICULUM_REVISION_PROMPT_VERSION = "2.1.0";
 export const CURRICULUM_TITLE_PROMPT_VERSION = "1.0.0";
 
 export const CURRICULUM_INTAKE_SYSTEM_PROMPT = `You are an expert homeschool curriculum designer helping a parent shape a full curriculum.
@@ -77,6 +77,13 @@ Requirements:
 - Do not assume one distinct skill per session.
 - Do not collapse a multi-week or daily plan into only a few skills unless the pacing object and unit session budgets clearly show how the time will be used.
 - If skills need extra clarity, use keyed object leaves in the document where the key is the skill title and the value is a short description.
+- Do not optimize for minimal node count. Optimize for the smallest teachable unit that still feels meaningful in the available lesson rhythm.
+- Keep taxonomy noise and gratuitous bloat out of the tree, but allow the structure to grow when the learner, topic, and pacing need it.
+- More procedural, novice, fragile-confidence, or short-session contexts should produce smaller, more observable skills.
+- More mature, fluent, abstract-capable, or experienced contexts can support broader integrated skills when they remain teachable.
+- Multiple goal groups per strand are fine when they reflect real sub-progressions.
+- A skill should usually be narrow enough to teach, model, practice, and check within roughly 1-3 short sessions unless the learner is more advanced and the topic supports broader integration.
+- If multiple distinct procedures, rules, or misconception targets would be taught separately, they should usually be separate skills.
 
 Return JSON only with this exact shape:
 {
@@ -136,7 +143,8 @@ Generation rules:
 - Create between 1 and 8 domains total.
 - Every skill should fit under a goal group, which fits under a strand, which fits under a domain.
 - Units should cover the curriculum in a teachable order.
-- Keep the tree compact, but create enough goal groups and skills to support the requested timeframe without feeling repetitive or skeletal.
+- Do not optimize for minimal node count. Optimize for the smallest teachable unit that still feels meaningful in the available lesson rhythm.
+- Keep taxonomy noise and gratuitous bloat out of the tree, but allow the structure to grow when the learner, topic, and pacing need it.
 - Use the pacing object and unit session budgets to show how the available time is filled.
 - Let the same skill or strand span multiple sessions when practice, review, or transfer work is appropriate.
 - If the requested scope is long, the curriculum should usually include more than a handful of skills.
@@ -247,7 +255,7 @@ Rules:
 - The title should usually be 2 to 6 words.
 - Make it sound intentional and human, not generic or corporate.
 - Do not copy or lightly rephrase the parent's opening request.
-- Do not output titles like "Chess Curriculum", "Custom Study", "Learning Plan", or "Skill Path" unless the rest of the title makes it distinct.
+- Do not output titles like "Custom Study", "Learning Plan", or "Skill Path" unless the rest of the title makes it distinct.
 - Prefer a title that reflects the actual curriculum arc, not just the raw topic label.
 - Keep it clear enough that a parent can recognize the subject immediately.
 - No markdown fences.`;
@@ -308,6 +316,7 @@ export function buildCurriculumGenerationPrompt(input: {
     totalSessionsLowerBound?: number;
     totalSessionsUpperBound?: number;
   };
+  granularityGuidance?: string[];
   correctionNotes?: string[];
 }) {
   const transcript = input.messages
@@ -325,6 +334,8 @@ ${JSON.stringify(input.requirementHints ?? {}, null, 2)}
 
 Pacing expectations inferred from the conversation:
 ${JSON.stringify(input.pacingExpectations ?? {}, null, 2)}
+
+${input.granularityGuidance && input.granularityGuidance.length > 0 ? `Granularity guidance:\n${input.granularityGuidance.map((note, index) => `${index + 1}. ${note}`).join("\n")}\n` : ""}
 
 Conversation transcript:
 ${transcript || "No conversation transcript was provided."}
@@ -427,6 +438,8 @@ Revision instructions:
 - Do not invent a new goal group unless explicitly requested.
 - For rename requests, keep the structure the same and change wording only.
 - For targeted adjust requests, keep the change local unless a broader rewrite is requested.
+- Preserve teachable granularity while keeping the tree coherent and free of taxonomy noise.
+- If a branch is too broad for the learner or pacing, split it into sibling skills rather than compressing multiple procedures into one leaf.
 - Return the full revised artifact when action is "apply".
 - If the request is too vague to apply safely, ask one precise clarification question.
 
