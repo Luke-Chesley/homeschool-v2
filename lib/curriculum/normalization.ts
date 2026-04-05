@@ -147,16 +147,19 @@ function collectLeaves(
   if (typeof node === "string") {
     const title = node.trim();
     if (title) {
-      leaves.push({
-        title,
-        rawPath: [...pathSegments, title],
-        rawContainerPath: pathSegments,
-        sequenceIndex: leaves.length,
-        sourcePayload: {
-          leafKind: "string",
-          rawValue: node,
-        },
-      });
+        leaves.push({
+          title,
+          rawPath: [...pathSegments, title],
+          rawContainerPath: pathSegments,
+          sequenceIndex: leaves.length,
+          sourcePayload: {
+            leafKind: "string",
+            rawValue: node,
+            rawPath: [...pathSegments, title],
+            rawContainerPath: pathSegments,
+            rawDepth: pathSegments.length,
+          },
+        });
     }
     return leaves;
   }
@@ -173,6 +176,9 @@ function collectLeaves(
         sourcePayload: {
           leafKind: "array_item",
           rawValue: item,
+          rawPath: [...pathSegments, title],
+          rawContainerPath: pathSegments,
+          rawDepth: pathSegments.length,
         },
       });
     }
@@ -197,6 +203,9 @@ function collectLeaves(
           leafKind: "keyed_string",
           rawValue: value,
           rawKey: key,
+          rawPath: [...pathSegments, key],
+          rawContainerPath: pathSegments,
+          rawDepth: pathSegments.length,
         },
       });
       continue;
@@ -272,8 +281,17 @@ export function normalizeCurriculumDocument(args: {
       parentPath: null,
       originalLabel: rolePath.domain.originalLabel,
       originalType: rolePath.domain.synthesized ? "synthetic" : "source_container",
+      sourcePayload: {
+        nodeRole: "domain",
+        rawContainerPath: leaf.rawContainerPath,
+        rawPath: leaf.rawPath,
+        sourceLineage: leaf.rawContainerPath.slice(0, 1),
+        synthesized: rolePath.domain.synthesized,
+      },
       metadata: {
         rawContainerPath: leaf.rawContainerPath,
+        rawPath: leaf.rawPath,
+        sourceLineage: leaf.rawContainerPath.slice(0, 1),
         synthesized: rolePath.domain.synthesized,
       },
     });
@@ -285,8 +303,17 @@ export function normalizeCurriculumDocument(args: {
       parentPath: domainNode.normalizedPath,
       originalLabel: rolePath.strand.originalLabel,
       originalType: rolePath.strand.synthesized ? "synthetic" : "source_container",
+      sourcePayload: {
+        nodeRole: "strand",
+        rawContainerPath: leaf.rawContainerPath,
+        rawPath: leaf.rawPath,
+        sourceLineage: leaf.rawContainerPath.slice(0, 2),
+        synthesized: rolePath.strand.synthesized,
+      },
       metadata: {
         rawContainerPath: leaf.rawContainerPath,
+        rawPath: leaf.rawPath,
+        sourceLineage: leaf.rawContainerPath.slice(0, 2),
         synthesized: rolePath.strand.synthesized,
       },
     });
@@ -298,10 +325,29 @@ export function normalizeCurriculumDocument(args: {
       parentPath: strandNode.normalizedPath,
       originalLabel: rolePath.goalGroup.originalLabel,
       originalType: rolePath.goalGroup.synthesized ? "synthetic" : "source_container",
+      sourcePayload: {
+        nodeRole: "goal_group",
+        rawContainerPath: leaf.rawContainerPath,
+        rawPath: leaf.rawPath,
+        sourceLineage: leaf.rawPath.slice(0, 3),
+        synthesized: rolePath.goalGroup.synthesized,
+        ...(rolePath.compressedSegments.length > 0
+          ? {
+              compressedStructure: {
+                rawPath: leaf.rawPath,
+                rawContainerPath: leaf.rawContainerPath,
+                compressedSegments: rolePath.compressedSegments,
+              },
+            }
+          : {}),
+      },
       metadata: {
         rawContainerPath: leaf.rawContainerPath,
+        rawPath: leaf.rawPath,
+        sourceLineage: leaf.rawPath.slice(0, 3),
         synthesized: rolePath.goalGroup.synthesized,
         compressedSegments: rolePath.compressedSegments,
+        compressedStructure: rolePath.compressedSegments.length > 0,
       },
     });
 
@@ -316,6 +362,7 @@ export function normalizeCurriculumDocument(args: {
       metadata: {
         rawPath: leaf.rawPath,
         rawContainerPath: leaf.rawContainerPath,
+        sourceLineage: leaf.rawPath.slice(0, -1),
         canonicalSequenceIndex: leaf.sequenceIndex,
       },
     });
