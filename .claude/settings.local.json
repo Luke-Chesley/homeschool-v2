@@ -26,7 +26,10 @@
       "Bash(corepack pnpm:*)",
       "Bash(ln -s /home/luke/Desktop/homeschool-v2/node_modules /home/luke/Desktop/homeschool-v2/.worktrees/structured-activity-runtime/node_modules)",
       "Bash(node_modules/.bin/tsc --noEmit)",
-      "Bash(xargs ls:*)"
+      "Bash(xargs ls:*)",
+      "Bash(node:*)",
+      "Bash(pnpm test:curriculum)",
+      "Bash(make test:curriculum)"
     ]
   }
 }
