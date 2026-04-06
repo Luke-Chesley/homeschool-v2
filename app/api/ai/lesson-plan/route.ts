@@ -122,7 +122,8 @@ export async function POST(req: NextRequest) {
     artifactType: "lesson_plan",
     title: `${sourceTitle} lesson draft`,
     status: "ready",
-    body: result.output,
+    // Store structured draft as JSON string in the body field
+    body: JSON.stringify(result.output),
     promptVersion: result.lineage.promptRef.version,
     promptTemplateId: null,
     generationJobId: null,
@@ -138,6 +139,7 @@ export async function POST(req: NextRequest) {
       date,
       sourceId: workspaceResult.sourceId,
       routeFingerprint,
+      schemaVersion: result.output.schema_version,
     },
     qaMetadata: {
       lineageId: result.lineage.id,
@@ -154,12 +156,12 @@ export async function POST(req: NextRequest) {
     sourceId: workspaceResult.sourceId,
     sourceTitle,
     routeFingerprint,
-    markdown: result.output,
+    structured: result.output,
     promptVersion: result.lineage.promptRef.version,
   });
 
   return NextResponse.json({
-    markdown: savedDraft.markdown,
+    structured: savedDraft.structured,
     promptVersion: savedDraft.promptVersion,
     artifactId: artifact.id,
     sourceTitle,

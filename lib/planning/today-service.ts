@@ -1,5 +1,8 @@
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 
+import type { StructuredLessonDraft } from "@/lib/lesson-draft/types";
+import { isStructuredLessonDraft } from "@/lib/lesson-draft/types";
+
 import {
   getCurriculumTree,
   getLiveCurriculumSource,
@@ -79,12 +82,27 @@ function readLessonDraftFromMetadata(
   }
 
   const candidate = sourceDrafts[routeFingerprint];
-  if (!isRecord(candidate) || typeof candidate.markdown !== "string") {
+  if (!isRecord(candidate)) {
+    return null;
+  }
+
+  // New format: has a "structured" key with schema_version "1.0"
+  const hasStructured =
+    isRecord(candidate.structured) &&
+    (candidate.structured as Record<string, unknown>).schema_version === "1.0";
+
+  // Legacy format: has a "markdown" string key
+  const hasMarkdown = typeof candidate.markdown === "string";
+
+  if (!hasStructured && !hasMarkdown) {
     return null;
   }
 
   return {
-    markdown: candidate.markdown,
+    structured: hasStructured
+      ? (candidate.structured as StructuredLessonDraft)
+      : undefined,
+    markdown: hasMarkdown ? (candidate.markdown as string) : undefined,
     sourceId: typeof candidate.sourceId === "string" ? candidate.sourceId : sourceId,
     sourceTitle: typeof candidate.sourceTitle === "string" ? candidate.sourceTitle : "Curriculum",
     routeFingerprint:
@@ -451,7 +469,7 @@ export async function saveTodayLessonDraft(params: {
   sourceId: string;
   sourceTitle: string;
   routeFingerprint: string;
-  markdown: string;
+  structured: StructuredLessonDraft;
   promptVersion?: string;
 }) {
   const day = await getOrCreateTodayWorkspaceDay(params);
@@ -475,7 +493,7 @@ export async function saveTodayLessonDraft(params: {
           [params.sourceId]: {
             ...sourceDrafts,
             [params.routeFingerprint]: {
-              markdown: params.markdown,
+              structured: params.structured,
               sourceId: params.sourceId,
               sourceTitle: params.sourceTitle,
               routeFingerprint: params.routeFingerprint,
@@ -490,7 +508,7 @@ export async function saveTodayLessonDraft(params: {
     .where(eq(planDays.id, day.id));
 
   return {
-    markdown: params.markdown,
+    structured: params.structured,
     sourceId: params.sourceId,
     sourceTitle: params.sourceTitle,
     routeFingerprint: params.routeFingerprint,

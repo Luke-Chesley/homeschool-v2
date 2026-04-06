@@ -1,3 +1,10 @@
+import type { LessonShape, TeacherContext } from "../lesson-draft/types.ts";
+import { LESSON_BLOCK_TYPES } from "../lesson-draft/types.ts";
+
+// ---------------------------------------------------------------------------
+// Route item input shape (unchanged from previous version)
+// ---------------------------------------------------------------------------
+
 export interface LessonDraftRouteItemInput {
   title: string;
   subject: string;
@@ -6,6 +13,10 @@ export interface LessonDraftRouteItemInput {
   lessonLabel: string;
   note?: string;
 }
+
+// ---------------------------------------------------------------------------
+// Prompt input shape
+// ---------------------------------------------------------------------------
 
 export interface LessonDraftPromptInput {
   learnerName: string;
@@ -20,42 +31,94 @@ export interface LessonDraftPromptInput {
   materials: string[];
   weekHighlights?: string[];
   weekScheduleSummary?: string[];
+  lessonShape?: LessonShape;
+  teacherContext?: TeacherContext;
 }
 
-export const LESSON_DRAFT_PROMPT_VERSION = "1.3.0";
+// ---------------------------------------------------------------------------
+// Prompt version
+// ---------------------------------------------------------------------------
 
-export const LESSON_DRAFT_SYSTEM_PROMPT = `You are a homeschool lesson planner for a calm, parent-first planning workflow.
+export const LESSON_DRAFT_PROMPT_VERSION = "2.0.0";
 
-Write a practical lesson plan from the current day's route. Use the day's objectives and the current week's route context together. Keep the tone direct, grounded, and easy for a parent to teach from.
+// ---------------------------------------------------------------------------
+// System prompt
+// ---------------------------------------------------------------------------
 
-Requirements:
-- Use the provided route items, total time, and objective count as the actual planning constraints.
-- Treat the listed objectives as equal planning inputs unless the content itself implies a dependency.
-- Use the weekly context to keep today's lesson aligned with what came earlier in the week and what is coming next.
-- Keep the plan realistic for the available time. If there is not enough time for every objective, note the tradeoff and collapse or defer lower-priority work.
-- Prefer short, concrete sections over long prose.
-- Do not add hype, generic teaching platitudes, or filler.
-- Use the listed route items as context, but do not assume the exact sequence is fixed.
+const BLOCK_TYPE_LIST = LESSON_BLOCK_TYPES.join(", ");
 
-Return Markdown with these sections:
-1. Overview
-2. Time Budget
-3. Lesson Sequence
-4. Materials
-5. Parent Notes
+export const LESSON_DRAFT_SYSTEM_PROMPT = `You are a homeschool lesson planner that generates structured lesson data for a parent-facing teaching interface.
 
-Each section should be concise and actionable.`;
+IMPORTANT: Return valid JSON only. No markdown, no prose, no code fences. The output must parse as a StructuredLessonDraft object.
 
-export function buildLessonDraftUserPrompt(input: LessonDraftPromptInput) {
-  const objectives = input.objectives.length > 0
-    ? input.objectives.map((objective, index) => `${index + 1}. ${objective}`).join("\n")
-    : "1. Use the current day's items to keep the lesson coherent.";
+Schema (all fields are strings or string arrays unless annotated):
+{
+  "schema_version": "1.0",
+  "title": string,
+  "lesson_focus": string,           // 1 sentence, what this lesson is about
+  "primary_objectives": string[],   // 1-3 items, each <= 20 words
+  "success_criteria": string[],     // 1-4 items, observable/concrete
+  "total_minutes": number,
+  "blocks": Block[],
+  "materials": string[],
+  "teacher_notes": string[],        // short bullets, <= 5 items
+  "adaptations": Adaptation[],
+
+  // Optional - include only when genuinely useful:
+  "prep": string[],
+  "assessment_artifact": string,
+  "extension": string,
+  "follow_through": string,
+  "co_teacher_notes": string[],
+  "accommodations": string[],
+  "lesson_shape": string
+}
+
+Block shape:
+{
+  "type": one of [${BLOCK_TYPE_LIST}],
+  "title": string,                  // short label, <= 10 words
+  "minutes": number,
+  "purpose": string,                // 1 sentence max
+  "teacher_action": string,         // 1-2 sentences, what you do
+  "learner_action": string,         // 1-2 sentences, what learner does
+  "check_for": string,              // optional, 1 sentence
+  "materials_needed": string[],     // optional
+  "optional": boolean               // optional, true = can skip if time is short
+}
+
+Adaptation shape:
+{
+  "trigger": "if_struggles" | "if_finishes_early" | "if_attention_drops" | "if_materials_missing" | string,
+  "action": string                  // 1-2 sentences, actionable instruction
+}
+
+Rules:
+- Block minutes must sum to total_minutes +/- 15%.
+- Include at least one instructional block (model, guided_practice, independent_practice, demonstration, read_aloud, discussion, or project_work).
+- Include at least one visible check: a check_for_understanding or reflection block, or a check_for field on any block.
+- Do not follow a rigid pedagogical script. Choose only the blocks that fit this lesson.
+- Keep all text short and operational. No paragraphs. No narrative. No filler.
+- Align blocks to the provided route items and objectives without forcing route order as a script.
+- If total time is tight, mark lower-priority blocks as optional:true.
+- Adaptations are short, actionable, and ready to use during live teaching.
+- Do not include optional top-level fields unless they add clear value for this lesson.`;
+
+// ---------------------------------------------------------------------------
+// User prompt builder
+// ---------------------------------------------------------------------------
+
+export function buildLessonDraftUserPrompt(input: LessonDraftPromptInput): string {
+  const objectives =
+    input.objectives.length > 0
+      ? input.objectives.map((o, i) => `${i + 1}. ${o}`).join("\n")
+      : "1. Use the current day's items to keep the lesson coherent.";
 
   const routeItems = input.routeItems
-    .map((item, index) => {
+    .map((item, i) => {
       const noteLine = item.note ? `\n   Note: ${item.note}` : "";
       return [
-        `${index + 1}. ${item.title} (${item.subject}, ${item.estimatedMinutes} min)`,
+        `${i + 1}. ${item.title} (${item.subject}, ${item.estimatedMinutes} min)`,
         `   Objective: ${item.objective}`,
         `   Route label: ${item.lessonLabel}`,
         noteLine,
@@ -65,38 +128,58 @@ export function buildLessonDraftUserPrompt(input: LessonDraftPromptInput) {
     })
     .join("\n");
 
-  const materials = input.materials.length > 0 ? input.materials.join(" · ") : "No shared materials were collected.";
+  const materials =
+    input.materials.length > 0 ? input.materials.join(" · ") : "None listed.";
+
   const weekHighlights =
     input.weekHighlights && input.weekHighlights.length > 0
-      ? input.weekHighlights.map((highlight, index) => `${index + 1}. ${highlight}`).join("\n")
-      : "1. No weekly highlights were provided.";
+      ? input.weekHighlights.map((h, i) => `${i + 1}. ${h}`).join("\n")
+      : "None provided.";
+
   const weekScheduleSummary =
     input.weekScheduleSummary && input.weekScheduleSummary.length > 0
-      ? input.weekScheduleSummary.map((day, index) => `${index + 1}. ${day}`).join("\n")
-      : "1. No weekly schedule summary was provided.";
+      ? input.weekScheduleSummary.map((d, i) => `${i + 1}. ${d}`).join("\n")
+      : "None provided.";
 
-  return `Draft a lesson plan for ${input.learnerName} on ${input.dateLabel}.
+  const shapeNote = input.lessonShape
+    ? `\nLesson shape preference: ${input.lessonShape}`
+    : "";
+
+  const teacherNote = input.teacherContext
+    ? buildTeacherContextNote(input.teacherContext)
+    : "";
+
+  return `Generate a structured lesson plan for ${input.learnerName} on ${input.dateLabel}.
 
 Curriculum source: ${input.sourceTitle}
 Week context: ${input.weekLabel ?? "Current week"}
 Route items: ${input.itemCount}
 Total time: ${input.totalMinutes} minutes
 Objectives in scope: ${input.objectiveCount}
-
+${shapeNote}${teacherNote}
 Objectives:
 ${objectives}
 
 Route items:
 ${routeItems}
 
-Collected materials:
+Materials available:
 ${materials}
 
 Weekly highlights:
 ${weekHighlights}
 
-Weekly schedule summary:
+Weekly schedule:
 ${weekScheduleSummary}
 
-Use the route item count, time budget, objective count, and weekly context to shape the plan. Treat the objectives and route items as a set of inputs rather than a strict order. Keep the response ready to teach from, but concise enough to scan quickly.`;
+Return only valid JSON. No other text.`;
+}
+
+function buildTeacherContextNote(ctx: TeacherContext): string {
+  const lines: string[] = [];
+  if (ctx.subject_comfort) lines.push(`Teacher subject comfort: ${ctx.subject_comfort}`);
+  if (ctx.prep_tolerance) lines.push(`Prep tolerance: ${ctx.prep_tolerance}`);
+  if (ctx.teaching_style) lines.push(`Teaching style: ${ctx.teaching_style}`);
+  if (ctx.role) lines.push(`Role: ${ctx.role}`);
+  return lines.length > 0 ? "\n" + lines.join("\n") + "\n" : "";
 }
