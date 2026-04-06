@@ -4,7 +4,11 @@ import { requireAppSession } from "@/lib/app-session/server";
 import { createRepositories } from "@/lib/db";
 import { getDb } from "@/lib/db/server";
 import { getTodayWorkspace } from "@/lib/planning/today-service";
-import { buildContextFromPlanItem, buildPromptInput } from "@/lib/activities/generation-context";
+import {
+  buildContextFromLessonSession,
+  buildContextFromPlanItem,
+  buildPromptInput,
+} from "@/lib/activities/generation-context";
 import {
   ACTIVITY_SPEC_SYSTEM_PROMPT,
   buildActivitySpecUserPrompt,
@@ -12,7 +16,7 @@ import {
 import { publishActivitySpecForItem } from "@/lib/activities/assignment-service";
 
 // ---------------------------------------------------------------------------
-// Generate activity spec for a single plan item
+// Generate activity spec — lesson-first, item-second
 // ---------------------------------------------------------------------------
 
 export async function generateActivityAction(
@@ -55,6 +59,9 @@ export async function generateActivityAction(
       return { ok: true }; // idempotent
     }
 
+    // Pass the lesson draft when available — it becomes the primary generation input
+    const lessonDraft = workspaceResult.workspace.lessonDraft?.structured;
+
     await publishActivitySpecForItem({
       organizationId: session.organization.id,
       learnerId: session.activeLearner.id,
@@ -63,6 +70,7 @@ export async function generateActivityAction(
       planItem,
       learnerName: session.activeLearner.displayName,
       workflowMode,
+      lessonDraft,
     });
 
     return { ok: true };
@@ -73,7 +81,7 @@ export async function generateActivityAction(
 }
 
 // ---------------------------------------------------------------------------
-// Return the generation prompt for a plan item (debug / transparency)
+// Return the generation prompt (debug / transparency)
 // ---------------------------------------------------------------------------
 
 export async function getActivityPromptPreviewAction(
@@ -106,11 +114,17 @@ export async function getActivityPromptPreviewAction(
     const planItem = workspaceResult.workspace.items.find((item) => item.id === itemId);
     if (!planItem) return { ok: false, error: "Plan item not found" };
 
-    const ctx = buildContextFromPlanItem(
-      planItem,
-      session.activeLearner.displayName,
-      workflowMode,
-    );
+    // Mirror the same context-building logic as generation — lesson-first
+    const lessonDraft = workspaceResult.workspace.lessonDraft?.structured;
+    const ctx = lessonDraft
+      ? buildContextFromLessonSession({
+          lessonDraft,
+          planItem,
+          learnerName: session.activeLearner.displayName,
+          workflowMode,
+        })
+      : buildContextFromPlanItem(planItem, session.activeLearner.displayName, workflowMode);
+
     const promptInput = buildPromptInput(ctx);
     const userPrompt = buildActivitySpecUserPrompt(promptInput);
 

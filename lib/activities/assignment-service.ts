@@ -1,22 +1,30 @@
 import "@/lib/server-only";
 
 /**
- * Assignment service — spec-driven activity creation.
+ * Assignment service — lesson-first activity creation.
  *
- * Replaces the old fixed-blueprint system. Activities are now generated as
- * structured ActivitySpecs via the generation service, then persisted in
- * interactive_activities with activityType = "activity_spec" and
- * schemaVersion = "2".
+ * Activities are generated from a lesson session + lesson draft, with plan
+ * items providing optional scope narrowing. The lesson session is the primary
+ * ownership anchor; planItemId is secondary scope metadata.
  *
- * The old buildActivityBlueprint / buildGuidedPracticeDefinition / etc.
- * functions are removed. All new activities use the canonical ActivitySpec.
+ * Generation path:
+ *   1. Structured lesson draft available → generateActivitySpecForLessonSession()
+ *   2. No lesson draft → generateActivitySpecForPlanItem() (fallback)
+ *
+ * Persistence hierarchy:
+ *   activity → lessonSession (primary parent)
+ *   activity → planItem (scope/route reference, secondary)
  */
 
 import { createRepositories } from "@/lib/db";
 import { getDb } from "@/lib/db/server";
 import { getTodayWorkspace } from "@/lib/planning/today-service";
 import type { PlanItem } from "@/lib/planning/types";
-import { generateActivitySpecForPlanItem } from "./generation-service";
+import type { StructuredLessonDraft } from "@/lib/lesson-draft/types";
+import {
+  generateActivitySpecForLessonSession,
+  generateActivitySpecForPlanItem,
+} from "./generation-service";
 
 export async function publishActivitySpecForItem(params: {
   organizationId: string;
@@ -26,14 +34,24 @@ export async function publishActivitySpecForItem(params: {
   planItem: PlanItem;
   learnerName: string;
   workflowMode: string;
+  /** Structured lesson draft — primary generation input when available */
+  lessonDraft?: StructuredLessonDraft;
 }): Promise<void> {
   const repos = createRepositories(getDb());
 
-  const genResult = await generateActivitySpecForPlanItem(
-    params.planItem,
-    params.learnerName,
-    params.workflowMode,
-  );
+  // Lesson-first: use lesson draft as primary context when available
+  const genResult = params.lessonDraft
+    ? await generateActivitySpecForLessonSession({
+        lessonDraft: params.lessonDraft,
+        planItem: params.planItem,
+        learnerName: params.learnerName,
+        workflowMode: params.workflowMode,
+      })
+    : await generateActivitySpecForPlanItem(
+        params.planItem,
+        params.learnerName,
+        params.workflowMode,
+      );
 
   await repos.activities.createActivity({
     organizationId: params.organizationId,
@@ -54,13 +72,17 @@ export async function publishActivitySpecForItem(params: {
       promptVersion: genResult.promptVersion,
     },
     metadata: {
+      // Primary parent — lesson session
       sessionId: params.lessonSessionId,
+      // Scope metadata — plan item reference
       weeklyRouteItemId: params.planItem.id,
       sourceLabel: params.planItem.sourceLabel,
       lessonLabel: params.planItem.lessonLabel,
       standardIds: params.planItem.standards,
       estimatedMinutes: genResult.spec.estimatedMinutes,
       interactionMode: genResult.spec.interactionMode,
+      // Generation provenance
+      lessonDraftUsed: Boolean(params.lessonDraft),
     },
   });
 }
@@ -87,6 +109,9 @@ export async function ensurePublishedActivitiesForLearner(params: {
     return [];
   }
 
+  // Lesson draft is shared across all plan items from the same source
+  const lessonDraft = workspaceResult.workspace.lessonDraft?.structured;
+
   for (const planItem of workspaceResult.workspace.items) {
     const durablePlanItemId = planItem.planRecordId ?? planItem.workflow?.planItemId;
     const durableSessionId = planItem.sessionRecordId ?? planItem.workflow?.lessonSessionId;
@@ -96,8 +121,7 @@ export async function ensurePublishedActivitiesForLearner(params: {
     }
 
     const existingActivities = await repos.activities.listActivitiesForPlanItem(durablePlanItemId);
-    const publishedActivity = existingActivities.find((activity) => activity.status === "published");
-    if (publishedActivity) {
+    if (existingActivities.find((a) => a.status === "published")) {
       continue;
     }
 
@@ -109,6 +133,7 @@ export async function ensurePublishedActivitiesForLearner(params: {
       planItem,
       learnerName: params.learnerName,
       workflowMode,
+      lessonDraft,
     });
   }
 
