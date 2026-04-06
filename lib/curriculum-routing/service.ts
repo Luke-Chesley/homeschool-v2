@@ -43,7 +43,7 @@ const UNSCHEDULED_BLOCKING_SKILL_STATUSES = new Set<SkillStatus>([
 const UNFINISHED_SCHEDULED_STATUSES = new Set<SkillStatus>(["scheduled", "in_progress"]);
 
 const CAPACITY_STATES = new Set<WeeklyRouteItemState>(["queued", "scheduled", "in_progress"]);
-const WEEKDAY_COUNT = 5;
+const WEEKDAY_COUNT = 7;
 
 type RouteBoardContext = {
   sourceId: string;

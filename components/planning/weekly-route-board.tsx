@@ -53,7 +53,7 @@ function addDays(baseDate: string, days: number) {
 }
 
 function getWeekdayDates(weekStartDate: string) {
-  return Array.from({ length: 5 }, (_, index) => addDays(weekStartDate, index));
+  return Array.from({ length: 7 }, (_, index) => addDays(weekStartDate, index));
 }
 
 function getColumnLabel(columnId: ColumnId) {
