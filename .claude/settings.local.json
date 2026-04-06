@@ -25,7 +25,8 @@
       "Bash(sed -i 's|from \"\\\\./spec\"|from \"./spec.ts\"|g' lib/activities/validation.ts)",
       "Bash(corepack pnpm:*)",
       "Bash(ln -s /home/luke/Desktop/homeschool-v2/node_modules /home/luke/Desktop/homeschool-v2/.worktrees/structured-activity-runtime/node_modules)",
-      "Bash(node_modules/.bin/tsc --noEmit)"
+      "Bash(node_modules/.bin/tsc --noEmit)",
+      "Bash(xargs ls:*)"
     ]
   }
 }
