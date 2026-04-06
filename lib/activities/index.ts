@@ -16,10 +16,26 @@ export * from "./validation";
 export * from "./session-service";
 export { getAttemptStore } from "./attempt-store";
 export type { AttemptStore } from "./attempt-store";
-export { generateActivitySpec, generateActivitySpecForPlanItem } from "./generation-service";
+export {
+  generateActivitySpec,
+  generateActivitySpecForLessonSession,
+  generateActivitySpecForPlanItem,
+} from "./generation-service";
 export type { ActivityGenResult } from "./generation-service";
-export { buildContextFromPlanItem, buildPromptInput } from "./generation-context";
-export type { ActivityGenerationContext, LessonContext, CurriculumContext } from "./generation-context";
+export {
+  buildContextFromLessonSession,
+  buildContextFromPlanItem,
+  buildPromptInput,
+  extractLessonDraftContext,
+} from "./generation-context";
+export type {
+  ActivityGenerationContext,
+  LessonContext,
+  LessonDraftContext,
+  CurriculumContext,
+  ActivityScope,
+  ActivityScopeKind,
+} from "./generation-context";
 
 // Fixtures (local dev only)
 export { FIXTURE_SESSIONS } from "./fixtures";

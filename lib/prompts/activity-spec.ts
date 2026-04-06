@@ -4,10 +4,14 @@
  * The model outputs a structured ActivitySpec (schemaVersion "2").
  * No prose, no raw code, no arbitrary UI — only bounded component types
  * from the supported library.
+ *
+ * When a structured lesson draft is provided, it is the primary input.
+ * Plan item metadata is secondary/scope context.
  */
 
 import { COMPONENT_TYPE_LIST } from "@/lib/activities/components";
 import { ActivityKindSchema } from "@/lib/activities/kinds";
+import type { LessonDraftContext, ActivityScope } from "@/lib/activities/generation-context";
 
 // ---------------------------------------------------------------------------
 // Prompt inputs
@@ -30,6 +34,17 @@ export interface ActivitySpecPromptInput {
   /** Teacher/parent constraints */
   workflowMode?: string;
   materialsAvailable?: string[];
+  /**
+   * Structured lesson draft — when present, this is the primary generation
+   * input. The model should use lesson blocks, success criteria, and
+   * adaptations to shape the activity design.
+   */
+  lessonDraft?: LessonDraftContext;
+  /**
+   * Activity scope within the lesson — how narrowly this activity is focused
+   * relative to the full session.
+   */
+  scope?: Pick<ActivityScope, "kind" | "label" | "planItemId">;
   /** Generation hints */
   templateHint?: string;
   interactionModePreference?: "digital" | "offline" | "hybrid";
@@ -44,7 +59,7 @@ export interface ActivitySpecPromptInput {
 // Prompt version
 // ---------------------------------------------------------------------------
 
-export const ACTIVITY_SPEC_PROMPT_VERSION = "1.0.0";
+export const ACTIVITY_SPEC_PROMPT_VERSION = "2.0.0";
 
 // ---------------------------------------------------------------------------
 // System prompt
@@ -54,6 +69,8 @@ const KIND_LIST = ActivityKindSchema.options.join(", ");
 const COMPONENT_LIST = COMPONENT_TYPE_LIST.join(", ");
 
 export const ACTIVITY_SPEC_SYSTEM_PROMPT = `You are an expert homeschool activity designer. You generate structured activity specifications that are rendered by a bounded component library. You never generate raw frontend code.
+
+Your primary input is a structured lesson plan (when provided). Use the lesson's objectives, block sequence, success criteria, and adaptations to design an activity that fits the actual lesson — not a generic exercise.
 
 ## Your output
 
@@ -138,18 +155,20 @@ answer_response, file_artifact, image_artifact, audio_artifact, self_assessment,
 ## Design rules
 
 1. Choose activityKind based on LEARNING INTENT, not UI shape. The same UI components can serve many kinds.
-2. Components describe how the learner interacts — keep them grounded in the lesson topic.
-3. For offline activities (real-world experiments, art, sports, reading physical books), set interactionMode to "offline" and include an offlineMode config. Use evidence-capture components (observation_record, teacher_checkoff, reflection_prompt, image_capture) instead of forcing digital interaction.
-4. Do NOT spam quiz-style questions. Use single_select or multi_select only when testing recall is the right pedagogical choice.
-5. Build steps (build_steps) are for scaffolded problem-solving, not generic instruction delivery.
-6. For reflection activities, use reflection_prompt with meaningful sub-prompts — not just "what did you learn?".
-7. Always include a confidence_check for activities where learner confidence is informative.
-8. Always include teacherSupport with setup notes, discussion questions, and mastery indicators.
-9. Estimate time realistically — a 15-minute session should not have 8 interactive components.
-10. For correctness_based scoring, mark correct answers in choice configs (they are stripped before sending to the learner).
-11. Component IDs must be unique within the activity (use short kebab-case like "step-1", "q-place-value", "reflection-main").
-12. Do not duplicate the lesson draft in prose inside paragraph components. Use content components sparingly to frame context.
-13. The activity should produce evidence that tells a parent/teacher something meaningful — don't generate evidence that is trivially useless.
+2. When a lesson draft is provided, use the block sequence to determine what kind of interaction fits (e.g., a guided_practice block → build_steps or construction_space; a reflection block → reflection_prompt; a check_for_understanding block → single_select or short_answer).
+3. Components describe how the learner interacts — keep them grounded in the lesson topic and the lesson draft's success criteria.
+4. For offline activities (real-world experiments, art, sports, reading physical books), set interactionMode to "offline" and include an offlineMode config. Use evidence-capture components (observation_record, teacher_checkoff, reflection_prompt, image_capture) instead of forcing digital interaction.
+5. Do NOT spam quiz-style questions. Use single_select or multi_select only when testing recall is the right pedagogical choice.
+6. Build steps (build_steps) are for scaffolded problem-solving, not generic instruction delivery.
+7. For reflection activities, use reflection_prompt with meaningful sub-prompts grounded in the lesson's success criteria — not just "what did you learn?".
+8. Always include a confidence_check for activities where learner confidence is informative.
+9. Always include teacherSupport with setup notes, discussion questions, and mastery indicators — pull from the lesson draft's teacher_notes and adaptations when available.
+10. Estimate time realistically — a 15-minute session should not have 8 interactive components.
+11. For correctness_based scoring, mark correct answers in choice configs (they are stripped before sending to the learner).
+12. Component IDs must be unique within the activity (use short kebab-case like "step-1", "q-place-value", "reflection-main").
+13. Do not duplicate the lesson draft in prose inside paragraph components. Use content components sparingly to frame context.
+14. The activity should produce evidence that tells a parent/teacher something meaningful — don't generate evidence that is trivially useless.
+15. If a scope is provided (e.g., route_item), design the activity to target that specific skill or topic within the broader lesson, not the lesson as a whole.
 `;
 
 // ---------------------------------------------------------------------------
@@ -163,32 +182,111 @@ export function buildActivitySpecUserPrompt(input: ActivitySpecPromptInput): str
   lines.push(``);
   lines.push(`Learner: ${input.learnerName}${input.learnerGradeLevel ? ` (${input.learnerGradeLevel})` : ""}`);
   lines.push(`Subject: ${input.curriculumSubject}`);
-  lines.push(`Lesson: ${input.lessonTitle}`);
-  lines.push(`Lesson purpose: ${input.lessonPurpose}`);
   lines.push(`Session budget: ${input.estimatedMinutes} minutes`);
+
+  if (input.workflowMode) {
+    lines.push(`Workflow mode: ${input.workflowMode}`);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Lesson draft (primary input when available)
+  // ---------------------------------------------------------------------------
+
+  if (input.lessonDraft) {
+    const d = input.lessonDraft;
+    lines.push(``);
+    lines.push(`## Lesson plan`);
+    lines.push(`Title: ${input.lessonTitle}`);
+    lines.push(`Focus: ${d.lessonFocus}`);
+
+    if (d.primaryObjectives.length > 0) {
+      lines.push(`Objectives:`);
+      for (const obj of d.primaryObjectives) {
+        lines.push(`- ${obj}`);
+      }
+    }
+
+    if (d.successCriteria.length > 0) {
+      lines.push(`Success criteria (use these as mastery indicators in teacherSupport):`);
+      for (const sc of d.successCriteria) {
+        lines.push(`- ${sc}`);
+      }
+    }
+
+    if (d.blocks.length > 0) {
+      lines.push(`Lesson blocks:`);
+      for (const block of d.blocks) {
+        const opt = block.optional ? " [optional]" : "";
+        lines.push(`  [${block.type}${opt}] ${block.title} (${block.minutes} min)`);
+        lines.push(`    Purpose: ${block.purpose}`);
+        lines.push(`    Learner: ${block.learnerAction}`);
+      }
+    }
+
+    if (d.materials.length > 0) {
+      lines.push(`Materials: ${d.materials.join(", ")}`);
+    }
+
+    if (d.teacherNotes.length > 0) {
+      lines.push(`Teacher notes:`);
+      for (const note of d.teacherNotes) {
+        lines.push(`- ${note}`);
+      }
+    }
+
+    if (d.adaptations.length > 0) {
+      lines.push(`Adaptations:`);
+      for (const a of d.adaptations) {
+        lines.push(`- ${a.trigger}: ${a.action}`);
+      }
+    }
+
+    if (d.assessmentArtifact) {
+      lines.push(`Assessment artifact: ${d.assessmentArtifact}`);
+    }
+
+    if (d.lessonShape) {
+      lines.push(`Lesson shape: ${d.lessonShape}`);
+    }
+  } else {
+    // No lesson draft — fall back to plan item metadata
+    lines.push(`Lesson: ${input.lessonTitle}`);
+    lines.push(`Lesson purpose: ${input.lessonPurpose}`);
+
+    if (input.lessonObjectives.length > 0) {
+      lines.push(``);
+      lines.push(`Objectives:`);
+      for (const obj of input.lessonObjectives) {
+        lines.push(`- ${obj}`);
+      }
+    }
+
+    if (input.materialsAvailable && input.materialsAvailable.length > 0) {
+      lines.push(`Materials available: ${input.materialsAvailable.join(", ")}`);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Scope (always included)
+  // ---------------------------------------------------------------------------
+
+  if (input.scope) {
+    lines.push(``);
+    lines.push(`Activity scope: ${input.scope.kind}${input.scope.label ? ` — "${input.scope.label}"` : ""}`);
+    if (input.scope.kind === "route_item") {
+      lines.push(`Design this activity to target the scoped skill/topic above within the broader lesson.`);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Optional fields
+  // ---------------------------------------------------------------------------
 
   if (input.skillTitle) {
     lines.push(`Skill: ${input.skillTitle}`);
   }
   if (input.skillPath) {
     lines.push(`Skill path: ${input.skillPath}`);
-  }
-
-  if (input.lessonObjectives.length > 0) {
-    lines.push(``);
-    lines.push(`Objectives:`);
-    for (const obj of input.lessonObjectives) {
-      lines.push(`- ${obj}`);
-    }
-  }
-
-  if (input.materialsAvailable && input.materialsAvailable.length > 0) {
-    lines.push(``);
-    lines.push(`Materials available: ${input.materialsAvailable.join(", ")}`);
-  }
-
-  if (input.workflowMode) {
-    lines.push(`Workflow mode: ${input.workflowMode}`);
   }
 
   if (input.templateHint) {

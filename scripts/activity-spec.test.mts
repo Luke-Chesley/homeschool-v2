@@ -514,3 +514,201 @@ test("reflection activity — validates and captures confidence signal", () => {
   assert.equal(parsed?.activityKind, "reflection");
   assert.equal(parsed?.evidenceSchema.captureKinds.includes("confidence_signal"), true);
 });
+
+// ---------------------------------------------------------------------------
+// Test: lesson-first context builder
+// ---------------------------------------------------------------------------
+
+import {
+  buildContextFromLessonSession,
+  buildContextFromPlanItem,
+  extractLessonDraftContext,
+  buildPromptInput,
+} from "../lib/activities/generation-context.ts";
+import type { StructuredLessonDraft } from "../lib/lesson-draft/types.ts";
+import type { PlanItem } from "../lib/planning/types.ts";
+
+const sampleLessonDraft: StructuredLessonDraft = {
+  schema_version: "1.0",
+  title: "Long Division — Step by Step",
+  lesson_focus: "Master the standard algorithm for long division with 3-digit dividends.",
+  primary_objectives: [
+    "Perform long division with a 1-digit divisor",
+    "Identify remainder and check by multiplying back",
+  ],
+  success_criteria: [
+    "Learner can correctly divide a 3-digit number by a 1-digit number",
+    "Learner explains each step without prompting",
+  ],
+  total_minutes: 40,
+  blocks: [
+    {
+      type: "retrieval",
+      title: "Warm-up multiplication facts",
+      minutes: 5,
+      purpose: "Activate prior knowledge of multiplication needed for division",
+      teacher_action: "Ask 6 quick multiplication questions",
+      learner_action: "Answer 6 multiplication questions verbally",
+    },
+    {
+      type: "model",
+      title: "Teacher models long division",
+      minutes: 10,
+      purpose: "Show the step-by-step procedure",
+      teacher_action: "Work through 2 examples on whiteboard",
+      learner_action: "Watch and take notes",
+    },
+    {
+      type: "guided_practice",
+      title: "Guided problem set",
+      minutes: 15,
+      purpose: "Practice with support",
+      teacher_action: "Circulate and prompt as needed",
+      learner_action: "Solve 4 problems in workbook",
+    },
+    {
+      type: "reflection",
+      title: "Session reflection",
+      minutes: 5,
+      purpose: "Consolidate learning",
+      teacher_action: "Ask reflection questions",
+      learner_action: "Write 2 sentences about what they learned",
+    },
+  ],
+  materials: ["Math workbook p.42", "Whiteboard", "Pencil"],
+  teacher_notes: [
+    "Emphasize D-M-S-B (divide, multiply, subtract, bring down)",
+    "Check remainder is less than divisor",
+  ],
+  adaptations: [
+    { trigger: "if_struggles", action: "Use smaller numbers, work one step at a time" },
+    { trigger: "if_finishes_early", action: "Try 4-digit dividends" },
+  ],
+  assessment_artifact: "Completed workbook page with 4 problems",
+};
+
+const samplePlanItem: PlanItem = {
+  id: "route-item-123",
+  date: "2026-04-05",
+  title: "Long Division",
+  subject: "Math",
+  kind: "lesson",
+  objective: "Practice long division with 3-digit numbers",
+  estimatedMinutes: 40,
+  status: "ready",
+  standards: [],
+  goals: [],
+  materials: ["Math workbook"],
+  artifactSlots: ["work sample"],
+  copilotPrompts: [],
+  sourceLabel: "Math Curriculum",
+  lessonLabel: "Math · Division · Long Division",
+  curriculum: {
+    sourceId: "src-math",
+    skillNodeId: "skill-long-div",
+    weeklyRouteItemId: "route-item-123",
+    origin: "curriculum_route",
+  },
+};
+
+test("buildContextFromLessonSession — uses lesson draft as primary source", () => {
+  const ctx = buildContextFromLessonSession({
+    lessonDraft: sampleLessonDraft,
+    planItem: samplePlanItem,
+    learnerName: "Alex",
+    workflowMode: "family_guided",
+  });
+
+  // Lesson-level fields come from the draft
+  assert.equal(ctx.lesson.title, "Long Division — Step by Step");
+  assert.equal(ctx.lesson.purpose, sampleLessonDraft.lesson_focus);
+  assert.deepEqual(ctx.lesson.objectives, sampleLessonDraft.primary_objectives);
+  assert.equal(ctx.lesson.estimatedMinutes, 40);
+
+  // Lesson draft context is populated
+  assert.ok(ctx.lessonDraft, "lessonDraft context should be present");
+  assert.equal(ctx.lessonDraft!.lessonFocus, sampleLessonDraft.lesson_focus);
+  assert.equal(ctx.lessonDraft!.blocks.length, 4);
+  assert.deepEqual(ctx.lessonDraft!.successCriteria, sampleLessonDraft.success_criteria);
+  assert.equal(ctx.lessonDraft!.assessmentArtifact, "Completed workbook page with 4 problems");
+});
+
+test("buildContextFromLessonSession — plan item provides scope and curriculum linkage", () => {
+  const ctx = buildContextFromLessonSession({
+    lessonDraft: sampleLessonDraft,
+    planItem: samplePlanItem,
+    learnerName: "Alex",
+    workflowMode: "family_guided",
+  });
+
+  assert.equal(ctx.scope?.kind, "route_item");
+  assert.equal(ctx.scope?.planItemId, "route-item-123");
+  assert.equal(ctx.scope?.label, "Long Division");
+  assert.equal(ctx.curriculum.sourceTitle, "Math Curriculum");
+  assert.equal(ctx.lesson.subject, "Math");
+});
+
+test("buildContextFromLessonSession — materials come from lesson draft when available", () => {
+  const ctx = buildContextFromLessonSession({
+    lessonDraft: sampleLessonDraft,
+    planItem: samplePlanItem,
+    learnerName: "Alex",
+  });
+
+  // Lesson draft materials take precedence over plan item materials
+  assert.deepEqual(ctx.teacher?.materialsAvailable, ["Math workbook p.42", "Whiteboard", "Pencil"]);
+});
+
+test("buildContextFromLessonSession — works without plan item (session-level scope)", () => {
+  const ctx = buildContextFromLessonSession({
+    lessonDraft: sampleLessonDraft,
+    learnerName: "Alex",
+  });
+
+  assert.equal(ctx.scope?.kind, "session");
+  assert.equal(ctx.scope?.label, "Long Division — Step by Step");
+  assert.equal(ctx.lesson.title, "Long Division — Step by Step");
+});
+
+test("extractLessonDraftContext — produces compact representation", () => {
+  const draftCtx = extractLessonDraftContext(sampleLessonDraft);
+
+  assert.equal(draftCtx.lessonFocus, sampleLessonDraft.lesson_focus);
+  assert.equal(draftCtx.blocks.length, 4);
+  // Only learner_action is included — teacher_action is not
+  assert.ok(!("teacher_action" in draftCtx.blocks[0]!));
+  assert.equal(draftCtx.blocks[0]!.learnerAction, "Answer 6 multiplication questions verbally");
+  assert.equal(draftCtx.adaptations.length, 2);
+  assert.equal(draftCtx.assessmentArtifact, "Completed workbook page with 4 problems");
+});
+
+test("buildPromptInput — includes lessonDraft when present in context", () => {
+  const ctx = buildContextFromLessonSession({
+    lessonDraft: sampleLessonDraft,
+    planItem: samplePlanItem,
+    learnerName: "Alex",
+  });
+  const input = buildPromptInput(ctx);
+
+  assert.ok(input.lessonDraft, "prompt input should include lessonDraft");
+  assert.equal(input.lessonDraft!.lessonFocus, sampleLessonDraft.lesson_focus);
+  assert.equal(input.scope?.kind, "route_item");
+});
+
+test("buildPromptInput — no lessonDraft when built from plan item only", () => {
+  const ctx = buildContextFromPlanItem(samplePlanItem, "Alex", "family_guided");
+  const input = buildPromptInput(ctx);
+
+  assert.equal(input.lessonDraft, undefined);
+  assert.equal(input.scope?.kind, "route_item");
+});
+
+test("buildContextFromPlanItem — backward compat: no lessonDraft in context", () => {
+  const ctx = buildContextFromPlanItem(samplePlanItem, "Alex", "manager_led");
+
+  assert.equal(ctx.lessonDraft, undefined);
+  assert.equal(ctx.lesson.title, "Long Division");
+  assert.equal(ctx.lesson.purpose, samplePlanItem.objective);
+  assert.equal(ctx.scope?.kind, "route_item");
+  assert.equal(ctx.teacher?.workflowMode, "manager_led");
+});

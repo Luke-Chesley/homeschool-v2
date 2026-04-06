@@ -6,9 +6,13 @@ import "@/lib/server-only";
  * Generates ActivitySpec objects from lesson and curriculum context via AI.
  * Falls back to a deterministic spec when AI is unavailable or fails.
  *
- * This replaces the old blueprint system in assignment-service.ts.
- * Old per-kind blueprints (guided_practice, reflection, checklist, etc.) are
- * no longer the canonical generation path.
+ * Primary path: generateActivitySpecForLessonSession()
+ *   — uses structured lesson draft as the main content source
+ *   — plan item provides scope/curriculum linkage
+ *
+ * Fallback path: generateActivitySpecForPlanItem()
+ *   — used when no lesson draft is available
+ *   — plan item metadata is the sole content source
  */
 
 import { getAdapterForTask } from "@/lib/ai/registry";
@@ -23,10 +27,12 @@ import { ActivitySpecSchema, parseActivitySpec, type ActivitySpec } from "./spec
 import { validateActivitySpec } from "./validation";
 import {
   buildContextFromPlanItem,
+  buildContextFromLessonSession,
   buildPromptInput,
   type ActivityGenerationContext,
 } from "./generation-context";
 import type { PlanItem } from "@/lib/planning/types";
+import type { StructuredLessonDraft } from "@/lib/lesson-draft/types";
 
 // ---------------------------------------------------------------------------
 // Generation result
@@ -41,12 +47,34 @@ export interface ActivityGenResult {
 }
 
 // ---------------------------------------------------------------------------
-// Public API
+// Public API — primary (lesson-first)
 // ---------------------------------------------------------------------------
 
 /**
- * Generate an ActivitySpec from a plan item.
- * This is the primary entry point used by the assignment service.
+ * Generate an ActivitySpec from a structured lesson draft.
+ * This is the primary production entry point.
+ *
+ * The lesson draft is the main content source; planItem (if given) provides
+ * curriculum linkage and narrows scope to a specific skill within the lesson.
+ */
+export async function generateActivitySpecForLessonSession(params: {
+  lessonDraft: StructuredLessonDraft;
+  planItem?: PlanItem;
+  learnerName: string;
+  workflowMode?: string;
+}): Promise<ActivityGenResult> {
+  const ctx = buildContextFromLessonSession(params);
+  return generateActivitySpec(ctx);
+}
+
+// ---------------------------------------------------------------------------
+// Public API — fallback (plan-item-only)
+// ---------------------------------------------------------------------------
+
+/**
+ * Generate an ActivitySpec from a plan item alone.
+ * Used when no structured lesson draft is available.
+ * Plan item metadata is the sole content source in this path.
  */
 export async function generateActivitySpecForPlanItem(
   planItem: PlanItem,
@@ -57,16 +85,22 @@ export async function generateActivitySpecForPlanItem(
   return generateActivitySpec(ctx);
 }
 
+// ---------------------------------------------------------------------------
+// Core generation — AI + fallback
+// ---------------------------------------------------------------------------
+
 /**
  * Generate an ActivitySpec from a rich generation context.
- * Used when more context is available (lesson draft, curriculum tree, etc.).
+ * Tries AI up to 2 times; falls back to a deterministic spec.
  */
 export async function generateActivitySpec(
   ctx: ActivityGenerationContext,
 ): Promise<ActivityGenResult> {
-  // Try AI generation with up to 2 attempts (second with correction notes)
   for (let attempt = 0; attempt < 2; attempt++) {
-    const correctionNotes = attempt > 0 ? "Previous attempt produced an invalid spec. See errors above. Fix all issues." : undefined;
+    const correctionNotes =
+      attempt > 0
+        ? "Previous attempt produced an invalid spec. See errors above. Fix all issues."
+        : undefined;
     const result = await tryAiGenerate(ctx, correctionNotes);
     if (result) {
       return {
@@ -78,7 +112,6 @@ export async function generateActivitySpec(
     }
   }
 
-  // Fallback to deterministic spec
   const spec = buildFallbackSpec(ctx);
   return {
     spec,
@@ -137,15 +170,15 @@ async function tryAiGenerate(
 
 /**
  * Builds a minimal but valid ActivitySpec without AI.
- * Used when AI generation fails or is unavailable.
+ * When a lesson draft is available, success criteria are used as mastery
+ * indicators. Block sequence informs activity structure.
  */
 function buildFallbackSpec(ctx: ActivityGenerationContext): ActivitySpec {
-  const { lesson, curriculum, teacher } = ctx;
+  const { lesson, lessonDraft, curriculum, teacher, scope } = ctx;
   const subject = curriculum.subject ?? lesson.subject ?? "this subject";
   const minutes = lesson.estimatedMinutes ?? 20;
   const workflowMode = teacher?.workflowMode ?? "family_guided";
 
-  // Determine appropriate activity kind from workflow mode and lesson context
   const activityKind =
     workflowMode === "manager_led"
       ? "observation"
@@ -153,23 +186,28 @@ function buildFallbackSpec(ctx: ActivityGenerationContext): ActivitySpec {
         ? "demonstration"
         : "guided_practice";
 
+  // Use lesson draft objectives / success criteria when available
+  const objectives = lessonDraft?.primaryObjectives ?? lesson.objectives;
+  const successCriteria = lessonDraft?.successCriteria ?? [];
+  const scopeLabel = scope?.label ?? lesson.title;
+
   const components: ActivitySpec["components"] = [
     {
       type: "paragraph",
       id: "intro",
-      text: `${lesson.purpose ?? `Work through ${lesson.title} and capture what you understand.`}`,
+      text: lessonDraft?.lessonFocus ?? lesson.purpose ?? `Work through ${lesson.title} and capture what you understand.`,
     },
     {
       type: "text_response",
       id: "focus",
       prompt: `In your own words, explain the focus for this ${subject.toLowerCase()} session.`,
-      hint: lesson.objectives[0],
+      hint: objectives[0],
       required: true,
     },
     {
       type: "text_response",
       id: "work",
-      prompt: `Complete the core work for "${lesson.title}" and record the key step or answer you reached.`,
+      prompt: `Complete the core work for "${scopeLabel}" and record the key step or answer you reached.`,
       hint: (teacher?.materialsAvailable ?? []).join(" · ") || undefined,
       required: true,
     },
@@ -195,31 +233,34 @@ function buildFallbackSpec(ctx: ActivityGenerationContext): ActivitySpec {
     },
   ];
 
-  // For manager_led or observation-style, add teacher checkoff
   if (workflowMode === "manager_led" || activityKind === "observation") {
     components.push({
       type: "teacher_checkoff",
       id: "checkoff",
       prompt: "Supervisor confirmation",
       items: [
-        {
-          id: "checkoff-ready",
-          label: "Work sample is ready for review",
-        },
-        {
-          id: "checkoff-notes",
-          label: "Context and blockers are recorded",
-        },
+        { id: "checkoff-ready", label: "Work sample is ready for review" },
+        { id: "checkoff-notes", label: "Context and blockers are recorded" },
       ],
       acknowledgmentLabel: "I confirm this session is ready for review.",
       notePrompt: "Notes for the reviewer",
     });
   }
 
+  // Pull mastery indicators from lesson draft success criteria when available
+  const masteryIndicators =
+    successCriteria.length > 0
+      ? successCriteria
+      : objectives.map((o) => `Learner can: ${o}`);
+
   return {
     schemaVersion: "2",
-    title: `${lesson.title} — activity`,
-    purpose: lesson.purpose ?? lesson.objectives[0] ?? `Work through ${lesson.title}.`,
+    title: `${scopeLabel} — activity`,
+    purpose:
+      lessonDraft?.lessonFocus ??
+      lesson.purpose ??
+      lesson.objectives[0] ??
+      `Work through ${lesson.title}.`,
     activityKind,
     linkedObjectiveIds: ctx.linkedObjectiveIds ?? [],
     linkedSkillTitles: ctx.linkedSkillTitles ?? [],
@@ -238,10 +279,7 @@ function buildFallbackSpec(ctx: ActivityGenerationContext): ActivitySpec {
       autoScorable: false,
     },
     scoringModel: {
-      mode:
-        activityKind === "observation"
-          ? "teacher_observed"
-          : "completion_based",
+      mode: activityKind === "observation" ? "teacher_observed" : "completion_based",
       masteryThreshold: 0.8,
       reviewThreshold: 0.6,
     },
@@ -251,8 +289,10 @@ function buildFallbackSpec(ctx: ActivityGenerationContext): ActivitySpec {
       allowRetry: true,
     },
     teacherSupport: {
-      setupNotes: `Review "${lesson.title}" objectives before the session starts.`,
-      masteryIndicators: lesson.objectives.map((o) => `Learner can: ${o}`),
+      setupNotes: lessonDraft
+        ? `${lessonDraft.teacherNotes.join(" ")} Review "${scopeLabel}" before the session starts.`
+        : `Review "${lesson.title}" objectives before the session starts.`,
+      masteryIndicators,
     },
   };
 }
