@@ -41,6 +41,20 @@ export const CurriculumNodeTypeSchema = z.enum([
 
 export const JsonRecordSchema = z.record(z.string(), z.unknown());
 
+/**
+ * Source-level pacing contract extracted from the AI generation artifact.
+ * These values survive beyond the raw artifact and are the authoritative
+ * source of session timing for planning and lesson-draft generation.
+ */
+export const CurriculumSourcePacingSchema = z.object({
+  sessionMinutes: z.number().int().positive().optional(),
+  sessionsPerWeek: z.number().positive().optional(),
+  totalWeeks: z.number().int().positive().optional(),
+  totalSessions: z.number().int().positive().optional(),
+});
+
+export type CurriculumSourcePacing = z.infer<typeof CurriculumSourcePacingSchema>;
+
 export const CurriculumSourceSchema = z.object({
   id: z.string(),
   householdId: z.string(),
@@ -54,6 +68,8 @@ export const CurriculumSourceSchema = z.object({
   storagePath: z.string().optional(),
   indexingStatus: z.enum(["pending", "indexed", "failed", "not_applicable"]).default("not_applicable"),
   importVersion: z.number().int().positive().default(1),
+  /** Pacing contract from curriculum generation. Use this as the session budget source. */
+  pacing: CurriculumSourcePacingSchema.optional(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });

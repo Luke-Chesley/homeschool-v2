@@ -35,6 +35,11 @@ import type { WeeklyRouteBoard } from "@/lib/curriculum-routing";
 import { toWeekStartDate } from "@/lib/curriculum-routing";
 import { buildCopilotPlanningContext } from "@/lib/planning/copilot-snapshot";
 import { syncDailyWorkspaceSessionRecords } from "@/lib/planning/session-workspace-service";
+import {
+  resolveLessonSessionMinutes,
+  type LessonTimingContract,
+} from "@/lib/planning/session-timing";
+import type { CurriculumSource } from "@/lib/curriculum/types";
 
 const DEFAULT_UNSCHEDULED_ITEM_COUNT = 4;
 const TODAY_WORKSPACE_PLAN_PURPOSE = "today_workspace";
@@ -210,6 +215,8 @@ async function syncTodayPlanItems(params: {
   date: string;
   sourceId: string;
   sourceTitle: string;
+  /** Session budget from the canonical timing contract. Used for lesson session scheduledMinutes. */
+  sessionBudgetMinutes: number;
   selectedRouteItems: WeeklyRouteBoard["items"];
   nodeById: Map<string, Awaited<ReturnType<typeof listCurriculumNodes>>[number]>;
 }) {
@@ -268,7 +275,9 @@ async function syncTodayPlanItems(params: {
     let linkRecord = linkByWeeklyRouteItemId.get(routeItem.id) ?? null;
     const existingPlanItem = linkRecord ? planItemById.get(linkRecord.planItemId) ?? null : null;
     const scheduledDate = routeItem.scheduledDate ?? params.date;
-    const estimatedMinutes = node?.estimatedMinutes ?? 45;
+    // Item-effort: node-level override if explicitly set, otherwise session budget.
+    // This is NOT the session's total budget — it is one item's effort share.
+    const itemEffortMinutes = node?.estimatedMinutes ?? params.sessionBudgetMinutes;
     const subject = node?.normalizedPath.split("/")[0] ?? params.sourceTitle;
 
     let planItemRecord =
@@ -284,7 +293,7 @@ async function syncTodayPlanItems(params: {
           subject,
           status: mapRouteStateToPlanStatus(routeItem.state) === "blocked" ? "skipped" : "ready",
           scheduledDate,
-          estimatedMinutes,
+          estimatedMinutes: itemEffortMinutes,
           ordering: index,
           metadata: {
             sourceLabel: params.sourceTitle,
@@ -307,7 +316,7 @@ async function syncTodayPlanItems(params: {
           subject,
           status: mapRouteStateToPlanStatus(routeItem.state) === "blocked" ? "skipped" : "ready",
           scheduledDate,
-          estimatedMinutes,
+          estimatedMinutes: itemEffortMinutes,
           ordering: index,
           metadata: {
             ...(existingPlanItem.metadata ?? {}),
@@ -360,7 +369,8 @@ async function syncTodayPlanItems(params: {
       planDayId: workspaceDay.id,
       planItemId: planItemRecord.id,
       sessionDate: scheduledDate,
-      scheduledMinutes: estimatedMinutes,
+      // Use the canonical session budget (from curriculum pacing), not item effort.
+      scheduledMinutes: params.sessionBudgetMinutes,
       metadata: {
         weeklyRouteItemId: routeItem.id,
         sourceId: routeItem.sourceId,
@@ -549,6 +559,7 @@ function buildPlanItem(
   routeItem: WeeklyRouteBoard["items"][number],
   sourceTitle: string,
   date: string,
+  sessionBudgetMinutes: number,
   node?: Awaited<ReturnType<typeof listCurriculumNodes>>[number],
   workflow?: {
     planItemId: string;
@@ -560,7 +571,8 @@ function buildPlanItem(
   },
 ): PlanItem {
   const subject = node?.normalizedPath.split("/")[0] ?? sourceTitle;
-  const estimatedMinutes = node?.estimatedMinutes ?? 45;
+  // Item-effort: node override if explicitly set, otherwise the session budget.
+  const estimatedMinutes = node?.estimatedMinutes ?? sessionBudgetMinutes;
 
   return {
     id: routeItem.id,
@@ -603,10 +615,12 @@ function buildPlanItem(
 function buildWeeklyRouteItem(
   routeItem: WeeklyRouteBoard["items"][number],
   sourceTitle: string,
+  sessionBudgetMinutes: number,
   node?: Awaited<ReturnType<typeof listCurriculumNodes>>[number],
 ): WeeklyRouteItem {
   const subject = node?.normalizedPath.split("/")[0] ?? sourceTitle;
-  const estimatedMinutes = node?.estimatedMinutes ?? 45;
+  // Item-effort: node override if explicitly set, otherwise the session budget.
+  const estimatedMinutes = node?.estimatedMinutes ?? sessionBudgetMinutes;
 
   return {
     id: routeItem.id,
@@ -730,6 +744,8 @@ export async function getTodayWorkspace(params: {
   workspace: DailyWorkspace;
   sourceId: string;
   sourceTitle: string;
+  /** Resolved session budget from the canonical timing contract. */
+  sessionTiming: LessonTimingContract;
   planningContext: ReturnType<typeof buildCopilotPlanningContext>;
 } | null> {
   const { selectedSource } = await resolveSourceContext({
@@ -739,6 +755,13 @@ export async function getTodayWorkspace(params: {
   if (!selectedSource) {
     return null;
   }
+
+  // Resolve the canonical session budget for this source once.
+  // All planning and lesson-draft code downstream must use this value.
+  const sessionTiming = resolveLessonSessionMinutes({
+    sourceSessionMinutes: selectedSource.pacing?.sessionMinutes,
+  });
+  const sessionBudgetMinutes = sessionTiming.resolvedTotalMinutes;
 
   const weekStartDate = toWeekStartDate(params.date);
   const { board } = await getOrCreateWeeklyRouteBoardForLearner({
@@ -753,6 +776,7 @@ export async function getTodayWorkspace(params: {
     return {
       sourceId: selectedSource.id,
       sourceTitle: selectedSource.title,
+      sessionTiming,
       planningContext: null,
       workspace: {
         date: params.date,
@@ -801,6 +825,7 @@ export async function getTodayWorkspace(params: {
     return {
       sourceId: selectedSource.id,
       sourceTitle: selectedSource.title,
+      sessionTiming,
       planningContext: buildCopilotPlanningContext({
         board,
         learnerId: params.learnerId,
@@ -825,6 +850,7 @@ export async function getTodayWorkspace(params: {
           },
           selectedSource.title,
           params.date,
+          sessionBudgetMinutes,
           nodeById.get(board.items[0]!.skillNodeId),
         ),
         items: [],
@@ -841,21 +867,13 @@ export async function getTodayWorkspace(params: {
     };
   }
 
-  const selectedPlans = selectedRouteItems.map((item) =>
-    buildPlanItem(
-      item,
-      selectedSource.title,
-      item.scheduledDate ?? params.date,
-      nodeById.get(item.skillNodeId),
-      undefined,
-    ),
-  );
   const materializedWorkflow = await syncTodayPlanItems({
     organizationId: params.organizationId,
     learnerId: params.learnerId,
     date: params.date,
     sourceId: selectedSource.id,
     sourceTitle: selectedSource.title,
+    sessionBudgetMinutes,
     selectedRouteItems,
     nodeById,
   });
@@ -864,6 +882,7 @@ export async function getTodayWorkspace(params: {
       item,
       selectedSource.title,
       item.scheduledDate ?? params.date,
+      sessionBudgetMinutes,
       nodeById.get(item.skillNodeId),
       materializedWorkflow.get(item.id),
     ),
@@ -882,7 +901,9 @@ export async function getTodayWorkspace(params: {
       planItem.id,
       alternateItems
         .slice(0, 2)
-        .map((routeItem) => buildWeeklyRouteItem(routeItem, selectedSource.title, nodeById.get(routeItem.skillNodeId))),
+        .map((routeItem) =>
+          buildWeeklyRouteItem(routeItem, selectedSource.title, sessionBudgetMinutes, nodeById.get(routeItem.skillNodeId)),
+        ),
     ]),
   );
 
@@ -939,6 +960,7 @@ export async function getTodayWorkspace(params: {
     workspace,
     sourceId: selectedSource.id,
     sourceTitle: selectedSource.title,
+    sessionTiming,
     planningContext: buildCopilotPlanningContext({
       board,
       learnerId: params.learnerId,

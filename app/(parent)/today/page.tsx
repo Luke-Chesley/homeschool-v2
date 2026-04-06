@@ -121,8 +121,7 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
     notFound();
   }
 
-  const { workspace } = workspaceResult;
-  const totalMinutes = workspace.items.reduce((sum, item) => sum + item.estimatedMinutes, 0);
+  const { workspace, sessionTiming } = workspaceResult;
 
   return (
     <PlanningShell>
@@ -130,7 +129,7 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
         <span className="font-medium text-foreground">Live curriculum: {liveSource.title}</span>
         <span>{formatLongDate(workspace.date)}</span>
         <span>{workspace.items.length} items</span>
-        <span>{totalMinutes} min</span>
+        <span>{sessionTiming.resolvedTotalMinutes} min</span>
       </div>
       <TodayWorkspaceView workspace={workspace} sourceId={liveSource.id} />
     </PlanningShell>

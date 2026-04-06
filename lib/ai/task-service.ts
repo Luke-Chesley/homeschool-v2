@@ -28,16 +28,44 @@ const StandardsSuggestOutputSchema = z.object({
   standardIds: z.array(z.string()),
 });
 
+/**
+ * Resolved timing for this lesson draft session.
+ * Always use resolvedTotalMinutes as the lesson budget.
+ * Do not compute lesson budget by summing routeItems[*].estimatedMinutes.
+ */
+export interface LessonDraftResolvedTiming {
+  /** Canonical session budget — the authoritative total for this draft. */
+  resolvedTotalMinutes: number;
+  /** Source-level pacing sessionMinutes, if present. */
+  sourceSessionMinutes: number | undefined;
+  /** Explicit per-lesson override, if any. */
+  lessonOverrideMinutes: number | undefined;
+  /** What produced the resolved value. */
+  timingSource: "lesson_override" | "source_default" | "system_fallback";
+}
+
 export interface LessonDraftInput {
   title?: string;
   topic: string;
   gradeLevel?: string;
   standardIds?: string[];
+  /**
+   * @deprecated Pass resolvedTiming instead. This field is only used as a
+   * fallback when resolvedTiming is absent (e.g. callers that have not yet
+   * been updated). Do NOT compute this by summing routeItems[*].estimatedMinutes.
+   */
   estimatedMinutes?: number;
+  /**
+   * Explicit resolved timing contract for this lesson draft.
+   * When present, resolvedTiming.resolvedTotalMinutes is used as the session
+   * budget and estimatedMinutes is ignored.
+   */
+  resolvedTiming?: LessonDraftResolvedTiming;
   objectives?: string[];
   routeItems?: Array<{
     title: string;
     subject: string;
+    /** Item-level effort hint — NOT the session budget. */
     estimatedMinutes: number;
     objective: string;
     lessonLabel: string;
@@ -429,9 +457,14 @@ export async function buildLessonDraftPromptPreview(
   const prompt = await resolvePrompt("lesson.draft", LESSON_DRAFT_PROMPT_VERSION);
   const routeItems = input.routeItems ?? [];
   const objectives = input.objectives ?? [];
+  // Prefer resolvedTiming.resolvedTotalMinutes (canonical session budget from curriculum pacing).
+  // Fall back to estimatedMinutes if provided (legacy callers only).
+  // Do NOT fall back to summing routeItems[*].estimatedMinutes — that conflates
+  // per-item effort with the session budget and produces inflated totals.
   const totalMinutes =
+    input.resolvedTiming?.resolvedTotalMinutes ??
     input.estimatedMinutes ??
-    routeItems.reduce((sum, item) => sum + item.estimatedMinutes, 0);
+    45; // final fallback — only reached when no timing contract exists
 
   const userPrompt = `${buildLessonDraftUserPrompt({
     learnerName: input.context?.learnerName ?? "the learner",

@@ -44,13 +44,22 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { workspace, sourceTitle, planningContext } = workspaceResult;
-  const totalMinutes = workspace.items.reduce((sum, item) => sum + item.estimatedMinutes, 0);
+  const { workspace, sourceTitle, planningContext, sessionTiming } = workspaceResult;
+
+  // Use the canonical session budget from curriculum pacing.
+  // Do NOT sum workspace.items[*].estimatedMinutes — those are per-item effort
+  // hints and summing them inflates the lesson budget when multiple items are present.
+  const resolvedTiming = {
+    resolvedTotalMinutes: sessionTiming.resolvedTotalMinutes,
+    sourceSessionMinutes: sessionTiming.sourceSessionMinutes,
+    lessonOverrideMinutes: sessionTiming.lessonOverrideMinutes,
+    timingSource: sessionTiming.timingSource,
+  } satisfies import("@/lib/ai/task-service").LessonDraftResolvedTiming;
 
   const lessonDraftInput = {
     title: sourceTitle,
     topic: workspace.leadItem.title,
-    estimatedMinutes: totalMinutes,
+    resolvedTiming,
     objectives: workspace.sessionTargets,
     routeItems: workspace.items.map((item) => ({
       title: item.title,
@@ -168,7 +177,8 @@ export async function POST(req: NextRequest) {
     date,
     summary: {
       itemCount: workspace.items.length,
-      totalMinutes,
+      totalMinutes: sessionTiming.resolvedTotalMinutes,
+      timingSource: sessionTiming.timingSource,
       objectiveCount: workspace.sessionTargets.length,
       weekLabel: planningContext?.weeklyPlanningSnapshot?.weekLabel,
       weekHighlights: planningContext?.weeklyPlanningSnapshot?.highlights ?? [],

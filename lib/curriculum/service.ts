@@ -30,6 +30,36 @@ function mapKind(kind: string): CurriculumSource["kind"] {
   return kind === "external_link" ? "external" : (kind as CurriculumSource["kind"]);
 }
 
+function extractSourcePacing(
+  metadata: Record<string, unknown>,
+): import("./types").CurriculumSourcePacing | undefined {
+  const raw = metadata.pacing;
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+    return undefined;
+  }
+
+  const pacingRecord = raw as Record<string, unknown>;
+  const sessionMinutes =
+    typeof pacingRecord.sessionMinutes === "number" ? pacingRecord.sessionMinutes : undefined;
+  const sessionsPerWeek =
+    typeof pacingRecord.sessionsPerWeek === "number" ? pacingRecord.sessionsPerWeek : undefined;
+  const totalWeeks =
+    typeof pacingRecord.totalWeeks === "number" ? pacingRecord.totalWeeks : undefined;
+  const totalSessions =
+    typeof pacingRecord.totalSessions === "number" ? pacingRecord.totalSessions : undefined;
+
+  if (
+    sessionMinutes === undefined &&
+    sessionsPerWeek === undefined &&
+    totalWeeks === undefined &&
+    totalSessions === undefined
+  ) {
+    return undefined;
+  }
+
+  return { sessionMinutes, sessionsPerWeek, totalWeeks, totalSessions };
+}
+
 function mapSource(record: {
   id: string;
   organizationId: string;
@@ -62,6 +92,7 @@ function mapSource(record: {
       (record.metadata.indexingStatus as CurriculumSource["indexingStatus"] | undefined) ??
       "not_applicable",
     importVersion: record.importVersion,
+    pacing: extractSourcePacing(record.metadata),
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
   };
