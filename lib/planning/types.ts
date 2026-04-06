@@ -1,4 +1,5 @@
 import type { WeeklyRouteBoardItem } from "@/lib/curriculum-routing/types";
+import type { StructuredLessonDraft } from "@/lib/lesson-draft/types";
 
 export type EnergyLevel = "low" | "steady" | "high";
 
@@ -217,7 +218,10 @@ export interface DailyWorkspaceArtifactSlot {
 }
 
 export interface DailyWorkspaceLessonDraft {
-  markdown: string;
+  /** Structured lesson draft (schema_version "1.0"). Present for new drafts. */
+  structured?: StructuredLessonDraft;
+  /** Legacy markdown string. Present for drafts generated before v2.0.0. */
+  markdown?: string;
   sourceId: string;
   sourceTitle: string;
   routeFingerprint: string;

@@ -4,11 +4,16 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { LessonPlanPanel } from "@/components/planning/lesson-plan-panel";
+import {
+  LessonDraftRenderer,
+  LegacyLessonDraftNotice,
+} from "@/components/planning/lesson-draft-renderer";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { MarkdownContent } from "@/components/ui/markdown-content";
-import type { DailyWorkspace } from "@/lib/planning/types";
+import type { StructuredLessonDraft } from "@/lib/lesson-draft/types";
+import type { DailyWorkspace, DailyWorkspaceLessonDraft } from "@/lib/planning/types";
 import { cn } from "@/lib/utils";
 
 interface TodayWorkspaceViewProps {
@@ -51,13 +56,42 @@ function canRepeatToTomorrow(date: string) {
   return day >= 1 && day <= 4;
 }
 
+// Typed draft state: can hold structured, legacy markdown, or null
+type DraftState =
+  | { kind: "structured"; draft: StructuredLessonDraft }
+  | { kind: "markdown"; markdown: string }
+  | null;
+
+function initialDraftState(lessonDraft: DailyWorkspaceLessonDraft | null): DraftState {
+  if (!lessonDraft) return null;
+  if (lessonDraft.structured) {
+    return { kind: "structured", draft: lessonDraft.structured };
+  }
+  if (lessonDraft.markdown) {
+    return { kind: "markdown", markdown: lessonDraft.markdown };
+  }
+  return null;
+}
+
 export function TodayWorkspaceView({ workspace, sourceId }: TodayWorkspaceViewProps) {
-  const [lessonDraft, setLessonDraft] = useState<string | null>(workspace.lessonDraft?.markdown ?? null);
+  const [draftState, setDraftState] = useState<DraftState>(
+    () => initialDraftState(workspace.lessonDraft),
+  );
   const repeatTomorrowAllowed = canRepeatToTomorrow(workspace.date);
 
   useEffect(() => {
-    setLessonDraft(workspace.lessonDraft?.markdown ?? null);
-  }, [workspace.date, workspace.leadItem.id, workspace.lessonDraft?.markdown, sourceId]);
+    setDraftState(initialDraftState(workspace.lessonDraft));
+  }, [workspace.date, workspace.leadItem.id, workspace.lessonDraft, sourceId]);
+
+  function handleDraftChange(incoming: StructuredLessonDraft | string | null) {
+    if (incoming === null) {
+      setDraftState(null);
+    } else if (typeof incoming === "string") {
+      setDraftState({ kind: "markdown", markdown: incoming });
+    } else {
+      setDraftState({ kind: "structured", draft: incoming });
+    }
+  }
 
   if (workspace.items.length === 0) {
     return (
@@ -81,7 +115,7 @@ export function TodayWorkspaceView({ workspace, sourceId }: TodayWorkspaceViewPr
     );
   }
 
-  if (lessonDraft) {
+  if (draftState) {
     return (
       <div className="grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)_320px] xl:items-start">
         <TodayRouteItemsSection
@@ -90,12 +124,12 @@ export function TodayWorkspaceView({ workspace, sourceId }: TodayWorkspaceViewPr
           repeatTomorrowAllowed={repeatTomorrowAllowed}
           compact
         />
-        <TodayLessonDraftArticle workspace={workspace} markdown={lessonDraft} />
+        <TodayLessonDraftArticle workspace={workspace} draftState={draftState} />
         <TodayLessonPlanSection
           workspace={workspace}
           sourceId={sourceId}
-          draftMarkdown={lessonDraft}
-          onDraftChange={setLessonDraft}
+          draftState={draftState}
+          onDraftChange={handleDraftChange}
           showDraftOutput={false}
           compact
         />
@@ -113,8 +147,8 @@ export function TodayWorkspaceView({ workspace, sourceId }: TodayWorkspaceViewPr
       <TodayLessonPlanSection
         workspace={workspace}
         sourceId={sourceId}
-        draftMarkdown={lessonDraft}
-        onDraftChange={setLessonDraft}
+        draftState={null}
+        onDraftChange={handleDraftChange}
       />
     </div>
   );
@@ -303,10 +337,10 @@ export function TodayRouteItemsSection({
 
 function TodayLessonDraftArticle({
   workspace,
-  markdown,
+  draftState,
 }: {
   workspace: DailyWorkspace;
-  markdown: string;
+  draftState: DraftState & { kind: string };
 }) {
   return (
     <section className="space-y-4">
@@ -316,8 +350,15 @@ function TodayLessonDraftArticle({
       </div>
 
       <Card>
-        <div className="p-6 sm:p-7">
-          <MarkdownContent content={markdown} />
+        <div className="p-5 sm:p-6">
+          {draftState.kind === "structured" ? (
+            <LessonDraftRenderer draft={draftState.draft} />
+          ) : draftState.kind === "markdown" ? (
+            <div className="space-y-4">
+              <LegacyLessonDraftNotice />
+              <MarkdownContent content={draftState.markdown} />
+            </div>
+          ) : null}
         </div>
       </Card>
     </section>
@@ -327,13 +368,13 @@ function TodayLessonDraftArticle({
 export function TodayLessonPlanSection({
   workspace,
   sourceId,
-  draftMarkdown,
+  draftState,
   onDraftChange,
   showDraftOutput = true,
   compact = false,
 }: TodayWorkspaceViewProps & {
-  draftMarkdown?: string | null;
-  onDraftChange?: (markdown: string | null) => void;
+  draftState?: DraftState;
+  onDraftChange?: (draft: StructuredLessonDraft | string | null) => void;
   showDraftOutput?: boolean;
   compact?: boolean;
 }) {
@@ -363,7 +404,7 @@ export function TodayLessonPlanSection({
         objectiveCount={workspace.sessionTargets.length}
         objectives={workspace.sessionTargets}
         routeItemTitles={workspace.items.map((item) => item.title)}
-        draftMarkdown={draftMarkdown}
+        draftState={draftState ?? null}
         onDraftChange={onDraftChange}
         showDraftOutput={showDraftOutput}
       />

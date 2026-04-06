@@ -7,6 +7,12 @@ import { z } from "zod";
 import { parseActivityDefinition } from "@/lib/activities/types";
 import { getRepositories } from "@/lib/db";
 import { ensureDatabaseReady } from "@/lib/db/server";
+import type { StructuredLessonDraft } from "@/lib/lesson-draft/types";
+import {
+  validateLessonDraft,
+  hasProsyContent,
+  buildCorrectionNotes,
+} from "@/lib/lesson-draft/validate";
 import {
   buildLessonDraftUserPrompt,
   LESSON_DRAFT_PROMPT_VERSION,
@@ -38,6 +44,10 @@ export interface LessonDraftInput {
     note?: string;
   }>;
   materials?: string[];
+  /** Optional lesson shape meta-template to guide block selection */
+  lessonShape?: import("@/lib/lesson-draft/types").LessonShape;
+  /** Optional teacher/parent context to tune generated content */
+  teacherContext?: import("@/lib/lesson-draft/types").TeacherContext;
   context?: CopilotContext;
 }
 
@@ -449,6 +459,8 @@ export async function buildLessonDraftPromptPreview(
             day.itemTitles.length > 0 ? day.itemTitles.join(", ") : "No scheduled items"
           }`,
       ) ?? [],
+    lessonShape: input.lessonShape,
+    teacherContext: input.teacherContext,
   })}\n\nContext:\n${input.context ? JSON.stringify(input.context, null, 2) : "No additional context provided."}`;
 
   return {
@@ -457,29 +469,69 @@ export async function buildLessonDraftPromptPreview(
   };
 }
 
+const MAX_LESSON_DRAFT_RETRIES = 2;
+
 export async function generateLessonDraft(
   input: LessonDraftInput,
-): Promise<TaskResult<string>> {
+): Promise<TaskResult<StructuredLessonDraft>> {
   const { adapter, model } = getTaskRuntime("lesson.draft");
   const prompt = await buildLessonDraftPromptPreview(input);
-  const result = await adapter.complete({
-    model,
-    messages: [
-      { role: "system", content: prompt.systemPrompt },
-      { role: "user", content: prompt.userPrompt },
-    ],
-  });
 
-  return {
-    output: result.content,
-    lineage: buildLineage(
-      "lesson.draft",
-      adapter.providerId,
-      result.model ?? model,
-      LESSON_DRAFT_PROMPT_VERSION,
-    ),
-    usage: result.usage,
-  };
+  const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
+    { role: "system", content: prompt.systemPrompt },
+    { role: "user", content: prompt.userPrompt },
+  ];
+
+  let lastRaw: Record<string, unknown> = {};
+  let lastErrors: string[] = [];
+
+  for (let attempt = 0; attempt <= MAX_LESSON_DRAFT_RETRIES; attempt++) {
+    if (attempt > 0) {
+      // Inject correction turn
+      const correctionNote = buildCorrectionNotes(
+        lastErrors,
+        lastRaw ? hasProsyContent(lastRaw as unknown as StructuredLessonDraft) : false,
+      );
+      messages.push({ role: "assistant", content: JSON.stringify(lastRaw) });
+      messages.push({ role: "user", content: correctionNote });
+    }
+
+    const result = await adapter.completeJson<Record<string, unknown>>({
+      model,
+      messages,
+    });
+
+    lastRaw = result ?? {};
+
+    const validation = validateLessonDraft(lastRaw);
+    if (validation.valid) {
+      const draft = validation.draft;
+      const proseWarning = hasProsyContent(draft);
+      if (!proseWarning || attempt >= MAX_LESSON_DRAFT_RETRIES) {
+        return {
+          output: draft,
+          lineage: buildLineage(
+            "lesson.draft",
+            adapter.providerId,
+            model,
+            LESSON_DRAFT_PROMPT_VERSION,
+          ),
+        };
+      }
+      // Valid schema but too prosy — retry with prose warning
+      lastErrors = [];
+    } else {
+      lastErrors = validation.errors;
+      if (attempt >= MAX_LESSON_DRAFT_RETRIES) {
+        throw new Error(
+          `Lesson draft failed validation after ${attempt + 1} attempt(s): ${lastErrors.join("; ")}`,
+        );
+      }
+    }
+  }
+
+  // Unreachable, but TypeScript requires a return
+  throw new Error("Lesson draft generation failed unexpectedly.");
 }
 
 export async function generateWorksheet(
@@ -616,11 +668,11 @@ export async function processAiGenerationJob(jobId: string) {
       case "lesson.draft": {
         const result = await generateLessonDraft(job.inputs as unknown as LessonDraftInput);
         output = result.output;
-        artifactBody = result.output;
+        artifactBody = JSON.stringify(result.output);
         if (job.artifactId) {
           await repos.activities.updateArtifact(job.artifactId, {
             status: "ready",
-            body: result.output,
+            body: JSON.stringify(result.output),
             providerId: result.lineage.providerId,
             modelId: result.lineage.modelId,
             promptVersion: result.lineage.promptRef.version,

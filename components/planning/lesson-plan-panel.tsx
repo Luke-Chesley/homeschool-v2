@@ -3,11 +3,22 @@
 import { useEffect, useMemo, useState } from "react";
 import { Loader2, Sparkles } from "lucide-react";
 
+import {
+  LessonDraftRenderer,
+  LegacyLessonDraftNotice,
+} from "@/components/planning/lesson-draft-renderer";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { MarkdownContent } from "@/components/ui/markdown-content";
+import type { StructuredLessonDraft } from "@/lib/lesson-draft/types";
 import { cn } from "@/lib/utils";
+
+// DraftState mirrors the type in today-workspace-view without a cross-import
+type DraftState =
+  | { kind: "structured"; draft: StructuredLessonDraft }
+  | { kind: "markdown"; markdown: string }
+  | null;
 
 interface LessonPlanPanelProps {
   date: string;
@@ -18,15 +29,15 @@ interface LessonPlanPanelProps {
   objectiveCount: number;
   objectives: string[];
   routeItemTitles: string[];
-  draftMarkdown?: string | null;
-  onDraftChange?: (markdown: string | null) => void;
+  draftState?: DraftState;
+  onDraftChange?: (draft: StructuredLessonDraft | string | null) => void;
   showDraftOutput?: boolean;
 }
 
 type LessonPlanState =
   | { status: "idle" }
   | { status: "loading" }
-  | { status: "ready"; markdown: string }
+  | { status: "ready"; draft: StructuredLessonDraft }
   | { status: "error"; message: string };
 
 type PromptDebugState =
@@ -44,7 +55,7 @@ export function LessonPlanPanel({
   objectiveCount,
   objectives,
   routeItemTitles,
-  draftMarkdown,
+  draftState,
   onDraftChange,
   showDraftOutput = true,
 }: LessonPlanPanelProps) {
@@ -82,6 +93,8 @@ export function LessonPlanPanel({
     setPromptDebugState({ status: "idle", open: false });
   }, [contextKey]);
 
+  const hasDraft = draftState !== null && draftState !== undefined;
+
   async function handleGenerate() {
     setState({ status: "loading" });
 
@@ -89,26 +102,23 @@ export function LessonPlanPanel({
       const response = await fetch("/api/ai/lesson-plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          date,
-          sourceId,
-        }),
+        body: JSON.stringify({ date, sourceId }),
       });
 
       const data = (await response.json()) as
-        | { markdown: string; error?: string }
+        | { structured: StructuredLessonDraft; error?: string }
         | { error: string };
 
       if (!response.ok) {
         throw new Error("error" in data ? data.error : "Lesson plan generation failed.");
       }
 
-      if (!("markdown" in data)) {
+      if (!("structured" in data) || !data.structured) {
         throw new Error("Lesson plan generation failed.");
       }
 
-      setState({ status: "ready", markdown: data.markdown });
-      onDraftChange?.(data.markdown);
+      setState({ status: "ready", draft: data.structured });
+      onDraftChange?.(data.structured);
     } catch (error) {
       setState({
         status: "error",
@@ -129,11 +139,7 @@ export function LessonPlanPanel({
       const response = await fetch("/api/ai/lesson-plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          date,
-          sourceId,
-          debug: true,
-        }),
+        body: JSON.stringify({ date, sourceId, debug: true }),
       });
 
       const data = (await response.json()) as
@@ -190,7 +196,7 @@ export function LessonPlanPanel({
             ) : (
               <Sparkles className="size-4" />
             )}
-            {draftMarkdown ? "Regenerate" : "Generate"}
+            {hasDraft ? "Regenerate" : "Generate"}
           </button>
 
           <button
@@ -199,7 +205,9 @@ export function LessonPlanPanel({
             disabled={routeItemCount === 0 || promptDebugState.status === "loading"}
             className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
           >
-            {promptDebugState.status === "loading" ? <Loader2 className="size-4 animate-spin" /> : null}
+            {promptDebugState.status === "loading" ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : null}
             {promptDebugState.open ? "Hide prompt" : "View prompt"}
           </button>
         </div>
@@ -225,11 +233,9 @@ export function LessonPlanPanel({
             {promptDebugState.status === "error" ? (
               <div className="text-sm text-destructive">{promptDebugState.message}</div>
             ) : null}
-
             {promptDebugState.status === "loading" ? (
               <div className="text-sm text-muted-foreground">Building prompt preview...</div>
             ) : null}
-
             {promptDebugState.status === "ready" ? (
               <div className="grid gap-4">
                 <div>
@@ -255,11 +261,18 @@ export function LessonPlanPanel({
           </div>
         ) : null}
 
-        {showDraftOutput && draftMarkdown ? (
-          <div className="rounded-lg border border-border/70 bg-background p-5">
-            <MarkdownContent content={draftMarkdown} />
+        {showDraftOutput && draftState?.kind === "structured" ? (
+          <div className="rounded-lg border border-border/70 bg-background p-4">
+            <LessonDraftRenderer draft={draftState.draft} mode="compact" />
           </div>
-        ) : showDraftOutput ? (
+        ) : showDraftOutput && draftState?.kind === "markdown" ? (
+          <div className="rounded-lg border border-border/70 bg-background p-5">
+            <LegacyLessonDraftNotice />
+            <div className="mt-4">
+              <MarkdownContent content={draftState.markdown} />
+            </div>
+          </div>
+        ) : showDraftOutput && !hasDraft ? (
           <div className="rounded-lg border border-dashed border-border/70 bg-background p-4 text-sm text-muted-foreground">
             Generate a draft when today’s route is set.
           </div>
