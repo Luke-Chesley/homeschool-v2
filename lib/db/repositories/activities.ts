@@ -4,6 +4,7 @@ import type { InferInsertModel } from "drizzle-orm";
 import type { HomeschoolDb } from "@/lib/db/client";
 import {
   activityAttempts,
+  activityEvidence,
   activityStandards,
   generatedArtifacts,
   interactiveActivities,
@@ -13,6 +14,7 @@ export type NewGeneratedArtifact = InferInsertModel<typeof generatedArtifacts>;
 export type NewInteractiveActivity = InferInsertModel<typeof interactiveActivities>;
 export type NewActivityStandard = InferInsertModel<typeof activityStandards>;
 export type NewActivityAttempt = InferInsertModel<typeof activityAttempts>;
+export type NewActivityEvidence = InferInsertModel<typeof activityEvidence>;
 
 export function createActivitiesRepository(db: HomeschoolDb) {
   return {
@@ -252,6 +254,77 @@ export function createActivitiesRepository(db: HomeschoolDb) {
         .returning();
 
       return attempt ?? null;
+    },
+
+    // -------------------------------------------------------------------------
+    // Activity evidence (structured evidence capture for v2 ActivitySpec)
+    // -------------------------------------------------------------------------
+
+    async createEvidence(input: NewActivityEvidence) {
+      const [record] = await db.insert(activityEvidence).values(input).returning();
+      return record;
+    },
+
+    async listEvidenceForAttempt(attemptId: string) {
+      return db
+        .select()
+        .from(activityEvidence)
+        .where(eq(activityEvidence.attemptId, attemptId))
+        .orderBy(asc(activityEvidence.capturedAt));
+    },
+
+    async listEvidenceForLearner(learnerId: string) {
+      return db
+        .select()
+        .from(activityEvidence)
+        .where(eq(activityEvidence.learnerId, learnerId))
+        .orderBy(desc(activityEvidence.capturedAt));
+    },
+
+    async listEvidenceForSession(lessonSessionId: string) {
+      return db
+        .select()
+        .from(activityEvidence)
+        .where(eq(activityEvidence.lessonSessionId, lessonSessionId))
+        .orderBy(asc(activityEvidence.capturedAt));
+    },
+
+    async listEvidenceForActivity(activityId: string) {
+      return db
+        .select()
+        .from(activityEvidence)
+        .where(eq(activityEvidence.activityId, activityId))
+        .orderBy(asc(activityEvidence.capturedAt));
+    },
+
+    async updateEvidenceReviewState(id: string, reviewState: string) {
+      const [record] = await db
+        .update(activityEvidence)
+        .set({ reviewState, updatedAt: new Date() })
+        .where(eq(activityEvidence.id, id))
+        .returning();
+      return record ?? null;
+    },
+
+    // -------------------------------------------------------------------------
+    // Activity spec helpers (v2 activities — activityType = "activity_spec")
+    // -------------------------------------------------------------------------
+
+    async createActivitySpec(input: NewInteractiveActivity) {
+      return this.createActivity({ ...input, activityType: "activity_spec" });
+    },
+
+    async listSpecActivitiesForLearner(learnerId: string) {
+      return db
+        .select()
+        .from(interactiveActivities)
+        .where(
+          and(
+            eq(interactiveActivities.learnerId, learnerId),
+            eq(interactiveActivities.activityType, "activity_spec"),
+          ),
+        )
+        .orderBy(asc(interactiveActivities.createdAt));
     },
   };
 }
