@@ -5,22 +5,89 @@ import { createRepositories } from "@/lib/db";
 import { getDb } from "@/lib/db/server";
 import { getTodayWorkspace } from "@/lib/planning/today-service";
 import {
-  buildContextFromLessonSession,
-  buildContextFromPlanItem,
+  buildActivityContextFromLessonDraft,
   buildPromptInput,
 } from "@/lib/activities/generation-context";
 import {
   ACTIVITY_SPEC_SYSTEM_PROMPT,
   buildActivitySpecUserPrompt,
 } from "@/lib/prompts/activity-spec";
-import { publishActivitySpecForItem } from "@/lib/activities/assignment-service";
+import { publishActivityForLessonDraft } from "@/lib/activities/assignment-service";
+import { computeLessonDraftFingerprint } from "@/lib/lesson-draft/fingerprint";
 
 // ---------------------------------------------------------------------------
-// Generate activity spec — lesson-first, item-second
+// Lesson-draft activity status
 // ---------------------------------------------------------------------------
 
-export async function generateActivityAction(
-  itemId: string,
+export type LessonDraftActivityStatus =
+  | "no_draft"
+  | "no_activity"
+  | "ready"
+  | "stale";
+
+export interface LessonDraftActivityState {
+  ok: boolean;
+  status?: LessonDraftActivityStatus;
+  sessionId?: string;
+  activityId?: string;
+  error?: string;
+}
+
+/**
+ * Get the current activity state for today's lesson draft.
+ * Drives the UI: no_draft / no_activity / ready / stale.
+ */
+export async function getLessonDraftActivityStatusAction(
+  date: string,
+): Promise<LessonDraftActivityState> {
+  try {
+    const session = await requireAppSession();
+    const repos = createRepositories(getDb());
+
+    const workspaceResult = await getTodayWorkspace({
+      organizationId: session.organization.id,
+      learnerId: session.activeLearner.id,
+      learnerName: session.activeLearner.displayName,
+      date,
+    });
+
+    if (!workspaceResult) return { ok: false, error: "Workspace not found" };
+
+    const lessonDraft = workspaceResult.workspace.lessonDraft?.structured;
+    if (!lessonDraft) return { ok: true, status: "no_draft" };
+
+    const leadItem = workspaceResult.workspace.leadItem;
+    const leadSessionId = leadItem.sessionRecordId ?? leadItem.workflow?.lessonSessionId;
+    if (!leadSessionId) return { ok: true, status: "no_activity" };
+
+    const currentFingerprint = computeLessonDraftFingerprint(lessonDraft);
+    const existingActivity = await repos.activities.findPublishedActivityForSession(leadSessionId);
+
+    if (!existingActivity) return { ok: true, status: "no_activity", sessionId: leadSessionId };
+
+    const isStale = existingActivity.lessonDraftFingerprint !== currentFingerprint;
+    return {
+      ok: true,
+      status: isStale ? "stale" : "ready",
+      sessionId: leadSessionId,
+      activityId: existingActivity.id,
+    };
+  } catch (err) {
+    console.error("[getLessonDraftActivityStatusAction]", err);
+    return { ok: false, error: err instanceof Error ? err.message : "Status check failed" };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Generate / regenerate activity for today's lesson draft
+// ---------------------------------------------------------------------------
+
+/**
+ * Generate (or regenerate) one activity for today's lesson draft.
+ * Idempotent when the draft has not changed.
+ * Archives and replaces the activity when the draft changed.
+ */
+export async function generateLessonDraftActivityAction(
   date: string,
 ): Promise<{ ok: boolean; error?: string }> {
   try {
@@ -41,51 +108,43 @@ export async function generateActivityAction(
 
     if (!workspaceResult) return { ok: false, error: "Workspace not found" };
 
-    const planItem = workspaceResult.workspace.items.find((item) => item.id === itemId);
-    if (!planItem) return { ok: false, error: "Plan item not found" };
-
-    const durablePlanItemId = planItem.planRecordId ?? planItem.workflow?.planItemId;
-    const durableSessionId = planItem.sessionRecordId ?? planItem.workflow?.lessonSessionId;
-
-    if (!durablePlanItemId || !durableSessionId) {
-      return {
-        ok: false,
-        error: "Plan item is missing required IDs — try refreshing the page.",
-      };
-    }
-
-    const existingActivities = await repos.activities.listActivitiesForPlanItem(durablePlanItemId);
-    if (existingActivities.some((a) => a.status === "published")) {
-      return { ok: true }; // idempotent
-    }
-
-    // Pass the lesson draft when available — it becomes the primary generation input
     const lessonDraft = workspaceResult.workspace.lessonDraft?.structured;
+    if (!lessonDraft) {
+      return { ok: false, error: "No lesson draft — generate a lesson plan first." };
+    }
 
-    await publishActivitySpecForItem({
+    const leadItem = workspaceResult.workspace.leadItem;
+    const leadSessionId = leadItem.sessionRecordId ?? leadItem.workflow?.lessonSessionId;
+    const leadPlanItemId = leadItem.planRecordId ?? leadItem.workflow?.planItemId;
+
+    if (!leadSessionId) {
+      return { ok: false, error: "Session record not found — try refreshing the page." };
+    }
+
+    await publishActivityForLessonDraft({
       organizationId: session.organization.id,
       learnerId: session.activeLearner.id,
-      planItemId: durablePlanItemId,
-      lessonSessionId: durableSessionId,
-      planItem,
+      lessonSessionId: leadSessionId,
+      lessonDraft,
+      lessonDraftFingerprint: computeLessonDraftFingerprint(lessonDraft),
       learnerName: session.activeLearner.displayName,
       workflowMode,
-      lessonDraft,
+      planItems: workspaceResult.workspace.items,
+      leadPlanItemId: leadPlanItemId ?? undefined,
     });
 
     return { ok: true };
   } catch (err) {
-    console.error("[generateActivityAction]", err);
+    console.error("[generateLessonDraftActivityAction]", err);
     return { ok: false, error: err instanceof Error ? err.message : "Generation failed" };
   }
 }
 
 // ---------------------------------------------------------------------------
-// Return the generation prompt (debug / transparency)
+// Prompt preview for today's lesson draft (debug / transparency)
 // ---------------------------------------------------------------------------
 
-export async function getActivityPromptPreviewAction(
-  itemId: string,
+export async function getLessonDraftPromptPreviewAction(
   date: string,
 ): Promise<{
   ok: boolean;
@@ -111,26 +170,20 @@ export async function getActivityPromptPreviewAction(
 
     if (!workspaceResult) return { ok: false, error: "Workspace not found" };
 
-    const planItem = workspaceResult.workspace.items.find((item) => item.id === itemId);
-    if (!planItem) return { ok: false, error: "Plan item not found" };
-
-    // Mirror the same context-building logic as generation — lesson-first
     const lessonDraft = workspaceResult.workspace.lessonDraft?.structured;
-    const ctx = lessonDraft
-      ? buildContextFromLessonSession({
-          lessonDraft,
-          planItem,
-          learnerName: session.activeLearner.displayName,
-          workflowMode,
-        })
-      : buildContextFromPlanItem(planItem, session.activeLearner.displayName, workflowMode);
+    if (!lessonDraft) return { ok: false, error: "No lesson draft available" };
 
-    const promptInput = buildPromptInput(ctx);
-    const userPrompt = buildActivitySpecUserPrompt(promptInput);
+    const ctx = buildActivityContextFromLessonDraft({
+      lessonDraft,
+      learnerName: session.activeLearner.displayName,
+      workflowMode,
+      planItems: workspaceResult.workspace.items,
+    });
 
+    const userPrompt = buildActivitySpecUserPrompt(buildPromptInput(ctx));
     return { ok: true, systemPrompt: ACTIVITY_SPEC_SYSTEM_PROMPT, userPrompt };
   } catch (err) {
-    console.error("[getActivityPromptPreviewAction]", err);
+    console.error("[getLessonDraftPromptPreviewAction]", err);
     return { ok: false, error: err instanceof Error ? err.message : "Failed to build prompt" };
   }
 }

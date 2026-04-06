@@ -29,7 +29,9 @@
       "Bash(xargs ls:*)",
       "Bash(node:*)",
       "Bash(pnpm test:curriculum)",
-      "Bash(make test:curriculum)"
+      "Bash(make test:curriculum)",
+      "Bash(grep -E \"\\\\.ts$\")",
+      "Bash(npx --yes node --test scripts/activity-spec.test.mts)"
     ]
   }
 }

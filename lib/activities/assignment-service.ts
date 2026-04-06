@@ -1,19 +1,22 @@
 import "@/lib/server-only";
 
 /**
- * Assignment service — lesson-first activity creation.
+ * Assignment service — lesson-draft-owned activity creation.
  *
- * Activities are generated from a lesson session + lesson draft, with plan
- * items providing optional scope narrowing. The lesson session is the primary
- * ownership anchor; planItemId is secondary scope metadata.
+ * Hierarchy: curriculum → lesson draft → one lesson activity → evidence/progress
  *
- * Generation path:
- *   1. Structured lesson draft available → generateActivitySpecForLessonSession()
- *   2. No lesson draft → generateActivitySpecForPlanItem() (fallback)
+ * Each lesson draft produces ONE primary activity. The lesson session is the
+ * persistence anchor; the lesson draft fingerprint identifies which draft
+ * version produced the activity.
  *
- * Persistence hierarchy:
- *   activity → lessonSession (primary parent)
- *   activity → planItem (scope/route reference, secondary)
+ * Stale detection:
+ *   When the lesson draft changes (fingerprint changes), the old activity is
+ *   archived and a new one generated. Activity reuse is keyed to the lesson
+ *   draft identity — not to overlapping skills or plan items.
+ *
+ * Traceability:
+ *   Plan items are stored in activity metadata for reporting/progress mapping.
+ *   They do not drive generation.
  */
 
 import { createRepositories } from "@/lib/db";
@@ -21,43 +24,67 @@ import { getDb } from "@/lib/db/server";
 import { getTodayWorkspace } from "@/lib/planning/today-service";
 import type { PlanItem } from "@/lib/planning/types";
 import type { StructuredLessonDraft } from "@/lib/lesson-draft/types";
-import {
-  generateActivitySpecForLessonSession,
-  generateActivitySpecForPlanItem,
-} from "./generation-service";
+import { computeLessonDraftFingerprint } from "@/lib/lesson-draft/fingerprint";
+import { generateActivitySpecForLessonDraft } from "./generation-service";
 
-export async function publishActivitySpecForItem(params: {
+// ---------------------------------------------------------------------------
+// Lesson-draft-owned activity publishing
+// ---------------------------------------------------------------------------
+
+/**
+ * Generate and publish one activity for a lesson draft.
+ *
+ * If an activity for the exact same lesson draft version (same fingerprint)
+ * already exists and is published, this is a no-op (idempotent).
+ *
+ * If an activity exists for the session with a DIFFERENT fingerprint, the old
+ * activity is archived (stale) and a new one is generated.
+ */
+export async function publishActivityForLessonDraft(params: {
   organizationId: string;
   learnerId: string;
-  planItemId: string;
   lessonSessionId: string;
-  planItem: PlanItem;
+  lessonDraft: StructuredLessonDraft;
+  lessonDraftFingerprint: string;
   learnerName: string;
   workflowMode: string;
-  /** Structured lesson draft — primary generation input when available */
-  lessonDraft?: StructuredLessonDraft;
+  planItems?: PlanItem[];
+  leadPlanItemId?: string;
 }): Promise<void> {
   const repos = createRepositories(getDb());
 
-  // Lesson-first: use lesson draft as primary context when available
-  const genResult = params.lessonDraft
-    ? await generateActivitySpecForLessonSession({
-        lessonDraft: params.lessonDraft,
-        planItem: params.planItem,
-        learnerName: params.learnerName,
-        workflowMode: params.workflowMode,
-      })
-    : await generateActivitySpecForPlanItem(
-        params.planItem,
-        params.learnerName,
-        params.workflowMode,
-      );
+  // Idempotent check — same draft version already published
+  const existingForDraft = await repos.activities.findActivityForLessonDraft(
+    params.lessonSessionId,
+    params.lessonDraftFingerprint,
+  );
+  if (existingForDraft?.status === "published") {
+    return;
+  }
+
+  // Stale check — archive any published activity with a different fingerprint
+  const staleActivity = await repos.activities.findPublishedActivityForSession(
+    params.lessonSessionId,
+  );
+  if (staleActivity && staleActivity.lessonDraftFingerprint !== params.lessonDraftFingerprint) {
+    await repos.activities.archiveActivitiesForSession(params.lessonSessionId);
+  }
+
+  const genResult = await generateActivitySpecForLessonDraft({
+    lessonDraft: params.lessonDraft,
+    learnerName: params.learnerName,
+    workflowMode: params.workflowMode,
+    planItems: params.planItems,
+  });
+
+  const planItems = params.planItems ?? [];
 
   await repos.activities.createActivity({
     organizationId: params.organizationId,
     learnerId: params.learnerId,
-    planItemId: params.planItemId,
+    planItemId: params.leadPlanItemId ?? null,
     lessonSessionId: params.lessonSessionId,
+    lessonDraftFingerprint: params.lessonDraftFingerprint,
     artifactId: null,
     activityType: "activity_spec",
     status: "published",
@@ -72,20 +99,22 @@ export async function publishActivitySpecForItem(params: {
       promptVersion: genResult.promptVersion,
     },
     metadata: {
-      // Primary parent — lesson session
       sessionId: params.lessonSessionId,
-      // Scope metadata — plan item reference
-      weeklyRouteItemId: params.planItem.id,
-      sourceLabel: params.planItem.sourceLabel,
-      lessonLabel: params.planItem.lessonLabel,
-      standardIds: params.planItem.standards,
+      lessonDraftFingerprint: params.lessonDraftFingerprint,
+      trackedPlanItemIds: planItems.map((p) => p.id),
+      linkedSkillTitles: planItems.map((p) => p.title),
+      standardIds: planItems.flatMap((p) => p.standards ?? []),
       estimatedMinutes: genResult.spec.estimatedMinutes,
       interactionMode: genResult.spec.interactionMode,
-      // Generation provenance
-      lessonDraftUsed: Boolean(params.lessonDraft),
+      lessonTitle: params.lessonDraft.title,
+      lessonFocus: params.lessonDraft.lesson_focus,
     },
   });
 }
+
+// ---------------------------------------------------------------------------
+// Batch: ensure one activity per lesson draft for a learner's day
+// ---------------------------------------------------------------------------
 
 export async function ensurePublishedActivitiesForLearner(params: {
   organizationId: string;
@@ -109,31 +138,29 @@ export async function ensurePublishedActivitiesForLearner(params: {
     return [];
   }
 
-  // Lesson draft is shared across all plan items from the same source
-  const lessonDraft = workspaceResult.workspace.lessonDraft?.structured;
+  const { workspace } = workspaceResult;
+  const lessonDraft = workspace.lessonDraft?.structured;
 
-  for (const planItem of workspaceResult.workspace.items) {
-    const durablePlanItemId = planItem.planRecordId ?? planItem.workflow?.planItemId;
-    const durableSessionId = planItem.sessionRecordId ?? planItem.workflow?.lessonSessionId;
+  if (!lessonDraft) {
+    return repos.activities.listPublishedActivitiesForLearner(params.learnerId);
+  }
 
-    if (!durablePlanItemId || !durableSessionId) {
-      continue;
-    }
+  const fingerprint = computeLessonDraftFingerprint(lessonDraft);
+  const leadItem = workspace.leadItem;
+  const leadSessionId = leadItem.sessionRecordId ?? leadItem.workflow?.lessonSessionId;
+  const leadPlanItemId = leadItem.planRecordId ?? leadItem.workflow?.planItemId;
 
-    const existingActivities = await repos.activities.listActivitiesForPlanItem(durablePlanItemId);
-    if (existingActivities.find((a) => a.status === "published")) {
-      continue;
-    }
-
-    await publishActivitySpecForItem({
+  if (leadSessionId) {
+    await publishActivityForLessonDraft({
       organizationId: params.organizationId,
       learnerId: params.learnerId,
-      planItemId: durablePlanItemId,
-      lessonSessionId: durableSessionId,
-      planItem,
+      lessonSessionId: leadSessionId,
+      lessonDraft,
+      lessonDraftFingerprint: fingerprint,
       learnerName: params.learnerName,
       workflowMode,
-      lessonDraft,
+      planItems: workspace.items,
+      leadPlanItemId: leadPlanItemId ?? undefined,
     });
   }
 

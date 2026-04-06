@@ -118,6 +118,50 @@ export function createActivitiesRepository(db: HomeschoolDb) {
       });
     },
 
+    /**
+     * Find the activity for a specific lesson draft version (session + fingerprint).
+     * Returns the activity if it matches the current fingerprint, or null if none exists.
+     */
+    async findActivityForLessonDraft(lessonSessionId: string, lessonDraftFingerprint: string) {
+      return db.query.interactiveActivities.findFirst({
+        where: and(
+          eq(interactiveActivities.lessonSessionId, lessonSessionId),
+          eq(interactiveActivities.lessonDraftFingerprint, lessonDraftFingerprint),
+        ),
+        orderBy: [asc(interactiveActivities.createdAt)],
+      });
+    },
+
+    /**
+     * Find any published activity for a session, regardless of fingerprint.
+     * Used to detect stale activities (fingerprint mismatch = stale).
+     */
+    async findPublishedActivityForSession(lessonSessionId: string) {
+      return db.query.interactiveActivities.findFirst({
+        where: and(
+          eq(interactiveActivities.lessonSessionId, lessonSessionId),
+          eq(interactiveActivities.status, "published"),
+        ),
+        orderBy: [desc(interactiveActivities.createdAt)],
+      });
+    },
+
+    /**
+     * Mark all published activities for a session as stale (archived).
+     * Called before generating a new activity for a changed lesson draft.
+     */
+    async archiveActivitiesForSession(lessonSessionId: string) {
+      await db
+        .update(interactiveActivities)
+        .set({ status: "archived", updatedAt: new Date() })
+        .where(
+          and(
+            eq(interactiveActivities.lessonSessionId, lessonSessionId),
+            eq(interactiveActivities.status, "published"),
+          ),
+        );
+    },
+
     async listPublishedActivitiesForLearner(learnerId: string) {
       return db
         .select()

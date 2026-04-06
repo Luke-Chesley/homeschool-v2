@@ -18,13 +18,11 @@ export { getAttemptStore } from "./attempt-store";
 export type { AttemptStore } from "./attempt-store";
 export {
   generateActivitySpec,
-  generateActivitySpecForLessonSession,
-  generateActivitySpecForPlanItem,
+  generateActivitySpecForLessonDraft,
 } from "./generation-service";
 export type { ActivityGenResult } from "./generation-service";
 export {
-  buildContextFromLessonSession,
-  buildContextFromPlanItem,
+  buildActivityContextFromLessonDraft,
   buildPromptInput,
   extractLessonDraftContext,
 } from "./generation-context";

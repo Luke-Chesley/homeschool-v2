@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Sparkles } from "lucide-react";
+import { AlertTriangle, Loader2, Sparkles } from "lucide-react";
 
 import { LessonPlanPanel } from "@/components/planning/lesson-plan-panel";
 import {
@@ -18,8 +18,9 @@ import type { StructuredLessonDraft } from "@/lib/lesson-draft/types";
 import type { DailyWorkspace, DailyWorkspaceLessonDraft } from "@/lib/planning/types";
 import { cn } from "@/lib/utils";
 import {
-  generateActivityAction,
-  getActivityPromptPreviewAction,
+  generateLessonDraftActivityAction,
+  getLessonDraftPromptPreviewAction,
+  type LessonDraftActivityStatus,
 } from "@/app/(parent)/today/actions";
 
 interface TodayWorkspaceViewProps {
@@ -80,7 +81,7 @@ function initialDraftState(lessonDraft: DailyWorkspaceLessonDraft | null): Draft
 }
 
 // ---------------------------------------------------------------------------
-// Generate-activity button (per plan item)
+// Lesson-draft activity control: generate / regenerate / stale / ready
 // ---------------------------------------------------------------------------
 
 type PromptPreviewState =
@@ -89,7 +90,7 @@ type PromptPreviewState =
   | { status: "ready"; systemPrompt: string; userPrompt: string }
   | { status: "error"; message: string };
 
-function ActivityPromptPreview({ itemId, date }: { itemId: string; date: string }) {
+function LessonDraftPromptPreview({ date }: { date: string }) {
   const [open, setOpen] = useState(false);
   const [preview, setPreview] = useState<PromptPreviewState>({ status: "idle" });
 
@@ -101,7 +102,7 @@ function ActivityPromptPreview({ itemId, date }: { itemId: string; date: string 
     setOpen(true);
     if (preview.status === "ready") return;
     setPreview({ status: "loading" });
-    const result = await getActivityPromptPreviewAction(itemId, date);
+    const result = await getLessonDraftPromptPreviewAction(date);
     if (result.ok && result.systemPrompt && result.userPrompt) {
       setPreview({ status: "ready", systemPrompt: result.systemPrompt, userPrompt: result.userPrompt });
     } else {
@@ -146,18 +147,41 @@ function ActivityPromptPreview({ itemId, date }: { itemId: string; date: string 
   );
 }
 
-function GenerateActivityButton({ itemId, date }: { itemId: string; date: string }) {
+/**
+ * Lesson-draft activity control panel.
+ *
+ * Displays the current activity state and provides generate / regenerate
+ * affordances. Placed in the lesson draft area — not on plan item cards.
+ *
+ * States:
+ *   - no_activity: show generate button
+ *   - stale: show warning + regenerate button (draft changed since last gen)
+ *   - ready: show open activity link
+ */
+function LessonDraftActivityControl({
+  date,
+  activityStatus,
+  sessionId,
+}: {
+  date: string;
+  activityStatus: LessonDraftActivityStatus | null;
+  sessionId?: string;
+}) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState(false);
+  const [localStatus, setLocalStatus] = useState<LessonDraftActivityStatus | null>(activityStatus);
+
+  useEffect(() => {
+    setLocalStatus(activityStatus);
+  }, [activityStatus]);
 
   function handleGenerate() {
     setError(null);
     startTransition(async () => {
-      const result = await generateActivityAction(itemId, date);
+      const result = await generateLessonDraftActivityAction(date);
       if (result.ok) {
-        setDone(true);
+        setLocalStatus("ready");
         router.refresh();
       } else {
         setError(result.error ?? "Generation failed");
@@ -165,19 +189,56 @@ function GenerateActivityButton({ itemId, date }: { itemId: string; date: string
     });
   }
 
-  if (done) return null;
+  const isStale = localStatus === "stale";
+  const hasActivity = localStatus === "ready" || localStatus === "stale";
+  const canGenerate = localStatus === "no_activity" || localStatus === "stale";
 
   return (
-    <div className="flex flex-col gap-1">
-      <Button variant="outline" size="sm" onClick={handleGenerate} disabled={isPending}>
-        {isPending ? (
-          <Loader2 className="size-3.5 animate-spin" />
-        ) : (
-          <Sparkles className="size-3.5" />
-        )}
-        {isPending ? "Generating…" : "Generate activity"}
-      </Button>
-      {error ? <p className="text-xs text-destructive">{error}</p> : null}
+    <div className="space-y-3">
+      {isStale ? (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-800 dark:bg-amber-950/30">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+          <div className="space-y-1">
+            <p className="font-medium text-amber-800 dark:text-amber-200">Activity is stale</p>
+            <p className="text-xs text-amber-700 dark:text-amber-300">
+              The lesson draft changed after this activity was generated. Regenerate to reflect the
+              current lesson.
+            </p>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="flex flex-wrap items-center gap-2">
+        {sessionId && hasActivity ? (
+          <Link
+            href={`/activity/${sessionId}`}
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
+            {isStale ? "Open (stale)" : "Open activity"}
+          </Link>
+        ) : null}
+
+        {canGenerate ? (
+          <Button variant="outline" size="sm" onClick={handleGenerate} disabled={isPending}>
+            {isPending ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <Sparkles className="size-3.5" />
+            )}
+            {isPending
+              ? isStale
+                ? "Regenerating…"
+                : "Generating…"
+              : isStale
+                ? "Regenerate activity"
+                : "Generate activity"}
+          </Button>
+        ) : null}
+
+        {error ? <p className="text-xs text-destructive">{error}</p> : null}
+      </div>
+
+      <LessonDraftPromptPreview date={date} />
     </div>
   );
 }
@@ -302,19 +363,10 @@ export function TodayRouteItemsSection({
                   </div>
                   {item.workflow ? (
                     <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                      <span>{item.workflow.activityCount} activities</span>
                       <span>{item.workflow.evidenceCount} evidence</span>
                     </div>
                   ) : null}
                   <div className="flex flex-wrap gap-2">
-                    {item.sessionRecordId ? (
-                      <Link
-                        href={`/activity/${item.sessionRecordId}`}
-                        className={buttonVariants({ variant: "outline", size: "sm" })}
-                      >
-                        Open activity
-                      </Link>
-                    ) : null}
                     <Link
                       href={`/today?date=${workspace.date}&action=complete&planItemId=${item.id}`}
                       className={buttonVariants({ variant: "default", size: "sm" })}
@@ -391,7 +443,6 @@ export function TodayRouteItemsSection({
                     <p className="text-xs text-muted-foreground">{item.lessonLabel}</p>
                     {item.workflow ? (
                       <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                        <span>{item.workflow.activityCount} activities</span>
                         <span>{item.workflow.evidenceCount} evidence</span>
                       </div>
                     ) : null}
@@ -399,17 +450,6 @@ export function TodayRouteItemsSection({
                   </div>
 
                   <div className="flex flex-wrap gap-2 sm:justify-end">
-                    {item.sessionRecordId ? (
-                      <Link
-                        href={`/activity/${item.sessionRecordId}`}
-                        className={buttonVariants({ variant: "outline", size: "sm" })}
-                      >
-                        Open activity
-                      </Link>
-                    ) : null}
-                    {(item.workflow?.activityCount ?? 0) === 0 && !item.sessionRecordId ? (
-                      <GenerateActivityButton itemId={item.id} date={workspace.date} />
-                    ) : null}
                     <Link
                       href={`/today?date=${workspace.date}&action=complete&planItemId=${item.id}`}
                       className={buttonVariants({ variant: "default", size: "sm" })}
@@ -440,10 +480,6 @@ export function TodayRouteItemsSection({
                     ) : null}
                   </div>
                 </div>
-
-                {(item.workflow?.activityCount ?? 0) === 0 && !item.sessionRecordId ? (
-                  <ActivityPromptPreview itemId={item.id} date={workspace.date} />
-                ) : null}
               </div>
             </Card>
           );
@@ -460,6 +496,11 @@ function TodayLessonDraftArticle({
   workspace: DailyWorkspace;
   draftState: DraftState & { kind: string };
 }) {
+  // Activity state for this lesson draft — server-loaded via props (or refreshed)
+  // We use null as the initial state; the control itself handles the button
+  // for legacy sessions that already have activities.
+  const leadSessionId = workspace.leadItem.sessionRecordId ?? workspace.leadItem.workflow?.lessonSessionId ?? undefined;
+
   return (
     <section className="space-y-4">
       <div className="border-b border-border/70 pb-4">
@@ -479,6 +520,21 @@ function TodayLessonDraftArticle({
           ) : null}
         </div>
       </Card>
+
+      {/* Activity generation — owned by the lesson draft, not by individual items */}
+      {draftState.kind === "structured" ? (
+        <div className="space-y-2">
+          <h3 className="text-sm font-medium text-foreground">Activity</h3>
+          <p className="text-xs text-muted-foreground">
+            One activity generated from this lesson draft. Regenerate when the draft changes.
+          </p>
+          <LessonDraftActivityControl
+            date={workspace.date}
+            activityStatus={null}
+            sessionId={leadSessionId}
+          />
+        </div>
+      ) : null}
     </section>
   );
 }

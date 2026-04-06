@@ -516,12 +516,11 @@ test("reflection activity — validates and captures confidence signal", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Test: lesson-first context builder
+// Test: lesson-draft context builder
 // ---------------------------------------------------------------------------
 
 import {
-  buildContextFromLessonSession,
-  buildContextFromPlanItem,
+  buildActivityContextFromLessonDraft,
   extractLessonDraftContext,
   buildPromptInput,
 } from "../lib/activities/generation-context.ts";
@@ -611,63 +610,59 @@ const samplePlanItem: PlanItem = {
   },
 };
 
-test("buildContextFromLessonSession — uses lesson draft as primary source", () => {
-  const ctx = buildContextFromLessonSession({
+test("buildActivityContextFromLessonDraft — uses lesson draft as content source", () => {
+  const ctx = buildActivityContextFromLessonDraft({
     lessonDraft: sampleLessonDraft,
-    planItem: samplePlanItem,
     learnerName: "Alex",
     workflowMode: "family_guided",
+    planItems: [samplePlanItem],
   });
 
-  // Lesson-level fields come from the draft
   assert.equal(ctx.lesson.title, "Long Division — Step by Step");
   assert.equal(ctx.lesson.purpose, sampleLessonDraft.lesson_focus);
   assert.deepEqual(ctx.lesson.objectives, sampleLessonDraft.primary_objectives);
   assert.equal(ctx.lesson.estimatedMinutes, 40);
-
-  // Lesson draft context is populated
-  assert.ok(ctx.lessonDraft, "lessonDraft context should be present");
+  assert.ok(ctx.lessonDraft, "lessonDraft context must be present");
   assert.equal(ctx.lessonDraft!.lessonFocus, sampleLessonDraft.lesson_focus);
   assert.equal(ctx.lessonDraft!.blocks.length, 4);
   assert.deepEqual(ctx.lessonDraft!.successCriteria, sampleLessonDraft.success_criteria);
   assert.equal(ctx.lessonDraft!.assessmentArtifact, "Completed workbook page with 4 problems");
 });
 
-test("buildContextFromLessonSession — plan item provides scope and curriculum linkage", () => {
-  const ctx = buildContextFromLessonSession({
+test("buildActivityContextFromLessonDraft — scope is always session-level", () => {
+  const ctx = buildActivityContextFromLessonDraft({
     lessonDraft: sampleLessonDraft,
-    planItem: samplePlanItem,
     learnerName: "Alex",
     workflowMode: "family_guided",
-  });
-
-  assert.equal(ctx.scope?.kind, "route_item");
-  assert.equal(ctx.scope?.planItemId, "route-item-123");
-  assert.equal(ctx.scope?.label, "Long Division");
-  assert.equal(ctx.curriculum.sourceTitle, "Math Curriculum");
-  assert.equal(ctx.lesson.subject, "Math");
-});
-
-test("buildContextFromLessonSession — materials come from lesson draft when available", () => {
-  const ctx = buildContextFromLessonSession({
-    lessonDraft: sampleLessonDraft,
-    planItem: samplePlanItem,
-    learnerName: "Alex",
-  });
-
-  // Lesson draft materials take precedence over plan item materials
-  assert.deepEqual(ctx.teacher?.materialsAvailable, ["Math workbook p.42", "Whiteboard", "Pencil"]);
-});
-
-test("buildContextFromLessonSession — works without plan item (session-level scope)", () => {
-  const ctx = buildContextFromLessonSession({
-    lessonDraft: sampleLessonDraft,
-    learnerName: "Alex",
+    planItems: [samplePlanItem],
   });
 
   assert.equal(ctx.scope?.kind, "session");
-  assert.equal(ctx.scope?.label, "Long Division — Step by Step");
-  assert.equal(ctx.lesson.title, "Long Division — Step by Step");
+  assert.equal(ctx.scope?.label, sampleLessonDraft.title);
+});
+
+test("buildActivityContextFromLessonDraft — plan items provide traceability, not scope", () => {
+  const ctx = buildActivityContextFromLessonDraft({
+    lessonDraft: sampleLessonDraft,
+    learnerName: "Alex",
+    planItems: [samplePlanItem],
+  });
+
+  assert.equal(ctx.curriculum.sourceTitle, "Math Curriculum");
+  assert.equal(ctx.lesson.subject, "Math");
+  assert.ok(ctx.linkedSkillTitles?.includes("Long Division"));
+  // Scope is still session-level despite plan item being present
+  assert.equal(ctx.scope?.kind, "session");
+});
+
+test("buildActivityContextFromLessonDraft — materials come from lesson draft", () => {
+  const ctx = buildActivityContextFromLessonDraft({
+    lessonDraft: sampleLessonDraft,
+    learnerName: "Alex",
+    planItems: [samplePlanItem],
+  });
+
+  assert.deepEqual(ctx.teacher?.materialsAvailable, ["Math workbook p.42", "Whiteboard", "Pencil"]);
 });
 
 test("extractLessonDraftContext — produces compact representation", () => {
@@ -682,33 +677,176 @@ test("extractLessonDraftContext — produces compact representation", () => {
   assert.equal(draftCtx.assessmentArtifact, "Completed workbook page with 4 problems");
 });
 
-test("buildPromptInput — includes lessonDraft when present in context", () => {
-  const ctx = buildContextFromLessonSession({
+test("buildPromptInput — includes lessonDraft and session scope from lesson draft context", () => {
+  const ctx = buildActivityContextFromLessonDraft({
     lessonDraft: sampleLessonDraft,
-    planItem: samplePlanItem,
     learnerName: "Alex",
+    planItems: [samplePlanItem],
   });
   const input = buildPromptInput(ctx);
 
-  assert.ok(input.lessonDraft, "prompt input should include lessonDraft");
+  assert.ok(input.lessonDraft, "prompt input must include lessonDraft");
   assert.equal(input.lessonDraft!.lessonFocus, sampleLessonDraft.lesson_focus);
-  assert.equal(input.scope?.kind, "route_item");
+  assert.equal(input.scope?.kind, "session");
+  assert.ok(input.linkedSkillTitles?.includes("Long Division"));
 });
 
-test("buildPromptInput — no lessonDraft when built from plan item only", () => {
-  const ctx = buildContextFromPlanItem(samplePlanItem, "Alex", "family_guided");
+// ---------------------------------------------------------------------------
+// Test: lesson-draft fingerprinting and ownership hierarchy
+// ---------------------------------------------------------------------------
+
+import { computeLessonDraftFingerprint } from "../lib/lesson-draft/fingerprint.ts";
+
+test("buildActivityContextFromLessonDraft — scope is session-level, not route_item", () => {
+  const ctx = buildActivityContextFromLessonDraft({
+    lessonDraft: sampleLessonDraft,
+    learnerName: "Alex",
+    workflowMode: "family_guided",
+    planItems: [samplePlanItem],
+  });
+
+  // Scope is always session — covers the whole lesson draft
+  assert.equal(ctx.scope?.kind, "session");
+  assert.equal(ctx.scope?.label, sampleLessonDraft.title);
+});
+
+test("buildActivityContextFromLessonDraft — lesson draft is the content source", () => {
+  const ctx = buildActivityContextFromLessonDraft({
+    lessonDraft: sampleLessonDraft,
+    learnerName: "Alex",
+  });
+
+  assert.equal(ctx.lesson.title, sampleLessonDraft.title);
+  assert.equal(ctx.lesson.purpose, sampleLessonDraft.lesson_focus);
+  assert.deepEqual(ctx.lesson.objectives, sampleLessonDraft.primary_objectives);
+  assert.ok(ctx.lessonDraft, "lessonDraft context must be present");
+  assert.equal(ctx.lessonDraft!.blocks.length, 4);
+});
+
+test("buildActivityContextFromLessonDraft — plan items are traceability only", () => {
+  const planItem2: PlanItem = {
+    ...samplePlanItem,
+    id: "route-item-456",
+    title: "Long Division Practice",
+    subject: "Math",
+  };
+
+  const ctx = buildActivityContextFromLessonDraft({
+    lessonDraft: sampleLessonDraft,
+    learnerName: "Alex",
+    planItems: [samplePlanItem, planItem2],
+  });
+
+  // Linked skill titles come from plan items (traceability)
+  assert.ok(ctx.linkedSkillTitles?.includes("Long Division"));
+  assert.ok(ctx.linkedSkillTitles?.includes("Long Division Practice"));
+  // But scope is still session-level — plan items don't change it
+  assert.equal(ctx.scope?.kind, "session");
+});
+
+test("buildActivityContextFromLessonDraft — works with no plan items", () => {
+  const ctx = buildActivityContextFromLessonDraft({
+    lessonDraft: sampleLessonDraft,
+    learnerName: "Alex",
+    workflowMode: "family_guided",
+  });
+
+  assert.equal(ctx.scope?.kind, "session");
+  assert.deepEqual(ctx.linkedSkillTitles, []);
+  assert.equal(ctx.lesson.title, sampleLessonDraft.title);
+});
+
+test("computeLessonDraftFingerprint — same draft produces same fingerprint", () => {
+  const fp1 = computeLessonDraftFingerprint(sampleLessonDraft);
+  const fp2 = computeLessonDraftFingerprint(sampleLessonDraft);
+  assert.equal(fp1, fp2, "fingerprint must be deterministic");
+  assert.equal(fp1.length, 16, "fingerprint is 16 hex chars");
+});
+
+test("computeLessonDraftFingerprint — different content produces different fingerprint", () => {
+  const fp1 = computeLessonDraftFingerprint(sampleLessonDraft);
+  const modified: typeof sampleLessonDraft = {
+    ...sampleLessonDraft,
+    lesson_focus: "A completely different focus for this lesson",
+  };
+  const fp2 = computeLessonDraftFingerprint(modified);
+  assert.notEqual(fp1, fp2, "changed draft must produce different fingerprint");
+});
+
+test("computeLessonDraftFingerprint — different blocks produce different fingerprint", () => {
+  const fp1 = computeLessonDraftFingerprint(sampleLessonDraft);
+  const reordered: typeof sampleLessonDraft = {
+    ...sampleLessonDraft,
+    blocks: [...sampleLessonDraft.blocks].reverse(), // reorder blocks
+  };
+  const fp2 = computeLessonDraftFingerprint(reordered);
+  assert.notEqual(fp1, fp2, "reordered blocks must produce different fingerprint");
+});
+
+test("computeLessonDraftFingerprint — skill overlap does not cause fingerprint match", () => {
+  // Two lesson drafts that mention the same skill but have different content
+  const draftA: typeof sampleLessonDraft = {
+    ...sampleLessonDraft,
+    title: "Long Division — Day 1",
+    lesson_focus: "Introduction to long division",
+  };
+  const draftB: typeof sampleLessonDraft = {
+    ...sampleLessonDraft,
+    title: "Long Division — Day 2",
+    lesson_focus: "Practice long division with remainders",
+  };
+  const fpA = computeLessonDraftFingerprint(draftA);
+  const fpB = computeLessonDraftFingerprint(draftB);
+  assert.notEqual(fpA, fpB, "overlapping skills must not cause fingerprint collision");
+});
+
+test("buildActivityContextFromLessonDraft — primary: prompt input has lesson draft, session scope", () => {
+  const ctx = buildActivityContextFromLessonDraft({
+    lessonDraft: sampleLessonDraft,
+    learnerName: "Alex",
+    workflowMode: "family_guided",
+    planItems: [samplePlanItem],
+  });
   const input = buildPromptInput(ctx);
 
-  assert.equal(input.lessonDraft, undefined);
-  assert.equal(input.scope?.kind, "route_item");
+  assert.ok(input.lessonDraft, "prompt input must include lessonDraft");
+  assert.equal(input.scope?.kind, "session");
+  // Plan items appear as linked skill titles (traceability)
+  assert.ok(input.linkedSkillTitles?.includes("Long Division"));
 });
 
-test("buildContextFromPlanItem — backward compat: no lessonDraft in context", () => {
-  const ctx = buildContextFromPlanItem(samplePlanItem, "Alex", "manager_led");
+test("activity hierarchy: one lesson draft → one session-scoped activity context", () => {
+  // Verify the canonical hierarchy is enforced in context construction.
+  // Two plan items in the same session should produce ONE session-scoped context.
+  const planItem2: PlanItem = {
+    ...samplePlanItem,
+    id: "route-item-789",
+    title: "Division Review",
+    subject: "Math",
+  };
 
-  assert.equal(ctx.lessonDraft, undefined);
-  assert.equal(ctx.lesson.title, "Long Division");
-  assert.equal(ctx.lesson.purpose, samplePlanItem.objective);
-  assert.equal(ctx.scope?.kind, "route_item");
-  assert.equal(ctx.teacher?.workflowMode, "manager_led");
+  const ctx = buildActivityContextFromLessonDraft({
+    lessonDraft: sampleLessonDraft,
+    learnerName: "Alex",
+    planItems: [samplePlanItem, planItem2],
+  });
+
+  // One context, session-scoped — not one per plan item
+  assert.equal(ctx.scope?.kind, "session");
+  assert.equal(ctx.lesson.title, sampleLessonDraft.title);
+  assert.equal(ctx.linkedSkillTitles?.length, 2); // both items as traceability
+});
+
+test("evidence/progress traceability: context retains linked skill titles", () => {
+  // Skills/objectives are preserved as traceability links in generated context
+  const ctx = buildActivityContextFromLessonDraft({
+    lessonDraft: sampleLessonDraft,
+    learnerName: "Alex",
+    planItems: [samplePlanItem],
+  });
+
+  // Skill titles are available for evidence → objective → curriculum mapping
+  assert.ok(Array.isArray(ctx.linkedSkillTitles));
+  assert.ok(ctx.linkedSkillTitles!.length > 0, "skill titles must be retained for traceability");
+  assert.ok(Array.isArray(ctx.linkedObjectiveIds));
 });

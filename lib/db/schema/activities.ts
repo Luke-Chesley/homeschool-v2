@@ -107,10 +107,27 @@ export const interactiveActivities = pgTable("interactive_activities", {
     .notNull()
     .references(() => organizations.id, { onDelete: "cascade" }),
   learnerId: text("learner_id").references(() => learners.id, { onDelete: "set null" }),
+  /**
+   * Scope/traceability metadata — which plan item this activity scoped to.
+   * NOT the primary ownership anchor; lessonSessionId is primary.
+   * For lesson-draft-owned activities, this may be null or the lead item.
+   */
   planItemId: text("plan_item_id").references(() => planItems.id, { onDelete: "set null" }),
+  /**
+   * Primary ownership anchor — the lesson session this activity belongs to.
+   * For lesson-draft-owned activities this is the lead item's session.
+   */
   lessonSessionId: text("lesson_session_id").references(() => lessonSessions.id, {
     onDelete: "set null",
   }),
+  /**
+   * Lesson draft content fingerprint — identifies which version of the lesson
+   * draft produced this activity. Changes when the draft changes materially.
+   * Used for stale detection: if the current draft fingerprint differs from
+   * this value, the activity is stale and should be regenerated.
+   * Null for legacy activities generated before this field was added.
+   */
+  lessonDraftFingerprint: text("lesson_draft_fingerprint"),
   artifactId: text("artifact_id").references(() => generatedArtifacts.id, {
     onDelete: "set null",
   }),

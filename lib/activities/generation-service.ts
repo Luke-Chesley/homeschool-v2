@@ -3,16 +3,15 @@ import "@/lib/server-only";
 /**
  * Activity spec generation service.
  *
- * Generates ActivitySpec objects from lesson and curriculum context via AI.
+ * Generates ActivitySpec objects from lesson draft context via AI.
  * Falls back to a deterministic spec when AI is unavailable or fails.
  *
- * Primary path: generateActivitySpecForLessonSession()
- *   — uses structured lesson draft as the main content source
- *   — plan item provides scope/curriculum linkage
+ * Hierarchy: curriculum → lesson draft → one lesson activity → evidence/progress
  *
- * Fallback path: generateActivitySpecForPlanItem()
- *   — used when no lesson draft is available
- *   — plan item metadata is the sole content source
+ * Entry point: generateActivitySpecForLessonDraft()
+ *   — lesson draft is the sole generation parent
+ *   — plan items provide optional traceability only
+ *   — produces one activity for the whole lesson draft
  */
 
 import { getAdapterForTask } from "@/lib/ai/registry";
@@ -26,8 +25,7 @@ import {
 import { ActivitySpecSchema, parseActivitySpec, type ActivitySpec } from "./spec";
 import { validateActivitySpec } from "./validation";
 import {
-  buildContextFromPlanItem,
-  buildContextFromLessonSession,
+  buildActivityContextFromLessonDraft,
   buildPromptInput,
   type ActivityGenerationContext,
 } from "./generation-context";
@@ -40,48 +38,28 @@ import type { StructuredLessonDraft } from "@/lib/lesson-draft/types";
 
 export interface ActivityGenResult {
   spec: ActivitySpec;
-  /** True when AI generation was used; false when fallback was used */
   aiGenerated: boolean;
   promptVersion: string;
   correctionApplied: boolean;
 }
 
 // ---------------------------------------------------------------------------
-// Public API — primary (lesson-first)
+// Public API
 // ---------------------------------------------------------------------------
 
 /**
  * Generate an ActivitySpec from a structured lesson draft.
- * This is the primary production entry point.
  *
- * The lesson draft is the main content source; planItem (if given) provides
- * curriculum linkage and narrows scope to a specific skill within the lesson.
+ * The lesson draft is the sole content source. Plan items (if given) are
+ * included only as traceability links in the generated spec.
  */
-export async function generateActivitySpecForLessonSession(params: {
+export async function generateActivitySpecForLessonDraft(params: {
   lessonDraft: StructuredLessonDraft;
-  planItem?: PlanItem;
   learnerName: string;
   workflowMode?: string;
+  planItems?: PlanItem[];
 }): Promise<ActivityGenResult> {
-  const ctx = buildContextFromLessonSession(params);
-  return generateActivitySpec(ctx);
-}
-
-// ---------------------------------------------------------------------------
-// Public API — fallback (plan-item-only)
-// ---------------------------------------------------------------------------
-
-/**
- * Generate an ActivitySpec from a plan item alone.
- * Used when no structured lesson draft is available.
- * Plan item metadata is the sole content source in this path.
- */
-export async function generateActivitySpecForPlanItem(
-  planItem: PlanItem,
-  learnerName: string,
-  workflowMode?: string,
-): Promise<ActivityGenResult> {
-  const ctx = buildContextFromPlanItem(planItem, learnerName, workflowMode);
+  const ctx = buildActivityContextFromLessonDraft(params);
   return generateActivitySpec(ctx);
 }
 
@@ -170,8 +148,7 @@ async function tryAiGenerate(
 
 /**
  * Builds a minimal but valid ActivitySpec without AI.
- * When a lesson draft is available, success criteria are used as mastery
- * indicators. Block sequence informs activity structure.
+ * Uses lesson draft structure when available.
  */
 function buildFallbackSpec(ctx: ActivityGenerationContext): ActivitySpec {
   const { lesson, lessonDraft, curriculum, teacher, scope } = ctx;
@@ -186,7 +163,6 @@ function buildFallbackSpec(ctx: ActivityGenerationContext): ActivitySpec {
         ? "demonstration"
         : "guided_practice";
 
-  // Use lesson draft objectives / success criteria when available
   const objectives = lessonDraft?.primaryObjectives ?? lesson.objectives;
   const successCriteria = lessonDraft?.successCriteria ?? [];
   const scopeLabel = scope?.label ?? lesson.title;
@@ -247,7 +223,6 @@ function buildFallbackSpec(ctx: ActivityGenerationContext): ActivitySpec {
     });
   }
 
-  // Pull mastery indicators from lesson draft success criteria when available
   const masteryIndicators =
     successCriteria.length > 0
       ? successCriteria
