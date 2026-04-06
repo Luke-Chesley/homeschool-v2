@@ -18,7 +18,7 @@ import { getTodayWorkspace } from "@/lib/planning/today-service";
 import type { PlanItem } from "@/lib/planning/types";
 import { generateActivitySpecForPlanItem } from "./generation-service";
 
-async function publishActivitySpec(params: {
+export async function publishActivitySpecForItem(params: {
   organizationId: string;
   learnerId: string;
   planItemId: string;
@@ -101,7 +101,7 @@ export async function ensurePublishedActivitiesForLearner(params: {
       continue;
     }
 
-    await publishActivitySpec({
+    await publishActivitySpecForItem({
       organizationId: params.organizationId,
       learnerId: params.learnerId,
       planItemId: durablePlanItemId,

@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { Loader2, Sparkles } from "lucide-react";
 
 import { LessonPlanPanel } from "@/components/planning/lesson-plan-panel";
 import {
@@ -9,12 +11,16 @@ import {
   LegacyLessonDraftNotice,
 } from "@/components/planning/lesson-draft-renderer";
 import { Badge } from "@/components/ui/badge";
-import { buttonVariants } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { MarkdownContent } from "@/components/ui/markdown-content";
 import type { StructuredLessonDraft } from "@/lib/lesson-draft/types";
 import type { DailyWorkspace, DailyWorkspaceLessonDraft } from "@/lib/planning/types";
 import { cn } from "@/lib/utils";
+import {
+  generateActivityAction,
+  getActivityPromptPreviewAction,
+} from "@/app/(parent)/today/actions";
 
 interface TodayWorkspaceViewProps {
   workspace: DailyWorkspace;
@@ -72,6 +78,111 @@ function initialDraftState(lessonDraft: DailyWorkspaceLessonDraft | null): Draft
   }
   return null;
 }
+
+// ---------------------------------------------------------------------------
+// Generate-activity button (per plan item)
+// ---------------------------------------------------------------------------
+
+type PromptPreviewState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "ready"; systemPrompt: string; userPrompt: string }
+  | { status: "error"; message: string };
+
+function ActivityPromptPreview({ itemId, date }: { itemId: string; date: string }) {
+  const [open, setOpen] = useState(false);
+  const [preview, setPreview] = useState<PromptPreviewState>({ status: "idle" });
+
+  async function handleToggle() {
+    if (open) {
+      setOpen(false);
+      return;
+    }
+    setOpen(true);
+    if (preview.status === "ready") return;
+    setPreview({ status: "loading" });
+    const result = await getActivityPromptPreviewAction(itemId, date);
+    if (result.ok && result.systemPrompt && result.userPrompt) {
+      setPreview({ status: "ready", systemPrompt: result.systemPrompt, userPrompt: result.userPrompt });
+    } else {
+      setPreview({ status: "error", message: result.error ?? "Failed to load prompt" });
+    }
+  }
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={handleToggle}
+        className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "text-muted-foreground")}
+      >
+        {preview.status === "loading" ? <Loader2 className="size-3.5 animate-spin" /> : null}
+        <span>{open ? "Hide prompt" : "View prompt"}</span>
+        <span className="text-xs opacity-50">debug</span>
+      </button>
+
+      {open && preview.status === "ready" ? (
+        <div className="mt-3 rounded-lg border border-border/70 bg-background p-4">
+          <div className="grid gap-4">
+            <div>
+              <p className="mb-2 text-xs font-medium text-foreground">System</p>
+              <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-lg border border-border/70 bg-muted/35 p-3 text-xs leading-6 text-foreground">
+                {preview.systemPrompt}
+              </pre>
+            </div>
+            <div>
+              <p className="mb-2 text-xs font-medium text-foreground">User</p>
+              <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-lg border border-border/70 bg-muted/35 p-3 text-xs leading-6 text-foreground">
+                {preview.userPrompt}
+              </pre>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {open && preview.status === "error" ? (
+        <p className="mt-2 text-xs text-destructive">{preview.message}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function GenerateActivityButton({ itemId, date }: { itemId: string; date: string }) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+
+  function handleGenerate() {
+    setError(null);
+    startTransition(async () => {
+      const result = await generateActivityAction(itemId, date);
+      if (result.ok) {
+        setDone(true);
+        router.refresh();
+      } else {
+        setError(result.error ?? "Generation failed");
+      }
+    });
+  }
+
+  if (done) return null;
+
+  return (
+    <div className="flex flex-col gap-1">
+      <Button variant="outline" size="sm" onClick={handleGenerate} disabled={isPending}>
+        {isPending ? (
+          <Loader2 className="size-3.5 animate-spin" />
+        ) : (
+          <Sparkles className="size-3.5" />
+        )}
+        {isPending ? "Generating…" : "Generate activity"}
+      </Button>
+      {error ? <p className="text-xs text-destructive">{error}</p> : null}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 
 export function TodayWorkspaceView({ workspace, sourceId }: TodayWorkspaceViewProps) {
   const [draftState, setDraftState] = useState<DraftState>(
@@ -296,6 +407,9 @@ export function TodayRouteItemsSection({
                         Open activity
                       </Link>
                     ) : null}
+                    {(item.workflow?.activityCount ?? 0) === 0 && !item.sessionRecordId ? (
+                      <GenerateActivityButton itemId={item.id} date={workspace.date} />
+                    ) : null}
                     <Link
                       href={`/today?date=${workspace.date}&action=complete&planItemId=${item.id}`}
                       className={buttonVariants({ variant: "default", size: "sm" })}
@@ -326,6 +440,10 @@ export function TodayRouteItemsSection({
                     ) : null}
                   </div>
                 </div>
+
+                {(item.workflow?.activityCount ?? 0) === 0 && !item.sessionRecordId ? (
+                  <ActivityPromptPreview itemId={item.id} date={workspace.date} />
+                ) : null}
               </div>
             </Card>
           );
