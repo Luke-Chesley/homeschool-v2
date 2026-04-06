@@ -535,6 +535,30 @@ async function buildRouteBoard(route: WeeklyRouteRecord): Promise<WeeklyRouteBoa
 
   const conflicts = computeConflicts(items, context);
 
+  // Debug output: progression consumption basis
+  const hasExplicitProgression = orderedPhaseIds.length > 0 || phaseIdBySkillNodeId.size > 0;
+  const skillsWithHardPrereqs = items.filter((item) => (hardPrerequisitesBySkillNodeId.get(item.skillNodeId) ?? []).length > 0).length;
+  const skillsWithRecommendedBefore = items.filter((item) => (recommendedBeforeBySkillNodeId.get(item.skillNodeId) ?? []).length > 0).length;
+  const skillsAssignedToPhases = items.filter((item) => phaseIdBySkillNodeId.has(item.skillNodeId)).length;
+  const inferredOrderPrereqs = prerequisites.filter((p) => p.kind === "inferred").length;
+  const explicitPrereqs = prerequisites.filter((p) => p.kind !== "inferred").length;
+
+  console.info("[curriculum-routing] Route board built.", {
+    sourceId: route.sourceId,
+    learnerId: route.learnerId,
+    weekStartDate: route.weekStartDate,
+    itemCount: items.length,
+    phaseCount: orderedPhaseIds.length,
+    skillsAssignedToPhases,
+    skillsWithHardPrereqs,
+    skillsWithRecommendedBefore,
+    explicitPrereqs,
+    inferredOrderPrereqs,
+    hasExplicitProgression,
+    usingInferredFallback: !hasExplicitProgression,
+    conflictCount: conflicts.length,
+  });
+
   return {
     summary: {
       weeklyRouteId: route.id,

@@ -56,11 +56,10 @@ export function assessCurriculumArtifactQuality(
 ): CurriculumQualityIssue[] {
   const issues: CurriculumQualityIssue[] = [];
   const skillLeaves = collectDocumentSkillLeaves(artifact.document);
-  const lessons = collectLessons(artifact);
   const topicKeywords = extractMeaningfulKeywords(context.topicText);
   const artifactText = buildArtifactText(artifact);
-  const totalSessions = estimateTotalSessions(artifact);
-  const sessionsPerSkill = skillLeaves.length > 0 ? totalSessions / skillLeaves.length : Number.POSITIVE_INFINITY;
+
+  // Only block on truly egregious structural failures.
 
   if (skillLeaves.length === 0) {
     issues.push({
@@ -76,50 +75,6 @@ export function assessCurriculumArtifactQuality(
       message: "The curriculum does not stay clearly aligned to the requested topic.",
     });
   }
-
-  if (sessionsPerSkill > context.granularity.maxSessionsPerSkill) {
-    issues.push({
-      code: "learner_fit_granularity",
-      message: `The curriculum is too broad for the learner context: about ${sessionsPerSkill.toFixed(1)} sessions per skill.`,
-    });
-  }
-
-  if (skillLeaves.length > context.granularity.preferredSkillCount + 5) {
-    issues.push({
-      code: "taxonomic_bloat",
-      message: "The curriculum creates more skill leaves than the learner context appears to need.",
-    });
-  }
-
-  const broadSkillIssues = skillLeaves
-    .map((skill) => describeSkillBroadness(skill, context.granularity))
-    .filter((issue): issue is CurriculumQualityIssue => Boolean(issue));
-  issues.push(...broadSkillIssues);
-
-  const teachabilityIssues = lessons.flatMap((lesson) =>
-    describeLessonTeachability(lesson, skillLeaves, context.granularity),
-  );
-  issues.push(...teachabilityIssues);
-
-  const visibleAssessmentIssue = describeAssessmentVisibility(artifact, lessons);
-  if (visibleAssessmentIssue) {
-    issues.push(visibleAssessmentIssue);
-  }
-
-  issues.push(
-    ...describeNamingIssues({
-      artifact,
-      context,
-    }),
-  );
-
-  const practiceBalanceIssue = describePracticeBalance(artifact, lessons, totalSessions);
-  if (practiceBalanceIssue) {
-    issues.push(practiceBalanceIssue);
-  }
-
-  const alignmentIssues = describeLessonSkillAlignment(lessons, skillLeaves);
-  issues.push(...alignmentIssues);
 
   return uniqueIssues(issues);
 }

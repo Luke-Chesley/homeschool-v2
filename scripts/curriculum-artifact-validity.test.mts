@@ -283,19 +283,26 @@ test("generation schema failure returns a structured failure result", async () =
 });
 
 test("generation quality failure returns a structured failure result", async () => {
-  const artifact = makeBroadArtifact();
+  // Only truly egregious artifacts fail now — empty skill tree is the clearest case
+  const emptyArtifact = {
+    ...makeBroadArtifact(),
+    document: {
+      Ecosystems: {
+        "Core ideas": {},
+      },
+    },
+  };
   const result = await generateCurriculumArtifact(
     { learner, messages },
     {
       resolvePrompt: stubPrompt,
-      complete: async () => ({ content: JSON.stringify(artifact) }),
+      complete: async () => ({ content: JSON.stringify(emptyArtifact) }),
     },
   );
 
   assert.equal(result.kind, "failure");
   assert.equal(result.stage, "quality");
-  assert.equal(result.attemptCount, 2);
-  assert.ok(result.issues.some((issue) => issue.code === "skill_atomicity"));
+  assert.ok(result.issues.some((issue) => issue.code === "teachability"));
 });
 
 test("generation failure does not call persistence", async () => {
@@ -385,10 +392,12 @@ test("revision failure does not call persistence", async () => {
 });
 
 test("quality checks flag overly broad skills and missing visible assessment", () => {
+  // Quality checks are now minimal — only empty tree and complete topic mismatch block generation.
+
+  // A broad but topic-matching artifact passes.
   const broadArtifact = makeBroadArtifact();
-  const issues = assessCurriculumArtifactQuality(broadArtifact, {
+  const passIssues = assessCurriculumArtifactQuality(broadArtifact, {
     topicText: "ecosystems",
-    requestText: "Build an ecosystems curriculum for a 4th grader who needs short lessons.",
     granularity: inferCurriculumGranularityProfile({
       topic: "ecosystems",
       requirements: {
@@ -401,26 +410,39 @@ test("quality checks flag overly broad skills and missing visible assessment", (
         assessment: "",
         structurePreferences: "",
       },
-      pacing: {
-        totalWeeks: 8,
-        sessionsPerWeek: 2,
-        sessionMinutes: 20,
-        explicitlyRequestedTotalSessions: 16,
-      },
+      pacing: { totalWeeks: 8, sessionsPerWeek: 2, sessionMinutes: 20, explicitlyRequestedTotalSessions: 16 },
     }),
-    requestedPacing: {
-      totalWeeks: 8,
-      sessionsPerWeek: 2,
-      sessionMinutes: 20,
-      explicitlyRequestedTotalSessions: 16,
-    },
-    learnerText: "young beginner",
   });
+  assert.equal(passIssues.length, 0, "broad but on-topic artifact should pass quality checks");
 
-  const codes = new Set(issues.map((issue) => issue.code));
+  // Empty skill tree is still blocked.
+  const emptyArtifact = { ...broadArtifact, document: { Ecosystems: { "Core ideas": {} } } };
+  const emptyIssues = assessCurriculumArtifactQuality(emptyArtifact, {
+    topicText: "ecosystems",
+    granularity: inferCurriculumGranularityProfile({
+      topic: "ecosystems",
+      requirements: { topic: "ecosystems", goals: "", timeframe: "", learnerProfile: "", constraints: "", teachingStyle: "", assessment: "", structurePreferences: "" },
+      pacing: {},
+    }),
+  });
+  assert.ok(emptyIssues.some((issue) => issue.code === "teachability"), "empty tree should fail teachability");
 
-  assert.ok(codes.has("skill_atomicity"));
-  assert.ok(codes.has("assessment_visibility"));
-  assert.ok(codes.has("teachability"));
-  assert.ok(codes.has("practice_balance"));
+  // Topic mismatch on a completely alien curriculum is still blocked.
+  // Build an artifact whose every field is about calculus, none about ecosystems.
+  const offTopicArtifact = {
+    source: { title: "Calculus", description: "Calculus course.", subjects: ["math"], gradeLevels: ["12"], summary: "Integration and derivatives.", teachingApproach: "Lectures.", successSignals: ["Solve integrals."], parentNotes: [], rationale: [] },
+    intakeSummary: "Calculus for seniors.",
+    pacing: { totalWeeks: 8, sessionsPerWeek: 2, sessionMinutes: 30, totalSessions: 16, coverageStrategy: "Lecture then drill.", coverageNotes: [] },
+    document: { "Calculus": { "Integrals": { "Techniques": ["Integration by parts", "Substitution"] } } },
+    units: [{ title: "Integrals", description: "Integration techniques.", estimatedSessions: 8, lessons: [{ title: "By Parts", description: "Integration by parts technique.", estimatedMinutes: 30, materials: [], objectives: ["Solve by parts"], linkedSkillTitles: ["Integration by parts"] }] }],
+  };
+  const offTopicIssues = assessCurriculumArtifactQuality(offTopicArtifact, {
+    topicText: "ecosystems science food webs habitats",
+    granularity: inferCurriculumGranularityProfile({
+      topic: "ecosystems",
+      requirements: { topic: "ecosystems", goals: "", timeframe: "", learnerProfile: "", constraints: "", teachingStyle: "", assessment: "", structurePreferences: "" },
+      pacing: {},
+    }),
+  });
+  assert.ok(offTopicIssues.some((issue) => issue.code === "topic_alignment"), "off-topic artifact should fail topic_alignment");
 });

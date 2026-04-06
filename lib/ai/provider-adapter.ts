@@ -89,7 +89,10 @@ export const DEFAULT_ROUTING_CONFIG: ModelRoutingConfig = {
   taskDefaults: {
     "curriculum.intake": "mock-chat-model",
     "curriculum.generate.core": "mock-generation-model",
+    "curriculum.generate.progression": "mock-generation-model",
     "curriculum.revise": "mock-generation-model",
+    "curriculum.revise.core": "mock-generation-model",
+    "curriculum.revise.progression": "mock-generation-model",
     "curriculum.title": "mock-generation-model",
     "chat.answer": "mock-chat-model",
     "lesson.draft": "mock-generation-model",

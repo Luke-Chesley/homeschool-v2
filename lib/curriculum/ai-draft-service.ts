@@ -67,6 +67,11 @@ import {
   buildRevisionPromptSummary,
   runCurriculumRevisionDecision,
 } from "./revision-model";
+import {
+  validateProgressionSemantics,
+  extractLeafSkillTitles,
+} from "./progression-validation";
+import { assessCurriculumArtifactQuality } from "./quality";
 
 type RevisionPreference = "targeted" | "broader";
 
@@ -326,14 +331,25 @@ export async function reviseCurriculumFromConversation(params: {
     });
   }
 
-  const progression = await generateCurriculumProgression({
+  const progressionResult = await generateCurriculumProgression({
     learner: params.learner,
     artifact: decision.artifact,
   });
 
-  if (progression) {
-    decision.artifact.progression = progression;
+  if (progressionResult.progression) {
+    decision.artifact.progression = progressionResult.progression;
   }
+
+  console.info("[curriculum/ai-draft] Revision progression pass complete.", {
+    sourceId: snapshot.source.id,
+    progressionAttempted: progressionResult.attempted,
+    progressionAccepted: progressionResult.progression !== null,
+    progressionPhaseCount: progressionResult.phaseCount,
+    progressionEdgeCount: progressionResult.edgeCount,
+    progressionUnresolvedCount: progressionResult.unresolvedCount,
+    progressionFailureReason: progressionResult.failureReason ?? "none",
+    usingInferredFallback: progressionResult.progression === null,
+  });
 
   const created = await persist({
     householdId: params.householdId,
@@ -463,7 +479,30 @@ export async function generateCurriculumArtifact(
           title: normalizeCurriculumLabel(sanitizedArtifact.source.title),
         },
       };
-      coreArtifact = normalizeCurriculumArtifactLabels(titledArtifact);
+      const candidate = normalizeCurriculumArtifactLabels(titledArtifact);
+      const qualityIssues = assessCurriculumArtifactQuality(candidate, {
+        topicText: topic,
+        granularity: granularityProfile,
+        requestedPacing,
+        revisionMode: "generation",
+      });
+
+      if (qualityIssues.length > 0) {
+        stage = "quality";
+        issues = qualityIssues.map((qi) => ({
+          code: qi.code,
+          message: qi.message,
+          path: qi.path ?? [],
+        }));
+        console.warn("[curriculum/ai-draft] curriculum artifact failed quality check", {
+          attempt: attempts,
+          issueCount: qualityIssues.length,
+          issues: issues.slice(0, 5),
+        });
+        continue;
+      }
+
+      coreArtifact = candidate;
       break;
     } catch (error) {
       stage = "generation";
@@ -479,20 +518,43 @@ export async function generateCurriculumArtifact(
   }
 
   if (coreArtifact) {
-    const progression = await generateCurriculumProgression({
+    const progressionResult = await generateCurriculumProgression({
       learner: params.learner,
       artifact: coreArtifact,
     }, deps);
 
-    if (progression) {
-      coreArtifact.progression = progression;
+    if (progressionResult.progression) {
+      coreArtifact.progression = progressionResult.progression;
     }
+
+    console.info("[curriculum/ai-draft] Core generation complete.", {
+      progressionAttempted: progressionResult.attempted,
+      progressionAccepted: progressionResult.progression !== null,
+      progressionPhaseCount: progressionResult.phaseCount,
+      progressionEdgeCount: progressionResult.edgeCount,
+      progressionUnresolvedCount: progressionResult.unresolvedCount,
+      progressionFailureReason: progressionResult.failureReason ?? "none",
+      usingInferredFallback: progressionResult.progression === null,
+    });
 
     return {
       kind: "success",
       artifact: coreArtifact,
     };
   }
+
+  console.error("[curriculum/ai-draft] curriculum artifact failure", {
+    stage,
+    reason:
+      stage === "parse"
+        ? "parse_failed"
+        : stage === "schema"
+          ? "schema_failed"
+          : stage === "quality"
+            ? "quality_failed"
+            : "generation_failed",
+    issueCount: issues.length,
+  });
 
   return buildCurriculumFailureResult({
     stage,
@@ -501,13 +563,17 @@ export async function generateCurriculumArtifact(
         ? "parse_failed"
         : stage === "schema"
           ? "schema_failed"
-          : "generation_failed",
+          : stage === "quality"
+            ? "quality_failed"
+            : "generation_failed",
     userSafeMessage:
       stage === "parse"
         ? "I could not parse a valid curriculum from the model response. Please try again."
         : stage === "schema"
           ? "I could not validate the curriculum structure from the model response. Please try again."
-          : "I could not produce a valid curriculum from the model response. Please try again.",
+          : stage === "quality"
+            ? "The generated curriculum did not meet quality requirements. Please try again or rephrase your request."
+            : "I could not produce a valid curriculum from the model response. Please try again.",
     issues,
     attemptCount: attempts,
     retryable: true,
@@ -521,6 +587,17 @@ export async function generateCurriculumArtifact(
   });
 }
 
+interface ProgressionGenerateResult {
+  progression: CurriculumAiProgression | null;
+  attempted: boolean;
+  parsed: boolean;
+  semanticValidation: boolean | null;
+  phaseCount: number;
+  edgeCount: number;
+  unresolvedCount: number;
+  failureReason: string | null;
+}
+
 async function generateCurriculumProgression(
   params: {
     learner: AppLearner;
@@ -530,25 +607,40 @@ async function generateCurriculumProgression(
     resolvePrompt?: typeof resolvePrompt;
     complete?: (options: any) => Promise<{ content: string }>;
   },
-): Promise<CurriculumAiProgression | null> {
+): Promise<ProgressionGenerateResult> {
   const resolvePromptFn = deps?.resolvePrompt ?? resolvePrompt;
   const prompt = await resolvePromptFn("curriculum.generate.progression", CURRICULUM_PROGRESSION_PROMPT_VERSION);
   const adapter = getAdapterForTask("curriculum.generate.progression");
   const model = getModelForTask("curriculum.generate.progression", getAiRoutingConfig());
   const complete = deps?.complete ?? ((options: any) => adapter.complete(options));
+  const leafSkillTitles = extractLeafSkillTitles(params.artifact.document);
+
+  console.info("[curriculum/ai-draft] progression generation started", {
+    learner: params.learner.displayName,
+    leafSkillCount: leafSkillTitles.length,
+    model,
+  });
 
   const attemptNotes: string[][] = [
     [],
     [
-      "Ensure all skill titles match leaf nodes in the provided document tree exactly.",
+      "Ensure ALL skill titles match EXACTLY the titles in the authoritative leaf skill list.",
+      "Copy the exact string from the list — do not paraphrase, abbreviate, or rephrase.",
       "Avoid cycles in hard prerequisites.",
+      "Every phase must include at least one skill from the authoritative list.",
     ],
   ];
   let attempts = 0;
+  let lastFailureReason: string | null = null;
 
   for (const correctionNotes of attemptNotes) {
     attempts += 1;
     try {
+      const correctionBlock =
+        correctionNotes.length > 0
+          ? `\n\nCorrection notes for this retry:\n${correctionNotes.map((note, i) => `${i + 1}. ${note}`).join("\n")}`
+          : "";
+
       const response = await complete({
         model,
         temperature: 0.2,
@@ -556,23 +648,96 @@ async function generateCurriculumProgression(
         messages: [
           {
             role: "user",
-            content: buildCurriculumProgressionPrompt({
-              learnerName: params.learner.displayName,
-              coreArtifact: params.artifact,
-            }),
+            content:
+              buildCurriculumProgressionPrompt({
+                learnerName: params.learner.displayName,
+                coreArtifact: params.artifact,
+                leafSkillTitles,
+              }) + correctionBlock,
           },
         ],
       });
 
       const parsed = parseCurriculumProgression(response.content);
-      if (parsed.kind === "success") {
-        return parsed.progression;
+      if (parsed.kind !== "success") {
+        lastFailureReason = `${parsed.kind} on attempt ${attempts}`;
+        console.warn("[curriculum/ai-draft] Progression parse/schema failed.", {
+          attempt: attempts,
+          kind: parsed.kind,
+          issues: parsed.issues,
+        });
+        continue;
       }
-      console.warn("[curriculum/ai-draft] Progression parse/schema failed.", {
+
+      // Semantic validation
+      const validation = validateProgressionSemantics(parsed.progression, leafSkillTitles);
+      const { summary } = validation;
+
+      console.info("[curriculum/ai-draft] progression semantic validation", {
         attempt: attempts,
-        issues: parsed.issues,
+        valid: validation.valid,
+        skillsInCurriculum: summary.skillsInCurriculum,
+        skillsAssignedToPhases: summary.skillsAssignedToPhases,
+        edgesAccepted: summary.edgesAccepted,
+        edgesDropped: summary.edgesDropped,
+        unresolvedEdgeEndpoints: summary.unresolvedEdgeEndpoints,
+        unresolvedPhaseSkills: summary.unresolvedPhaseSkills,
+        hardPrerequisiteEdges: summary.hardPrerequisiteEdges,
+        phaseCount: summary.phaseCount,
+        issues: validation.issues.map((issue) => ({ code: issue.code, message: issue.message })),
       });
+
+      if (!validation.valid) {
+        const blockingIssues = validation.issues.filter(
+          (issue) =>
+            issue.code === "hard_prerequisite_cycle" ||
+            issue.code === "self_loop" ||
+            issue.code === "empty_phases",
+        );
+        lastFailureReason = `semantic validation failed on attempt ${attempts}: ${blockingIssues.map((issue) => issue.code).join(", ")}`;
+        console.warn("[curriculum/ai-draft] Progression semantic validation blocked.", {
+          attempt: attempts,
+          blockingIssues: blockingIssues.map((issue) => ({ code: issue.code, message: issue.message })),
+        });
+        continue;
+      }
+
+      // Quality threshold: non-empty phases and minimal skill coverage for non-trivial curricula
+      const totalSkills = leafSkillTitles.length;
+      const minPhaseCoverage = totalSkills >= 4 ? Math.ceil(totalSkills * 0.4) : 0;
+      if (summary.phaseCount === 0 && totalSkills > 0) {
+        lastFailureReason = `no phases generated on attempt ${attempts}`;
+        console.warn("[curriculum/ai-draft] Progression has no phases, retrying.", { attempt: attempts, totalSkills });
+        continue;
+      }
+      if (summary.skillsAssignedToPhases < minPhaseCoverage) {
+        lastFailureReason = `insufficient phase coverage on attempt ${attempts}: ${summary.skillsAssignedToPhases}/${totalSkills} skills assigned`;
+        console.warn("[curriculum/ai-draft] Progression phase coverage below threshold, retrying.", {
+          attempt: attempts,
+          skillsAssignedToPhases: summary.skillsAssignedToPhases,
+          totalSkills,
+          minPhaseCoverage,
+        });
+        continue;
+      }
+
+      console.info("[curriculum/ai-draft] Progression accepted.", {
+        attempt: attempts,
+        summary,
+      });
+
+      return {
+        progression: parsed.progression,
+        attempted: true,
+        parsed: true,
+        semanticValidation: true,
+        phaseCount: summary.phaseCount,
+        edgeCount: summary.edgesAccepted,
+        unresolvedCount: summary.unresolvedEdgeEndpoints + summary.unresolvedPhaseSkills,
+        failureReason: null,
+      };
     } catch (error) {
+      lastFailureReason = `model call failed on attempt ${attempts}`;
       console.error("[curriculum/ai-draft] Progression generation failed attempt.", {
         attempt: attempts,
         error,
@@ -580,7 +745,23 @@ async function generateCurriculumProgression(
     }
   }
 
-  return null;
+  // All attempts exhausted — log explicitly, do not silently succeed
+  console.error("[curriculum/ai-draft] Progression generation failed after all attempts. Planning will fall back to inferred order.", {
+    leafSkillCount: leafSkillTitles.length,
+    attempts,
+    lastFailureReason,
+  });
+
+  return {
+    progression: null,
+    attempted: true,
+    parsed: false,
+    semanticValidation: null,
+    phaseCount: 0,
+    edgeCount: 0,
+    unresolvedCount: 0,
+    failureReason: lastFailureReason,
+  };
 }
 
 async function generateCurriculumRevisionDecision(params: {

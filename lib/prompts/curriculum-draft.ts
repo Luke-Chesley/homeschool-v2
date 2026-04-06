@@ -356,13 +356,23 @@ ${input.correctionNotes && input.correctionNotes.length > 0 ? `Correction notes 
 export function buildCurriculumProgressionPrompt(input: {
   learnerName: string;
   coreArtifact: any;
+  leafSkillTitles: string[];
 }) {
+  const skillList = input.leafSkillTitles
+    .map((title, index) => `  ${index + 1}. "${title}"`)
+    .join("\n");
+
   return `Active learner: ${input.learnerName}
 
-Core curriculum artifact:
+Authoritative leaf skill list (${input.leafSkillTitles.length} skills):
+${skillList}
+
+IMPORTANT: Every skillTitle in phases.skillTitles and every fromSkillTitle / toSkillTitle in edges MUST be copied EXACTLY from the list above. Do not paraphrase, abbreviate, or reword any title.
+
+Core curriculum artifact (for context only — use the skill list above for exact titles):
 ${JSON.stringify(input.coreArtifact, null, 2)}
 
-Generate the progression graph for this curriculum.`;
+Generate the progression graph for this curriculum. Use only skill titles from the authoritative list.`;
 }
 
 export interface CurriculumRevisionPromptNode {

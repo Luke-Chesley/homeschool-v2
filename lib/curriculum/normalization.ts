@@ -62,6 +62,14 @@ export interface NormalizedCurriculumImport {
     skillCount: number;
     maxDepth: number;
     sourceFingerprint: string;
+    progressionDiagnostics: {
+      hasExplicitProgression: boolean;
+      usingInferredFallback: boolean;
+      phaseCount: number;
+      acceptedEdgeCount: number;
+      droppedEdgeCount: number;
+      unmatchedPhaseSkillCount: number;
+    };
   };
 }
 
@@ -239,6 +247,11 @@ export function normalizeCurriculumDocument(args: {
   const siblingCounters = new Map<string, number>();
   const canonicalSkillNodeIds: string[] = [];
 
+  // Diagnostic counters populated below
+  let _droppedEdgeCount = 0;
+  let _unmatchedPhaseSkillCount = 0;
+  let _usingInferredFallback = false;
+
   const createOrGetNode = (params: {
     normalizedType: CurriculumNodeType;
     title: string;
@@ -402,6 +415,8 @@ export function normalizeCurriculumDocument(args: {
   const prerequisites: NormalizedCurriculumImport["prerequisites"] = [];
 
   if (args.progression?.edges && args.progression.edges.length > 0) {
+    const unmatchedEdgeEndpoints: Array<{ fromSkillTitle: string; toSkillTitle: string; unresolved: string[] }> = [];
+
     for (const edge of args.progression.edges) {
       const skillNodeId = skillIdByTitle.get(edge.toSkillTitle);
       const prerequisiteSkillNodeId = skillIdByTitle.get(edge.fromSkillTitle);
@@ -416,10 +431,42 @@ export function normalizeCurriculumDocument(args: {
             derivedFrom: "explicit_progression_graph",
           },
         });
+      } else {
+        const unresolved: string[] = [];
+        if (!prerequisiteSkillNodeId) unresolved.push(`fromSkillTitle: "${edge.fromSkillTitle}"`);
+        if (!skillNodeId) unresolved.push(`toSkillTitle: "${edge.toSkillTitle}"`);
+        unmatchedEdgeEndpoints.push({ fromSkillTitle: edge.fromSkillTitle, toSkillTitle: edge.toSkillTitle, unresolved });
       }
     }
+
+    _droppedEdgeCount = unmatchedEdgeEndpoints.length;
+
+    if (unmatchedEdgeEndpoints.length > 0) {
+      console.error("[curriculum/normalization] Progression edges dropped due to unmatched skill titles.", {
+        sourceId: args.sourceId,
+        droppedEdgeCount: unmatchedEdgeEndpoints.length,
+        totalEdgeCount: args.progression.edges.length,
+        acceptedEdgeCount: prerequisites.length,
+        unmatchedEdges: unmatchedEdgeEndpoints.slice(0, 10),
+        availableSkillTitles: [...skillIdByTitle.keys()].slice(0, 20),
+      });
+    } else {
+      console.info("[curriculum/normalization] All progression edges resolved.", {
+        sourceId: args.sourceId,
+        acceptedEdgeCount: prerequisites.length,
+      });
+    }
   } else {
-    // Fallback to inferred sequence
+    // Explicit fallback: inferred sequence — log clearly so it is observable
+    _usingInferredFallback = true;
+    console.info("[curriculum/normalization] No explicit progression edges — using inferred canonical order fallback.", {
+      sourceId: args.sourceId,
+      hasProgression: Boolean(args.progression),
+      hasEdges: Boolean(args.progression?.edges),
+      edgeCount: args.progression?.edges?.length ?? 0,
+      skillCount: canonicalSkillNodeIds.length,
+    });
+
     for (let i = 1; i < canonicalSkillNodeIds.length; i++) {
       prerequisites.push({
         sourceId: args.sourceId,
@@ -434,16 +481,46 @@ export function normalizeCurriculumDocument(args: {
     }
   }
 
-  const phases: NormalizedCurriculumImport["phases"] =
-    args.progression?.phases?.map((phase, index) => ({
+  const phases: NormalizedCurriculumImport["phases"] = [];
+  if (args.progression?.phases && args.progression.phases.length > 0) {
+    const unmatchedPhaseSkills: Array<{ phaseTitle: string; skillTitle: string }> = [];
+
+    for (const [index, phase] of args.progression.phases.entries()) {
+      const nodeIds: string[] = [];
+      for (const title of phase.skillTitles) {
+        const nodeId = skillIdByTitle.get(title);
+        if (nodeId) {
+          nodeIds.push(nodeId);
+        } else {
+          unmatchedPhaseSkills.push({ phaseTitle: phase.title, skillTitle: title });
+        }
+      }
+      phases.push({
+        sourceId: args.sourceId,
+        title: phase.title,
+        description: phase.description,
+        position: index,
+        nodeIds,
+      });
+    }
+
+    _unmatchedPhaseSkillCount = unmatchedPhaseSkills.length;
+
+    if (unmatchedPhaseSkills.length > 0) {
+      console.error("[curriculum/normalization] Phase skill titles dropped due to unmatched titles.", {
+        sourceId: args.sourceId,
+        droppedCount: unmatchedPhaseSkills.length,
+        unmatchedPhaseSkills: unmatchedPhaseSkills.slice(0, 10),
+      });
+    }
+
+    console.info("[curriculum/normalization] Phases normalized.", {
       sourceId: args.sourceId,
-      title: phase.title,
-      description: phase.description,
-      position: index,
-      nodeIds: phase.skillTitles
-        .map((title) => skillIdByTitle.get(title))
-        .filter((id): id is string => !!id),
-    })) ?? [];
+      phaseCount: phases.length,
+      totalPhaseNodeAssignments: phases.reduce((sum, phase) => sum + phase.nodeIds.length, 0),
+      unmatchedSkillCount: unmatchedPhaseSkills.length,
+    });
+  }
 
   return {
     nodes: [...nodes.values()].sort((left, right) => {
@@ -462,6 +539,14 @@ export function normalizeCurriculumDocument(args: {
       skillCount: canonicalSkillNodeIds.length,
       maxDepth: Math.max(0, ...[...nodes.values()].map((node) => node.depth)),
       sourceFingerprint: fingerprintDocument(args.document),
+      progressionDiagnostics: {
+        hasExplicitProgression: Boolean(args.progression?.edges?.length || args.progression?.phases?.length),
+        usingInferredFallback: _usingInferredFallback,
+        phaseCount: phases.length,
+        acceptedEdgeCount: prerequisites.filter((p) => p.metadata?.derivedFrom === "explicit_progression_graph").length,
+        droppedEdgeCount: _droppedEdgeCount,
+        unmatchedPhaseSkillCount: _unmatchedPhaseSkillCount,
+      },
     },
   };
 }

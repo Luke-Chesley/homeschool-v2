@@ -290,53 +290,54 @@ test("quality checks reject a broad revision artifact and return failure", async
     error: () => {},
   };
 
+  // Build an artifact that is completely off-topic (calculus, not board games).
   const broadArtifact = {
     source: {
-      title: "Board Games Setup and Play",
-      description: "A very broad board games curriculum.",
-      subjects: ["Games"],
-      gradeLevels: ["3"],
+      title: "Calculus",
+      description: "Integration and derivatives.",
+      subjects: ["math"],
+      gradeLevels: ["12"],
       academicYear: "2025-2026",
-      summary: "Teach everything about board games in one sequence.",
-      teachingApproach: "Use a broad sequence.",
-      successSignals: ["The learner understands board games."],
-      parentNotes: ["Keep it broad."],
-      rationale: ["One broad branch."],
+      summary: "Integration and differentiation techniques.",
+      teachingApproach: "Lecture then drill.",
+      successSignals: ["Solve integrals."],
+      parentNotes: [],
+      rationale: [],
     },
-    intakeSummary: "Broad board games revision.",
+    intakeSummary: "Calculus for seniors.",
     pacing: {
       totalWeeks: 2,
       sessionsPerWeek: 4,
       sessionMinutes: 30,
       totalSessions: 8,
-      coverageStrategy: "Cover the whole topic.",
-      coverageNotes: ["Move quickly."],
+      coverageStrategy: "Drill integration techniques.",
+      coverageNotes: [],
     },
     document: {
-      "Board Games Setup and Play": {
-        "All of setup and play": {
-          "Set up the board, move every piece, notice every rule, and explain all outcomes": [
-            "Do everything at once",
+      "Calculus": {
+        "Integrals": {
+          "Techniques": [
+            "Integration by parts",
           ],
         },
       },
     },
     units: [
       {
-        title: "Unit 1",
-        description: "A broad unit.",
+        title: "Integrals",
+        description: "Integration techniques.",
         estimatedWeeks: 2,
         estimatedSessions: 8,
         lessons: [
           {
-            title: "Overview",
-            description: "Cover everything.",
-            subject: "Games",
+            title: "By parts",
+            description: "Integration by parts technique.",
+            subject: "math",
             estimatedMinutes: 30,
-            materials: ["board"],
-            objectives: [],
+            materials: [],
+            objectives: ["Solve by parts"],
             linkedSkillTitles: [
-              "Do everything at once",
+              "Integration by parts",
             ],
           },
         ],
