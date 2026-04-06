@@ -14,7 +14,18 @@
       "Bash(ls app/api/activities/attempts/[attemptId]/autosave/)",
       "Bash(ls app/api/activities/attempts/[attemptId]/submit/)",
       "Bash(find \"app/\\(learner\\)\" -type f)",
-      "Bash(ls \"app/\\(parent\\)/copilot/\")"
+      "Bash(ls \"app/\\(parent\\)/copilot/\")",
+      "Bash(git worktree:*)",
+      "Bash(node --test --experimental-strip-types scripts/activity-spec.test.mts)",
+      "Bash(grep -rn \"from \\\\\"\\\\.\" /home/luke/Desktop/homeschool-v2/.worktrees/structured-activity-runtime/lib/activities/*.ts)",
+      "Bash(sed -i 's|from \"\\\\./kinds\"|from \"./kinds.ts\"|g' lib/activities/spec.ts)",
+      "Bash(sed -i 's|from \"\\\\./components\"|from \"./components.ts\"|g' lib/activities/spec.ts)",
+      "Bash(sed -i 's|from \"\\\\./evidence\"|from \"./evidence.ts\"|g' lib/activities/spec.ts)",
+      "Bash(sed -i 's|from \"\\\\./scoring\"|from \"./scoring.ts\"|g' lib/activities/spec.ts)",
+      "Bash(sed -i 's|from \"\\\\./spec\"|from \"./spec.ts\"|g' lib/activities/validation.ts)",
+      "Bash(corepack pnpm:*)",
+      "Bash(ln -s /home/luke/Desktop/homeschool-v2/node_modules /home/luke/Desktop/homeschool-v2/.worktrees/structured-activity-runtime/node_modules)",
+      "Bash(node_modules/.bin/tsc --noEmit)"
     ]
   }
 }
