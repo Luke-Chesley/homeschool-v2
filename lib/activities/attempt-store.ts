@@ -9,6 +9,7 @@ import { activityAttempts } from "@/lib/db/schema";
 import { LOCAL_DEMO_LEARNER_ID } from "@/lib/db/fixtures/local-demo-persistence";
 import type { ActivityAttempt, AttemptAnswer, ActivityOutcome, ActivitySession } from "./types";
 import { parseActivityDefinition } from "./types";
+import { isActivitySpec, parseActivitySpec } from "./spec";
 
 export interface AttemptStore {
   findInProgress(sessionId: string, learnerId: string): Promise<ActivityAttempt | null>;
@@ -100,18 +101,35 @@ async function getActivitySession(sessionId: string): Promise<ActivitySession | 
     (await getActivitiesRepo().findActivityBySessionId(sessionId)) ??
     (await getActivitiesRepo().findActivityById(sessionId));
 
-  if (!activity) {
+  if (!activity || !activity.learnerId) {
     return null;
   }
 
+  // v2 ActivitySpec takes precedence
+  if (isActivitySpec(activity.definition)) {
+    const spec = parseActivitySpec(activity.definition);
+    if (!spec) return null;
+    return {
+      id: getActivitySessionId(activity),
+      learnerId: activity.learnerId,
+      activityId: activity.id,
+      definition: spec as unknown as ActivitySession["definition"],
+      status: "not_started",
+      estimatedMinutes: spec.estimatedMinutes,
+      lessonId: getActivityLessonId(activity),
+      standardIds: getActivityStandardIds(activity),
+    };
+  }
+
+  // v1 legacy definition
   const definition = parseActivityDefinition(activity.definition);
-  if (!definition || !activity.learnerId) {
+  if (!definition) {
     return null;
   }
 
   return {
     id: getActivitySessionId(activity),
-    learnerId: activity.learnerId ?? LOCAL_DEMO_LEARNER_ID,
+    learnerId: activity.learnerId,
     activityId: activity.id,
     definition,
     status: "not_started",

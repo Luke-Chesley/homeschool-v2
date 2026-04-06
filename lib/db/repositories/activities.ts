@@ -113,8 +113,11 @@ export function createActivitiesRepository(db: HomeschoolDb) {
 
     async findPrimaryActivityForSession(sessionId: string) {
       return db.query.interactiveActivities.findFirst({
-        where: eq(interactiveActivities.lessonSessionId, sessionId),
-        orderBy: [asc(interactiveActivities.createdAt)],
+        where: and(
+          eq(interactiveActivities.lessonSessionId, sessionId),
+          eq(interactiveActivities.status, "published"),
+        ),
+        orderBy: [desc(interactiveActivities.createdAt)],
       });
     },
 

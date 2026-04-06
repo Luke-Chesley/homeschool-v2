@@ -8,6 +8,7 @@ export async function GET(
   const { sessionId } = await params;
   const session = await getSession(sessionId);
   if (!session) {
+    console.error("[api/activities/sessions GET] Session not found for id:", sessionId);
     return NextResponse.json({ error: "Session not found" }, { status: 404 });
   }
   return NextResponse.json(session);

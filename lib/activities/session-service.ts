@@ -3,7 +3,7 @@ import "@/lib/server-only";
 import { getAttemptStore } from "./attempt-store";
 import type { ActivityAttempt, ActivityOutcome, ActivitySession, AttemptAnswer } from "./types";
 import { parseActivityDefinition } from "./types";
-import { parseActivitySpec, isActivitySpec } from "./spec";
+import { parseActivitySpec, isActivitySpec, ActivitySpecSchema } from "./spec";
 import { ensurePublishedActivitiesForLearner } from "./assignment-service";
 import {
   applyOutcomeFeedbackToSkillState,
@@ -119,7 +119,13 @@ function mapActivityToSession(activity: {
   // v2 ActivitySpec (schemaVersion "2") takes precedence
   if (isActivitySpec(activity.definition)) {
     const spec = parseActivitySpec(activity.definition);
-    if (!spec) return null;
+    if (!spec) {
+      const result = ActivitySpecSchema.safeParse(activity.definition);
+      if (!result.success) {
+        console.error("[mapActivityToSession] ActivitySpec parse failed for activity", activity.id, ":", JSON.stringify(result.error.issues.slice(0, 5)));
+      }
+      return null;
+    }
     return {
       id: getActivitySessionId(activity),
       learnerId: activity.learnerId ?? LOCAL_DEMO_LEARNER_ID,
@@ -334,8 +340,23 @@ export async function getSession(sessionId: string): Promise<ActivitySession | n
     (await getActivitiesRepo().findActivityBySessionId(sessionId)) ??
     (await getActivitiesRepo().findActivityById(sessionId));
 
-  const session = activity ? mapActivityToSession(activity) : null;
+  if (!activity) {
+    console.warn("[getSession] No activity found for sessionId:", sessionId);
+    return null;
+  }
+
+  const session = mapActivityToSession(activity);
   if (!session) {
+    // Log details to help diagnose parse failures
+    const defKeys = Object.keys(activity.definition ?? {});
+    const schemaVer = (activity.definition as Record<string, unknown>)?.schemaVersion;
+    console.warn(
+      "[getSession] mapActivityToSession returned null for activity:",
+      activity.id,
+      "| status:", activity.status,
+      "| schemaVersion:", schemaVer,
+      "| definition keys:", defKeys.slice(0, 8).join(", "),
+    );
     return null;
   }
 
