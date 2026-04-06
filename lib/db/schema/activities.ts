@@ -1,4 +1,4 @@
-import { type AnyPgColumn, integer, pgEnum, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { type AnyPgColumn, index, integer, pgEnum, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 
 import { learners } from "@/lib/db/schema/learners";
 import { organizations } from "@/lib/db/schema/organizations";
@@ -42,6 +42,8 @@ export const interactiveActivityTypeEnum = pgEnum("interactive_activity_type", [
   "step_validation",
   "supervisor_sign_off",
   "oral_video_evidence",
+  /** New canonical spec type — schemaVersion "2" ActivitySpec stored in definition column */
+  "activity_spec",
 ]);
 
 export const interactiveActivityStatusEnum = pgEnum("interactive_activity_status", [
@@ -165,3 +167,68 @@ export const activityAttempts = pgTable("activity_attempts", {
   metadata: metadataColumn(),
   ...timestamps(),
 });
+
+// ---------------------------------------------------------------------------
+// Activity evidence — structured evidence records captured during activities
+// ---------------------------------------------------------------------------
+
+export const evidenceKindEnum = pgEnum("activity_evidence_kind", [
+  "answer_response",
+  "file_artifact",
+  "image_artifact",
+  "audio_artifact",
+  "self_assessment",
+  "teacher_observation",
+  "teacher_checkoff",
+  "completion_marker",
+  "confidence_signal",
+  "reflection_response",
+  "rubric_score",
+  "ordering_result",
+  "matching_result",
+  "categorization_result",
+  "construction_product",
+]);
+
+export const activityEvidence = pgTable(
+  "activity_evidence",
+  {
+    id: text("id").primaryKey().$defaultFn(() => prefixedId("evidence")),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    learnerId: text("learner_id")
+      .notNull()
+      .references(() => learners.id, { onDelete: "cascade" }),
+    activityId: text("activity_id")
+      .notNull()
+      .references(() => interactiveActivities.id, { onDelete: "cascade" }),
+    attemptId: text("attempt_id").references(() => activityAttempts.id, {
+      onDelete: "set null",
+    }),
+    lessonSessionId: text("lesson_session_id").references(() => lessonSessions.id, {
+      onDelete: "set null",
+    }),
+    componentId: text("component_id").notNull(),
+    componentType: text("component_type").notNull(),
+    evidenceKind: evidenceKindEnum("evidence_kind").notNull(),
+    /** Normalized captured value */
+    value: metadataColumn("value"),
+    /** Human-readable summary */
+    summary: text("summary"),
+    linkedObjectiveIds: metadataColumn("linked_objective_ids"),
+    linkedSkillIds: metadataColumn("linked_skill_ids"),
+    reviewState: text("review_state").notNull().default("not_required"),
+    capturedAt: timestamp("captured_at", { withTimezone: true }),
+    metadata: metadataColumn(),
+    ...timestamps(),
+  },
+  (table) => ({
+    evidenceLearnerActivityIdx: index("activity_evidence_learner_activity_idx").on(
+      table.learnerId,
+      table.activityId,
+    ),
+    evidenceAttemptIdx: index("activity_evidence_attempt_idx").on(table.attemptId),
+    evidenceSessionIdx: index("activity_evidence_session_idx").on(table.lessonSessionId),
+  }),
+);

@@ -3,6 +3,7 @@ import "@/lib/server-only";
 import { getAttemptStore } from "./attempt-store";
 import type { ActivityAttempt, ActivityOutcome, ActivitySession, AttemptAnswer } from "./types";
 import { parseActivityDefinition } from "./types";
+import { parseActivitySpec, isActivitySpec } from "./spec";
 import { ensurePublishedActivitiesForLearner } from "./assignment-service";
 import {
   applyOutcomeFeedbackToSkillState,
@@ -115,6 +116,27 @@ function mapActivityToSession(activity: {
   definition: Record<string, unknown>;
   metadata: Record<string, unknown>;
 }): ActivitySession | null {
+  // v2 ActivitySpec (schemaVersion "2") takes precedence
+  if (isActivitySpec(activity.definition)) {
+    const spec = parseActivitySpec(activity.definition);
+    if (!spec) return null;
+    return {
+      id: getActivitySessionId(activity),
+      learnerId: activity.learnerId ?? LOCAL_DEMO_LEARNER_ID,
+      activityId: activity.id,
+      // Wrap the ActivitySpec in a definition-compatible shape for the session
+      // The ActivitySpecRenderer handles rendering; the definition is passed through
+      definition: spec as unknown as ActivitySession["definition"],
+      status: "not_started",
+      estimatedMinutes: spec.estimatedMinutes,
+      lessonId:
+        activity.lessonSessionId ??
+        (typeof activity.metadata.lessonId === "string" ? activity.metadata.lessonId : undefined),
+      standardIds: getActivityStandardIds(activity),
+    };
+  }
+
+  // v1 legacy definition (quiz, flashcards, guided_practice, etc.)
   const definition = parseActivityDefinition(activity.definition);
   if (!definition) {
     return null;

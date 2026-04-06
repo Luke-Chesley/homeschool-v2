@@ -3,9 +3,8 @@
 /**
  * ActivityRenderer — top-level dispatcher.
  *
- * Routes to the correct renderer based on activity.kind. This is the single
- * integration point for new activity types — add a new case here and a
- * corresponding renderer component.
+ * For v2 ActivitySpec (schemaVersion "2"): routes to ActivitySpecRenderer.
+ * For legacy v1 activity kinds: routes to the corresponding per-kind renderer.
  *
  * No arbitrary code execution: activity definitions are pure data schemas.
  */
@@ -18,6 +17,9 @@ import type {
   HybridLayoutActivity,
   HybridComponent,
 } from "@/lib/activities/types";
+import { isActivitySpec } from "@/lib/activities/spec";
+import type { ActivitySpec } from "@/lib/activities/spec";
+import { ActivitySpecRenderer } from "./v2/ActivitySpecRenderer";
 import { QuizRenderer } from "./QuizRenderer";
 import { FlashcardsRenderer } from "./FlashcardsRenderer";
 import { MatchingRenderer } from "./MatchingRenderer";
@@ -50,6 +52,37 @@ export function ActivityRenderer({
 }: ActivityRendererProps) {
   const initialAnswers = attempt?.answers ?? [];
   const initialUiState = attempt?.uiState;
+
+  // v2 ActivitySpec — route to the component-registry renderer
+  if (isActivitySpec(definition)) {
+    const spec = definition as unknown as ActivitySpec;
+    // Reconstruct initialEvidence from attempt.answers (stored as evidence map)
+    const initialEvidence = attempt?.uiState as Record<string, unknown> | undefined;
+    return (
+      <ActivitySpecRenderer
+        spec={spec}
+        initialEvidence={initialEvidence}
+        estimatedMinutes={estimatedMinutes}
+        onEvidenceChange={(evidence) => {
+          // Serialize evidence as answers array for backward-compat autosave
+          const answers = Object.entries(evidence).map(([questionId, value]) => ({
+            questionId,
+            value,
+          }));
+          onAnswerChange?.(answers, evidence);
+        }}
+        onSubmit={(evidence) => {
+          const answers = Object.entries(evidence).map(([questionId, value]) => ({
+            questionId,
+            value,
+          }));
+          onSubmit?.(answers);
+        }}
+        submitting={submitting}
+        submitted={submitted}
+      />
+    );
+  }
 
   switch (definition.kind) {
     case "quiz":
