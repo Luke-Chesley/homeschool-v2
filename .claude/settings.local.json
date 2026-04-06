@@ -31,7 +31,9 @@
       "Bash(pnpm test:curriculum)",
       "Bash(make test:curriculum)",
       "Bash(grep -E \"\\\\.ts$\")",
-      "Bash(npx --yes node --test scripts/activity-spec.test.mts)"
+      "Bash(npx --yes node --test scripts/activity-spec.test.mts)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(d['dependencies'].get\\('drizzle-orm', 'not found'\\)\\)\")",
+      "Bash(make typecheck:*)"
     ]
   }
 }

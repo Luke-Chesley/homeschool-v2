@@ -132,12 +132,9 @@ export const CurriculumAiCreateResponseSchema = z.object({
 export type CurriculumAiCreateResponse = z.infer<typeof CurriculumAiCreateResponseSchema>;
 
 export const CurriculumAiFailureStageSchema = z.enum([
-  "topic_extraction",
   "generation",
   "parse",
   "schema",
-  "title",
-  "quality",
   "persistence",
   "revision",
 ]);

@@ -50,7 +50,6 @@ export async function runCurriculumRevisionDecision(params: {
   systemPrompt: string;
   completeJson: RevisionModelClient["completeJson"];
   logger?: RevisionModelLogger;
-  artifactQualityCheck?: (artifact: NonNullable<CurriculumAiRevisionTurn["artifact"]>) => string[];
 }): Promise<CurriculumAiRevisionTurn | CurriculumAiFailureResult> {
   const logger = params.logger ?? console;
   const messages = normalizeRevisionMessages(params.messages);
@@ -112,22 +111,6 @@ export async function runCurriculumRevisionDecision(params: {
       const turn = sanitizeRevisionTurn(validatedTurn.data);
       if (turn.action === "apply") {
         validateRevisionArtifactStructure(turn.artifact);
-        if (params.artifactQualityCheck) {
-          const qualityIssues = params.artifactQualityCheck(turn.artifact!);
-          if (qualityIssues.length > 0) {
-            lastStage = "quality";
-            lastIssues = qualityIssues.map((message, index) => ({
-              code: "quality_failed",
-              message,
-              path: [String(index)],
-            }));
-            logger.warn("[curriculum/ai-draft] revision artifact failed quality checks", {
-              attempt: attemptIndex + 1,
-              issues: qualityIssues,
-            });
-            continue;
-          }
-        }
       }
 
       logger.info("[curriculum/ai-draft] revision model response", {
@@ -175,15 +158,10 @@ export async function runCurriculumRevisionDecision(params: {
     kind: "failure",
     stage: lastStage,
     reason:
-      lastStage === "quality"
-        ? "quality_failed"
-        : lastStage === "schema"
-          ? "schema_failed"
-          : "revision_failed",
-    userSafeMessage:
-      lastStage === "quality"
-        ? "I could not apply the revision safely from the current model output. Please restate the change more concretely."
-        : "I couldn't produce a valid revision from the model output. Please restate the change in one sentence.",
+      lastStage === "schema"
+        ? "schema_failed"
+        : "revision_failed",
+    userSafeMessage: "I couldn't produce a valid revision from the model output. Please restate the change in one sentence.",
     issues: lastIssues,
     attemptCount: attempts,
     retryable: true,

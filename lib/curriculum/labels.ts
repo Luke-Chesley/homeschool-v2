@@ -154,5 +154,9 @@ function isLikelySubjectLabel(value: string) {
     return false;
   }
 
+  if (/^(welcome|hello|hi|hey|thanks|thank you|greetings|howdy|sure|okay|ok|yes|no|great|alright|cool)$/i.test(label)) {
+    return false;
+  }
+
   return true;
 }

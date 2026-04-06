@@ -9,11 +9,9 @@ import {
   buildCurriculumGenerationPrompt,
   buildCurriculumIntakePrompt,
   buildCurriculumRevisionPrompt,
-  buildCurriculumTitlePrompt,
   CURRICULUM_GENERATION_PROMPT_VERSION,
   CURRICULUM_INTAKE_PROMPT_VERSION,
   CURRICULUM_REVISION_PROMPT_VERSION,
-  CURRICULUM_TITLE_PROMPT_VERSION,
   type CurriculumRevisionPromptSnapshot,
 } from "@/lib/prompts/curriculum-draft";
 import type { AppLearner } from "@/lib/users/service";
@@ -31,7 +29,6 @@ import {
   inferCurriculumGranularityProfile,
   type RequestedPacing,
 } from "./granularity";
-import { assessCurriculumArtifactQuality } from "./quality";
 import {
   extractRequestedSubjectLabel,
   countWords,
@@ -384,7 +381,6 @@ export async function generateCurriculumArtifact(
   deps?: {
     resolvePrompt?: typeof resolvePrompt;
     complete?: (options: any) => Promise<{ content: string }>;
-    titleComplete?: (options: any) => Promise<{ content: string }>;
   },
 ): Promise<CurriculumAiGenerateResult> {
   const resolvePromptFn = deps?.resolvePrompt ?? resolvePrompt;
@@ -396,27 +392,6 @@ export async function generateCurriculumArtifact(
   const capturedRequirements = inferCapturedRequirements(messages);
   const requestedPacing = inferRequestedPacing(messages, capturedRequirements);
   const topic = resolveGenerationTopic(capturedRequirements, messages);
-  if (!topic) {
-    return buildCurriculumFailureResult({
-      stage: "topic_extraction",
-      reason: "topic_extraction_failed",
-      userSafeMessage:
-        "I could not extract a clean subject for the curriculum. Please restate the topic as a short subject phrase.",
-      issues: [
-        {
-          code: "topic_extraction_failed",
-          message: "The request did not contain a clean subject phrase.",
-          path: ["source", "title"],
-        },
-      ],
-      attemptCount: 0,
-      retryable: true,
-      debugMetadata: {
-        promptVersion: CURRICULUM_GENERATION_PROMPT_VERSION,
-        capturedRequirements,
-      },
-    });
-  }
   const granularityProfile = inferCurriculumGranularityProfile({
     topic,
     requirements: capturedRequirements,
@@ -467,53 +442,18 @@ export async function generateCurriculumArtifact(
       }
 
       const sanitizedArtifact = sanitizeArtifact(parsedArtifact.artifact);
-      const finalized = await finalizeCurriculumTitle({
-        artifact: sanitizedArtifact,
-        learner: params.learner,
-        messages,
-        requestedSubject: topic,
-        requestText: collectUserMessages(messages).join(" "),
-      }, deps);
-
-      if (finalized.kind === "failure") {
-        stage = finalized.stage;
-        issues = finalized.issues;
-        continue;
-      }
-
-      const normalizedArtifact = normalizeCurriculumArtifactLabels(finalized.artifact);
-      const qualityIssues = assessCurriculumArtifactQuality(normalizedArtifact, {
-        topicText: [
-          topic,
-          capturedRequirements.topic,
-          capturedRequirements.goals,
-          capturedRequirements.learnerProfile,
-          capturedRequirements.structurePreferences,
-        ]
-          .join(" ")
-          .trim(),
-        requestText: collectUserMessages(messages).join(" "),
-        granularity: granularityProfile,
-        requestedPacing,
-        learnerText: params.learner.displayName,
-        revisionMode: "generation",
-      });
-      if (qualityIssues.length === 0) {
-        return {
-          kind: "success",
-          artifact: normalizedArtifact,
-        };
-      }
-
-      stage = "quality";
-      issues = qualityIssues.map((issue) => ({
-        code: issue.code,
-        message: issue.message,
-        path: issue.path ?? [],
-      }));
-      console.warn("[curriculum/ai-draft] Artifact quality check failed, retrying.", {
-        issues: qualityIssues.map((issue) => issue.message),
-      });
+      const titledArtifact = {
+        ...sanitizedArtifact,
+        source: {
+          ...sanitizedArtifact.source,
+          title: normalizeCurriculumLabel(sanitizedArtifact.source.title),
+        },
+      };
+      const normalizedArtifact = normalizeCurriculumArtifactLabels(titledArtifact);
+      return {
+        kind: "success",
+        artifact: normalizedArtifact,
+      };
     } catch (error) {
       stage = "generation";
       issues = [
@@ -530,24 +470,16 @@ export async function generateCurriculumArtifact(
   return buildCurriculumFailureResult({
     stage,
     reason:
-      stage === "quality"
-        ? "quality_failed"
-        : stage === "parse"
-          ? "parse_failed"
-          : stage === "schema"
-            ? "schema_failed"
-            : stage === "title"
-              ? "title_failed"
-              : "generation_failed",
+      stage === "parse"
+        ? "parse_failed"
+        : stage === "schema"
+          ? "schema_failed"
+          : "generation_failed",
     userSafeMessage:
-      stage === "quality"
-        ? "I could not produce a curriculum that passed the naming and teachability checks. Please make the topic or pacing a little clearer."
-        : stage === "parse"
-          ? "I could not parse a valid curriculum from the model response. Please try again."
-          : stage === "schema"
-            ? "I could not validate the curriculum structure from the model response. Please try again."
-            : stage === "title"
-              ? "I could not produce a clean curriculum title from the model response. Please restate the subject more directly."
+      stage === "parse"
+        ? "I could not parse a valid curriculum from the model response. Please try again."
+        : stage === "schema"
+          ? "I could not validate the curriculum structure from the model response. Please try again."
           : "I could not produce a valid curriculum from the model response. Please try again.",
     issues,
     attemptCount: attempts,
@@ -628,38 +560,6 @@ async function generateCurriculumRevisionDecision(params: {
     systemPrompt: prompt.systemPrompt,
     completeJson: (options) => adapter.completeJson(options),
     logger: console,
-    artifactQualityCheck: (artifact) =>
-      assessCurriculumArtifactQuality(artifact, {
-        topicText: [
-          revisionTopic,
-          params.snapshot.source.title,
-          params.snapshot.source.description ?? "",
-          normalizedMessages.map((message) => message.content).join(" "),
-        ]
-          .join(" ")
-          .trim(),
-        requestText: normalizedMessages.map((message) => message.content).join(" "),
-        granularity: revisionGranularityProfile,
-        requestedPacing: {
-          totalWeeks: params.snapshot.counts.estimatedSessionCount > 0
-            ? Math.max(1, Math.ceil(params.snapshot.counts.estimatedSessionCount / 4))
-            : undefined,
-          totalSessionsLowerBound:
-            params.snapshot.counts.estimatedSessionCount > 0
-              ? Math.max(1, Math.floor(params.snapshot.counts.estimatedSessionCount * 0.9))
-              : undefined,
-          totalSessionsUpperBound:
-            params.snapshot.counts.estimatedSessionCount > 0
-              ? Math.max(1, Math.ceil(params.snapshot.counts.estimatedSessionCount * 1.1))
-              : undefined,
-          explicitlyRequestedTotalSessions:
-            params.snapshot.counts.estimatedSessionCount > 0
-              ? params.snapshot.counts.estimatedSessionCount
-              : undefined,
-        },
-        learnerText: params.learner.displayName,
-        revisionMode: "revision",
-      }).map((issue) => issue.message),
   });
 }
 
@@ -2017,156 +1917,6 @@ function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-async function finalizeCurriculumTitle(params: {
-  artifact: CurriculumAiGeneratedArtifact;
-  learner: AppLearner;
-  messages: ChatMessage[];
-  requestedSubject: string;
-  requestText: string;
-},
-deps?: {
-  resolvePrompt?: typeof resolvePrompt;
-  titleComplete?: (options: any) => Promise<{ content: string }>;
-}): Promise<
-  | {
-      kind: "success";
-      artifact: CurriculumAiGeneratedArtifact;
-    }
-  | CurriculumAiFailureResult
-> {
-  const currentIssues = getCurriculumTitleIssues({
-    title: params.artifact.source.title,
-    requestedSubject: params.requestedSubject,
-    requestText: params.requestText,
-  });
-
-  if (currentIssues.length === 0) {
-    return {
-      kind: "success",
-      artifact: {
-        ...params.artifact,
-        source: {
-          ...params.artifact.source,
-          title: normalizeCurriculumLabel(params.artifact.source.title),
-        },
-      },
-    };
-  }
-
-  const proposedTitle = await generateCurriculumTitle({
-    artifact: params.artifact,
-    learner: params.learner,
-    messages: params.messages,
-    subject: params.requestedSubject,
-  }, deps);
-
-  if (!proposedTitle) {
-    return buildCurriculumFailureResult({
-      stage: "title",
-      reason: "title_failed",
-      userSafeMessage:
-        "I could not produce a clean curriculum title from the model output. Please restate the subject more directly.",
-      issues: currentIssues,
-      attemptCount: 1,
-      retryable: true,
-      debugMetadata: {
-        promptVersion: CURRICULUM_TITLE_PROMPT_VERSION,
-        requestedSubject: params.requestedSubject,
-        requestText: params.requestText,
-      },
-    });
-  }
-
-  const titleIssues = getCurriculumTitleIssues({
-    title: proposedTitle,
-    requestedSubject: params.requestedSubject,
-    requestText: params.requestText,
-  });
-  if (titleIssues.length > 0) {
-    return buildCurriculumFailureResult({
-      stage: "title",
-      reason: "title_failed",
-      userSafeMessage:
-        "I could not produce a clean curriculum title from the model output. Please restate the subject more directly.",
-      issues: titleIssues,
-      attemptCount: 1,
-      retryable: true,
-      debugMetadata: {
-        promptVersion: CURRICULUM_TITLE_PROMPT_VERSION,
-        requestedSubject: params.requestedSubject,
-        requestText: params.requestText,
-      },
-    });
-  }
-
-  return {
-    kind: "success",
-    artifact: {
-      ...params.artifact,
-      source: {
-        ...params.artifact.source,
-        title: normalizeCurriculumLabel(proposedTitle),
-      },
-    },
-  };
-}
-
-async function generateCurriculumTitle(params: {
-  artifact: CurriculumAiGeneratedArtifact;
-  learner: AppLearner;
-  messages: ChatMessage[];
-  subject: string;
-}, deps?: {
-  resolvePrompt?: typeof resolvePrompt;
-  titleComplete?: (options: any) => Promise<{ content: string }>;
-}) {
-  const resolvePromptFn = deps?.resolvePrompt ?? resolvePrompt;
-  const prompt = await resolvePromptFn("curriculum.title", CURRICULUM_TITLE_PROMPT_VERSION);
-  const adapter = getAdapterForTask("curriculum.title");
-  const model = getModelForTask("curriculum.title", getAiRoutingConfig());
-  const complete = deps?.titleComplete ?? ((options: any) => adapter.complete(options));
-
-  try {
-    const response = await complete({
-      model,
-      temperature: 0.25,
-      systemPrompt: prompt.systemPrompt,
-      messages: [
-        {
-          role: "user",
-          content: buildCurriculumTitlePrompt({
-            learnerName: params.learner.displayName,
-            messages: params.messages,
-            subject: params.subject,
-            artifact: {
-              source: {
-                title: params.artifact.source.title,
-                summary: params.artifact.source.summary,
-                subjects: params.artifact.source.subjects,
-                gradeLevels: params.artifact.source.gradeLevels,
-              },
-              pacing: {
-                totalWeeks: params.artifact.pacing.totalWeeks,
-                sessionsPerWeek: params.artifact.pacing.sessionsPerWeek,
-                totalSessions: params.artifact.pacing.totalSessions,
-              },
-              units: params.artifact.units.map((unit) => ({
-                title: unit.title,
-                description: unit.description,
-              })),
-            },
-          }),
-        },
-      ],
-    });
-
-    const parsed = parseCurriculumTitleCandidate(response.content);
-    return parsed ? normalizeCurriculumLabel(parsed) : null;
-  } catch (error) {
-    console.error("[curriculum/ai-draft] Title generation failed.", error);
-    return null;
-  }
-}
 
 async function buildCurriculumRevisionSnapshot(sourceId: string, householdId: string) {
   const source = await getCurriculumSource(sourceId, householdId);
@@ -2597,18 +2347,6 @@ function sanitizeRevisionPlan(plan: CurriculumAiRevisionPlan): CurriculumAiRevis
   };
 }
 
-function parseCurriculumTitleCandidate(content: string) {
-  const parsed = safeParseJson(content);
-  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-    const candidate = (parsed as Record<string, unknown>).title;
-    if (typeof candidate === "string" && candidate.trim()) {
-      return candidate.trim();
-    }
-  }
-
-  const trimmed = content.trim().replace(/^["']|["']$/g, "");
-  return trimmed.length > 0 ? trimmed : null;
-}
 
 function sanitizePacing(pacing: CurriculumAiPacing): CurriculumAiPacing {
   return {
@@ -2940,77 +2678,6 @@ function countDocumentSkills(document: CurriculumAiGeneratedArtifact["document"]
   return countDocumentNodeSkills(document);
 }
 
-function getCurriculumTitleIssues(params: {
-  title: string;
-  requestedSubject: string;
-  requestText: string;
-}) {
-  const issues: CurriculumAiFailureIssue[] = [];
-  const normalizedTitle = normalizeCurriculumLabel(params.title);
-  const normalizedSubject = normalizeCurriculumLabel(params.requestedSubject);
-  const normalizedRequest = normalizeForComparison(params.requestText);
-
-  if (!normalizedTitle) {
-    issues.push({
-      code: "title_shape",
-      message: "The title is empty after normalization.",
-      path: ["source", "title"],
-    });
-    return issues;
-  }
-
-  if (countWords(normalizedTitle) > 8 || normalizedTitle.length > 60) {
-    issues.push({
-      code: "title_length",
-      message: `The title "${normalizedTitle}" is too long to be a usable label.`,
-      path: ["source", "title"],
-    });
-  }
-
-  if (isLikelySentenceLabel(normalizedTitle)) {
-    issues.push({
-      code: "title_shape",
-      message: `The title "${normalizedTitle}" reads like a sentence rather than a label.`,
-      path: ["source", "title"],
-    });
-  }
-
-  if (hasWrapperLabelSignals(normalizedTitle) && countWords(normalizedTitle) <= 4) {
-    issues.push({
-      code: "title_wrapper",
-      message: `The title "${normalizedTitle}" looks like wrapper language instead of a subject label.`,
-      path: ["source", "title"],
-    });
-  }
-
-  if (normalizedSubject) {
-    const titleComparison = normalizeForComparison(normalizedTitle);
-    const subjectComparison = normalizeForComparison(normalizedSubject);
-    if (
-      !titleComparison.includes(subjectComparison) &&
-      !subjectComparison.includes(titleComparison)
-    ) {
-      issues.push({
-        code: "title_topic_alignment",
-        message: `The title "${normalizedTitle}" is not clearly aligned to the subject "${normalizedSubject}".`,
-        path: ["source", "title"],
-      });
-    }
-  }
-
-  if (normalizedRequest && normalizedRequest.length > 0) {
-    const overlap = labelTokenOverlapScore(normalizedTitle, params.requestText);
-    if (overlap >= 0.8 && countWords(params.requestText) > 8) {
-      issues.push({
-        code: "title_overlap",
-        message: `The title "${normalizedTitle}" overlaps too heavily with the raw request.`,
-        path: ["source", "title"],
-      });
-    }
-  }
-
-  return uniqueFailures(issues);
-}
 
 function countDocumentNodeSkills(node: unknown): number {
   if (typeof node === "string") {
