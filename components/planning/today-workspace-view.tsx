@@ -191,7 +191,7 @@ function LessonDraftActivityControl({
 
   const isStale = localStatus === "stale";
   const hasActivity = localStatus === "ready" || localStatus === "stale";
-  const canGenerate = localStatus === "no_activity" || localStatus === "stale";
+  const canGenerate = localStatus === null || localStatus === "no_activity" || localStatus === "stale";
 
   return (
     <div className="space-y-3">
