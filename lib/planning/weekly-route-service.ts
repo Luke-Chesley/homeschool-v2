@@ -2,6 +2,7 @@ import { and, asc, eq } from "drizzle-orm";
 
 import {
   generateWeeklyRoute,
+  getEnabledPlanningDayOffsets,
   getWeeklyRouteBoard,
   getWeeklyRouteBoardById,
   toWeekStartDate,
@@ -11,6 +12,7 @@ import { getDb } from "@/lib/db/server";
 import {
   curriculumNodes,
   learnerBranchActivations,
+  learnerRouteProfiles,
   routeOverrideEvents,
   weeklyRouteItems,
   weeklyRoutes,
@@ -20,7 +22,7 @@ type WeeklyRouteItemRow = typeof weeklyRouteItems.$inferSelect;
 type WeeklyRouteRecord = typeof weeklyRoutes.$inferSelect;
 type WeeklyRouteOverrideKind = WeeklyRouteItemRow["manualOverrideKind"];
 
-const WEEKDAY_COUNT = 5;
+const WEEKDAY_COUNT = 7;
 
 function parseDateOrThrow(value: string): Date {
   const parsed = new Date(`${value}T12:00:00.000Z`);
@@ -43,12 +45,24 @@ function buildWeekdayDates(weekStartDate: string) {
 
 async function ensureSuggestedWeeklyRouteSchedule(route: WeeklyRouteRecord) {
   const db = getDb();
-  const rows = await db.query.weeklyRouteItems.findMany({
-    where: eq(weeklyRouteItems.weeklyRouteId, route.id),
-    orderBy: [asc(weeklyRouteItems.currentPosition), asc(weeklyRouteItems.createdAt)],
-  });
+  const [rows, profile] = await Promise.all([
+    db.query.weeklyRouteItems.findMany({
+      where: eq(weeklyRouteItems.weeklyRouteId, route.id),
+      orderBy: [asc(weeklyRouteItems.currentPosition), asc(weeklyRouteItems.createdAt)],
+    }),
+    db.query.learnerRouteProfiles.findFirst({
+      where: and(
+        eq(learnerRouteProfiles.learnerId, route.learnerId),
+        eq(learnerRouteProfiles.sourceId, route.sourceId),
+      ),
+    }),
+  ]);
 
-  const weekdayDates = buildWeekdayDates(route.weekStartDate);
+  const allWeekDates = buildWeekdayDates(route.weekStartDate);
+  const enabledOffsets = getEnabledPlanningDayOffsets(profile?.planningDays ?? null);
+  const weekdayDates = enabledOffsets
+    .map((offset) => allWeekDates[offset])
+    .filter((d): d is string => d != null);
   const occupiedDates = new Set(
     rows.filter((row) => row.scheduledDate != null).map((row) => row.scheduledDate as string),
   );
@@ -296,7 +310,7 @@ export async function moveWeeklyRouteItem(params: {
         : toColumnKey(params.targetScheduledDate, weekdayDates);
 
     if (params.targetScheduledDate != null && targetColumnKey === "unassigned") {
-      throw new Error("Scheduled date must be within this week (Monday-Friday).");
+      throw new Error("Scheduled date must be within this week.");
     }
 
     const sameDayDuplicate = rows.find(
@@ -430,7 +444,7 @@ export async function moveWeeklyRouteItem(params: {
       : toColumnKey(params.targetScheduledDate, targetWeekdayDates);
 
   if (params.targetScheduledDate != null && targetColumnKey === "unassigned") {
-    throw new Error("Scheduled date must be within the target week (Monday-Friday).");
+    throw new Error("Scheduled date must be within the target week.");
   }
 
   const sameDayDuplicate = targetRows.find(

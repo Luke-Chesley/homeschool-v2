@@ -1,6 +1,7 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
 
 import { getDb } from "@/lib/db/server";
+import { getEnabledPlanningDayOffsets } from "./planning-days";
 import {
   curriculumNodes,
   curriculumSkillPrerequisites,
@@ -93,14 +94,17 @@ function buildSuggestedScheduledDates(params: {
   weekStartDate: string;
   itemCount: number;
   targetItemsPerDay: number;
-  planningDayCount: number;
+  enabledDayOffsets: number[];
 }) {
-  const weekdays = buildWeekDates(params.weekStartDate).slice(0, params.planningDayCount);
+  const allDays = buildWeekDates(params.weekStartDate);
+  const enabledDays = params.enabledDayOffsets
+    .map((offset) => allDays[offset])
+    .filter((d): d is string => d != null);
   const targetItemsPerDay = Math.max(1, params.targetItemsPerDay);
 
   return Array.from({ length: params.itemCount }, (_, index) => {
     const dayIndex = Math.floor(index / targetItemsPerDay);
-    return weekdays[dayIndex] ?? null;
+    return enabledDays[dayIndex] ?? null;
   });
 }
 
@@ -124,7 +128,7 @@ function getPlanningDayCount(profile: LearnerRouteProfileRecord | null): number 
   }
 
   if (Array.isArray(planningDays)) {
-    const values = planningDays.filter((value) => value != null);
+    const values = planningDays.filter((value) => Boolean(value));
     return values.length > 0 ? values.length : 5;
   }
 
@@ -621,12 +625,14 @@ function buildRecommendations(params: {
   targetItemsPerWeek: number;
   targetItemsPerDay: number;
   planningDayCount: number;
+  enabledDayOffsets: number[];
   generationBasis: Record<string, unknown>;
 } {
   const { profile, activeBranchActivations, nodes, prerequisites, skillStateBySkillNodeId } = params;
   const targetItemsPerWeek = getTargetItemsPerWeek(profile);
   const targetItemsPerDay = Math.max(1, profile?.targetItemsPerDay ?? 1);
   const planningDayCount = getPlanningDayCount(profile);
+  const enabledDayOffsets = getEnabledPlanningDayOffsets(profile?.planningDays ?? null);
 
   if (activeBranchActivations.length === 0) {
     return {
@@ -634,12 +640,14 @@ function buildRecommendations(params: {
       targetItemsPerWeek,
       targetItemsPerDay,
       planningDayCount,
+      enabledDayOffsets,
       generationBasis: {
         algorithmVersion: "2026-03-31-agent-b-v1",
         reason: "no_active_branch_activations",
         targetItemsPerWeek,
         targetItemsPerDay,
         planningDayCount,
+        enabledDayOffsets,
       },
     };
   }
@@ -759,11 +767,13 @@ function buildRecommendations(params: {
     targetItemsPerWeek,
     targetItemsPerDay,
     planningDayCount,
+    enabledDayOffsets,
     generationBasis: {
       algorithmVersion: "2026-03-31-agent-b-v1",
       targetItemsPerWeek,
       targetItemsPerDay,
       planningDayCount,
+      enabledDayOffsets,
       branchCount: branchInputs.length,
       weightedBranchCycle,
       selectedCount: orderedSkillNodeIds.length,
@@ -777,14 +787,14 @@ async function persistGeneratedRoute(params: {
   weekStartDate: string;
   orderedSkillNodeIds: string[];
   targetItemsPerDay: number;
-  planningDayCount: number;
+  enabledDayOffsets: number[];
   generationBasis: Record<string, unknown>;
 }) {
   const scheduledDates = buildSuggestedScheduledDates({
     weekStartDate: params.weekStartDate,
     itemCount: params.orderedSkillNodeIds.length,
     targetItemsPerDay: params.targetItemsPerDay,
-    planningDayCount: params.planningDayCount,
+    enabledDayOffsets: params.enabledDayOffsets,
   });
 
   return getDb().transaction(async (tx) => {
@@ -881,7 +891,7 @@ export async function generateWeeklyRoute(params: {
     weekStartDate,
     orderedSkillNodeIds: recommendation.orderedSkillNodeIds,
     targetItemsPerDay: recommendation.targetItemsPerDay,
-    planningDayCount: recommendation.planningDayCount,
+    enabledDayOffsets: recommendation.enabledDayOffsets,
     generationBasis: recommendation.generationBasis,
   });
 
