@@ -140,10 +140,9 @@ export async function getPlanningDayView(params: {
     return null;
   }
 
-  const scheduledMinutes = workspaceResult.workspace.items.reduce(
-    (sum, item) => sum + item.estimatedMinutes,
-    0,
-  );
+  // Use the resolved session budget for the day's constraint, not the sum of
+  // per-item effort estimates. The session budget is the authoritative day load.
+  const scheduledMinutes = workspaceResult.sessionTiming.resolvedTotalMinutes;
   const constraint = buildConstraint(params.date, scheduledMinutes, source.title);
   const selectableRouteItems = collectSelectableRouteItems(
     workspaceResult.workspace.alternatesByPlanItemId,
