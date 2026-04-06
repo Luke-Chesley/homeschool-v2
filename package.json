@@ -12,12 +12,13 @@
     "dev:db:reset": "bash ./scripts/supabase.sh db-reset",
     "inngest:dev": "bash ./scripts/inngest-dev.sh",
     "check:tools": "bash ./scripts/check-local-tools.sh",
-    "test:curriculum": "node --test --experimental-strip-types scripts/curriculum-*.test.mts scripts/session-timing.test.mts",
-    "test:curriculum-revision": "node --test --experimental-strip-types scripts/curriculum-revision-model.test.mts",
-    "test:activity": "node --test --experimental-strip-types scripts/activity-spec.test.mts",
+    "test:curriculum": "node --import ./scripts/path-loader.mjs --test --experimental-strip-types scripts/curriculum-*.test.mts scripts/session-timing.test.mts",
+    "test:curriculum-revision": "node --import ./scripts/path-loader.mjs --test --experimental-strip-types scripts/curriculum-revision-model.test.mts",
+    "test:activity": "node --import ./scripts/path-loader.mjs --test --experimental-strip-types scripts/activity-spec.test.mts",
     "build": "next build",
     "start": "next start",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "contracts:check": "node --experimental-strip-types scripts/check-contracts.mts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",

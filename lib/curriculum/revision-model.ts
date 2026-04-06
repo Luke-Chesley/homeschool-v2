@@ -49,6 +49,7 @@ export async function runCurriculumRevisionDecision(params: {
   model: string;
   systemPrompt: string;
   completeJson: RevisionModelClient["completeJson"];
+  artifactQualityCheck?: (artifact: CurriculumAiRevisionTurn["artifact"]) => string[];
   logger?: RevisionModelLogger;
 }): Promise<CurriculumAiRevisionTurn | CurriculumAiFailureResult> {
   const logger = params.logger ?? console;
@@ -113,6 +114,23 @@ export async function runCurriculumRevisionDecision(params: {
         validateRevisionArtifactStructure(turn.artifact);
       }
 
+      if (turn.action === "apply" && turn.artifact && params.artifactQualityCheck) {
+        const qualityIssues = params.artifactQualityCheck(turn.artifact);
+        if (qualityIssues.length > 0) {
+          lastStage = "quality";
+          lastIssues = qualityIssues.map((message) => ({
+            code: "quality_failed",
+            message,
+            path: [],
+          }));
+          logger.warn("[curriculum/ai-draft] revision artifact failed quality check", {
+            attempt: attemptIndex + 1,
+            issues: lastIssues,
+          });
+          continue;
+        }
+      }
+
       logger.info("[curriculum/ai-draft] revision model response", {
         attempt: attemptIndex + 1,
         action: turn.action,
@@ -160,8 +178,13 @@ export async function runCurriculumRevisionDecision(params: {
     reason:
       lastStage === "schema"
         ? "schema_failed"
-        : "revision_failed",
-    userSafeMessage: "I couldn't produce a valid revision from the model output. Please restate the change in one sentence.",
+        : lastStage === "quality"
+          ? "quality_failed"
+          : "revision_failed",
+    userSafeMessage:
+      lastStage === "quality"
+        ? "I wasn't able to apply the revision safely — the result didn't meet quality requirements. Please try rephrasing the request."
+        : "I couldn't produce a valid revision from the model output. Please restate the change in one sentence.",
     issues: lastIssues,
     attemptCount: attempts,
     retryable: true,

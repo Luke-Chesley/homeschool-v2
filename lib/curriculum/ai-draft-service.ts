@@ -6,11 +6,13 @@ import { getAiRoutingConfig } from "@/lib/ai/routing";
 import type { ChatMessage } from "@/lib/ai/types";
 import { resolvePrompt } from "@/lib/prompts/store";
 import {
-  buildCurriculumGenerationPrompt,
+  buildCurriculumCorePrompt,
   buildCurriculumIntakePrompt,
+  buildCurriculumProgressionPrompt,
   buildCurriculumRevisionPrompt,
-  CURRICULUM_GENERATION_PROMPT_VERSION,
+  CURRICULUM_CORE_PROMPT_VERSION,
   CURRICULUM_INTAKE_PROMPT_VERSION,
+  CURRICULUM_PROGRESSION_PROMPT_VERSION,
   CURRICULUM_REVISION_PROMPT_VERSION,
   type CurriculumRevisionPromptSnapshot,
 } from "@/lib/prompts/curriculum-draft";
@@ -44,6 +46,7 @@ import {
   CurriculumAiChatTurnSchema,
   CurriculumAiGeneratedArtifactSchema,
   CurriculumAiFailureResultSchema,
+  CurriculumAiProgressionSchema,
   type CurriculumAiRevisionPlan,
   CurriculumAiRevisionTurnSchema,
   type CurriculumAiPacing,
@@ -58,6 +61,7 @@ import {
   type CurriculumAiFailureIssue,
   type CurriculumAiRevisionResult,
   type CurriculumAiRevisionTurn,
+  type CurriculumAiProgression,
 } from "./ai-draft";
 import {
   buildRevisionPromptSummary,
@@ -322,6 +326,15 @@ export async function reviseCurriculumFromConversation(params: {
     });
   }
 
+  const progression = await generateCurriculumProgression({
+    learner: params.learner,
+    artifact: decision.artifact,
+  });
+
+  if (progression) {
+    decision.artifact.progression = progression;
+  }
+
   const created = await persist({
     householdId: params.householdId,
     sourceId: params.sourceId,
@@ -384,9 +397,9 @@ export async function generateCurriculumArtifact(
   },
 ): Promise<CurriculumAiGenerateResult> {
   const resolvePromptFn = deps?.resolvePrompt ?? resolvePrompt;
-  const prompt = await resolvePromptFn("curriculum.generate", CURRICULUM_GENERATION_PROMPT_VERSION);
-  const adapter = getAdapterForTask("curriculum.generate");
-  const model = getModelForTask("curriculum.generate", getAiRoutingConfig());
+  const prompt = await resolvePromptFn("curriculum.generate.core", CURRICULUM_CORE_PROMPT_VERSION);
+  const adapter = getAdapterForTask("curriculum.generate.core");
+  const model = getModelForTask("curriculum.generate.core", getAiRoutingConfig());
   const complete = deps?.complete ?? ((options: any) => adapter.complete(options));
   const messages = normalizeMessages(params.messages);
   const capturedRequirements = inferCapturedRequirements(messages);
@@ -411,6 +424,7 @@ export async function generateCurriculumArtifact(
   let attempts = 0;
   let stage: CurriculumAiFailureResult["stage"] = "generation";
   let issues: CurriculumAiFailureIssue[] = [];
+  let coreArtifact: CurriculumAiGeneratedArtifact | null = null;
 
   for (const correctionNotes of attemptNotes) {
     attempts += 1;
@@ -422,7 +436,7 @@ export async function generateCurriculumArtifact(
         messages: [
           {
             role: "user",
-            content: buildCurriculumGenerationPrompt({
+            content: buildCurriculumCorePrompt({
               learnerName: params.learner.displayName,
               messages,
               requirementHints: capturedRequirements,
@@ -449,11 +463,8 @@ export async function generateCurriculumArtifact(
           title: normalizeCurriculumLabel(sanitizedArtifact.source.title),
         },
       };
-      const normalizedArtifact = normalizeCurriculumArtifactLabels(titledArtifact);
-      return {
-        kind: "success",
-        artifact: normalizedArtifact,
-      };
+      coreArtifact = normalizeCurriculumArtifactLabels(titledArtifact);
+      break;
     } catch (error) {
       stage = "generation";
       issues = [
@@ -463,8 +474,24 @@ export async function generateCurriculumArtifact(
           path: [],
         },
       ];
-      console.error("[curriculum/ai-draft] Artifact generation failed, retrying.", error);
+      console.error("[curriculum/ai-draft] Artifact core generation failed, retrying.", error);
     }
+  }
+
+  if (coreArtifact) {
+    const progression = await generateCurriculumProgression({
+      learner: params.learner,
+      artifact: coreArtifact,
+    }, deps);
+
+    if (progression) {
+      coreArtifact.progression = progression;
+    }
+
+    return {
+      kind: "success",
+      artifact: coreArtifact,
+    };
   }
 
   return buildCurriculumFailureResult({
@@ -485,13 +512,75 @@ export async function generateCurriculumArtifact(
     attemptCount: attempts,
     retryable: true,
     debugMetadata: {
-      promptVersion: CURRICULUM_GENERATION_PROMPT_VERSION,
+      promptVersion: CURRICULUM_CORE_PROMPT_VERSION,
       topic,
       capturedRequirements,
       requestedPacing,
       granularityProfile,
     },
   });
+}
+
+async function generateCurriculumProgression(
+  params: {
+    learner: AppLearner;
+    artifact: CurriculumAiGeneratedArtifact;
+  },
+  deps?: {
+    resolvePrompt?: typeof resolvePrompt;
+    complete?: (options: any) => Promise<{ content: string }>;
+  },
+): Promise<CurriculumAiProgression | null> {
+  const resolvePromptFn = deps?.resolvePrompt ?? resolvePrompt;
+  const prompt = await resolvePromptFn("curriculum.generate.progression", CURRICULUM_PROGRESSION_PROMPT_VERSION);
+  const adapter = getAdapterForTask("curriculum.generate.progression");
+  const model = getModelForTask("curriculum.generate.progression", getAiRoutingConfig());
+  const complete = deps?.complete ?? ((options: any) => adapter.complete(options));
+
+  const attemptNotes: string[][] = [
+    [],
+    [
+      "Ensure all skill titles match leaf nodes in the provided document tree exactly.",
+      "Avoid cycles in hard prerequisites.",
+    ],
+  ];
+  let attempts = 0;
+
+  for (const correctionNotes of attemptNotes) {
+    attempts += 1;
+    try {
+      const response = await complete({
+        model,
+        temperature: 0.2,
+        systemPrompt: prompt.systemPrompt,
+        messages: [
+          {
+            role: "user",
+            content: buildCurriculumProgressionPrompt({
+              learnerName: params.learner.displayName,
+              coreArtifact: params.artifact,
+            }),
+          },
+        ],
+      });
+
+      const parsed = parseCurriculumProgression(response.content);
+      if (parsed.kind === "success") {
+        return parsed.progression;
+      }
+      console.warn("[curriculum/ai-draft] Progression parse/schema failed.", {
+        attempt: attempts,
+        issues: parsed.issues,
+      });
+    } catch (error) {
+      console.error("[curriculum/ai-draft] Progression generation failed attempt.", {
+        attempt: attempts,
+        error,
+      });
+    }
+  }
+
+  return null;
 }
 
 async function generateCurriculumRevisionDecision(params: {
@@ -2307,6 +2396,52 @@ export function parseCurriculumGeneratedArtifact(content: string):
   return {
     kind: "success",
     artifact: validated.data,
+  };
+}
+
+export function parseCurriculumProgression(content: string):
+  | {
+      kind: "success";
+      progression: CurriculumAiProgression;
+    }
+  | {
+      kind: "parse_failure";
+      issues: CurriculumAiFailureIssue[];
+    }
+  | {
+      kind: "schema_failure";
+      issues: CurriculumAiFailureIssue[];
+    } {
+  const parsed = safeParseJson(content);
+  if (!parsed) {
+    return {
+      kind: "parse_failure",
+      issues: [
+        {
+          code: "parse_failed",
+          message: "The progression response could not be parsed as JSON.",
+          path: [],
+        },
+      ],
+    };
+  }
+
+  const data = (parsed as any).progression ?? parsed;
+  const validated = CurriculumAiProgressionSchema.safeParse(data);
+  if (!validated.success) {
+    return {
+      kind: "schema_failure",
+      issues: validated.error.issues.map((issue) => ({
+        code: "schema_failed",
+        message: issue.message,
+        path: issue.path.map((segment) => String(segment)),
+      })),
+    };
+  }
+
+  return {
+    kind: "success",
+    progression: validated.data,
   };
 }
 

@@ -4,6 +4,8 @@ import { getDb } from "@/lib/db/server";
 import {
   curriculumItems,
   curriculumNodes,
+  curriculumPhases,
+  curriculumPhaseNodes,
   curriculumSkillPrerequisites,
   curriculumSources,
   organizationPlatformSettings,
@@ -246,6 +248,7 @@ function toImportedCurriculumDocumentFromAiArtifact(
     subjects: artifact.source.subjects,
     gradeLevels: artifact.source.gradeLevels,
     document: artifact.document,
+    progression: artifact.progression,
     units: artifact.units,
     metadata: {
       intakeSummary: artifact.intakeSummary,
@@ -385,6 +388,29 @@ async function importNormalizedTree(
 
     if (normalized.prerequisites.length > 0) {
       await tx.insert(curriculumSkillPrerequisites).values(normalized.prerequisites);
+    }
+
+    // Persist Phases
+    await tx.delete(curriculumPhases).where(eq(curriculumPhases.sourceId, sourceId));
+    for (const phase of normalized.phases) {
+      const [createdPhase] = await tx
+        .insert(curriculumPhases)
+        .values({
+          sourceId,
+          title: phase.title,
+          description: phase.description ?? null,
+          position: phase.position,
+        })
+        .returning();
+
+      if (phase.nodeIds.length > 0) {
+        await tx.insert(curriculumPhaseNodes).values(
+          phase.nodeIds.map((nodeId) => ({
+            phaseId: createdPhase.id,
+            curriculumNodeId: nodeId,
+          })),
+        );
+      }
     }
 
     await replaceCurriculumOutline(tx, sourceId, imported.units);

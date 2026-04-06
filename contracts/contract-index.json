@@ -1,0 +1,79 @@
+{
+  "contracts": [
+    {
+      "id": "curriculum-artifact",
+      "title": "Curriculum Artifact",
+      "docPath": "contracts/curriculum-artifact.md",
+      "canonicalSources": [
+        "lib/prompts/curriculum-draft.ts",
+        "lib/curriculum/ai-draft-service.ts"
+      ],
+      "producerEntrypoints": [
+        "CurriculumAiDraftService.generateDraft()"
+      ],
+      "consumerEntrypoints": [
+        "lib/curriculum/normalization.ts"
+      ],
+      "versionFields": [
+        "CURRICULUM_GENERATION_PROMPT_VERSION"
+      ]
+    },
+    {
+      "id": "curriculum-revision-artifact",
+      "title": "Curriculum Revision Artifact",
+      "docPath": "contracts/curriculum-revision-artifact.md",
+      "canonicalSources": [
+        "lib/prompts/curriculum-draft.ts",
+        "lib/curriculum/revision-model.ts"
+      ],
+      "producerEntrypoints": [
+        "runCurriculumRevisionDecision()"
+      ],
+      "consumerEntrypoints": [
+        "app/api/curriculum/revision/route.ts"
+      ],
+      "versionFields": [
+        "CURRICULUM_REVISION_PROMPT_VERSION"
+      ]
+    },
+    {
+      "id": "lesson-draft-artifact",
+      "title": "Lesson Draft Artifact",
+      "docPath": "contracts/lesson-draft-artifact.md",
+      "canonicalSources": [
+        "lib/prompts/lesson-draft.ts",
+        "lib/lesson-draft/types.ts"
+      ],
+      "producerEntrypoints": [
+        "TaskService.generateLessonDraft()"
+      ],
+      "consumerEntrypoints": [
+        "app/(parent)/today/page.tsx",
+        "components/activities/ActivityShell.tsx"
+      ],
+      "versionFields": [
+        "LESSON_DRAFT_PROMPT_VERSION",
+        "schema_version"
+      ]
+    },
+    {
+      "id": "activity-artifact",
+      "title": "Activity Artifact",
+      "docPath": "contracts/activity-artifact.md",
+      "canonicalSources": [
+        "lib/prompts/activity-spec.ts",
+        "lib/activities/spec.ts"
+      ],
+      "producerEntrypoints": [
+        "ActivityGenerationService.generateActivity()"
+      ],
+      "consumerEntrypoints": [
+        "components/activities/ActivityRenderer.tsx"
+      ],
+      "versionFields": [
+        "ACTIVITY_SPEC_PROMPT_VERSION",
+        "schemaVersion"
+      ]
+    }
+  ]
+}

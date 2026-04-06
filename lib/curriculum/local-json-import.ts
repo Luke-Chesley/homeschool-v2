@@ -1,7 +1,7 @@
-import { readFile } from "node:fs/promises";
-import path from "node:path";
+import "@/lib/server-only";
 
 import type { CurriculumSourceKind } from "./types";
+import type { CurriculumAiProgression } from "./ai-draft";
 
 export type CurriculumJsonNode =
   | string
@@ -18,35 +18,26 @@ export interface ImportedCurriculumDocument {
   subjects: string[];
   gradeLevels: string[];
   document: Record<string, CurriculumJsonNode>;
+  progression?: CurriculumAiProgression;
   metadata?: Record<string, unknown>;
   units?: Array<{
     title: string;
-    description?: string;
+    description: string;
     estimatedWeeks?: number;
     estimatedSessions?: number;
     lessons: Array<{
       title: string;
-      description?: string;
+      description: string;
       subject?: string;
       estimatedMinutes?: number;
-      materials?: string[];
-      objectives?: string[];
-      linkedSkillTitles?: string[];
+      materials: string[];
+      objectives: string[];
+      linkedSkillTitles: string[];
     }>;
   }>;
 }
 
 export async function loadLocalCurriculumJson(): Promise<ImportedCurriculumDocument> {
-  const filePath = path.join(process.cwd(), "curriculum.json");
-  const raw = await readFile(filePath, "utf8");
-  const parsed = JSON.parse(raw) as Record<string, CurriculumJsonNode>;
-
-  return {
-    title: "Imported Curriculum JSON",
-    description: "Loaded from curriculum.json in the project root.",
-    kind: "external",
-    subjects: [],
-    gradeLevels: [],
-    document: parsed,
-  };
+  const { default: data } = await import("@/curriculum.json");
+  return data as unknown as ImportedCurriculumDocument;
 }

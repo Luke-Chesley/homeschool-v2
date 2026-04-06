@@ -17,6 +17,10 @@ export const curriculumRouteNodeTypeEnum = pgEnum("curriculum_route_node_type", 
 export const curriculumRoutePrerequisiteKindEnum = pgEnum("curriculum_route_prerequisite_kind", [
   "explicit",
   "inferred",
+  "hardPrerequisite",
+  "recommendedBefore",
+  "revisitAfter",
+  "coPractice",
 ]);
 
 export const learnerBranchActivationStatusEnum = pgEnum("learner_branch_activation_status", [

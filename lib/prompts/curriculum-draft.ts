@@ -1,8 +1,9 @@
 import type { ChatMessage } from "../ai/types.ts";
 
 export const CURRICULUM_INTAKE_PROMPT_VERSION = "2.2.0";
-export const CURRICULUM_GENERATION_PROMPT_VERSION = "3.2.0";
-export const CURRICULUM_REVISION_PROMPT_VERSION = "2.2.0";
+export const CURRICULUM_CORE_PROMPT_VERSION = "4.0.0";
+export const CURRICULUM_PROGRESSION_PROMPT_VERSION = "1.0.0";
+export const CURRICULUM_REVISION_PROMPT_VERSION = "3.0.0";
 export const CURRICULUM_TITLE_PROMPT_VERSION = "1.1.0";
 
 export const CURRICULUM_INTAKE_SYSTEM_PROMPT = `You are an expert homeschool curriculum designer helping a parent shape a full curriculum.
@@ -56,35 +57,24 @@ Quality bar:
 
 Do not include markdown fences.`;
 
-export const CURRICULUM_GENERATION_SYSTEM_PROMPT = `You are an expert homeschool curriculum architect.
+export const CURRICULUM_CORE_SYSTEM_PROMPT = `You are an expert homeschool curriculum architect.
 
-Using the conversation transcript, generate a real curriculum structure that can be stored in an app.
+Using the conversation transcript, generate the CORE curriculum structure that can be stored in an app.
 
 Requirements:
 - Build the curriculum around the parent's stated goals, learner readiness, pacing, and constraints.
 - Produce a hierarchical curriculum tree using domain, strand, goal-group, and skill levels.
 - Make the tree coherent and teachable, not just exhaustive.
 - Make the skills detailed enough that later lesson planning has real curricular material to work from.
-- Then produce a unit and lesson outline aligned to that skill progression.
-- The unit outline is not the final lesson plan. It should provide enough structure and pacing coverage for a later lesson-planning step.
-- Generate a concise, parent-facing curriculum title. Do not default to copying the parent's opening sentence or simply echoing the raw topic phrase.
-- If the subject is already clearly stated, the title may stay close to that subject phrase as long as it remains concise and human.
-- Keep titles concrete, short, and parent-facing.
-- Avoid filler domains or generic framework labels unless the conversation clearly supports them.
-- Prefer a small number of meaningful strands over taxonomy noise.
-- If the topic is narrow, one domain is fine. If it is interdisciplinary, multiple domains are fine.
+- Then produce a unit and lesson outline aligned to that structural sequence.
+- Generate a concise, parent-facing curriculum title.
 - Units and lessons should feel like a sequence a parent could actually teach.
 - Represent pacing explicitly. A long schedule should show how time is filled through new instruction, guided practice, review, retrieval, and application.
 - Do not assume one distinct skill per session.
-- Do not collapse a multi-week or daily plan into only a few skills unless the pacing object and unit session budgets clearly show how the time will be used.
 - If skills need extra clarity, use keyed object leaves in the document where the key is the skill title and the value is a short description.
 - Do not optimize for minimal node count. Optimize for the smallest teachable unit that still feels meaningful in the available lesson rhythm.
-- Keep taxonomy noise and gratuitous bloat out of the tree, but allow the structure to grow when the learner, topic, and pacing need it.
-- More procedural, novice, fragile-confidence, or short-session contexts should produce smaller, more observable skills.
-- More mature, fluent, abstract-capable, or experienced contexts can support broader integrated skills when they remain teachable.
-- Multiple goal groups per strand are fine when they reflect real sub-progressions.
-- A skill should usually be narrow enough to teach, model, practice, and check within roughly 1-3 short sessions unless the learner is more advanced and the topic supports broader integration.
-- If multiple distinct procedures, rules, or misconception targets would be taught separately, they should usually be separate skills.
+- Multiple goal groups per strand are fine — use as many as the topic and learner require.
+- Each skill should be roughly 1-3 short sessions of focused work at the declared pacing.
 
 Return JSON only with this exact shape:
 {
@@ -143,50 +133,66 @@ Return JSON only with this exact shape:
 Generation rules:
 - Create between 1 and 8 domains total.
 - Every skill should fit under a goal group, which fits under a strand, which fits under a domain.
-- Units should cover the curriculum in a teachable order.
-- Do not optimize for minimal node count. Optimize for the smallest teachable unit that still feels meaningful in the available lesson rhythm.
-- Keep taxonomy noise and gratuitous bloat out of the tree, but allow the structure to grow when the learner, topic, and pacing need it.
-- Use the pacing object and unit session budgets to show how the available time is filled.
-- Let the same skill or strand span multiple sessions when practice, review, or transfer work is appropriate.
-- If the requested scope is long, the curriculum should usually include more than a handful of skills.
+- Units should cover the curriculum in a teachable structural order.
 - Lesson objectives and linked skills should correspond to the tree you generated.
-- Keep the curriculum matched to the requested scope. Do not inflate a short plan into a year-long scope.
-- Generate a concise, parent-facing curriculum title if the framing changes enough to warrant it.
-- If the subject is already clearly stated, the title may stay close to that subject phrase as long as it remains concise and human.
-- Use parent-usable wording, not standards jargon, unless the conversation clearly asks for formal academic language.
+- Do not include markdown fences.`;
+
+export const CURRICULUM_PROGRESSION_SYSTEM_PROMPT = `You are an expert pedagogical sequencer.
+
+Your job is to take a core curriculum (tree + units/lessons) and generate a global progression graph.
+
+Requirements:
+- Define learning phases (bands/layers) that group skills into meaningful pedagogical stages.
+- Define explicit dependency edges between skills.
+- Use these edge kinds:
+  - hardPrerequisite: A true gate. "toSkill" cannot be started until "fromSkill" is completed.
+  - recommendedBefore: A soft sequencing suggestion.
+  - revisitAfter: Intentionally resurface "fromSkill" after "toSkill" for reinforcement/spaced practice.
+  - coPractice: These skills should be practiced/introduced together or interleaved.
+- Do not force a single total order. Use hard edges only when truly gating.
+- Allow for revisits and recurrence.
+- Do not assume one skill equals one lesson.
+- Ensure all skill titles match leaf nodes in the provided document tree exactly.
+
+Return JSON only with this exact shape:
+{
+  "progression": {
+    "phases": [
+      {
+        "title": "string",
+        "description": "string or omitted",
+        "skillTitles": ["string"]
+      }
+    ],
+    "edges": [
+      {
+        "fromSkillTitle": "string",
+        "toSkillTitle": "string",
+        "kind": "hardPrerequisite" | "recommendedBefore" | "revisitAfter" | "coPractice"
+      }
+    ]
+  }
+}
+
+Rules:
+- Hard prerequisite graph must be acyclic.
+- Phases should cover all major skills in a logical progression.
 - Do not include markdown fences.`;
 
 export const CURRICULUM_REVISION_SYSTEM_PROMPT = `You are an expert homeschool curriculum architect revising an existing curriculum.
 
 You will receive:
-- a rich snapshot of the current curriculum structure, pacing, units, and lesson outline
+- a rich snapshot of the current curriculum structure, pacing, units, outline, and progression
 - the current revision conversation with the parent
 
-Your job:
-- read the snapshot and conversation directly
-- decide whether the parent is asking for a split, rename, targeted adjust, or broader rewrite
-- ask for clarification only when the request is genuinely ambiguous or under-specified
-- otherwise produce a revised curriculum artifact that preserves what should stay, changes what should change, and keeps the result coherent
-- identify the intended target inside the current structure yourself instead of relying on code-side matching
+Your job is to produce a revised CORE curriculum artifact. A separate pass will handle progression reconciliation.
 
 Revision rules:
-- Keep the curriculum teachable and logically ordered.
 - Preserve existing structure when the request is narrow.
 - Broader rewrites are allowed when the parent clearly asks for them.
-- Keep unchanged branches intact unless the parent explicitly asked for broader restructuring.
 - Preserve the canonical tree shape: domain -> strand -> goal group -> skill.
-- For split requests, replace the target skill with sibling skills under the existing parent.
-- Do not wrap the old skill as a new parent unless explicitly requested.
-- Do not invent a new goal group unless explicitly requested.
-- For rename requests, keep the structure the same and change wording only.
-- For targeted adjust requests, keep the change local unless a broader rewrite is requested.
-- Generate a concise, parent-facing curriculum title if the revision changes the framing enough to warrant it.
-- If the subject is already clearly stated, the title may stay close to that subject phrase as long as it remains concise and human.
-- Keep pacing believable. Use the pacing object and unit session budgets to show how the curriculum fills the requested time.
-- Do not assume one skill per session, but do not leave a long schedule supported by only a tiny set of skills.
-- If the parent asks to add goal groups, strands, or practice threads, incorporate them into the canonical tree rather than mentioning them only in prose.
-- Return the full revised artifact when action is "apply"; do not describe the edit in prose instead of applying it.
-- If the request is too vague to apply safely, ask one precise clarification question.
+- Keep the result coherent and teachable.
+- Generate a revised curriculum artifact that includes source, intakeSummary, pacing, document, and units.
 
 Return JSON only with this exact shape:
 {
@@ -300,7 +306,7 @@ ${transcript}
 Respond with the next assistant turn and the current intake state.`;
 }
 
-export function buildCurriculumGenerationPrompt(input: {
+export function buildCurriculumCorePrompt(input: {
   learnerName: string;
   messages: ChatMessage[];
   requirementHints?: {
@@ -344,7 +350,19 @@ ${input.granularityGuidance && input.granularityGuidance.length > 0 ? `Granulari
 Conversation transcript:
 ${transcript || "No conversation transcript was provided."}
 
-${input.correctionNotes && input.correctionNotes.length > 0 ? `Correction notes for this retry:\n${input.correctionNotes.map((note, index) => `${index + 1}. ${note}`).join("\n")}\n\n` : ""}Generate the full curriculum artifact.`;
+${input.correctionNotes && input.correctionNotes.length > 0 ? `Correction notes for this retry:\n${input.correctionNotes.map((note, index) => `${index + 1}. ${note}`).join("\n")}\n\n` : ""}Generate the core curriculum artifact.`;
+}
+
+export function buildCurriculumProgressionPrompt(input: {
+  learnerName: string;
+  coreArtifact: any;
+}) {
+  return `Active learner: ${input.learnerName}
+
+Core curriculum artifact:
+${JSON.stringify(input.coreArtifact, null, 2)}
+
+Generate the progression graph for this curriculum.`;
 }
 
 export interface CurriculumRevisionPromptNode {

@@ -88,7 +88,7 @@ export const DEFAULT_ROUTING_CONFIG: ModelRoutingConfig = {
   fallbackModel: "mock-model-1",
   taskDefaults: {
     "curriculum.intake": "mock-chat-model",
-    "curriculum.generate": "mock-generation-model",
+    "curriculum.generate.core": "mock-generation-model",
     "curriculum.revise": "mock-generation-model",
     "curriculum.title": "mock-generation-model",
     "chat.answer": "mock-chat-model",

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import type { CurriculumNodeType } from "@/lib/curriculum/types";
 import { normalizeCurriculumLabel } from "./labels.ts";
+import type { CurriculumAiProgression } from "./ai-draft.ts";
 
 type CurriculumJsonNode =
   | string
@@ -38,14 +39,23 @@ interface NodeAccumulator {
   metadata: Record<string, unknown>;
 }
 
+type PrerequisiteKind = "explicit" | "inferred" | "hardPrerequisite" | "recommendedBefore" | "revisitAfter" | "coPractice";
+
 export interface NormalizedCurriculumImport {
   nodes: NodeAccumulator[];
   prerequisites: Array<{
     sourceId: string;
     skillNodeId: string;
     prerequisiteSkillNodeId: string;
-    kind: "explicit" | "inferred";
+    kind: PrerequisiteKind;
     metadata: Record<string, unknown>;
+  }>;
+  phases: Array<{
+    sourceId: string;
+    title: string;
+    description?: string;
+    position: number;
+    nodeIds: string[];
   }>;
   summary: {
     nodeCount: number;
@@ -222,6 +232,7 @@ export function normalizeCurriculumDocument(args: {
   sourceId: string;
   sourceLineageId: string;
   document: Record<string, CurriculumJsonNode>;
+  progression?: CurriculumAiProgression;
 }): NormalizedCurriculumImport {
   const leaves = collectLeaves(args.document);
   const nodes = new Map<string, NodeAccumulator>();
@@ -381,16 +392,58 @@ export function normalizeCurriculumDocument(args: {
     canonicalSkillNodeIds.push(skillNode.id);
   }
 
-  const prerequisites = canonicalSkillNodeIds.slice(1).map((skillNodeId, index) => ({
-    sourceId: args.sourceId,
-    skillNodeId,
-    prerequisiteSkillNodeId: canonicalSkillNodeIds[index],
-    kind: "inferred" as const,
-    metadata: {
-      derivedFrom: "canonical_skill_sequence",
-      predecessorIndex: index,
-    },
-  }));
+  const skillIdByTitle = new Map<string, string>();
+  for (const node of nodes.values()) {
+    if (node.normalizedType === "skill") {
+      skillIdByTitle.set(node.title, node.id);
+    }
+  }
+
+  const prerequisites: NormalizedCurriculumImport["prerequisites"] = [];
+
+  if (args.progression?.edges && args.progression.edges.length > 0) {
+    for (const edge of args.progression.edges) {
+      const skillNodeId = skillIdByTitle.get(edge.toSkillTitle);
+      const prerequisiteSkillNodeId = skillIdByTitle.get(edge.fromSkillTitle);
+
+      if (skillNodeId && prerequisiteSkillNodeId) {
+        prerequisites.push({
+          sourceId: args.sourceId,
+          skillNodeId,
+          prerequisiteSkillNodeId,
+          kind: edge.kind,
+          metadata: {
+            derivedFrom: "explicit_progression_graph",
+          },
+        });
+      }
+    }
+  } else {
+    // Fallback to inferred sequence
+    for (let i = 1; i < canonicalSkillNodeIds.length; i++) {
+      prerequisites.push({
+        sourceId: args.sourceId,
+        skillNodeId: canonicalSkillNodeIds[i],
+        prerequisiteSkillNodeId: canonicalSkillNodeIds[i - 1],
+        kind: "inferred",
+        metadata: {
+          derivedFrom: "canonical_skill_sequence",
+          predecessorIndex: i - 1,
+        },
+      });
+    }
+  }
+
+  const phases: NormalizedCurriculumImport["phases"] =
+    args.progression?.phases?.map((phase, index) => ({
+      sourceId: args.sourceId,
+      title: phase.title,
+      description: phase.description,
+      position: index,
+      nodeIds: phase.skillTitles
+        .map((title) => skillIdByTitle.get(title))
+        .filter((id): id is string => !!id),
+    })) ?? [];
 
   return {
     nodes: [...nodes.values()].sort((left, right) => {
@@ -403,6 +456,7 @@ export function normalizeCurriculumDocument(args: {
       return left.sequenceIndex - right.sequenceIndex;
     }),
     prerequisites,
+    phases,
     summary: {
       nodeCount: nodes.size,
       skillCount: canonicalSkillNodeIds.length,

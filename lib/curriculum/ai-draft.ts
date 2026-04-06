@@ -104,12 +104,45 @@ export const CurriculumAiUnitSchema = z.object({
 
 export type CurriculumAiUnit = z.infer<typeof CurriculumAiUnitSchema>;
 
+export const CurriculumAiProgressionEdgeKindSchema = z.enum([
+  "hardPrerequisite",
+  "recommendedBefore",
+  "revisitAfter",
+  "coPractice",
+]);
+
+export type CurriculumAiProgressionEdgeKind = z.infer<typeof CurriculumAiProgressionEdgeKindSchema>;
+
+export const CurriculumAiProgressionEdgeSchema = z.object({
+  fromSkillTitle: z.string().trim().min(1).max(180),
+  toSkillTitle: z.string().trim().min(1).max(180),
+  kind: CurriculumAiProgressionEdgeKindSchema,
+});
+
+export type CurriculumAiProgressionEdge = z.infer<typeof CurriculumAiProgressionEdgeSchema>;
+
+export const CurriculumAiProgressionPhaseSchema = z.object({
+  title: z.string().trim().min(1).max(180),
+  description: z.string().trim().max(600).optional(),
+  skillTitles: z.array(z.string().trim().min(1).max(180)).min(1),
+});
+
+export type CurriculumAiProgressionPhase = z.infer<typeof CurriculumAiProgressionPhaseSchema>;
+
+export const CurriculumAiProgressionSchema = z.object({
+  phases: z.array(CurriculumAiProgressionPhaseSchema).default([]),
+  edges: z.array(CurriculumAiProgressionEdgeSchema).default([]),
+});
+
+export type CurriculumAiProgression = z.infer<typeof CurriculumAiProgressionSchema>;
+
 export const CurriculumAiGeneratedArtifactSchema = z.object({
   source: CurriculumAiDraftSummarySchema,
   intakeSummary: z.string().trim().min(1).max(1_500),
   pacing: CurriculumAiPacingSchema,
   document: z.record(z.string().trim().min(1).max(180), CurriculumAiDocumentNodeSchema),
   units: z.array(CurriculumAiUnitSchema).min(1).max(20),
+  progression: CurriculumAiProgressionSchema.optional(),
 });
 
 export type CurriculumAiGeneratedArtifact = z.infer<typeof CurriculumAiGeneratedArtifactSchema>;
@@ -137,6 +170,7 @@ export const CurriculumAiFailureStageSchema = z.enum([
   "schema",
   "persistence",
   "revision",
+  "quality",
 ]);
 
 export const CurriculumAiFailureIssueSchema = z.object({
@@ -152,7 +186,7 @@ export const CurriculumAiFailureResultSchema = z.object({
   stage: CurriculumAiFailureStageSchema,
   reason: z.string().trim().min(1).max(120),
   userSafeMessage: z.string().trim().min(1).max(500),
-  issues: z.array(CurriculumAiFailureIssueSchema).max(24).default([]),
+  issues: z.array(CurriculumAiFailureIssueSchema).default([]),
   attemptCount: z.number().int().nonnegative(),
   retryable: z.boolean(),
   debugMetadata: JsonRecordSchema.optional(),

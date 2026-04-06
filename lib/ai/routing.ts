@@ -37,7 +37,7 @@ export function getAiRoutingConfig(): ModelRoutingConfig {
 
   const anthropicDefaults: Partial<Record<AiTaskName, string>> = {
     "curriculum.intake": env.AI_CHAT_MODEL ?? "claude-sonnet-4-5",
-    "curriculum.generate": env.AI_GENERATION_MODEL ?? "claude-sonnet-4-5",
+    "curriculum.generate.core": env.AI_GENERATION_MODEL ?? "claude-sonnet-4-5",
     "curriculum.revise": env.AI_GENERATION_MODEL ?? "claude-sonnet-4-5",
     "curriculum.title": env.AI_FAST_MODEL ?? "claude-haiku-4-5",
     "chat.answer": env.AI_CHAT_MODEL ?? "claude-sonnet-4-5",
@@ -57,7 +57,7 @@ export function getAiRoutingConfig(): ModelRoutingConfig {
     OLLAMA_DEFAULT_MODEL;
   const ollamaDefaults: Partial<Record<AiTaskName, string>> = {
     "curriculum.intake": env.AI_CHAT_MODEL ?? ollamaSeedModel,
-    "curriculum.generate": env.AI_GENERATION_MODEL ?? ollamaSeedModel,
+    "curriculum.generate.core": env.AI_GENERATION_MODEL ?? ollamaSeedModel,
     "curriculum.revise": env.AI_GENERATION_MODEL ?? ollamaSeedModel,
     "curriculum.title": env.AI_FAST_MODEL ?? ollamaSeedModel,
     "chat.answer": env.AI_CHAT_MODEL ?? ollamaSeedModel,

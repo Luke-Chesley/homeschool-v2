@@ -76,7 +76,13 @@ Match existing style: `feat(scope): description` for features, `fix(scope): desc
 
 ## Documentation
 
-The `docs/` directory contains authoritative product and architecture decisions — read these before implementing new features:
+The `docs/` directory contains product and architecture decisions.
+The `/contracts/` directory contains first-class contracts for all AI-generated artifacts (curriculum, lesson drafts, activities).
+
+- **Contract Maintenance**: If a task changes the shape, required fields, defaults, versioning, persistence, or consumer expectations of a generated artifact, you **must** update the matching file in `/contracts/` and run `npm run contracts:check`.
+- If no contract file exists for a new generated artifact, create one using `contracts/_template.md`.
+
+Read these before implementing new features:
 - `docs/ARCHITECTURE.md` — tech rationale, system boundaries, initial DB table design
 - `docs/VISION.md` — user personas, core objects, MVP vs non-MVP scope
 - `docs/PRODUCT_IMPLEMENTATION_PLAN.md` — full use-case spec, data flows, parallel workstreams

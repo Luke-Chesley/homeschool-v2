@@ -7,6 +7,7 @@ Homeschool V2 is a Next.js App Router repo for a planning-first homeschool platf
 - `app/` holds routes, layouts, and API handlers.
 - `components/` holds UI, grouped by feature area.
 - `lib/` holds domain logic, session/auth code, DB access, and integration helpers.
+- `contracts/` holds first-class contracts for all AI-generated artifacts.
 - `docs/` holds plans and architecture/product notes.
 - `scripts/`, `supabase/`, and `drizzle/` hold local dev and data infrastructure.
 
@@ -100,6 +101,17 @@ Most non-UI logic lives here.
   Storage client helpers.
 - `lib/prompts/`
   Prompt definitions and prompt management.
+
+### `contracts/`
+
+First-class contracts for all AI-generated artifacts.
+
+- `contracts/README.md`
+  Explains how to use and update contracts.
+- `contracts/contract-index.json`
+  Machine-readable registry of artifact contracts.
+- Artifact docs (`curriculum-artifact.md`, etc.)
+  Detailed shape, field, and lifecycle documentation.
 
 ### `docs/`
 

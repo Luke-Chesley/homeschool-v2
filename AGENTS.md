@@ -71,6 +71,13 @@
 - Store secrets only in `.env.local`; never commit credentials.
 - Keep `.env.example` updated when adding required configuration such as AI provider or model settings.
 
+## Contract Maintenance
+- This repository uses a first-class contract registry in `/contracts/` to track the shape and requirements of generated artifacts (curriculum, lesson drafts, activities).
+- If a task changes the shape, required fields, defaults, versioning, persistence, ownership hierarchy, or consumer expectations of a generated artifact, you **must** update the matching file in `/contracts/` in the same change.
+- If no contract file exists yet for a new generated artifact, create one using `contracts/_template.md`.
+- If a contract file changes, update `contracts/contract-index.json`.
+- Run `npm run contracts:check` to ensure the registry remains structurally sound before finishing your task.
+
 ## Documentation Maintenance
 - Keep `README.md` current when the repo structure, key control points, setup flow, or major feature surfaces change.
 - If you add, remove, or significantly reorganize top-level directories or major subsystems, update `README.md` in the same task unless the user explicitly says not to.

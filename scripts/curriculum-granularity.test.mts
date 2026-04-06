@@ -4,8 +4,8 @@ import test from "node:test";
 import { buildFallbackChatTurn } from "../lib/curriculum/ai-draft-service.ts";
 import { normalizeCurriculumDocument } from "../lib/curriculum/normalization.ts";
 import {
-  CURRICULUM_GENERATION_SYSTEM_PROMPT,
-  buildCurriculumGenerationPrompt,
+  CURRICULUM_CORE_SYSTEM_PROMPT as CURRICULUM_GENERATION_SYSTEM_PROMPT,
+  buildCurriculumCorePrompt as buildCurriculumGenerationPrompt,
 } from "../lib/prompts/curriculum-draft.ts";
 import {
   inferCurriculumGranularityProfile,

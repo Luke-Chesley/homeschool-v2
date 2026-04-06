@@ -4,6 +4,8 @@ import { getDb } from "@/lib/db/server";
 import { getEnabledPlanningDayOffsets } from "./planning-days";
 import {
   curriculumNodes,
+  curriculumPhases,
+  curriculumPhaseNodes,
   curriculumSkillPrerequisites,
   learnerBranchActivations,
   learnerRouteProfiles,
@@ -50,8 +52,12 @@ type RouteBoardContext = {
   sourceId: string;
   targetItemsPerWeek: number;
   skillStatusBySkillNodeId: Map<string, SkillStatus>;
-  explicitPrerequisitesBySkillNodeId: Map<string, string[]>;
-  predecessorSkillNodeIdsBySkillNodeId: Map<string, string[]>;
+  hardPrerequisitesBySkillNodeId: Map<string, string[]>;
+  recommendedBeforeBySkillNodeId: Map<string, string[]>;
+  revisitAfterBySkillNodeId: Map<string, string[]>;
+  coPracticeBySkillNodeId: Map<string, string[]>;
+  phaseIdBySkillNodeId: Map<string, string>;
+  orderedPhaseIds: string[];
 };
 
 type RouteItemProjection = {
@@ -309,30 +315,34 @@ function computeConflicts(
       continue;
     }
 
-    const explicitBlocked = item.explicitPrerequisiteSkillNodeIds.filter((skillNodeId) => !isResolved(skillNodeId));
-    if (explicitBlocked.length > 0) {
+    // Hard Blockers
+    const hardBlocked = (context.hardPrerequisitesBySkillNodeId.get(item.skillNodeId) ?? [])
+      .filter((skillNodeId) => !isResolved(skillNodeId));
+    if (hardBlocked.length > 0) {
       conflicts.push({
         type: "explicit_prerequisite_blocked",
         affectedItemIds: [item.id],
-        blockingSkillNodeIds: explicitBlocked,
-        explanation: "This skill has unresolved explicit prerequisites.",
-        suggestedRepairActions: ["move_item_later", "acknowledge_skip"],
-        keepOverrideAllowed: true,
+        blockingSkillNodeIds: hardBlocked,
+        explanation: "This skill has unresolved hard prerequisites in the progression graph.",
+        suggestedRepairActions: ["move_item_later"],
+        keepOverrideAllowed: false,
       });
     }
 
-    const predecessorBlocked = item.predecessorSkillNodeIds.filter((skillNodeId) => !isResolved(skillNodeId));
-    if (predecessorBlocked.length > 0) {
+    // Soft Blockers (Recommended)
+    const recommendedBlocked = (context.recommendedBeforeBySkillNodeId.get(item.skillNodeId) ?? [])
+      .filter((skillNodeId) => !isResolved(skillNodeId));
+    if (recommendedBlocked.length > 0) {
       conflicts.push({
         type: "predecessor_not_completed",
         affectedItemIds: [item.id],
-        blockingSkillNodeIds: predecessorBlocked,
-        explanation: "This skill is ahead of an unfinished predecessor in canonical sequence.",
+        blockingSkillNodeIds: recommendedBlocked,
+        explanation: "This skill is recommended to follow other skills that are not yet complete.",
         suggestedRepairActions: ["move_predecessor_earlier", "move_item_later", "acknowledge_skip"],
         keepOverrideAllowed: true,
       });
 
-      const movedAhead = predecessorBlocked.some((skillNodeId) => {
+      const movedAhead = recommendedBlocked.some((skillNodeId) => {
         const predecessorItems = itemsBySkillNodeId.get(skillNodeId) ?? [];
         const predecessorItem = predecessorItems
           .filter((entry) => entry.state !== "done" && entry.state !== "removed")
@@ -347,8 +357,8 @@ function computeConflicts(
         conflicts.push({
           type: "reordered_ahead_of_predecessor",
           affectedItemIds: [item.id],
-          blockingSkillNodeIds: predecessorBlocked,
-          explanation: "Manual reorder moved this skill ahead of an unresolved predecessor.",
+          blockingSkillNodeIds: recommendedBlocked,
+          explanation: "Manual reorder moved this skill ahead of a recommended predecessor.",
           suggestedRepairActions: ["move_item_later", "acknowledge_skip"],
           keepOverrideAllowed: true,
         });
@@ -414,6 +424,20 @@ async function buildRouteBoard(route: WeeklyRouteRecord): Promise<WeeklyRouteBoa
     where: eq(curriculumSkillPrerequisites.sourceId, route.sourceId),
   });
 
+  const phases = await db.query.curriculumPhases.findMany({
+    where: eq(curriculumPhases.sourceId, route.sourceId),
+    orderBy: [asc(curriculumPhases.position), asc(curriculumPhases.createdAt)],
+  });
+
+  const phaseNodes = phases.length > 0
+    ? await db.query.curriculumPhaseNodes.findMany({
+        where: inArray(
+          curriculumPhaseNodes.phaseId,
+          phases.map((p) => p.id),
+        ),
+      })
+    : [];
+
   const statusBySkillNodeId = new Map<string, SkillStatus>(
     skillStates.map((state) => [state.skillNodeId, state.status]),
   );
@@ -425,14 +449,41 @@ async function buildRouteBoard(route: WeeklyRouteRecord): Promise<WeeklyRouteBoa
     canonicalOrder.map((skillNodeId, index) => [skillNodeId, index]),
   );
 
-  const explicitBySkillNodeId = new Map<string, string[]>();
-  const predecessorBySkillNodeId = new Map<string, string[]>();
+  const hardPrerequisitesBySkillNodeId = new Map<string, string[]>();
+  const recommendedBeforeBySkillNodeId = new Map<string, string[]>();
+  const revisitAfterBySkillNodeId = new Map<string, string[]>();
+  const coPracticeBySkillNodeId = new Map<string, string[]>();
+
   for (const prerequisite of prerequisites) {
-    const map = prerequisite.kind === "explicit" ? explicitBySkillNodeId : predecessorBySkillNodeId;
+    let map: Map<string, string[]>;
+    switch (prerequisite.kind) {
+      case "hardPrerequisite":
+      case "explicit": // Treat existing explicit as hard for backward compatibility or as requested
+        map = hardPrerequisitesBySkillNodeId;
+        break;
+      case "recommendedBefore":
+      case "inferred": // Treat existing inferred as recommended
+        map = recommendedBeforeBySkillNodeId;
+        break;
+      case "revisitAfter":
+        map = revisitAfterBySkillNodeId;
+        break;
+      case "coPractice":
+        map = coPracticeBySkillNodeId;
+        break;
+      default:
+        continue;
+    }
     const values = map.get(prerequisite.skillNodeId) ?? [];
     values.push(prerequisite.prerequisiteSkillNodeId);
     map.set(prerequisite.skillNodeId, values);
   }
+
+  const phaseIdBySkillNodeId = new Map<string, string>();
+  for (const pn of phaseNodes) {
+    phaseIdBySkillNodeId.set(pn.curriculumNodeId, pn.phaseId);
+  }
+  const orderedPhaseIds = phases.map((p) => p.id);
 
   const items: WeeklyRouteBoardItem[] = rows.map(({ item, node }) => {
     const canonicalPosition = getCanonicalPosition(node, canonicalFallbackBySkillNodeId.get(node.id) ?? 0);
@@ -455,8 +506,8 @@ async function buildRouteBoard(route: WeeklyRouteRecord): Promise<WeeklyRouteBoa
       manualOverrideNote: item.manualOverrideNote,
       state: item.state,
       learnerSkillStatus: status,
-      explicitPrerequisiteSkillNodeIds: explicitBySkillNodeId.get(item.skillNodeId) ?? [],
-      predecessorSkillNodeIds: predecessorBySkillNodeId.get(item.skillNodeId) ?? [],
+      explicitPrerequisiteSkillNodeIds: hardPrerequisitesBySkillNodeId.get(item.skillNodeId) ?? [],
+      predecessorSkillNodeIds: recommendedBeforeBySkillNodeId.get(item.skillNodeId) ?? [],
       dailySelection: {
         weeklyRouteItemId: item.id,
         curriculumSourceId: route.sourceId,
@@ -474,8 +525,12 @@ async function buildRouteBoard(route: WeeklyRouteRecord): Promise<WeeklyRouteBoa
     sourceId: route.sourceId,
     targetItemsPerWeek,
     skillStatusBySkillNodeId: statusBySkillNodeId,
-    explicitPrerequisitesBySkillNodeId: explicitBySkillNodeId,
-    predecessorSkillNodeIdsBySkillNodeId: predecessorBySkillNodeId,
+    hardPrerequisitesBySkillNodeId,
+    recommendedBeforeBySkillNodeId,
+    revisitAfterBySkillNodeId,
+    coPracticeBySkillNodeId,
+    phaseIdBySkillNodeId,
+    orderedPhaseIds,
   };
 
   const conflicts = computeConflicts(items, context);
@@ -574,12 +629,14 @@ interface GenerationContext {
   activeBranchActivations: Array<typeof learnerBranchActivations.$inferSelect>;
   nodes: typeof curriculumNodes.$inferSelect[];
   prerequisites: CurriculumPrerequisiteRecord[];
+  phases: Array<typeof curriculumPhases.$inferSelect>;
+  phaseNodes: Array<typeof curriculumPhaseNodes.$inferSelect>;
   skillStateBySkillNodeId: Map<string, SkillStatus>;
 }
 
 async function loadGenerationContext(params: { learnerId: string; sourceId: string }): Promise<GenerationContext> {
   const db = getDb();
-  const [profile, activeBranchActivations, nodes, prerequisites, skillStates] = await Promise.all([
+  const [profile, activeBranchActivations, nodes, prerequisites, phases, phaseNodes, skillStates] = await Promise.all([
     db.query.learnerRouteProfiles.findFirst({
       where: and(eq(learnerRouteProfiles.learnerId, params.learnerId), eq(learnerRouteProfiles.sourceId, params.sourceId)),
     }),
@@ -598,6 +655,19 @@ async function loadGenerationContext(params: { learnerId: string; sourceId: stri
     db.query.curriculumSkillPrerequisites.findMany({
       where: eq(curriculumSkillPrerequisites.sourceId, params.sourceId),
     }),
+    db.query.curriculumPhases.findMany({
+      where: eq(curriculumPhases.sourceId, params.sourceId),
+      orderBy: [asc(curriculumPhases.position), asc(curriculumPhases.createdAt)],
+    }),
+    db.query.curriculumPhaseNodes.findMany({
+      where: inArray(
+        curriculumPhaseNodes.phaseId,
+        db
+          .select({ id: curriculumPhases.id })
+          .from(curriculumPhases)
+          .where(eq(curriculumPhases.sourceId, params.sourceId)),
+      ),
+    }),
     db.query.learnerSkillStates.findMany({
       where: and(eq(learnerSkillStates.learnerId, params.learnerId), eq(learnerSkillStates.sourceId, params.sourceId)),
     }),
@@ -608,6 +678,8 @@ async function loadGenerationContext(params: { learnerId: string; sourceId: stri
     activeBranchActivations,
     nodes,
     prerequisites,
+    phases,
+    phaseNodes,
     skillStateBySkillNodeId: new Map<string, SkillStatus>(
       skillStates.map((state) => [state.skillNodeId, state.status]),
     ),
@@ -619,6 +691,8 @@ function buildRecommendations(params: {
   activeBranchActivations: Array<typeof learnerBranchActivations.$inferSelect>;
   nodes: typeof curriculumNodes.$inferSelect[];
   prerequisites: CurriculumPrerequisiteRecord[];
+  phases: Array<typeof curriculumPhases.$inferSelect>;
+  phaseNodes: Array<typeof curriculumPhaseNodes.$inferSelect>;
   skillStateBySkillNodeId: Map<string, SkillStatus>;
 }): {
   orderedSkillNodeIds: string[];
@@ -628,7 +702,15 @@ function buildRecommendations(params: {
   enabledDayOffsets: number[];
   generationBasis: Record<string, unknown>;
 } {
-  const { profile, activeBranchActivations, nodes, prerequisites, skillStateBySkillNodeId } = params;
+  const {
+    profile,
+    activeBranchActivations,
+    nodes,
+    prerequisites,
+    phases,
+    phaseNodes,
+    skillStateBySkillNodeId,
+  } = params;
   const targetItemsPerWeek = getTargetItemsPerWeek(profile);
   const targetItemsPerDay = Math.max(1, profile?.targetItemsPerDay ?? 1);
   const planningDayCount = getPlanningDayCount(profile);
@@ -642,7 +724,7 @@ function buildRecommendations(params: {
       planningDayCount,
       enabledDayOffsets,
       generationBasis: {
-        algorithmVersion: "2026-03-31-agent-b-v1",
+        algorithmVersion: "2026-04-01-progression-v1",
         reason: "no_active_branch_activations",
         targetItemsPerWeek,
         targetItemsPerDay,
@@ -652,17 +734,45 @@ function buildRecommendations(params: {
     };
   }
 
-  const { nodeById, collectSkillDescendants } = buildSkillMaps(nodes);
+  const { nodeById, canonicalPositionBySkillNodeId, collectSkillDescendants } = buildSkillMaps(nodes);
 
-  const explicitPrerequisitesBySkillNodeId = new Map<string, string[]>();
+  // Map prerequisites by kind
+  const hardPrerequisitesBySkillNodeId = new Map<string, string[]>();
+  const recommendedBeforeBySkillNodeId = new Map<string, string[]>();
+  const revisitAfterBySkillNodeId = new Map<string, string[]>();
+  const coPracticeBySkillNodeId = new Map<string, string[]>();
+
   for (const prerequisite of prerequisites) {
-    if (prerequisite.kind !== "explicit") {
-      continue;
+    let map: Map<string, string[]>;
+    switch (prerequisite.kind) {
+      case "hardPrerequisite":
+      case "explicit":
+        map = hardPrerequisitesBySkillNodeId;
+        break;
+      case "recommendedBefore":
+      case "inferred":
+        map = recommendedBeforeBySkillNodeId;
+        break;
+      case "revisitAfter":
+        map = revisitAfterBySkillNodeId;
+        break;
+      case "coPractice":
+        map = coPracticeBySkillNodeId;
+        break;
+      default:
+        continue;
     }
-    const existing = explicitPrerequisitesBySkillNodeId.get(prerequisite.skillNodeId) ?? [];
-    existing.push(prerequisite.prerequisiteSkillNodeId);
-    explicitPrerequisitesBySkillNodeId.set(prerequisite.skillNodeId, existing);
+    const values = map.get(prerequisite.skillNodeId) ?? [];
+    values.push(prerequisite.prerequisiteSkillNodeId);
+    map.set(prerequisite.skillNodeId, values);
   }
+
+  // Phase mapping
+  const phaseIdBySkillNodeId = new Map<string, string>();
+  for (const pn of phaseNodes) {
+    phaseIdBySkillNodeId.set(pn.curriculumNodeId, pn.phaseId);
+  }
+  const phaseIndexById = new Map<string, number>(phases.map((p, i) => [p.id, i]));
 
   const branchInputs = activeBranchActivations
     .map((activation) => {
@@ -681,14 +791,13 @@ function buildRecommendations(params: {
           continue;
         }
 
-        const explicitPrerequisites = explicitPrerequisitesBySkillNodeId.get(skillNodeId) ?? [];
-        const prerequisitesSatisfied = explicitPrerequisites.every((prerequisiteSkillNodeId) => {
-          const prerequisiteStatus =
-            skillStateBySkillNodeId.get(prerequisiteSkillNodeId) ?? "not_started";
-          return isSkillComplete(prerequisiteStatus);
-        });
+        // Hard gate check
+        const hardPrereqs = hardPrerequisitesBySkillNodeId.get(skillNodeId) ?? [];
+        const hardSatisfied = hardPrereqs.every((pid) =>
+          isSkillComplete(skillStateBySkillNodeId.get(pid) ?? "not_started"),
+        );
 
-        if (!prerequisitesSatisfied) {
+        if (!hardSatisfied) {
           continue;
         }
 
@@ -699,12 +808,39 @@ function buildRecommendations(params: {
         }
       }
 
+      // Internal sorting for branch queues based on phase and soft edges
+      const sortBranchQueue = (queue: string[]) => {
+        return queue.sort((a, b) => {
+          // 1. Phase priority
+          const phaseA = phaseIndexById.get(phaseIdBySkillNodeId.get(a) ?? "") ?? Infinity;
+          const phaseB = phaseIndexById.get(phaseIdBySkillNodeId.get(b) ?? "") ?? Infinity;
+          if (phaseA !== phaseB) return phaseA - phaseB;
+
+          // 2. Recommended Before (simple heuristic: if A is recommended before B, A < B)
+          const aBeforeB = recommendedBeforeBySkillNodeId.get(b)?.includes(a);
+          const bBeforeA = recommendedBeforeBySkillNodeId.get(a)?.includes(b);
+          if (aBeforeB && !bBeforeA) return -1;
+          if (bBeforeA && !aBeforeB) return 1;
+
+          // 3. Revisit After / Co Practice (similar heuristic)
+          const aRevisitB = revisitAfterBySkillNodeId.get(a)?.includes(b);
+          const bRevisitA = revisitAfterBySkillNodeId.get(b)?.includes(a);
+          if (aRevisitB && !bRevisitA) return 1; // A follows B
+          if (bRevisitA && !aRevisitB) return -1;
+
+          // 4. Tree order as tie-breaker
+          const posA = canonicalPositionBySkillNodeId.get(a) ?? Infinity;
+          const posB = canonicalPositionBySkillNodeId.get(b) ?? Infinity;
+          return posA - posB;
+        });
+      };
+
       return {
         branchNodeId: branchNode.id,
         branchNodePath: branchNode.normalizedPath,
         branchWeight: getBranchWeight(profile, branchNode.id),
-        unfinishedQueue: eligibleUnfinishedScheduled,
-        newQueue: eligibleNew,
+        unfinishedQueue: sortBranchQueue(eligibleUnfinishedScheduled),
+        newQueue: sortBranchQueue(eligibleNew),
       };
     })
     .filter((value): value is NonNullable<typeof value> => value != null)
@@ -721,7 +857,10 @@ function buildRecommendations(params: {
   const selectedSkillNodeIds: string[] = [];
   const selectedSet = new Set<string>();
 
-  const selectFromPhase = (phase: "unfinishedQueue" | "newQueue") => {
+  const selectFromQueues = (params: {
+    queueName: "unfinishedQueue" | "newQueue";
+    targetPhaseId?: string;
+  }) => {
     if (weightedBranchCycle.length === 0) {
       return;
     }
@@ -739,9 +878,23 @@ function buildRecommendations(params: {
           continue;
         }
 
-        const queue = branch[phase];
+        const queue = branch[params.queueName];
+        
+        // Skip skills already selected
         while (queue.length > 0 && selectedSet.has(queue[0])) {
           queue.shift();
+        }
+
+        if (queue.length === 0) {
+          continue;
+        }
+
+        // If a target phase is specified, only pick if the skill is in that phase
+        if (params.targetPhaseId) {
+          const skillPhaseId = phaseIdBySkillNodeId.get(queue[0]);
+          if (skillPhaseId !== params.targetPhaseId) {
+            continue;
+          }
         }
 
         const nextSkillNodeId = queue.shift();
@@ -756,11 +909,28 @@ function buildRecommendations(params: {
     }
   };
 
-  // Unfinished scheduled work is always selected before introducing new skills.
-  selectFromPhase("unfinishedQueue");
-  selectFromPhase("newQueue");
+  // 1. Unfinished scheduled work across all phases first
+  selectFromQueues({ queueName: "unfinishedQueue" });
+
+  // 2. New work, phase by phase (Step 11.2)
+  const orderedPhaseIds = phases.map((p) => p.id);
+  for (const phaseId of orderedPhaseIds) {
+    selectFromQueues({ queueName: "newQueue", targetPhaseId: phaseId });
+  }
+
+  // 3. Any remaining new work (in case some skills have no phase)
+  selectFromQueues({ queueName: "newQueue" });
 
   const orderedSkillNodeIds = [...selectedSkillNodeIds];
+
+  // Summarize generation basis for observability (Step 15)
+  const activePhases = Array.from(
+    new Set(
+      orderedSkillNodeIds
+        .map((sid) => phaseIdBySkillNodeId.get(sid))
+        .filter((pid): pid is string => pid != null),
+    ),
+  ).map((pid) => phases.find((p) => p.id === pid)?.title ?? pid);
 
   return {
     orderedSkillNodeIds,
@@ -769,7 +939,7 @@ function buildRecommendations(params: {
     planningDayCount,
     enabledDayOffsets,
     generationBasis: {
-      algorithmVersion: "2026-03-31-agent-b-v1",
+      algorithmVersion: "2026-04-01-progression-v1",
       targetItemsPerWeek,
       targetItemsPerDay,
       planningDayCount,
@@ -777,6 +947,9 @@ function buildRecommendations(params: {
       branchCount: branchInputs.length,
       weightedBranchCycle,
       selectedCount: orderedSkillNodeIds.length,
+      activePhases,
+      hardPrerequisitesConsidered: true,
+      softEdgesConsidered: true,
     },
   };
 }
@@ -1113,8 +1286,8 @@ function buildRepairPreview(params: {
       }
 
       const dependencySkillNodeIds = [
-        ...(context.predecessorSkillNodeIdsBySkillNodeId.get(entry.skillNodeId) ?? []),
-        ...(context.explicitPrerequisitesBySkillNodeId.get(entry.skillNodeId) ?? []),
+        ...(context.hardPrerequisitesBySkillNodeId.get(entry.skillNodeId) ?? []),
+        ...(context.recommendedBeforeBySkillNodeId.get(entry.skillNodeId) ?? []),
       ];
 
       const blockingPositions = dependencySkillNodeIds
@@ -1220,6 +1393,7 @@ export async function previewWeeklyRouteRepair(params: {
   learnerId: string;
   weeklyRouteId: string;
 }): Promise<WeeklyRouteRepairPreview> {
+  const db = getDb();
   const board = await getWeeklyRouteBoardById({
     learnerId: params.learnerId,
     weeklyRouteId: params.weeklyRouteId,
@@ -1228,18 +1402,72 @@ export async function previewWeeklyRouteRepair(params: {
     throw new Error("Weekly route not found.");
   }
 
+  // We need to fetch the full progression graph again to build the context
+  const prerequisites = await db.query.curriculumSkillPrerequisites.findMany({
+    where: eq(curriculumSkillPrerequisites.sourceId, board.summary.sourceId),
+  });
+
+  const phases = await db.query.curriculumPhases.findMany({
+    where: eq(curriculumPhases.sourceId, board.summary.sourceId),
+    orderBy: [asc(curriculumPhases.position), asc(curriculumPhases.createdAt)],
+  });
+
+  const phaseNodes = phases.length > 0
+    ? await db.query.curriculumPhaseNodes.findMany({
+        where: inArray(
+          curriculumPhaseNodes.phaseId,
+          phases.map((p) => p.id),
+        ),
+      })
+    : [];
+
+  const hardPrerequisitesBySkillNodeId = new Map<string, string[]>();
+  const recommendedBeforeBySkillNodeId = new Map<string, string[]>();
+  const revisitAfterBySkillNodeId = new Map<string, string[]>();
+  const coPracticeBySkillNodeId = new Map<string, string[]>();
+
+  for (const prerequisite of prerequisites) {
+    let map: Map<string, string[]>;
+    switch (prerequisite.kind) {
+      case "hardPrerequisite":
+      case "explicit":
+        map = hardPrerequisitesBySkillNodeId;
+        break;
+      case "recommendedBefore":
+      case "inferred":
+        map = recommendedBeforeBySkillNodeId;
+        break;
+      case "revisitAfter":
+        map = revisitAfterBySkillNodeId;
+        break;
+      case "coPractice":
+        map = coPracticeBySkillNodeId;
+        break;
+      default:
+        continue;
+    }
+    const values = map.get(prerequisite.skillNodeId) ?? [];
+    values.push(prerequisite.prerequisiteSkillNodeId);
+    map.set(prerequisite.skillNodeId, values);
+  }
+
+  const phaseIdBySkillNodeId = new Map<string, string>();
+  for (const pn of phaseNodes) {
+    phaseIdBySkillNodeId.set(pn.curriculumNodeId, pn.phaseId);
+  }
+
   const context: RouteBoardContext = {
     sourceId: board.summary.sourceId,
     targetItemsPerWeek: board.summary.targetItemsPerWeek,
     skillStatusBySkillNodeId: new Map(
       board.items.map((item) => [item.skillNodeId, item.learnerSkillStatus as SkillStatus]),
     ),
-    explicitPrerequisitesBySkillNodeId: new Map(
-      board.items.map((item) => [item.skillNodeId, item.explicitPrerequisiteSkillNodeIds]),
-    ),
-    predecessorSkillNodeIdsBySkillNodeId: new Map(
-      board.items.map((item) => [item.skillNodeId, item.predecessorSkillNodeIds]),
-    ),
+    hardPrerequisitesBySkillNodeId,
+    recommendedBeforeBySkillNodeId,
+    revisitAfterBySkillNodeId,
+    coPracticeBySkillNodeId,
+    phaseIdBySkillNodeId,
+    orderedPhaseIds: phases.map((p) => p.id),
   };
 
   return buildRepairPreview({

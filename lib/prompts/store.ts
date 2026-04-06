@@ -4,10 +4,12 @@ import type { AiTaskName } from "@/lib/ai/types";
 import { getRepositories } from "@/lib/db";
 import { ensureDatabaseReady } from "@/lib/db/server";
 import {
-  CURRICULUM_GENERATION_PROMPT_VERSION,
-  CURRICULUM_GENERATION_SYSTEM_PROMPT,
+  CURRICULUM_CORE_PROMPT_VERSION,
+  CURRICULUM_CORE_SYSTEM_PROMPT,
   CURRICULUM_INTAKE_PROMPT_VERSION,
   CURRICULUM_INTAKE_SYSTEM_PROMPT,
+  CURRICULUM_PROGRESSION_PROMPT_VERSION,
+  CURRICULUM_PROGRESSION_SYSTEM_PROMPT,
   CURRICULUM_REVISION_PROMPT_VERSION,
   CURRICULUM_REVISION_SYSTEM_PROMPT,
   CURRICULUM_TITLE_PROMPT_VERSION,
@@ -43,10 +45,22 @@ const STATIC_PROMPTS: PromptRecord[] = [
     notes: "Conversational intake for AI curriculum drafting",
   },
   {
-    task: "curriculum.generate",
-    version: CURRICULUM_GENERATION_PROMPT_VERSION,
-    systemPrompt: CURRICULUM_GENERATION_SYSTEM_PROMPT,
-    notes: "Structured curriculum tree and lesson outline generation",
+    task: "curriculum.generate.core",
+    version: CURRICULUM_CORE_PROMPT_VERSION,
+    systemPrompt: CURRICULUM_CORE_SYSTEM_PROMPT,
+    notes: "Pass 1: Core curriculum structure (tree + units + lessons)",
+  },
+  {
+    task: "curriculum.generate.progression",
+    version: CURRICULUM_PROGRESSION_PROMPT_VERSION,
+    systemPrompt: CURRICULUM_PROGRESSION_SYSTEM_PROMPT,
+    notes: "Global progression graph generation for a curriculum",
+  },
+  {
+    task: "curriculum.revise.progression",
+    version: CURRICULUM_PROGRESSION_PROMPT_VERSION,
+    systemPrompt: CURRICULUM_PROGRESSION_SYSTEM_PROMPT,
+    notes: "Global progression graph reconciliation after curriculum revision",
   },
   {
     task: "curriculum.revise",

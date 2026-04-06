@@ -41,7 +41,11 @@ export type ProviderId = z.infer<typeof ProviderIdSchema>;
 export const AiTaskNameSchema = z.enum([
   "curriculum.intake",     // Conversational intake for curriculum drafting
   "curriculum.generate",   // Structured curriculum tree + lesson outline generation
+  "curriculum.generate.core", // Pass 1: Core curriculum structure
+  "curriculum.generate.progression", // Pass 2: Progression graph reconciliation
   "curriculum.revise",     // Revise an existing curriculum source from parent feedback
+  "curriculum.revise.core", // Pass 1: Revise core curriculum structure
+  "curriculum.revise.progression", // Pass 2: Reconcile progression after revision
   "curriculum.title",      // Generate a concise curriculum title from the curriculum artifact
   "lesson.draft",           // Generate a lesson outline from topic + standard
   "worksheet.generate",    // Generate a printable worksheet

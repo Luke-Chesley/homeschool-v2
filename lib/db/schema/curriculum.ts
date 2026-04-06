@@ -2,6 +2,7 @@ import { type AnyPgColumn, integer, pgEnum, pgTable, text, uniqueIndex } from "d
 
 import { learners } from "@/lib/db/schema/learners";
 import { organizations } from "@/lib/db/schema/organizations";
+import { curriculumNodes } from "@/lib/db/schema/curriculumRouting";
 import { metadataColumn, orderingColumn, prefixedId, timestamps } from "@/lib/db/schema/shared";
 import { standardNodes } from "@/lib/db/schema/standards";
 
@@ -49,6 +50,36 @@ export const curriculumSources = pgTable("curriculum_sources", {
   metadata: metadataColumn(),
   ...timestamps(),
 });
+
+export const curriculumPhases = pgTable("curriculum_phases", {
+  id: text("id").primaryKey().$defaultFn(() => prefixedId("phase")),
+  sourceId: text("source_id")
+    .notNull()
+    .references(() => curriculumSources.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  description: text("description"),
+  position: orderingColumn("position"),
+  metadata: metadataColumn(),
+  ...timestamps(),
+});
+
+export const curriculumPhaseNodes = pgTable(
+  "curriculum_phase_nodes",
+  {
+    id: text("id").primaryKey().$defaultFn(() => prefixedId("phnode")),
+    phaseId: text("phase_id")
+      .notNull()
+      .references(() => curriculumPhases.id, { onDelete: "cascade" }),
+    curriculumNodeId: text("curriculum_node_id")
+      .notNull()
+      .references(() => curriculumNodes.id, { onDelete: "cascade" }),
+    metadata: metadataColumn(),
+    ...timestamps(),
+  },
+  (table) => ({
+    uniquePhaseNode: uniqueIndex("unique_phase_node_idx").on(table.phaseId, table.curriculumNodeId),
+  }),
+);
 
 export const curriculumAssets = pgTable("curriculum_assets", {
   id: text("id").primaryKey().$defaultFn(() => prefixedId("asset")),

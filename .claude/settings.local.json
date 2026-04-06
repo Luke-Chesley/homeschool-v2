@@ -33,7 +33,12 @@
       "Bash(grep -E \"\\\\.ts$\")",
       "Bash(npx --yes node --test scripts/activity-spec.test.mts)",
       "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(d['dependencies'].get\\('drizzle-orm', 'not found'\\)\\)\")",
-      "Bash(make typecheck:*)"
+      "Bash(make typecheck:*)",
+      "Bash(make test-curriculum:*)",
+      "Bash(git stash:*)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('scripts', {}\\), indent=2\\)\\)\")",
+      "Bash(ls /home/luke/Desktop/homeschool-v2/lib/server-only*)",
+      "Bash(grep:*)"
     ]
   }
 }
