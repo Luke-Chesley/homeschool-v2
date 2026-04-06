@@ -490,7 +490,7 @@ export async function generateLessonDraft(
       // Inject correction turn
       const correctionNote = buildCorrectionNotes(
         lastErrors,
-        lastRaw ? hasProsyContent(lastRaw as unknown as StructuredLessonDraft) : false,
+        Array.isArray(lastRaw.blocks) ? hasProsyContent(lastRaw as unknown as StructuredLessonDraft) : false,
       );
       messages.push({ role: "assistant", content: JSON.stringify(lastRaw) });
       messages.push({ role: "user", content: correctionNote });
