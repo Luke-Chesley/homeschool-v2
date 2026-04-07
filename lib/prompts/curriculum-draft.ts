@@ -357,10 +357,30 @@ export function buildCurriculumProgressionPrompt(input: {
   learnerName: string;
   coreArtifact: any;
   leafSkillTitles: string[];
+  /** When provided, includes stable skill IDs in the prompt so the model can output ID-based refs. */
+  skillRefs?: Array<{ skillId: string; skillTitle: string }>;
 }) {
-  const skillList = input.leafSkillTitles
-    .map((title, index) => `  ${index + 1}. "${title}"`)
-    .join("\n");
+  const hasSkillIds = input.skillRefs && input.skillRefs.length > 0;
+
+  const skillList = hasSkillIds
+    ? input.skillRefs!
+        .map((ref, index) => `  ${index + 1}. skillId: "${ref.skillId}"  title: "${ref.skillTitle}"`)
+        .join("\n")
+    : input.leafSkillTitles
+        .map((title, index) => `  ${index + 1}. "${title}"`)
+        .join("\n");
+
+  const idInstructions = hasSkillIds
+    ? `
+IMPORTANT: For each edge, output BOTH:
+  - fromSkillTitle / toSkillTitle: exact title string from the list above
+  - fromSkillId / toSkillId: the skillId from the list above
+
+For each phase's skillTitles array, also output a parallel skillIds array with the skillId for each title.
+
+Example edge: { "fromSkillTitle": "Count to 20", "fromSkillId": "cnode_abc123", "toSkillTitle": "Add 1-10", "toSkillId": "cnode_def456", "kind": "hardPrerequisite" }
+`
+    : "";
 
   return `Active learner: ${input.learnerName}
 
@@ -368,7 +388,7 @@ Authoritative leaf skill list (${input.leafSkillTitles.length} skills):
 ${skillList}
 
 IMPORTANT: Every skillTitle in phases.skillTitles and every fromSkillTitle / toSkillTitle in edges MUST be copied EXACTLY from the list above. Do not paraphrase, abbreviate, or reword any title.
-
+${idInstructions}
 Core curriculum artifact (for context only — use the skill list above for exact titles):
 ${JSON.stringify(input.coreArtifact, null, 2)}
 

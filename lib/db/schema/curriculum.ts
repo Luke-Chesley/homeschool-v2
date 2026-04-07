@@ -1,4 +1,4 @@
-import { type AnyPgColumn, integer, pgEnum, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
+import { type AnyPgColumn, boolean, integer, pgEnum, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 
 import { learners } from "@/lib/db/schema/learners";
 import { organizations } from "@/lib/db/schema/organizations";
@@ -78,6 +78,45 @@ export const curriculumPhaseNodes = pgTable(
   },
   (table) => ({
     uniquePhaseNode: uniqueIndex("unique_phase_node_idx").on(table.phaseId, table.curriculumNodeId),
+  }),
+);
+
+export const curriculumProgressionStatusEnum = pgEnum("curriculum_progression_status", [
+  "not_attempted",
+  "explicit_ready",
+  "explicit_failed",
+  "fallback_only",
+  "stale",
+]);
+
+export const curriculumProgressionProvenanceEnum = pgEnum("curriculum_progression_provenance", [
+  "initial_generation",
+  "manual_regeneration",
+  "fallback_inference",
+]);
+
+export const curriculumProgressionState = pgTable(
+  "curriculum_progression_state",
+  {
+    id: text("id").primaryKey().$defaultFn(() => prefixedId("progstate")),
+    sourceId: text("source_id")
+      .notNull()
+      .references(() => curriculumSources.id, { onDelete: "cascade" }),
+    status: curriculumProgressionStatusEnum("status").notNull().default("not_attempted"),
+    lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
+    lastFailureReason: text("last_failure_reason"),
+    lastAcceptedPhaseCount: integer("last_accepted_phase_count").notNull().default(0),
+    lastAcceptedEdgeCount: integer("last_accepted_edge_count").notNull().default(0),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    usingInferredFallback: boolean("using_inferred_fallback").notNull().default(false),
+    provenance: curriculumProgressionProvenanceEnum("provenance"),
+    metadata: metadataColumn(),
+    ...timestamps(),
+  },
+  (table) => ({
+    progressionStateSourceUnique: uniqueIndex("curriculum_progression_state_source_idx").on(
+      table.sourceId,
+    ),
   }),
 );
 

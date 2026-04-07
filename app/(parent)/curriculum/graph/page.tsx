@@ -17,6 +17,7 @@ import {
 } from "@/lib/curriculum/service";
 import { buildProgressionGraph } from "@/lib/curriculum/progression-graph-model";
 import { cn } from "@/lib/utils";
+import { regenerateProgressionAction } from "./actions";
 
 export const metadata = {
   title: "Curriculum Progression Graph",
@@ -91,6 +92,15 @@ export default async function CurriculumGraphPage({ searchParams }: CurriculumGr
       source: tree.source,
       tree,
       outline,
+      progression: {
+        diagnostics: progression.diagnostics,
+        phases: progression.phases,
+        prerequisites: progression.prerequisites,
+      },
+      progressionGraph: {
+        nodes: graph.nodes,
+        edges: graph.edges,
+      },
     },
     null,
     2,
@@ -115,6 +125,8 @@ export default async function CurriculumGraphPage({ searchParams }: CurriculumGr
         sources={sources}
         selectedSourceId={selectedSourceId}
         graph={graph}
+        progressionDebug={progression}
+        regenerateAction={regenerateProgressionAction}
       />
       <CurriculumExportCard title="Export" text={exportText} />
       <CurriculumRefinementWidget sourceId={selectedSourceId} sourceTitle={tree.source.title} />

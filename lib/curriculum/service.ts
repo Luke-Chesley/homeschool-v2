@@ -6,6 +6,7 @@ import {
   curriculumNodes,
   curriculumPhases,
   curriculumPhaseNodes,
+  curriculumProgressionState,
   curriculumSkillPrerequisites,
   curriculumSources,
   organizationPlatformSettings,
@@ -318,7 +319,12 @@ async function replaceCurriculumOutline(
 async function importNormalizedTree(
   sourceId: string,
   imported: ImportedCurriculumDocument,
-  options?: { metadata?: Record<string, unknown> },
+  options?: {
+    metadata?: Record<string, unknown>;
+    progressionProvenance?: ProgressionProvenance;
+    progressionAttemptCount?: number;
+    progressionFailureReason?: string | null;
+  },
 ) {
   const source = await getDb().query.curriculumSources.findFirst({
     where: (table, { eq }) => eq(table.id, sourceId),
@@ -332,6 +338,7 @@ async function importNormalizedTree(
     sourceId,
     sourceLineageId: source.id,
     document: imported.document,
+    progression: imported.progression,
   });
 
   await getDb().transaction(async (tx) => {
@@ -440,6 +447,30 @@ async function importNormalizedTree(
         updatedAt: new Date(),
       })
       .where(eq(curriculumSources.id, sourceId));
+  });
+
+  // Persist progression state after the transaction.
+  const diag = normalized.summary.progressionDiagnostics;
+  let progressionStatus: ProgressionStatus;
+  if (diag.hasExplicitProgression) {
+    progressionStatus = "explicit_ready";
+  } else if (options?.progressionFailureReason) {
+    progressionStatus = "explicit_failed";
+  } else if (diag.usingInferredFallback) {
+    progressionStatus = "fallback_only";
+  } else {
+    progressionStatus = "not_attempted";
+  }
+
+  await upsertProgressionState({
+    sourceId,
+    status: progressionStatus,
+    lastFailureReason: options?.progressionFailureReason ?? null,
+    lastAcceptedPhaseCount: diag.phaseCount,
+    lastAcceptedEdgeCount: diag.acceptedEdgeCount,
+    attemptCount: options?.progressionAttemptCount ?? 0,
+    usingInferredFallback: diag.usingInferredFallback,
+    provenance: options?.progressionProvenance ?? (diag.hasExplicitProgression ? "initial_generation" : "fallback_inference"),
   });
 
   const updated = await getCurriculumSource(sourceId);
@@ -585,6 +616,8 @@ export async function importCurriculumSourceFromLocalJson(
 export async function createCurriculumSourceFromAiDraftArtifact(params: {
   householdId: string;
   artifact: CurriculumAiGeneratedArtifact;
+  progressionAttemptCount?: number;
+  progressionFailureReason?: string | null;
 }): Promise<CreatedAiDraftCurriculumResult> {
   const imported = toImportedCurriculumDocumentFromAiArtifact(params.artifact, "ai_draft");
 
@@ -602,7 +635,12 @@ export async function createCurriculumSourceFromAiDraftArtifact(params: {
   );
 
   try {
-    await importNormalizedTree(source.id, imported, { metadata: imported.metadata });
+    await importNormalizedTree(source.id, imported, {
+      metadata: imported.metadata,
+      progressionProvenance: "initial_generation",
+      progressionAttemptCount: params.progressionAttemptCount,
+      progressionFailureReason: params.progressionFailureReason,
+    });
     const tree = await getCurriculumTree(source.id, params.householdId);
     const outline = await listCurriculumOutline(source.id);
     const lessonCount = outline.reduce((total, unit) => total + unit.lessons.length, 0);
@@ -1055,12 +1093,30 @@ export interface CurriculumPrerequisiteRecord {
   kind: string;
 }
 
+export type ProgressionStatus =
+  | "not_attempted"
+  | "explicit_ready"
+  | "explicit_failed"
+  | "fallback_only"
+  | "stale";
+
+export type ProgressionProvenance =
+  | "initial_generation"
+  | "manual_regeneration"
+  | "fallback_inference";
+
 export interface CurriculumProgressionDiagnostics {
   hasExplicitProgression: boolean;
   usingInferredFallback: boolean;
   phaseCount: number;
   acceptedEdgeCount: number;
   droppedEdgeCount: number;
+  /** Explicit state from the progression_state table, or inferred from DB if not yet tracked. */
+  progressionStatus: ProgressionStatus;
+  lastAttemptAt: string | null;
+  lastFailureReason: string | null;
+  attemptCount: number;
+  provenance: ProgressionProvenance | null;
 }
 
 export interface CurriculumProgressionData {
@@ -1072,11 +1128,23 @@ export interface CurriculumProgressionData {
 export async function getCurriculumProgression(sourceId: string): Promise<CurriculumProgressionData> {
   const db = getDb();
 
-  const phaseRows = await db
-    .select()
-    .from(curriculumPhases)
-    .where(eq(curriculumPhases.sourceId, sourceId))
-    .orderBy(curriculumPhases.position);
+  const [phaseRows, prereqRows, stateRow] = await Promise.all([
+    db
+      .select()
+      .from(curriculumPhases)
+      .where(eq(curriculumPhases.sourceId, sourceId))
+      .orderBy(curriculumPhases.position),
+    db
+      .select()
+      .from(curriculumSkillPrerequisites)
+      .where(eq(curriculumSkillPrerequisites.sourceId, sourceId)),
+    db
+      .select()
+      .from(curriculumProgressionState)
+      .where(eq(curriculumProgressionState.sourceId, sourceId))
+      .limit(1)
+      .then((rows) => rows[0] ?? null),
+  ]);
 
   const phaseNodeRows =
     phaseRows.length > 0
@@ -1098,11 +1166,6 @@ export async function getCurriculumProgression(sourceId: string): Promise<Curric
     phaseNodesByPhaseId.set(row.phaseId, list);
   }
 
-  const prereqRows = await db
-    .select()
-    .from(curriculumSkillPrerequisites)
-    .where(eq(curriculumSkillPrerequisites.sourceId, sourceId));
-
   const phases: CurriculumPhaseRecord[] = phaseRows.map((p) => ({
     id: p.id,
     title: p.title,
@@ -1122,13 +1185,82 @@ export async function getCurriculumProgression(sourceId: string): Promise<Curric
   const acceptedEdgeCount = prerequisites.filter((p) => p.kind !== "inferred").length;
   const inferredEdgeCount = prerequisites.filter((p) => p.kind === "inferred").length;
 
+  // Derive progression status: prefer the explicit state row; infer from DB if missing.
+  let progressionStatus: ProgressionStatus;
+  if (stateRow) {
+    progressionStatus = stateRow.status as ProgressionStatus;
+  } else if (hasExplicitProgression) {
+    progressionStatus = "explicit_ready";
+  } else if (inferredEdgeCount > 0) {
+    progressionStatus = "fallback_only";
+  } else {
+    progressionStatus = "not_attempted";
+  }
+
   const diagnostics: CurriculumProgressionDiagnostics = {
     hasExplicitProgression,
     usingInferredFallback: !hasExplicitProgression && inferredEdgeCount > 0,
     phaseCount: phases.length,
     acceptedEdgeCount,
     droppedEdgeCount: 0,
+    progressionStatus,
+    lastAttemptAt: stateRow?.lastAttemptAt?.toISOString() ?? null,
+    lastFailureReason: stateRow?.lastFailureReason ?? null,
+    attemptCount: stateRow?.attemptCount ?? 0,
+    provenance: (stateRow?.provenance as ProgressionProvenance | null) ?? null,
   };
 
   return { phases, prerequisites, diagnostics };
+}
+
+export interface UpsertProgressionStateParams {
+  sourceId: string;
+  status: ProgressionStatus;
+  lastFailureReason?: string | null;
+  lastAcceptedPhaseCount?: number;
+  lastAcceptedEdgeCount?: number;
+  attemptCount?: number;
+  usingInferredFallback?: boolean;
+  provenance?: ProgressionProvenance;
+}
+
+export async function upsertProgressionState(params: UpsertProgressionStateParams): Promise<void> {
+  const now = new Date();
+  const existing = await getDb()
+    .select()
+    .from(curriculumProgressionState)
+    .where(eq(curriculumProgressionState.sourceId, params.sourceId))
+    .limit(1)
+    .then((rows) => rows[0] ?? null);
+
+  if (existing) {
+    await getDb()
+      .update(curriculumProgressionState)
+      .set({
+        status: params.status,
+        lastAttemptAt: now,
+        lastFailureReason: params.lastFailureReason ?? null,
+        lastAcceptedPhaseCount: params.lastAcceptedPhaseCount ?? existing.lastAcceptedPhaseCount,
+        lastAcceptedEdgeCount: params.lastAcceptedEdgeCount ?? existing.lastAcceptedEdgeCount,
+        attemptCount: params.attemptCount ?? existing.attemptCount,
+        usingInferredFallback: params.usingInferredFallback ?? existing.usingInferredFallback,
+        provenance: params.provenance ?? existing.provenance,
+        updatedAt: now,
+      })
+      .where(eq(curriculumProgressionState.sourceId, params.sourceId));
+  } else {
+    await getDb()
+      .insert(curriculumProgressionState)
+      .values({
+        sourceId: params.sourceId,
+        status: params.status,
+        lastAttemptAt: now,
+        lastFailureReason: params.lastFailureReason ?? null,
+        lastAcceptedPhaseCount: params.lastAcceptedPhaseCount ?? 0,
+        lastAcceptedEdgeCount: params.lastAcceptedEdgeCount ?? 0,
+        attemptCount: params.attemptCount ?? 0,
+        usingInferredFallback: params.usingInferredFallback ?? false,
+        provenance: params.provenance,
+      });
+  }
 }

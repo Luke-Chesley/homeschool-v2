@@ -57,6 +57,27 @@
       ]
     },
     {
+      "id": "curriculum-progression-artifact",
+      "title": "Curriculum Progression Artifact",
+      "docPath": "contracts/curriculum-progression-artifact.md",
+      "canonicalSources": [
+        "lib/prompts/curriculum-draft.ts",
+        "lib/curriculum/ai-draft-service.ts",
+        "lib/curriculum/ai-draft.ts"
+      ],
+      "producerEntrypoints": [
+        "generateCurriculumProgression()",
+        "regenerateCurriculumProgression()"
+      ],
+      "consumerEntrypoints": [
+        "lib/curriculum/normalization.ts",
+        "lib/curriculum/progression-graph-model.ts"
+      ],
+      "versionFields": [
+        "CURRICULUM_PROGRESSION_PROMPT_VERSION"
+      ]
+    },
+    {
       "id": "activity-artifact",
       "title": "Activity Artifact",
       "docPath": "contracts/activity-artifact.md",

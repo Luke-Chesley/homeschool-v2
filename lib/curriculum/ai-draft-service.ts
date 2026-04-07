@@ -254,6 +254,8 @@ export async function createCurriculumFromConversation(params: {
   const created = await persist({
     householdId: params.householdId,
     artifact: generation.artifact,
+    progressionAttemptCount: (generation as any).progressionAttemptCount,
+    progressionFailureReason: (generation as any).progressionFailureReason,
   });
 
   return {
@@ -534,13 +536,20 @@ export async function generateCurriculumArtifact(
       progressionEdgeCount: progressionResult.edgeCount,
       progressionUnresolvedCount: progressionResult.unresolvedCount,
       progressionFailureReason: progressionResult.failureReason ?? "none",
+      progressionAttemptCount: progressionResult.attemptCount,
       usingInferredFallback: progressionResult.progression === null,
     });
 
-    return {
+    const successResult: CurriculumAiGenerateResult & {
+      progressionAttemptCount: number;
+      progressionFailureReason: string | null;
+    } = {
       kind: "success",
       artifact: coreArtifact,
+      progressionAttemptCount: progressionResult.attemptCount,
+      progressionFailureReason: progressionResult.failureReason,
     };
+    return successResult;
   }
 
   console.error("[curriculum/ai-draft] curriculum artifact failure", {
@@ -587,7 +596,7 @@ export async function generateCurriculumArtifact(
   });
 }
 
-interface ProgressionGenerateResult {
+export interface ProgressionGenerateResult {
   progression: CurriculumAiProgression | null;
   attempted: boolean;
   parsed: boolean;
@@ -596,12 +605,15 @@ interface ProgressionGenerateResult {
   edgeCount: number;
   unresolvedCount: number;
   failureReason: string | null;
+  attemptCount: number;
 }
 
-async function generateCurriculumProgression(
+export async function generateCurriculumProgression(
   params: {
-    learner: AppLearner;
+    learner: { displayName: string };
     artifact: CurriculumAiGeneratedArtifact;
+    /** Optional: pre-computed skill refs with stable IDs (for the regeneration path). */
+    skillRefs?: Array<{ skillId: string; skillTitle: string }>;
   },
   deps?: {
     resolvePrompt?: typeof resolvePrompt;
@@ -613,7 +625,9 @@ async function generateCurriculumProgression(
   const adapter = getAdapterForTask("curriculum.generate.progression");
   const model = getModelForTask("curriculum.generate.progression", getAiRoutingConfig());
   const complete = deps?.complete ?? ((options: any) => adapter.complete(options));
-  const leafSkillTitles = extractLeafSkillTitles(params.artifact.document);
+  const leafSkillTitles = params.skillRefs
+    ? params.skillRefs.map((r) => r.skillTitle)
+    : extractLeafSkillTitles(params.artifact.document);
 
   console.info("[curriculum/ai-draft] progression generation started", {
     learner: params.learner.displayName,
@@ -622,12 +636,35 @@ async function generateCurriculumProgression(
   });
 
   const attemptNotes: string[][] = [
+    // attempt 1: no correction notes
     [],
+    // attempt 2: basic title-matching correction
     [
       "Ensure ALL skill titles match EXACTLY the titles in the authoritative leaf skill list.",
       "Copy the exact string from the list — do not paraphrase, abbreviate, or rephrase.",
       "Avoid cycles in hard prerequisites.",
       "Every phase must include at least one skill from the authoritative list.",
+    ],
+    // attempt 3: stricter coverage and cycle guidance
+    [
+      "CRITICAL: Every skillTitle, fromSkillTitle, and toSkillTitle must be an exact copy from the numbered list. No paraphrasing.",
+      "Check for prerequisite cycles: if A→B and B→C then C→A is a cycle and invalid.",
+      "Assign ALL skills from the list to at least one phase — do not leave any skill unphased.",
+      "Phases must cover at least 40% of skills from the list.",
+    ],
+    // attempt 4: minimal safe output instruction
+    [
+      "Simplify: produce the minimum number of phases needed (2-3 phases), assign every skill to exactly one phase.",
+      "Use only 'hardPrerequisite' and 'recommendedBefore' edge kinds.",
+      "Do NOT create any edges between skills in the same phase.",
+      "Triple-check: every title is a character-for-character copy from the authoritative skill list.",
+    ],
+    // attempt 5: last resort — minimal valid output
+    [
+      "FINAL ATTEMPT: Return the simplest valid progression.",
+      "Create exactly 2 phases: Phase 1 for foundational skills, Phase 2 for advanced skills.",
+      "Add only 1-3 clear hardPrerequisite edges between the most obviously sequential skill pairs.",
+      "Every title must match the list exactly — copy-paste each one.",
     ],
   ];
   let attempts = 0;
@@ -653,6 +690,7 @@ async function generateCurriculumProgression(
                 learnerName: params.learner.displayName,
                 coreArtifact: params.artifact,
                 leafSkillTitles,
+                skillRefs: params.skillRefs,
               }) + correctionBlock,
           },
         ],
@@ -735,6 +773,7 @@ async function generateCurriculumProgression(
         edgeCount: summary.edgesAccepted,
         unresolvedCount: summary.unresolvedEdgeEndpoints + summary.unresolvedPhaseSkills,
         failureReason: null,
+        attemptCount: attempts,
       };
     } catch (error) {
       lastFailureReason = `model call failed on attempt ${attempts}`;
@@ -761,6 +800,7 @@ async function generateCurriculumProgression(
     edgeCount: 0,
     unresolvedCount: 0,
     failureReason: lastFailureReason,
+    attemptCount: attempts,
   };
 }
 

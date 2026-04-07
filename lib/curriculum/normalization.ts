@@ -414,12 +414,25 @@ export function normalizeCurriculumDocument(args: {
 
   const prerequisites: NormalizedCurriculumImport["prerequisites"] = [];
 
+  // Build a set of valid node IDs for ID-first resolution
+  const validNodeIds = new Set<string>();
+  for (const node of nodes.values()) {
+    if (node.normalizedType === "skill") {
+      validNodeIds.add(node.id);
+    }
+  }
+
   if (args.progression?.edges && args.progression.edges.length > 0) {
     const unmatchedEdgeEndpoints: Array<{ fromSkillTitle: string; toSkillTitle: string; unresolved: string[] }> = [];
 
     for (const edge of args.progression.edges) {
-      const skillNodeId = skillIdByTitle.get(edge.toSkillTitle);
-      const prerequisiteSkillNodeId = skillIdByTitle.get(edge.fromSkillTitle);
+      // Resolve by stable ID first (new path), fall back to title lookup (legacy path)
+      const skillNodeId = (edge.toSkillId && validNodeIds.has(edge.toSkillId))
+        ? edge.toSkillId
+        : skillIdByTitle.get(edge.toSkillTitle);
+      const prerequisiteSkillNodeId = (edge.fromSkillId && validNodeIds.has(edge.fromSkillId))
+        ? edge.fromSkillId
+        : skillIdByTitle.get(edge.fromSkillTitle);
 
       if (skillNodeId && prerequisiteSkillNodeId) {
         prerequisites.push({
@@ -429,6 +442,7 @@ export function normalizeCurriculumDocument(args: {
           kind: edge.kind,
           metadata: {
             derivedFrom: "explicit_progression_graph",
+            resolvedById: Boolean(edge.toSkillId && validNodeIds.has(edge.toSkillId)),
           },
         });
       } else {
@@ -487,8 +501,13 @@ export function normalizeCurriculumDocument(args: {
 
     for (const [index, phase] of args.progression.phases.entries()) {
       const nodeIds: string[] = [];
-      for (const title of phase.skillTitles) {
-        const nodeId = skillIdByTitle.get(title);
+      for (let i = 0; i < phase.skillTitles.length; i++) {
+        const title = phase.skillTitles[i];
+        const skillId = phase.skillIds?.[i];
+        // Resolve by stable ID first, fall back to title lookup
+        const nodeId = (skillId && validNodeIds.has(skillId))
+          ? skillId
+          : skillIdByTitle.get(title);
         if (nodeId) {
           nodeIds.push(nodeId);
         } else {

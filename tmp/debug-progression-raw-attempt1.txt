@@ -1,0 +1,121 @@
+{
+  "progression": {
+    "phases": [
+      {
+        "title": "Phase 1: Understanding Basic Threats and Value",
+        "description": "Learning the absolute basics of what constitutes a threat (Check) and how to assess material advantage.",
+        "skillTitles": [
+          "Define Check (The immediate threat)",
+          "Identify Checkmate (The unavoidable end)",
+          "Compare the value of two pieces (e.g., Knight vs. Pawn)",
+          "Identify a winning sequence when material is unbalanced (e.g., extra Queen)"
+        ]
+      },
+      {
+        "title": "Phase 2: Establishing Board Control and Development",
+        "description": "Focusing on opening principles: getting pieces out safely, controlling key areas, and developing pieces logically.",
+        "skillTitles": [
+          "Move a piece to occupy the center squares (d4, e4, d5, e5)",
+          "Develop minor pieces before major pieces (Knights/Bishops)",
+          "Castle early to protect the King",
+          "Place pieces on open lines to restrict opponent movement"
+        ]
+      },
+      {
+        "title": "Phase 3: Mastering Core Tactics",
+        "description": "Moving beyond simple threats to executing specific, multi-piece tactical patterns.",
+        "skillTitles": [
+          "Execute a fork (attacking two pieces simultaneously)",
+          "Set up a pin to immobilize a piece",
+          "Use a piece move to reveal an attack on another piece"
+        ]
+      },
+      {
+        "title": "Phase 4: Advanced Strategy and Endgames",
+        "description": "Applying tactical knowledge to endgames, forcing opponents into limited space, and converting material advantages.",
+        "skillTitles": [
+          "Force the King to the edge of the board (Box technique)",
+          "Advance a pawn to the 8th rank and promote it",
+          "Identify a winning sequence when material is unbalanced (e.g., extra Queen)"
+        ]
+      }
+    ],
+    "edges": [
+      {
+        "fromSkillTitle": "Define Check (The immediate threat)",
+        "toSkillTitle": "Identify Checkmate (The unavoidable end)",
+        "kind": "hardPrerequisite"
+      },
+      {
+        "fromSkillTitle": "Identify Checkmate (The unavoidable end)",
+        "toSkillTitle": "Compare the value of two pieces (e.g., Knight vs. Pawn)",
+        "kind": "recommendedBefore"
+      },
+      {
+        "fromSkillTitle": "Compare the value of two pieces (e.g., Knight vs. Pawn)",
+        "toSkillTitle": "Identify a winning sequence when material is unbalanced (e.g., extra Queen)",
+        "kind": "hardPrerequisite"
+      },
+      {
+        "fromSkillTitle": "Identify a winning sequence when material is unbalanced (e.g., extra Queen)",
+        "toSkillTitle": "Move a piece to occupy the center squares (d4, e4, d5, e5)",
+        "kind": "recommendedBefore"
+      },
+      {
+        "fromSkillTitle": "Move a piece to occupy the center squares (d4, e4, d5, e5)",
+        "toSkillTitle": "Develop minor pieces before major pieces (Knights/Bishops)",
+        "kind": "hardPrerequisite"
+      },
+      {
+        "fromSkillTitle": "Develop minor pieces before major pieces (Knights/Bishops)",
+        "toSkillTitle": "Castle early to protect the King",
+        "kind": "hardPrerequisite"
+      },
+      {
+        "fromSkillTitle": "Castle early to protect the King",
+        "toSkillTitle": "Place pieces on open lines to restrict opponent movement",
+        "kind": "recommendedBefore"
+      },
+      {
+        "fromSkillTitle": "Place pieces on open lines to restrict opponent movement",
+        "toSkillTitle": "Execute a fork (attacking two pieces simultaneously)",
+        "kind": "recommendedBefore"
+      },
+      {
+        "fromSkillTitle": "Execute a fork (attacking two pieces simultaneously)",
+        "toSkillTitle": "Set up a pin to immobilize a piece",
+        "kind": "coPractice"
+      },
+      {
+        "fromSkillTitle": "Set up a pin to immobilize a piece",
+        "toSkillTitle": "Use a piece move to reveal an attack on another piece",
+        "kind": "coPractice"
+      },
+      {
+        "fromSkillTitle": "Use a piece move to reveal an attack on another piece",
+        "toSkillTitle": "Force the King to the edge of the board (Box technique)",
+        "kind": "recommendedBefore"
+      },
+      {
+        "fromSkillTitle": "Force the King to the edge of the board (Box technique)",
+        "toSkillTitle": "Advance a pawn to the 8th rank and promote it",
+        "kind": "recommendedBefore"
+      },
+      {
+        "fromSkillTitle": "Advance a pawn to the 8th rank and promote it",
+        "toSkillTitle": "Identify a winning sequence when material is unbalanced (e.g., extra Queen)",
+        "kind": "revisitAfter"
+      },
+      {
+        "fromSkillTitle": "Move a piece to occupy the center squares (d4, e4, d5, e5)",
+        "toSkillTitle": "Execute a fork (attacking two pieces simultaneously)",
+        "kind": "coPractice"
+      },
+      {
+        "fromSkillTitle": "Set up a pin to immobilize a piece",
+        "toSkillTitle": "Execute a fork (attacking two pieces simultaneously)",
+        "kind": "revisitAfter"
+      }
+    ]
+  }
+}

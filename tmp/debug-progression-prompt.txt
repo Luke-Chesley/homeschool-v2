@@ -1,0 +1,85 @@
+Active learner: Learner
+
+Authoritative leaf skill list (13 skills):
+  1. "Define Check (The immediate threat)"
+  2. "Identify Checkmate (The unavoidable end)"
+  3. "Compare the value of two pieces (e.g., Knight vs. Pawn)"
+  4. "Identify a winning sequence when material is unbalanced (e.g., extra Queen)"
+  5. "Move a piece to occupy the center squares (d4, e4, d5, e5)"
+  6. "Place pieces on open lines to restrict opponent movement"
+  7. "Execute a fork (attacking two pieces simultaneously)"
+  8. "Set up a pin to immobilize a piece"
+  9. "Use a piece move to reveal an attack on another piece"
+  10. "Develop minor pieces before major pieces (Knights/Bishops)"
+  11. "Castle early to protect the King"
+  12. "Force the King to the edge of the board (Box technique)"
+  13. "Advance a pawn to the 8th rank and promote it"
+
+IMPORTANT: Every skillTitle in phases.skillTitles and every fromSkillTitle / toSkillTitle in edges MUST be copied EXACTLY from the list above. Do not paraphrase, abbreviate, or reword any title.
+
+Core curriculum artifact (for context only — use the skill list above for exact titles):
+{
+  "source": {
+    "title": "Summer Chess Fundamentals for Beginners",
+    "description": "A 12-week, play-based curriculum designed for a 5-year-old who already knows piece movements, focusing on tactical understanding, basic game flow, and simple positional analysis."
+  },
+  "document": {
+    "I. Game Fundamentals & Board Control": {
+      "Basic Objectives": {
+        "Understanding Check and Checkmate": {
+          "Define Check (The immediate threat)": "",
+          "Identify Checkmate (The unavoidable end)": ""
+        }
+      },
+      "Piece Value & Material Advantage": {
+        "Relative Piece Value": {
+          "Compare the value of two pieces (e.g., Knight vs. Pawn)": ""
+        },
+        "Winning Material": {
+          "Identify a winning sequence when material is unbalanced (e.g., extra Queen)": ""
+        }
+      }
+    },
+    "II. Core Tactics & Attack Patterns": {
+      "Controlling Key Squares": {
+        "Central Control": {
+          "Move a piece to occupy the center squares (d4, e4, d5, e5)": ""
+        },
+        "Controlling Files/Ranks": {
+          "Place pieces on open lines to restrict opponent movement": ""
+        }
+      },
+      "Basic Tactical Motifs": {
+        "Forks": {
+          "Execute a fork (attacking two pieces simultaneously)": ""
+        },
+        "Pins": {
+          "Set up a pin to immobilize a piece": ""
+        },
+        "Discovered Attacks": {
+          "Use a piece move to reveal an attack on another piece": ""
+        }
+      }
+    },
+    "III. Game Flow & Endgames": {
+      "Opening Principles": {
+        "Development Sequence": {
+          "Develop minor pieces before major pieces (Knights/Bishops)": ""
+        },
+        "King Safety": {
+          "Castle early to protect the King": ""
+        }
+      },
+      "Simple Endgames": {
+        "King and Queen vs. King": {
+          "Force the King to the edge of the board (Box technique)": ""
+        },
+        "Pawn Promotion": {
+          "Advance a pawn to the 8th rank and promote it": ""
+        }
+      }
+    }
+  }
+}
+
+Generate the progression graph for this curriculum. Use only skill titles from the authoritative list.

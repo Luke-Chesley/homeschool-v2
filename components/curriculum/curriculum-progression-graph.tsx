@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, Info, X } from "lucide-react";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { AlertTriangle, CheckCircle2, Info, RefreshCw, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
-import { buttonVariants } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { ProgressionPromptPreview } from "@/components/curriculum/ProgressionPromptPreview";
 import type { CurriculumSource } from "@/lib/curriculum/types";
 import type {
   ProgressionGraph,
@@ -228,32 +229,131 @@ function SourceBar({
 
 // ── Diagnostics status bar ───────────────────────────────────────────────────
 
-function DiagnosticsBar({ graph }: { graph: ProgressionGraph }) {
+function progressionStatusMessage(
+  status: string,
+  hasExplicitProgression: boolean,
+  lastFailureReason: string | null,
+): { label: string; detail: string | null } {
+  switch (status) {
+    case "explicit_ready":
+      return { label: "Explicit progression", detail: null };
+    case "explicit_failed":
+      return {
+        label: "Explicit progression unavailable — generation failed.",
+        detail: lastFailureReason
+          ? `Last failure: ${lastFailureReason}`
+          : "Regenerate progression to replace fallback ordering.",
+      };
+    case "fallback_only":
+      return {
+        label: "Explicit progression was not accepted during generation. Using inferred fallback.",
+        detail: "Regenerate progression to replace fallback ordering.",
+      };
+    case "stale":
+      return {
+        label: "Explicit progression exists but is stale.",
+        detail: "Curriculum was updated since last progression generation. Regenerate to refresh.",
+      };
+    case "not_attempted":
+      return {
+        label: hasExplicitProgression
+          ? "Explicit progression"
+          : "Progression not yet generated.",
+        detail: hasExplicitProgression ? null : "Run regeneration to build an explicit progression.",
+      };
+    default:
+      return {
+        label: hasExplicitProgression
+          ? "Explicit progression"
+          : "Explicit progression unavailable. Using inferred fallback.",
+        detail: null,
+      };
+  }
+}
+
+interface DiagnosticsBarProps {
+  graph: ProgressionGraph;
+  sourceId: string;
+  onRegenerate: () => void;
+  isRegenerating: boolean;
+  regenerateResult: { kind: string; reason?: string; phaseCount?: number } | null;
+}
+
+function DiagnosticsBar({
+  graph,
+  sourceId,
+  onRegenerate,
+  isRegenerating,
+  regenerateResult,
+}: DiagnosticsBarProps) {
   const { diagnostics } = graph;
-  const isExplicit = diagnostics.hasExplicitProgression;
+  const status = (diagnostics as any).progressionStatus ?? (diagnostics.hasExplicitProgression ? "explicit_ready" : "fallback_only");
+  const isExplicit = status === "explicit_ready";
+  const isFailed = status === "explicit_failed" || status === "fallback_only" || status === "not_attempted";
+  const isStale = status === "stale";
+
+  const { label, detail } = progressionStatusMessage(
+    status,
+    diagnostics.hasExplicitProgression,
+    (diagnostics as any).lastFailureReason ?? null,
+  );
 
   return (
-    <div
-      className={cn(
-        "flex flex-wrap items-center gap-3 rounded-lg border px-4 py-2.5 text-sm",
-        isExplicit
-          ? "border-emerald-400/40 bg-emerald-50/60 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300"
-          : "border-amber-400/40 bg-amber-50/60 text-amber-800 dark:bg-amber-950/30 dark:text-amber-300",
+    <div className="space-y-2">
+      <div
+        className={cn(
+          "flex flex-wrap items-center gap-3 rounded-lg border px-4 py-2.5 text-sm",
+          isExplicit
+            ? "border-emerald-400/40 bg-emerald-50/60 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300"
+            : isStale
+              ? "border-blue-400/40 bg-blue-50/60 text-blue-800 dark:bg-blue-950/30 dark:text-blue-300"
+              : "border-amber-400/40 bg-amber-50/60 text-amber-800 dark:bg-amber-950/30 dark:text-amber-300",
+        )}
+      >
+        {isExplicit ? (
+          <CheckCircle2 className="size-4 shrink-0" />
+        ) : (
+          <AlertTriangle className="size-4 shrink-0" />
+        )}
+        <span className="font-medium">{label}</span>
+        <span className="text-xs opacity-70">
+          {diagnostics.phaseCount > 0 && `${diagnostics.phaseCount} phases · `}
+          {graph.edges.length} edges · {graph.nodes.length} skills
+          {diagnostics.droppedEdgeCount > 0 && ` · ${diagnostics.droppedEdgeCount} edges dropped`}
+          {(diagnostics as any).attemptCount > 0 && ` · ${(diagnostics as any).attemptCount} attempt${(diagnostics as any).attemptCount !== 1 ? "s" : ""}`}
+        </span>
+        <div className="ml-auto shrink-0">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onRegenerate}
+            disabled={isRegenerating}
+            className="h-7 gap-1.5 text-xs"
+          >
+            <RefreshCw className={cn("size-3", isRegenerating && "animate-spin")} />
+            {isRegenerating ? "Regenerating…" : "Regenerate progression"}
+          </Button>
+        </div>
+      </div>
+
+      {detail && !regenerateResult && (
+        <p className="px-1 text-xs text-muted-foreground">{detail}</p>
       )}
-    >
-      {isExplicit ? (
-        <CheckCircle2 className="size-4 shrink-0" />
-      ) : (
-        <AlertTriangle className="size-4 shrink-0" />
+
+      {regenerateResult && (
+        <div
+          className={cn(
+            "rounded-md border px-3 py-2 text-xs",
+            regenerateResult.kind === "success"
+              ? "border-emerald-400/40 bg-emerald-50/60 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300"
+              : "border-red-400/40 bg-red-50/60 text-red-800 dark:bg-red-950/30 dark:text-red-300",
+          )}
+        >
+          {regenerateResult.kind === "success"
+            ? `Progression regenerated — ${regenerateResult.phaseCount ?? 0} phases accepted. Reload the page to see the updated graph.`
+            : `Regeneration failed: ${regenerateResult.reason ?? "Unknown error."}`}
+        </div>
       )}
-      <span className="font-medium">
-        {isExplicit ? "Explicit progression" : "Inferred fallback — no explicit phases"}
-      </span>
-      <span className="text-xs opacity-70">
-        {diagnostics.phaseCount > 0 && `${diagnostics.phaseCount} phases · `}
-        {graph.edges.length} edges · {graph.nodes.length} skills
-        {diagnostics.droppedEdgeCount > 0 && ` · ${diagnostics.droppedEdgeCount} edges dropped`}
-      </span>
     </div>
   );
 }
@@ -393,20 +493,37 @@ interface CurriculumProgressionGraphProps {
   sources: CurriculumSource[];
   selectedSourceId: string;
   graph: ProgressionGraph;
+  progressionDebug?: unknown;
+  regenerateAction?: (sourceId: string) => Promise<{ kind: string; reason?: string; phaseCount?: number; attemptCount?: number }>;
 }
 
 export function CurriculumProgressionGraph({
   sources,
   selectedSourceId,
   graph,
+  progressionDebug,
+  regenerateAction,
 }: CurriculumProgressionGraphProps) {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [debugOpen, setDebugOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const [isPending, startTransition] = useTransition();
+  const [regenerateResult, setRegenerateResult] = useState<{ kind: string; reason?: string; phaseCount?: number } | null>(null);
 
   // Reset selection when source changes.
   useEffect(() => {
     setSelectedNodeId(null);
+    setRegenerateResult(null);
   }, [selectedSourceId]);
+
+  function handleRegenerate() {
+    if (!regenerateAction) return;
+    setRegenerateResult(null);
+    startTransition(async () => {
+      const result = await regenerateAction(selectedSourceId);
+      setRegenerateResult(result);
+    });
+  }
 
   const layout = computeLayout(graph);
   const nodeMap = new Map(graph.nodes.map((n) => [n.id, n]));
@@ -445,7 +562,13 @@ export function CurriculumProgressionGraph({
       </div>
 
       {/* Progression status */}
-      <DiagnosticsBar graph={graph} />
+      <DiagnosticsBar
+        graph={graph}
+        sourceId={selectedSourceId}
+        onRegenerate={handleRegenerate}
+        isRegenerating={isPending}
+        regenerateResult={regenerateResult}
+      />
 
       {/* Side-by-side: graph + detail panel */}
       <div className={cn("flex gap-4", selectedNode ? "items-start" : "")}>
@@ -677,6 +800,39 @@ export function CurriculumProgressionGraph({
             </div>
           </CardContent>
         </Card>
+      </div>
+
+      {/* Progression debug output */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-3">
+          <ProgressionPromptPreview sourceId={selectedSourceId} />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setDebugOpen((v) => !v)}
+            className="justify-between"
+          >
+            <span>{debugOpen ? "Hide output" : "View output"}</span>
+            <span className="ml-2 text-xs text-muted-foreground">debug</span>
+          </Button>
+        </div>
+
+        {debugOpen && progressionDebug != null ? (
+          <div className="rounded-lg border border-border/70 bg-background p-4">
+            <p className="text-sm font-medium text-foreground">Progression output</p>
+            <p className="text-xs leading-5 text-muted-foreground">
+              Raw progression data from DB — phases, prerequisites, and diagnostics.
+            </p>
+            <pre className="mt-3 max-h-[32rem] overflow-auto whitespace-pre-wrap rounded-lg border border-border/70 bg-muted/35 p-3 text-xs leading-6 text-foreground">
+              {JSON.stringify(progressionDebug, null, 2)}
+            </pre>
+          </div>
+        ) : null}
+
+        {debugOpen && progressionDebug == null ? (
+          <p className="px-1 text-xs text-muted-foreground">No progression data available for this source.</p>
+        ) : null}
       </div>
     </div>
   );
