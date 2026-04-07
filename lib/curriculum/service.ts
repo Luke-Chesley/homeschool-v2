@@ -1039,3 +1039,96 @@ export async function scheduleAiDraft(
 ): Promise<void> {
   console.info(`[curriculum] AI draft requested for source ${sourceId} (stub)`);
 }
+
+export interface CurriculumPhaseRecord {
+  id: string;
+  title: string;
+  description?: string;
+  position: number;
+  skillNodeIds: string[];
+}
+
+export interface CurriculumPrerequisiteRecord {
+  id: string;
+  skillNodeId: string;
+  prerequisiteSkillNodeId: string;
+  kind: string;
+}
+
+export interface CurriculumProgressionDiagnostics {
+  hasExplicitProgression: boolean;
+  usingInferredFallback: boolean;
+  phaseCount: number;
+  acceptedEdgeCount: number;
+  droppedEdgeCount: number;
+}
+
+export interface CurriculumProgressionData {
+  phases: CurriculumPhaseRecord[];
+  prerequisites: CurriculumPrerequisiteRecord[];
+  diagnostics: CurriculumProgressionDiagnostics;
+}
+
+export async function getCurriculumProgression(sourceId: string): Promise<CurriculumProgressionData> {
+  const db = getDb();
+
+  const phaseRows = await db
+    .select()
+    .from(curriculumPhases)
+    .where(eq(curriculumPhases.sourceId, sourceId))
+    .orderBy(curriculumPhases.position);
+
+  const phaseNodeRows =
+    phaseRows.length > 0
+      ? await db
+          .select()
+          .from(curriculumPhaseNodes)
+          .where(
+            inArray(
+              curriculumPhaseNodes.phaseId,
+              phaseRows.map((p) => p.id),
+            ),
+          )
+      : [];
+
+  const phaseNodesByPhaseId = new Map<string, string[]>();
+  for (const row of phaseNodeRows) {
+    const list = phaseNodesByPhaseId.get(row.phaseId) ?? [];
+    list.push(row.curriculumNodeId);
+    phaseNodesByPhaseId.set(row.phaseId, list);
+  }
+
+  const prereqRows = await db
+    .select()
+    .from(curriculumSkillPrerequisites)
+    .where(eq(curriculumSkillPrerequisites.sourceId, sourceId));
+
+  const phases: CurriculumPhaseRecord[] = phaseRows.map((p) => ({
+    id: p.id,
+    title: p.title,
+    description: p.description ?? undefined,
+    position: p.position,
+    skillNodeIds: phaseNodesByPhaseId.get(p.id) ?? [],
+  }));
+
+  const prerequisites: CurriculumPrerequisiteRecord[] = prereqRows.map((r) => ({
+    id: r.id,
+    skillNodeId: r.skillNodeId,
+    prerequisiteSkillNodeId: r.prerequisiteSkillNodeId,
+    kind: r.kind,
+  }));
+
+  const hasExplicitProgression = phases.length > 0;
+  const acceptedEdgeCount = prerequisites.filter((p) => p.kind !== "inferred").length;
+  const inferredEdgeCount = prerequisites.filter((p) => p.kind === "inferred").length;
+
+  const diagnostics: CurriculumProgressionDiagnostics = {
+    hasExplicitProgression,
+    usingInferredFallback: !hasExplicitProgression && inferredEdgeCount > 0,
+    phaseCount: phases.length,
+    acceptedEdgeCount,
+    droppedEdgeCount: 0,
+  };
+
+  return { phases, prerequisites, diagnostics };
+}

@@ -4,20 +4,22 @@ import { ArrowLeft } from "lucide-react";
 
 import { CurriculumEmptyState } from "@/components/curriculum/curriculum-empty-state";
 import { CurriculumExportCard } from "@/components/curriculum/CurriculumExportCard";
-import { CurriculumGraphWorkspace } from "@/components/curriculum/curriculum-graph-workspace";
+import { CurriculumProgressionGraph } from "@/components/curriculum/curriculum-progression-graph";
 import { CurriculumRefinementWidget } from "@/components/curriculum/CurriculumRefinementWidget";
 import { buttonVariants } from "@/components/ui/button";
 import { requireAppSession } from "@/lib/app-session/server";
 import {
+  getCurriculumProgression,
   getCurriculumTree,
   getLiveCurriculumSource,
-  listCurriculumSources,
   listCurriculumOutline,
+  listCurriculumSources,
 } from "@/lib/curriculum/service";
+import { buildProgressionGraph } from "@/lib/curriculum/progression-graph-model";
 import { cn } from "@/lib/utils";
 
 export const metadata = {
-  title: "Curriculum Graph",
+  title: "Curriculum Progression Graph",
 };
 
 interface CurriculumGraphPageProps {
@@ -39,7 +41,7 @@ export default async function CurriculumGraphPage({ searchParams }: CurriculumGr
             Back to curriculum
           </Link>
           <div>
-            <h1 className="font-serif text-4xl leading-tight tracking-tight">Curriculum graph</h1>
+            <h1 className="font-serif text-4xl leading-tight tracking-tight">Progression graph</h1>
             <p className="mt-2 text-sm text-muted-foreground">
               Start with one source and build a connected map the planner can route.
             </p>
@@ -54,6 +56,7 @@ export default async function CurriculumGraphPage({ searchParams }: CurriculumGr
     params.sourceId && sources.some((source) => source.id === params.sourceId)
       ? params.sourceId
       : activeSource?.id ?? sources[0].id;
+
   const tree = await getCurriculumTree(selectedSourceId, session.organization.id);
 
   if (!tree) {
@@ -65,7 +68,7 @@ export default async function CurriculumGraphPage({ searchParams }: CurriculumGr
             Back to curriculum
           </Link>
           <div>
-            <h1 className="font-serif text-4xl leading-tight tracking-tight">Curriculum graph</h1>
+            <h1 className="font-serif text-4xl leading-tight tracking-tight">Progression graph</h1>
             <p className="mt-2 text-sm text-muted-foreground">
               The selected source could not be loaded right now.
             </p>
@@ -75,7 +78,13 @@ export default async function CurriculumGraphPage({ searchParams }: CurriculumGr
     );
   }
 
-  const outline = await listCurriculumOutline(selectedSourceId);
+  const [progression, outline] = await Promise.all([
+    getCurriculumProgression(selectedSourceId),
+    listCurriculumOutline(selectedSourceId),
+  ]);
+
+  const graph = buildProgressionGraph(tree, progression);
+
   const exportText = JSON.stringify(
     {
       generatedAt: new Date().toISOString(),
@@ -95,17 +104,17 @@ export default async function CurriculumGraphPage({ searchParams }: CurriculumGr
           Back to curriculum
         </Link>
         <div>
-          <h1 className="font-serif text-4xl leading-tight tracking-tight">Curriculum graph</h1>
+          <h1 className="font-serif text-4xl leading-tight tracking-tight">Progression graph</h1>
           <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-            Explore the source as a connected node map. Follow the hierarchy, inspect sequencing,
-            and focus on one branch at a time without collapsing everything into a list.
+            Left-to-right progression map. Phases are columns; skills are nodes. Edges show prerequisite
+            and sequencing relationships. Click any skill to inspect its connections.
           </p>
         </div>
       </header>
-      <CurriculumGraphWorkspace
+      <CurriculumProgressionGraph
         sources={sources}
         selectedSourceId={selectedSourceId}
-        tree={tree}
+        graph={graph}
       />
       <CurriculumExportCard title="Export" text={exportText} />
       <CurriculumRefinementWidget sourceId={selectedSourceId} sourceTitle={tree.source.title} />
