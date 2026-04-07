@@ -5,8 +5,6 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db/server";
 import { curriculumNodes, curriculumPhases, curriculumPhaseNodes, curriculumSkillPrerequisites } from "@/lib/db/schema";
 import { getAdapterForTask } from "@/lib/ai/registry";
-import { getModelForTask } from "@/lib/ai/provider-adapter";
-import { getAiRoutingConfig } from "@/lib/ai/routing";
 import { resolvePrompt } from "@/lib/prompts/store";
 import {
   buildCurriculumProgressionPrompt,
@@ -19,7 +17,7 @@ import {
   type ProgressionProvenance,
 } from "./service";
 import { generateCurriculumProgression } from "./ai-draft-service";
-import { normalizeCurriculumDocument } from "./normalization";
+import type { CurriculumAiProgression } from "./ai-draft";
 import type { CurriculumAiGeneratedArtifact } from "./ai-draft";
 import type { CurriculumJsonNode } from "./local-json-import";
 
@@ -35,6 +33,7 @@ export type RegenerateProgressionResult =
       phaseCount: number;
       edgeCount: number;
       attemptCount: number;
+      phaseMembershipCount: number;
     }
   | {
       kind: "failure";
@@ -42,13 +41,156 @@ export type RegenerateProgressionResult =
       attemptCount: number;
     };
 
+// ── Resolution types ─────────────────────────────────────────────────────────
+
+type PrerequisiteKind =
+  | "explicit"
+  | "inferred"
+  | "hardPrerequisite"
+  | "recommendedBefore"
+  | "revisitAfter"
+  | "coPractice";
+
+export interface ResolvedPhase {
+  title: string;
+  description?: string;
+  position: number;
+  nodeIds: string[];
+}
+
+export interface ResolvedPrerequisite {
+  sourceId: string;
+  skillNodeId: string;
+  prerequisiteSkillNodeId: string;
+  kind: PrerequisiteKind;
+}
+
+export interface ResolutionDiagnostics {
+  totalAssignedSkillRefs: number;
+  totalAcceptedEdges: number;
+  unresolvedSkillRefCount: number;
+  emptyPhaseCount: number;
+  droppedEdgeCount: number;
+}
+
+export interface ProgressionResolutionResult {
+  resolvedPhases: ResolvedPhase[];
+  resolvedPrerequisites: ResolvedPrerequisite[];
+  diagnostics: ResolutionDiagnostics;
+}
+
+/**
+ * Resolve a generated progression draft strictly against existing authoritative
+ * DB skill node IDs for a curriculum source.
+ *
+ * No synthetic IDs. No title lookup fallback. skillRef IS the DB node ID.
+ * The same validNodeIdSet used here must be the same used for semantic
+ * validation — no second resolution universe.
+ */
+export function resolveProgressionAgainstExistingNodes(
+  sourceId: string,
+  dbSkillNodes: Array<{ id: string; title: string }>,
+  progression: CurriculumAiProgression,
+): ProgressionResolutionResult {
+  const validNodeIdSet = new Set(dbSkillNodes.map((n) => n.id));
+
+  // ── Phase resolution ─────────────────────────────────────────────────────
+  const resolvedPhases: ResolvedPhase[] = [];
+  let unresolvedSkillRefCount = 0;
+  let totalAssignedSkillRefs = 0;
+
+  for (const [index, phase] of progression.phases.entries()) {
+    const nodeIds: string[] = [];
+    for (const skillRef of phase.skillRefs) {
+      if (validNodeIdSet.has(skillRef)) {
+        nodeIds.push(skillRef);
+        totalAssignedSkillRefs++;
+      } else {
+        unresolvedSkillRefCount++;
+        console.warn(
+          "[curriculum/progression-regeneration] Phase skillRef failed resolution against existing nodes.",
+          { sourceId, phaseTitle: phase.title, skillRef },
+        );
+      }
+    }
+    resolvedPhases.push({
+      title: phase.title,
+      description: phase.description,
+      position: index,
+      nodeIds,
+    });
+  }
+
+  const emptyPhaseCount = resolvedPhases.filter((p) => p.nodeIds.length === 0).length;
+
+  // ── Edge resolution ───────────────────────────────────────────────────────
+  const resolvedPrerequisites: ResolvedPrerequisite[] = [];
+  let droppedEdgeCount = 0;
+  const edgeSet = new Set<string>();
+
+  for (const edge of progression.edges) {
+    const fromResolved = validNodeIdSet.has(edge.fromSkillRef);
+    const toResolved = validNodeIdSet.has(edge.toSkillRef);
+
+    if (!fromResolved || !toResolved) {
+      droppedEdgeCount++;
+      console.warn(
+        "[curriculum/progression-regeneration] Prerequisite edge dropped — skillRef(s) not in existing nodes.",
+        {
+          sourceId,
+          fromSkillRef: edge.fromSkillRef,
+          toSkillRef: edge.toSkillRef,
+          fromResolved,
+          toResolved,
+        },
+      );
+      continue;
+    }
+
+    if (edge.fromSkillRef === edge.toSkillRef) {
+      droppedEdgeCount++;
+      continue;
+    }
+
+    const edgeKey = `${edge.fromSkillRef}→${edge.toSkillRef}`;
+    if (edgeSet.has(edgeKey)) {
+      droppedEdgeCount++;
+      continue;
+    }
+
+    edgeSet.add(edgeKey);
+    resolvedPrerequisites.push({
+      sourceId,
+      skillNodeId: edge.toSkillRef,
+      prerequisiteSkillNodeId: edge.fromSkillRef,
+      kind: edge.kind as PrerequisiteKind,
+    });
+  }
+
+  const totalAcceptedEdges = resolvedPrerequisites.length;
+
+  return {
+    resolvedPhases,
+    resolvedPrerequisites,
+    diagnostics: {
+      totalAssignedSkillRefs,
+      totalAcceptedEdges,
+      unresolvedSkillRefCount,
+      emptyPhaseCount,
+      droppedEdgeCount,
+    },
+  };
+}
+
 /**
  * Regenerate only the progression pass for an existing curriculum source.
  *
- * Loads the persisted skill nodes, rebuilds a minimal artifact shell for the prompt,
- * reruns pass 2 (progression generation only), validates the result, and if valid,
- * clears and rewrites curriculum_phases, curriculum_phase_nodes, and the explicit rows
- * in curriculum_skill_prerequisites.
+ * Loads the persisted skill nodes, reruns pass 2 (progression generation only),
+ * validates the result, and if valid, resolves the generated progression directly
+ * against authoritative DB node IDs — no synthetic document normalization.
+ *
+ * Clears and rewrites curriculum_phases, curriculum_phase_nodes, and the explicit
+ * rows in curriculum_skill_prerequisites.
  *
  * Updates the curriculum_progression_state table with the outcome.
  * Does NOT touch the curriculum core (nodes, outline, source metadata).
@@ -79,8 +221,7 @@ export async function regenerateCurriculumProgression(
   // Build skill refs with stable IDs + titles for the ID-aware prompt path.
   const skillRefs = skillNodes.map((n) => ({ skillId: n.id, skillTitle: n.title }));
 
-  // Build a minimal artifact shell — we only need enough structure for the prompt.
-  // The actual document content is reconstructed from the skill hierarchy.
+  // Build a minimal artifact shell — prompt/preview purposes only.
   const minimalArtifact = buildMinimalArtifactForProgression(source, skillNodes);
 
   // Run progression generation with the real skill IDs.
@@ -111,6 +252,10 @@ export async function regenerateCurriculumProgression(
       attempts: result.attempts,
       usingInferredFallback: true,
       provenance,
+      debugMetadata: {
+        rawGeneratedProgression: null,
+        resolutionDiagnostics: null,
+      },
     });
 
     return {
@@ -120,33 +265,94 @@ export async function regenerateCurriculumProgression(
     };
   }
 
-  // Normalize the progression using the real DB source ID and lineage.
-  const normalized = normalizeCurriculumDocument({
+  // Resolve the generated progression strictly against existing DB node IDs.
+  // The same authoritative ref universe used for semantic validation in
+  // generateCurriculumProgression is also used here for persistence resolution.
+  const resolution = resolveProgressionAgainstExistingNodes(
+    params.sourceId,
+    skillNodes,
+    result.progression,
+  );
+
+  const { resolvedPhases, resolvedPrerequisites, diagnostics } = resolution;
+
+  console.info("[curriculum/progression-regeneration] Resolution complete.", {
     sourceId: params.sourceId,
-    sourceLineageId: params.sourceId,
-    document: buildDocumentFromSkillNodes(skillNodes),
-    progression: result.progression,
+    phaseCount: resolvedPhases.length,
+    phaseMembershipCount: diagnostics.totalAssignedSkillRefs,
+    emptyPhaseCount: diagnostics.emptyPhaseCount,
+    acceptedEdgeCount: diagnostics.totalAcceptedEdges,
+    droppedEdgeCount: diagnostics.droppedEdgeCount,
+    unresolvedSkillRefCount: diagnostics.unresolvedSkillRefCount,
   });
 
-  // Persist: clear explicit progression then write new phases and prerequisites.
+  // ── Hard post-resolution integrity checks ─────────────────────────────────
+  // Never mark explicit_ready when all phase memberships resolve to empty.
+  if (resolvedPhases.length === 0) {
+    const reason = "Resolved phases contained zero phases — regeneration produced no phase structure.";
+    await upsertProgressionState({
+      sourceId: params.sourceId,
+      status: "explicit_failed",
+      lastFailureReason: reason,
+      lastFailureCategory: "semantic",
+      attemptCount: result.attemptCount,
+      attempts: result.attempts,
+      usingInferredFallback: true,
+      provenance,
+      debugMetadata: {
+        rawGeneratedProgression: result.progression,
+        resolutionDiagnostics: diagnostics,
+      },
+    });
+    return { kind: "failure", reason, attemptCount: result.attemptCount };
+  }
+
+  if (diagnostics.totalAssignedSkillRefs === 0) {
+    const reason =
+      "Resolved phases contained zero valid node assignments — all generated skillRefs failed resolution against existing nodes.";
+    await upsertProgressionState({
+      sourceId: params.sourceId,
+      status: "explicit_failed",
+      lastFailureReason: reason,
+      lastFailureCategory: "semantic",
+      attemptCount: result.attemptCount,
+      attempts: result.attempts,
+      usingInferredFallback: true,
+      provenance,
+      debugMetadata: {
+        rawGeneratedProgression: result.progression,
+        resolutionDiagnostics: diagnostics,
+      },
+    });
+    return { kind: "failure", reason, attemptCount: result.attemptCount };
+  }
+
+  // ── Persist resolved progression ──────────────────────────────────────────
   const db = getDb();
   await db.transaction(async (tx) => {
-    // Clear existing phases (cascades to phase_nodes).
+    // Clear existing phases (cascades to phase_nodes via FK).
     await tx.delete(curriculumPhases).where(eq(curriculumPhases.sourceId, params.sourceId));
 
-    // Clear explicit (non-inferred) prerequisites only; preserve inferred fallback rows
-    // if they don't conflict with what we're about to write.
+    // Clear all prerequisites for this source (explicit and inferred).
     await tx
       .delete(curriculumSkillPrerequisites)
       .where(eq(curriculumSkillPrerequisites.sourceId, params.sourceId));
 
-    // Insert new prerequisites.
-    if (normalized.prerequisites.length > 0) {
-      await tx.insert(curriculumSkillPrerequisites).values(normalized.prerequisites);
+    // Insert resolved prerequisites.
+    if (resolvedPrerequisites.length > 0) {
+      await tx.insert(curriculumSkillPrerequisites).values(
+        resolvedPrerequisites.map((p) => ({
+          sourceId: p.sourceId,
+          skillNodeId: p.skillNodeId,
+          prerequisiteSkillNodeId: p.prerequisiteSkillNodeId,
+          kind: p.kind,
+          metadata: { derivedFrom: "explicit_progression_graph", resolvedById: true },
+        })),
+      );
     }
 
-    // Insert new phases and phase-node assignments.
-    for (const phase of normalized.phases) {
+    // Insert phase rows and phase-node assignments.
+    for (const phase of resolvedPhases) {
       const [createdPhase] = await tx
         .insert(curriculumPhases)
         .values({
@@ -154,7 +360,10 @@ export async function regenerateCurriculumProgression(
           title: phase.title,
           description: phase.description ?? null,
           position: phase.position,
-          metadata: { provenance: "manual_regeneration" },
+          metadata: {
+            provenance: "manual_regeneration",
+            resolvedMembershipCount: phase.nodeIds.length,
+          },
         })
         .returning();
 
@@ -169,33 +378,42 @@ export async function regenerateCurriculumProgression(
     }
   });
 
-  const diag = normalized.summary.progressionDiagnostics;
-
   await upsertProgressionState({
     sourceId: params.sourceId,
     status: "explicit_ready",
     lastFailureReason: null,
     lastFailureCategory: null,
-    lastAcceptedPhaseCount: diag.phaseCount,
-    lastAcceptedEdgeCount: diag.acceptedEdgeCount,
+    lastAcceptedPhaseCount: resolvedPhases.length,
+    lastAcceptedEdgeCount: diagnostics.totalAcceptedEdges,
     attemptCount: result.attemptCount,
     attempts: result.attempts,
     usingInferredFallback: false,
     provenance,
+    debugMetadata: {
+      rawGeneratedProgression: result.progression,
+      resolutionDiagnostics: diagnostics,
+      resolvedPhaseMembershipCount: diagnostics.totalAssignedSkillRefs,
+      emptyPhaseCount: diagnostics.emptyPhaseCount,
+      resolvedExplicitEdgeCount: diagnostics.totalAcceptedEdges,
+      droppedExplicitEdgeCount: diagnostics.droppedEdgeCount,
+      unresolvedSkillRefCount: diagnostics.unresolvedSkillRefCount,
+    },
   });
 
   console.info("[curriculum/progression-regeneration] Progression regenerated successfully.", {
     sourceId: params.sourceId,
-    phaseCount: diag.phaseCount,
-    edgeCount: diag.acceptedEdgeCount,
+    phaseCount: resolvedPhases.length,
+    phaseMembershipCount: diagnostics.totalAssignedSkillRefs,
+    edgeCount: diagnostics.totalAcceptedEdges,
     attemptCount: result.attemptCount,
   });
 
   return {
     kind: "success",
-    phaseCount: diag.phaseCount,
-    edgeCount: diag.acceptedEdgeCount,
+    phaseCount: resolvedPhases.length,
+    edgeCount: diagnostics.totalAcceptedEdges,
     attemptCount: result.attemptCount,
+    phaseMembershipCount: diagnostics.totalAssignedSkillRefs,
   };
 }
 
@@ -226,8 +444,6 @@ export async function buildProgressionPromptPreview(params: {
     .then((rows) => rows.filter((r) => r.normalizedType === "skill" && r.title));
 
   const skillRefs = skillNodes.map((n) => ({ skillId: n.id, skillTitle: n.title }));
-  const minimalArtifact = buildMinimalArtifactForProgression(source, skillNodes);
-  const leafSkillTitles = skillRefs.map((r) => r.skillTitle);
 
   const prompt = await resolvePrompt(
     "curriculum.generate.progression",
@@ -238,7 +454,7 @@ export async function buildProgressionPromptPreview(params: {
     learnerName: params.learnerDisplayName,
     sourceTitle: source.title,
     sourceSummary: source.description || undefined,
-    skillCatalog: skillRefs.map(r => ({ skillRef: r.skillId, title: r.skillTitle })),
+    skillCatalog: skillRefs.map((r) => ({ skillRef: r.skillId, title: r.skillTitle })),
   });
 
   return {
@@ -247,30 +463,14 @@ export async function buildProgressionPromptPreview(params: {
   };
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-/**
- * Build a minimal synthetic document from skill nodes for the progression prompt.
- * Groups skills by their stable ID prefix (since we don't have full tree context
- * in this service, we use a flat structure). The prompt context from the source
- * title is more important for quality than the document hierarchy.
- */
-function buildDocumentFromSkillNodes(
-  skillNodes: Array<{ id: string; title: string; normalizedType: string }>,
-): Record<string, CurriculumJsonNode> {
-  // Build a flat skills-only document to feed to normalization for title→ID mapping.
-  // The prompt already receives skill titles + IDs directly; this document is only
-  // used for normalization title lookups.
-  const skills: Record<string, string> = {};
-  for (const node of skillNodes) {
-    skills[node.title] = node.id;
-  }
-  return { Skills: skills } as Record<string, CurriculumJsonNode>;
-}
+// ── Prompt-only helpers (not used for persistence) ───────────────────────────
 
 /**
  * Build a minimal artifact that has enough structure for the progression prompt
  * but doesn't require a full AI re-generation.
+ *
+ * NOTE: This is prompt/debug-only. It must NOT participate in persistence-critical
+ * resolution. Resolution happens via resolveProgressionAgainstExistingNodes().
  */
 function buildMinimalArtifactForProgression(
   source: { title: string; summary?: string | null },
