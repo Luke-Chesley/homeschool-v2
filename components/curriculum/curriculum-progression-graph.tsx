@@ -233,38 +233,50 @@ function progressionStatusMessage(
   status: string,
   hasExplicitProgression: boolean,
   lastFailureReason: string | null,
-): { label: string; detail: string | null } {
+  rawAttemptSummaries?: any[],
+): { label: string; detail: string | null; missingSkillCount?: number } {
+  // Extract missing skill count from last failed attempt if present.
+  let missingSkillCount: number | undefined;
+  if (rawAttemptSummaries && rawAttemptSummaries.length > 0) {
+    const lastAttempt = rawAttemptSummaries[rawAttemptSummaries.length - 1];
+    if (lastAttempt?.missingSkillRefs?.length > 0) {
+      missingSkillCount = lastAttempt.missingSkillRefs.length;
+    } else if (lastAttempt?.summary?.missingSkillRefs > 0) {
+      missingSkillCount = lastAttempt.summary.missingSkillRefs;
+    }
+  }
+
   switch (status) {
     case "explicit_ready":
-      return { label: "Explicit progression", detail: null };
+      return { label: "Explicit progression ready", detail: null };
     case "explicit_failed":
       return {
-        label: "Explicit progression unavailable — generation failed.",
+        label: "Progression generation failed — using inferred fallback.",
         detail: lastFailureReason
           ? `Last failure: ${lastFailureReason}`
-          : "Regenerate progression to replace fallback ordering.",
+          : "Regenerate to retry.",
+        missingSkillCount,
       };
     case "fallback_only":
       return {
-        label: "Explicit progression was not accepted during generation. Using inferred fallback.",
-        detail: "Regenerate progression to replace fallback ordering.",
+        label: "Progression was not accepted during generation. Using inferred fallback.",
+        detail: "Regenerate to retry.",
+        missingSkillCount,
       };
     case "stale":
       return {
-        label: "Explicit progression exists but is stale.",
+        label: "Progression exists but is stale.",
         detail: "Curriculum was updated since last progression generation. Regenerate to refresh.",
       };
     case "not_attempted":
       return {
-        label: hasExplicitProgression
-          ? "Explicit progression"
-          : "Progression not yet generated.",
+        label: hasExplicitProgression ? "Explicit progression ready" : "Progression not yet generated.",
         detail: hasExplicitProgression ? null : "Run regeneration to build an explicit progression.",
       };
     default:
       return {
         label: hasExplicitProgression
-          ? "Explicit progression"
+          ? "Explicit progression ready"
           : "Explicit progression unavailable. Using inferred fallback.",
         detail: null,
       };
@@ -297,13 +309,14 @@ function DiagnosticsBar({
   const { diagnostics } = graph;
   const status = (diagnostics as any).progressionStatus ?? (diagnostics.hasExplicitProgression ? "explicit_ready" : "fallback_only");
   const isExplicit = status === "explicit_ready";
-  const isFailed = status === "explicit_failed" || status === "fallback_only" || status === "not_attempted";
   const isStale = status === "stale";
+  const rawAttemptSummaries = (diagnostics as any).rawAttemptSummaries as any[] | undefined;
 
-  const { label, detail } = progressionStatusMessage(
+  const { label, detail, missingSkillCount } = progressionStatusMessage(
     status,
     diagnostics.hasExplicitProgression,
     (diagnostics as any).lastFailureReason ?? null,
+    rawAttemptSummaries,
   );
 
   return (
@@ -327,15 +340,20 @@ function DiagnosticsBar({
         <span className="text-xs opacity-70">
           {diagnostics.phaseCount > 0 && `${diagnostics.phaseCount} phases · `}
           {graph.edges.length} edges · {graph.nodes.length} skills
+          {missingSkillCount && missingSkillCount > 0 && (
+            <span className="ml-1 font-semibold text-red-600 opacity-100">
+              · {missingSkillCount} skill{missingSkillCount !== 1 ? "s" : ""} unassigned
+            </span>
+          )}
           {diagnostics.droppedEdgeCount > 0 && ` · ${diagnostics.droppedEdgeCount} edges dropped`}
           {(diagnostics as any).attemptCount > 0 && ` · ${(diagnostics as any).attemptCount} attempt${(diagnostics as any).attemptCount !== 1 ? "s" : ""}`}
         </span>
-        <div className="ml-auto shrink-0">
+        <div className="ml-auto shrink-0 flex items-center gap-1">
           <Button
             size="sm"
             variant="ghost"
             onClick={() => setDebugOpen(!debugOpen)}
-            className="h-7 mr-2 text-xs"
+            className="h-7 text-xs"
           >
             {debugOpen ? "Hide prompt" : "View prompt"}
           </Button>
@@ -343,9 +361,9 @@ function DiagnosticsBar({
             size="sm"
             variant="ghost"
             onClick={() => setViewAttemptsOpen(!viewAttemptsOpen)}
-            className="h-7 mr-2 text-xs"
+            className="h-7 text-xs"
           >
-            {viewAttemptsOpen ? "Hide attempts" : "View attempts"}
+            {viewAttemptsOpen ? "Hide attempts" : `View attempts${rawAttemptSummaries?.length ? ` (${rawAttemptSummaries.length})` : ""}`}
           </Button>
           <Button
             size="sm"
@@ -355,7 +373,7 @@ function DiagnosticsBar({
             className="h-7 gap-1.5 text-xs"
           >
             <RefreshCw className={cn("size-3", isRegenerating && "animate-spin")} />
-            {isRegenerating ? "Regenerating…" : "Regenerate progression"}
+            {isRegenerating ? "Regenerating…" : "Regenerate"}
           </Button>
         </div>
       </div>
@@ -522,40 +540,187 @@ interface CurriculumProgressionGraphProps {
 }
 
 
-function ViewAttemptsPanel({ attempts }: { attempts: any[] }) {
-  if (!attempts || attempts.length === 0) return null;
+function StatusBadge({ value, okLabel = "ok" }: { value: string; okLabel?: string }) {
+  const isOk = value === "ok" || value === okLabel;
+  const isError = value === "error";
+  const isSkipped = value === "not_attempted";
   return (
-    <div className="mt-4 rounded-md border p-4 space-y-4 bg-muted/20">
-      <h3 className="font-semibold text-sm">Attempt Diagnostics</h3>
+    <span
+      className={cn(
+        "inline-block rounded px-1.5 py-0.5 text-[10px] font-medium",
+        isOk && "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
+        isError && "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300",
+        isSkipped && "bg-muted text-muted-foreground",
+      )}
+    >
+      {isSkipped ? "—" : value}
+    </span>
+  );
+}
+
+function AttemptCard({ attempt }: { attempt: any }) {
+  const [rawOpen, setRawOpen] = useState(false);
+  const [parsedOpen, setParsedOpen] = useState(false);
+
+  return (
+    <div className="text-xs space-y-2 p-3 border rounded bg-background">
+      {/* Header */}
+      <div className="flex justify-between font-medium border-b pb-1.5 mb-1">
+        <span className="text-sm">Attempt {attempt.attemptNumber}</span>
+        <span className={cn("text-sm font-semibold", attempt.accepted ? "text-emerald-600" : "text-red-600")}>
+          {attempt.accepted ? "Accepted" : "Failed"}
+          {attempt.repairAttempt?.success && " (after repair)"}
+        </span>
+      </div>
+
+      {/* Status grid */}
+      <div className="grid grid-cols-4 gap-x-3 gap-y-1 text-[11px]">
+        <div className="col-span-1 font-medium text-muted-foreground">Transport</div>
+        <div className="col-span-1"><StatusBadge value={attempt.transportStatus} okLabel="ok" /></div>
+        <div className="col-span-1 font-medium text-muted-foreground">Parse</div>
+        <div className="col-span-1">
+          <StatusBadge value={attempt.parseStatus} />
+          {attempt.parseFailureKind && (
+            <span className="ml-1 text-muted-foreground">({attempt.parseFailureKind})</span>
+          )}
+        </div>
+        <div className="col-span-1 font-medium text-muted-foreground">Schema</div>
+        <div className="col-span-1"><StatusBadge value={attempt.schemaStatus} /></div>
+        <div className="col-span-1 font-medium text-muted-foreground">Semantic</div>
+        <div className="col-span-1"><StatusBadge value={attempt.semanticStatus} /></div>
+      </div>
+
+      {/* Coverage summary */}
+      {attempt.summary && (
+        <div className="flex flex-wrap gap-3 text-[11px] text-muted-foreground pt-1 border-t">
+          <span>Phases: <strong className="text-foreground">{attempt.summary.phaseCount}</strong></span>
+          <span>Edges: <strong className="text-foreground">{attempt.summary.edgeCount}</strong></span>
+          {attempt.summary.missingSkillRefs > 0 && (
+            <span className="text-red-600 font-medium">
+              Missing skills: {attempt.summary.missingSkillRefs}
+            </span>
+          )}
+          {attempt.summary.duplicatePhaseAssignments > 0 && (
+            <span className="text-amber-600 font-medium">
+              Duplicates: {attempt.summary.duplicatePhaseAssignments}
+            </span>
+          )}
+          {attempt.summary.hardPrerequisiteCycle && (
+            <span className="text-red-600 font-medium">Cycle detected</span>
+          )}
+        </div>
+      )}
+
+      {/* Failure reason */}
+      {attempt.failureReason && (
+        <div className="text-red-600 text-[11px] break-words">
+          <strong>Failure:</strong> {attempt.failureReason}
+        </div>
+      )}
+
+      {/* Sanitization note */}
+      {attempt.sanitizationChanged && (
+        <div className="text-amber-600 text-[11px]">
+          Ref sanitization applied ({attempt.sanitizationResults?.filter((r: any) => r.changed).length} refs corrected)
+        </div>
+      )}
+
+      {/* Repair attempt note */}
+      {attempt.repairAttempt?.attempted && (
+        <div className={cn("text-[11px]", attempt.repairAttempt.success ? "text-emerald-600" : "text-amber-600")}>
+          Repair pass: {attempt.repairAttempt.success ? "succeeded" : `failed — ${attempt.repairAttempt.failureReason}`}
+        </div>
+      )}
+
+      {/* Missing skillRefs list */}
+      {attempt.missingSkillRefs && attempt.missingSkillRefs.length > 0 && (
+        <div className="text-[11px]">
+          <strong className="text-red-600">Missing skillRefs ({attempt.missingSkillRefs.length}):</strong>
+          <ul className="mt-1 space-y-0.5 text-muted-foreground font-mono">
+            {(attempt.missingSkillRefs as string[]).slice(0, 10).map((ref: string) => (
+              <li key={ref} className="truncate">{ref}</li>
+            ))}
+            {attempt.missingSkillRefs.length > 10 && (
+              <li className="text-muted-foreground">… and {attempt.missingSkillRefs.length - 10} more</li>
+            )}
+          </ul>
+        </div>
+      )}
+
+      {/* Validation issues */}
+      {attempt.validationIssues && attempt.validationIssues.length > 0 && (
+        <div className="text-[11px]">
+          <strong className="text-foreground/70">Validation issues:</strong>
+          <ul className="mt-1 space-y-0.5 text-muted-foreground">
+            {(attempt.validationIssues as any[]).slice(0, 8).map((issue: any, idx: number) => (
+              <li key={idx}>
+                <span className="font-mono text-red-600">{issue.code}</span>
+                {" — "}
+                <span className="break-words">{issue.message}</span>
+              </li>
+            ))}
+            {attempt.validationIssues.length > 8 && (
+              <li className="text-muted-foreground">… and {attempt.validationIssues.length - 8} more</li>
+            )}
+          </ul>
+        </div>
+      )}
+
+      {/* Raw response toggle */}
+      {attempt.rawResponse && (
+        <div className="text-[11px]">
+          <button
+            type="button"
+            onClick={() => setRawOpen((v) => !v)}
+            className="text-muted-foreground underline hover:text-foreground"
+          >
+            {rawOpen ? "Hide raw response" : "Show raw response"}
+          </button>
+          {rawOpen && (
+            <pre className="mt-2 max-h-64 overflow-auto rounded border bg-muted/30 p-2 font-mono text-[10px] whitespace-pre-wrap break-words">
+              {attempt.rawResponse}
+            </pre>
+          )}
+        </div>
+      )}
+
+      {/* Parsed JSON toggle */}
+      {attempt.parsedJson && (
+        <div className="text-[11px]">
+          <button
+            type="button"
+            onClick={() => setParsedOpen((v) => !v)}
+            className="text-muted-foreground underline hover:text-foreground"
+          >
+            {parsedOpen ? "Hide parsed JSON" : "Show parsed JSON"}
+          </button>
+          {parsedOpen && (
+            <pre className="mt-2 max-h-64 overflow-auto rounded border bg-muted/30 p-2 font-mono text-[10px] whitespace-pre-wrap break-words">
+              {JSON.stringify(attempt.parsedJson, null, 2)}
+            </pre>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ViewAttemptsPanel({ attempts }: { attempts: any[] }) {
+  if (!attempts || attempts.length === 0) {
+    return (
+      <div className="rounded-md border px-4 py-3 text-sm text-muted-foreground">
+        No attempt data stored. Regenerate to populate.
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-md border p-4 space-y-3 bg-muted/10">
+      <h3 className="font-semibold text-sm">
+        Attempt diagnostics ({attempts.length} attempt{attempts.length !== 1 ? "s" : ""})
+      </h3>
       <div className="space-y-3">
         {attempts.map((attempt, i) => (
-          <div key={i} className="text-xs space-y-1 p-3 border rounded bg-background">
-            <div className="flex justify-between font-medium border-b pb-1 mb-2">
-              <span>Attempt {attempt.attemptNumber}</span>
-              <span className={attempt.accepted ? "text-emerald-600" : "text-red-600"}>
-                {attempt.accepted ? "Accepted" : "Failed"}
-              </span>
-            </div>
-            <div className="grid grid-cols-2 gap-2 text-[11px]">
-              <div><strong>Transport:</strong> {attempt.transportStatus}</div>
-              <div><strong>Parse:</strong> {attempt.parseStatus}</div>
-              <div><strong>Schema:</strong> {attempt.schemaStatus}</div>
-              <div><strong>Semantic:</strong> {attempt.semanticStatus}</div>
-            </div>
-            {attempt.failureReason && (
-              <div className="mt-2 text-red-600">
-                <strong>Failure:</strong> {attempt.failureCategory} - {attempt.failureReason}
-              </div>
-            )}
-            {attempt.summary && (
-              <div className="mt-2 text-muted-foreground">
-                <span className="mr-3">Phases: {attempt.summary.phaseCount}</span>
-                <span className="mr-3">Edges: {attempt.summary.edgeCount}</span>
-                <span className="mr-3">Missing refs: {attempt.summary.missingSkillRefs}</span>
-                <span className="mr-3">Hard cycle: {attempt.summary.hardPrerequisiteCycle ? "Yes" : "No"}</span>
-              </div>
-            )}
-          </div>
+          <AttemptCard key={i} attempt={attempt} />
         ))}
       </div>
     </div>

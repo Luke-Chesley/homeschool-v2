@@ -1,7 +1,7 @@
 import Link from "next/link";
 
-import { MonthPlanningBoard } from "@/components/planning/month-planning-board";
 import { PlanningShell } from "@/components/planning/planning-shell";
+import { MonthPlanningBoard } from "@/components/planning/month-planning-board";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireAppSession } from "@/lib/app-session/server";

@@ -465,6 +465,7 @@ export function MonthPlanningBoard({ month }: MonthPlanningBoardProps) {
 
   return (
     <DndContext
+      id={`month-planning-board-${month.monthStartDate}`}
       sensors={sensors}
       collisionDetection={closestCorners}
       onDragStart={onDragStart}

@@ -5,6 +5,13 @@
  * correct, not that the references resolve or the graph is acyclic. This module
  * adds a second validation pass that rejects progressions that would silently
  * degrade to inferred-order planning.
+ *
+ * Acceptance contract:
+ * - Every skillRef in the catalog must appear in exactly one phase (no missing, no duplicates).
+ * - No unresolved phase skill refs.
+ * - No hard prerequisite cycles.
+ * - No self-loops.
+ * - At least one phase (if curriculum has skills).
  */
 
 import type { CurriculumAiProgression } from "./ai-draft.ts";
@@ -18,7 +25,8 @@ export interface ProgressionValidationIssue {
     | "hard_prerequisite_cycle"
     | "unresolved_phase_skill"
     | "empty_phases"
-    | "low_phase_coverage"
+    | "incomplete_phase_coverage"
+    | "duplicate_phase_assignment"
     | "unresolved_skill_id";
   message: string;
   context?: Record<string, unknown>;
@@ -37,18 +45,28 @@ export interface ProgressionValidationResult {
     hardPrerequisiteEdges: number;
     phaseCount: number;
   };
+  /** Exact skill refs that are in the catalog but assigned to zero phases. */
+  missingSkillRefs: string[];
+  /** Skill refs assigned to more than one phase. */
+  duplicateAssignedSkillRefs: string[];
+  /** Skill refs that appear in phases but are not in the catalog. */
+  invalidPhaseSkillRefs: string[];
 }
 
 /**
- * Validate that a progression graph is semantically meaningful relative to the
- * leaf skill titles extracted from the curriculum document.
+ * Validate that a progression graph is semantically correct relative to the
+ * authoritative skill ref catalog.
  *
- * @param progression - The raw progression from the AI
- * @param leafSkillTitles - The exact normalized titles of all leaf skill nodes
- *   in the curriculum document (from the same normalization pass used for
- *   persistence)
- * @param skillIdToTitle - Optional: map of stable skill ID → title. When provided,
- *   edges and phase members with skillId fields are validated by ID first.
+ * Hard failures (block acceptance):
+ * - Any phase skillRef is unresolved (not in catalog).
+ * - Any skillRef is omitted from all phases (incomplete coverage).
+ * - Any skillRef appears in more than one phase (duplicate assignment).
+ * - Zero phases when curriculum has skills.
+ * - Hard prerequisite cycles.
+ * - Self-loops.
+ *
+ * Soft issues (recorded but do not block):
+ * - Unresolved edge endpoints (edges are dropped, phases still may be fine).
  */
 export function validateProgressionSemantics(
   progression: CurriculumAiProgression,
@@ -142,7 +160,9 @@ export function validateProgressionSemantics(
 
   // --- Phase validation ---
   let unresolvedPhaseSkills = 0;
-  const assignedSkillRefs = new Set<string>();
+  // Track phase assignment: skillRef → phase titles it appears in
+  const skillPhaseMap = new Map<string, string[]>();
+  const invalidPhaseSkillRefs: string[] = [];
 
   if (progression.phases.length === 0 && totalSkills > 0) {
     issues.push({
@@ -160,19 +180,52 @@ export function validateProgressionSemantics(
           context: { phaseTitle: phase.title, skillRef },
         });
         unresolvedPhaseSkills++;
+        if (!invalidPhaseSkillRefs.includes(skillRef)) {
+          invalidPhaseSkillRefs.push(skillRef);
+        }
       } else {
-        assignedSkillRefs.add(skillRef);
+        const existing = skillPhaseMap.get(skillRef);
+        if (existing) {
+          existing.push(phase.title);
+        } else {
+          skillPhaseMap.set(skillRef, [phase.title]);
+        }
       }
     }
   }
 
-  const skillsAssignedToPhases = assignedSkillRefs.size;
+  // Duplicate assignment check (hard failure).
+  const duplicateAssignedSkillRefs: string[] = [];
+  for (const [skillRef, phases] of skillPhaseMap.entries()) {
+    if (phases.length > 1) {
+      duplicateAssignedSkillRefs.push(skillRef);
+      issues.push({
+        code: "duplicate_phase_assignment",
+        message: `SkillRef "${skillRef}" appears in ${phases.length} phases: ${phases.join(", ")}.`,
+        context: { skillRef, phases },
+      });
+    }
+  }
 
-  if (totalSkills >= 4 && skillsAssignedToPhases < Math.ceil(totalSkills / 2)) {
+  const skillsAssignedToPhases = skillPhaseMap.size;
+
+  // Full coverage check (hard failure): every skill must appear in exactly one phase.
+  const missingSkillRefs: string[] = [];
+  if (totalSkills > 0 && skillsAssignedToPhases !== totalSkills) {
+    for (const skillRef of validSkillRefs) {
+      if (!skillPhaseMap.has(skillRef)) {
+        missingSkillRefs.push(skillRef);
+      }
+    }
     issues.push({
-      code: "low_phase_coverage",
-      message: `Only ${skillsAssignedToPhases} of ${totalSkills} skills are assigned to phases. At least half should be covered.`,
-      context: { skillsAssignedToPhases, totalSkills },
+      code: "incomplete_phase_coverage",
+      message: `Only ${skillsAssignedToPhases} of ${totalSkills} skills are assigned to phases. All ${totalSkills} skills must be assigned to exactly one phase. Missing: ${missingSkillRefs.length} skills.`,
+      context: {
+        skillsAssignedToPhases,
+        totalSkills,
+        missingCount: missingSkillRefs.length,
+        missingSkillRefs: missingSkillRefs.slice(0, 10),
+      },
     });
   }
 
@@ -182,7 +235,9 @@ export function validateProgressionSemantics(
       issue.code !== "self_loop" &&
       issue.code !== "empty_phases" &&
       issue.code !== "unresolved_skill_id" &&
-      issue.code !== "unresolved_phase_skill"
+      issue.code !== "unresolved_phase_skill" &&
+      issue.code !== "incomplete_phase_coverage" &&
+      issue.code !== "duplicate_phase_assignment"
   );
 
   return {
@@ -198,6 +253,9 @@ export function validateProgressionSemantics(
       hardPrerequisiteEdges,
       phaseCount: progression.phases.length,
     },
+    missingSkillRefs,
+    duplicateAssignedSkillRefs,
+    invalidPhaseSkillRefs,
   };
 }
 

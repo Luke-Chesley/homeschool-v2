@@ -70,7 +70,10 @@ import {
 import {
   validateProgressionSemantics,
   extractLeafSkillTitles,
+  type ProgressionValidationResult,
 } from "./progression-validation";
+import { sanitizeProgressionRefs, type RefSanitizationResult } from "./progression-sanitization";
+import { repairProgressionDraft, type ProgressionRepairAttempt } from "./progression-repair";
 import { assessCurriculumArtifactQuality } from "./quality";
 
 type RevisionPreference = "targeted" | "broader";
@@ -601,11 +604,31 @@ export type ProgressionAttemptResult = {
   transportStatus: "ok" | "error"
   rawResponseReceived: boolean
   parseStatus: "not_attempted" | "ok" | "error"
+  /** Sub-classification when parseStatus is "error". */
+  parseFailureKind?: "no_json_found" | "malformed_json" | "wrong_top_level_shape"
   schemaStatus: "not_attempted" | "ok" | "error"
   semanticStatus: "not_attempted" | "ok" | "error"
   accepted: boolean
   failureCategory: "transport" | "parse" | "schema" | "semantic" | null
   failureReason: string | null
+  /** Raw model response text. Always stored for parse failures; stored for all attempts when possible. */
+  rawResponse?: string
+  /** Parsed JSON if parsing succeeded (before schema validation). */
+  parsedJson?: unknown
+  /** Sanitization results applied before semantic validation. */
+  sanitizationResults?: RefSanitizationResult[]
+  sanitizationChanged?: boolean
+  /** Full validation result from semantic pass (if reached). */
+  validationIssues?: Array<{ code: string; message: string; context?: Record<string, unknown> }>
+  missingSkillRefs?: string[]
+  duplicateAssignedSkillRefs?: string[]
+  invalidPhaseSkillRefs?: string[]
+  /** Repair attempt info (if a repair pass was run). */
+  repairAttempt?: {
+    attempted: boolean
+    success: boolean
+    failureReason: string | null
+  }
   summary?: {
     phaseCount: number
     edgeCount: number
@@ -697,6 +720,7 @@ export async function generateCurriculumProgression(
   let attemptLogs: ProgressionAttemptResult[] = [];
   let attempts = 0;
   let lastFailureReason: string | null = null;
+  const validSkillRefs = Array.from(skillIdToTitle.keys());
 
   for (const correctionNotes of attemptNotes) {
     attempts += 1;
@@ -724,7 +748,8 @@ export async function generateCurriculumProgression(
         ],
       });
 
-      
+      const rawResponse = response.content;
+
       let attemptResult: ProgressionAttemptResult = {
         attemptNumber: attempts,
         transportStatus: "ok",
@@ -735,103 +760,192 @@ export async function generateCurriculumProgression(
         accepted: false,
         failureCategory: null,
         failureReason: null,
+        rawResponse,
       };
 
-      const parsed = parseCurriculumProgression(response.content);
+      const parsed = parseCurriculumProgression(rawResponse);
       if (parsed.kind !== "success") {
         lastFailureReason = `${parsed.kind} on attempt ${attempts}`;
-        
-        attemptResult.failureCategory = parsed.kind === "parse_failure" ? "parse" : "schema";
+
+        if (parsed.kind === "parse_failure") {
+          attemptResult.parseStatus = "error";
+          attemptResult.parseFailureKind = parsed.parseFailureKind;
+          attemptResult.failureCategory = "parse";
+        } else {
+          attemptResult.parseStatus = "ok";
+          attemptResult.schemaStatus = "error";
+          attemptResult.parsedJson = parsed.parsedJson;
+          attemptResult.failureCategory = "schema";
+        }
         attemptResult.failureReason = lastFailureReason;
-        attemptResult.parseStatus = parsed.kind === "parse_failure" ? "error" : "ok";
-        attemptResult.schemaStatus = parsed.kind === "schema_failure" ? "error" : "not_attempted";
-        
+
         console.warn("[curriculum/ai-draft] Progression parse/schema failed.", {
           attempt: attempts,
           kind: parsed.kind,
+          parseFailureKind: parsed.kind === "parse_failure" ? parsed.parseFailureKind : undefined,
           issues: parsed.issues,
         });
-        
+
         attemptLogs.push(attemptResult);
         continue;
       }
 
       attemptResult.parseStatus = "ok";
       attemptResult.schemaStatus = "ok";
+      attemptResult.parsedJson = parsed.parsedJson;
 
-      // Semantic validation
-      const validation = validateProgressionSemantics(parsed.progression, Array.from(skillIdToTitle.keys()));
+      // ── Ref sanitization pass (before semantic validation) ────────────────
+      const sanitization = sanitizeProgressionRefs(parsed.progression);
+      attemptResult.sanitizationResults = sanitization.results;
+      attemptResult.sanitizationChanged = sanitization.anyChanged;
+
+      if (sanitization.anyChanged) {
+        console.info("[curriculum/ai-draft] Ref sanitization corrected some refs.", {
+          attempt: attempts,
+          changedCount: sanitization.results.filter((r) => r.changed).length,
+          changes: sanitization.results
+            .filter((r) => r.changed)
+            .map((r) => `${r.originalRef} → ${r.sanitizedRef}`),
+        });
+      }
+
+      const progressionToValidate = sanitization.anyChanged ? sanitization.sanitized : parsed.progression;
+
+      // ── Semantic validation ───────────────────────────────────────────────
+      const validation = validateProgressionSemantics(progressionToValidate, validSkillRefs);
       const { summary } = validation;
 
+      attemptResult.validationIssues = validation.issues.map((i) => ({
+        code: i.code,
+        message: i.message,
+        context: i.context,
+      }));
+      attemptResult.missingSkillRefs = validation.missingSkillRefs;
+      attemptResult.duplicateAssignedSkillRefs = validation.duplicateAssignedSkillRefs;
+      attemptResult.invalidPhaseSkillRefs = validation.invalidPhaseSkillRefs;
       attemptResult.summary = {
         phaseCount: summary.phaseCount,
         edgeCount: summary.edgesAccepted,
         unresolvedSkillRefCount: summary.unresolvedEdgeEndpoints + summary.unresolvedPhaseSkills,
-        hardPrerequisiteCycle: validation.issues.some(i => i.code === "hard_prerequisite_cycle"),
-        missingSkillRefs: 0,
-        duplicatePhaseAssignments: 0,
+        hardPrerequisiteCycle: validation.issues.some((i) => i.code === "hard_prerequisite_cycle"),
+        missingSkillRefs: validation.missingSkillRefs.length,
+        duplicatePhaseAssignments: validation.duplicateAssignedSkillRefs.length,
       };
 
       console.info("[curriculum/ai-draft] progression semantic validation", {
         attempt: attempts,
         valid: validation.valid,
-        summary,
+        skillsInCurriculum: summary.skillsInCurriculum,
+        skillsAssignedToPhases: summary.skillsAssignedToPhases,
+        missingSkillRefs: validation.missingSkillRefs.length,
+        duplicateAssignments: validation.duplicateAssignedSkillRefs.length,
         issues: validation.issues.map((issue) => ({ code: issue.code, message: issue.message })),
       });
 
       if (!validation.valid) {
-        const blockingIssues = validation.issues.filter(
-          (issue) =>
-            issue.code === "hard_prerequisite_cycle" ||
-            issue.code === "self_loop" ||
-            issue.code === "empty_phases" ||
-            issue.code === "unresolved_skill_id" ||
-            issue.code === "unresolved_phase_skill"
-        );
-        lastFailureReason = `semantic validation failed on attempt ${attempts}: ${blockingIssues.map((issue) => issue.code).join(", ")}`;
-        
+        // ── Attempt repair for ref/coverage failures (not cycles) ──────────
+        // Repair is appropriate when: JSON parsed, schema passed, but only
+        // coverage/ref issues remain (no hard structural cycles).
+        const hasCycle = validation.issues.some((i) => i.code === "hard_prerequisite_cycle");
+        const hasCoverageOrRefIssue =
+          validation.missingSkillRefs.length > 0 ||
+          validation.duplicateAssignedSkillRefs.length > 0 ||
+          validation.invalidPhaseSkillRefs.length > 0 ||
+          validation.issues.some(
+            (i) => i.code === "unresolved_phase_skill" || i.code === "incomplete_phase_coverage",
+          );
+
+        if (!hasCycle && hasCoverageOrRefIssue) {
+          console.info("[curriculum/ai-draft] Attempting repair pass for near-miss draft.", {
+            attempt: attempts,
+            missingSkillRefs: validation.missingSkillRefs.length,
+            duplicateAssignments: validation.duplicateAssignedSkillRefs.length,
+            invalidRefs: validation.invalidPhaseSkillRefs.length,
+          });
+
+          const repairResult = await repairProgressionDraft({
+            catalog: skillCatalog,
+            invalidDraft: progressionToValidate,
+            validationResult: validation,
+            systemPrompt: prompt.systemPrompt,
+            complete,
+            model,
+            parseFn: parseCurriculumProgression,
+          });
+
+          attemptResult.repairAttempt = {
+            attempted: repairResult.attempted,
+            success: repairResult.success,
+            failureReason: repairResult.failureReason,
+          };
+
+          if (repairResult.success && repairResult.repairedProgression) {
+            // Re-run sanitization + validation on the repaired draft.
+            const repairedSanitization = sanitizeProgressionRefs(repairResult.repairedProgression);
+            const repairedProgression = repairedSanitization.anyChanged
+              ? repairedSanitization.sanitized
+              : repairResult.repairedProgression;
+            const repairedValidation = validateProgressionSemantics(repairedProgression, validSkillRefs);
+
+            if (repairedValidation.valid) {
+              const rs = repairedValidation.summary;
+              // Update attempt result with repaired data.
+              attemptResult.semanticStatus = "ok";
+              attemptResult.accepted = true;
+              attemptResult.missingSkillRefs = repairedValidation.missingSkillRefs;
+              attemptResult.duplicateAssignedSkillRefs = repairedValidation.duplicateAssignedSkillRefs;
+              attemptResult.summary = {
+                phaseCount: rs.phaseCount,
+                edgeCount: rs.edgesAccepted,
+                unresolvedSkillRefCount: rs.unresolvedEdgeEndpoints + rs.unresolvedPhaseSkills,
+                hardPrerequisiteCycle: false,
+                missingSkillRefs: 0,
+                duplicatePhaseAssignments: 0,
+              };
+              attemptLogs.push(attemptResult);
+
+              console.info("[curriculum/ai-draft] Repaired progression accepted.", {
+                attempt: attempts,
+                phaseCount: rs.phaseCount,
+                edgeCount: rs.edgesAccepted,
+                skillsAssigned: rs.skillsAssignedToPhases,
+              });
+
+              return {
+                progression: repairedProgression,
+                attempted: true,
+                parsed: true,
+                semanticValidation: true,
+                phaseCount: rs.phaseCount,
+                edgeCount: rs.edgesAccepted,
+                unresolvedCount: rs.unresolvedEdgeEndpoints + rs.unresolvedPhaseSkills,
+                failureReason: null,
+                attemptCount: attempts,
+                attempts: attemptLogs,
+              };
+            } else {
+              console.warn("[curriculum/ai-draft] Repaired draft still invalid.", {
+                attempt: attempts,
+                missingAfterRepair: repairedValidation.missingSkillRefs.length,
+                issues: repairedValidation.issues.map((i) => i.code),
+              });
+            }
+          }
+        }
+
+        const blockingCodes = validation.issues.map((issue) => issue.code);
+        lastFailureReason = `semantic validation failed on attempt ${attempts}: ${blockingCodes.join(", ")} (skills: ${summary.skillsAssignedToPhases}/${summary.skillsInCurriculum} assigned)`;
+
         attemptResult.semanticStatus = "error";
         attemptResult.failureCategory = "semantic";
         attemptResult.failureReason = lastFailureReason;
 
         console.warn("[curriculum/ai-draft] Progression semantic validation blocked.", {
           attempt: attempts,
-          blockingIssues: blockingIssues.map((issue) => ({ code: issue.code, message: issue.message })),
+          issues: validation.issues.map((issue) => ({ code: issue.code, message: issue.message })),
+          missingSkillRefs: validation.missingSkillRefs.slice(0, 5),
         });
-        
-        attemptLogs.push(attemptResult);
-        continue;
-      }
 
-      // Quality threshold: non-empty phases and minimal skill coverage for non-trivial curricula
-      const totalSkills = skillCatalog.length;
-      const minPhaseCoverage = totalSkills >= 4 ? Math.ceil(totalSkills * 0.4) : 0;
-      if (summary.phaseCount === 0 && totalSkills > 0) {
-        lastFailureReason = `no phases generated on attempt ${attempts}`;
-        
-        attemptResult.semanticStatus = "error";
-        attemptResult.failureCategory = "semantic";
-        attemptResult.failureReason = lastFailureReason;
-        
-        console.warn("[curriculum/ai-draft] Progression has no phases, retrying.", { attempt: attempts, totalSkills });
-        
-        attemptLogs.push(attemptResult);
-        continue;
-      }
-      if (summary.skillsAssignedToPhases < minPhaseCoverage) {
-        lastFailureReason = `insufficient phase coverage on attempt ${attempts}: ${summary.skillsAssignedToPhases}/${totalSkills} skills assigned`;
-        
-        attemptResult.semanticStatus = "error";
-        attemptResult.failureCategory = "semantic";
-        attemptResult.failureReason = lastFailureReason;
-        
-        console.warn("[curriculum/ai-draft] Progression phase coverage below threshold, retrying.", {
-          attempt: attempts,
-          skillsAssignedToPhases: summary.skillsAssignedToPhases,
-          totalSkills,
-          minPhaseCoverage,
-        });
-        
         attemptLogs.push(attemptResult);
         continue;
       }
@@ -842,11 +956,14 @@ export async function generateCurriculumProgression(
 
       console.info("[curriculum/ai-draft] Progression accepted.", {
         attempt: attempts,
-        summary,
+        phaseCount: summary.phaseCount,
+        edgeCount: summary.edgesAccepted,
+        skillsAssigned: summary.skillsAssignedToPhases,
+        skillsInCurriculum: summary.skillsInCurriculum,
       });
 
       return {
-        progression: parsed.progression,
+        progression: progressionToValidate,
         attempted: true,
         parsed: true,
         semanticValidation: true,
@@ -2718,23 +2835,82 @@ export function parseCurriculumProgression(content: string):
   | {
       kind: "success";
       progression: CurriculumAiProgression;
+      parsedJson: unknown;
     }
   | {
       kind: "parse_failure";
+      parseFailureKind: "no_json_found" | "malformed_json" | "wrong_top_level_shape";
       issues: CurriculumAiFailureIssue[];
+      extractedCandidate?: string;
     }
   | {
       kind: "schema_failure";
       issues: CurriculumAiFailureIssue[];
+      parsedJson: unknown;
     } {
-  const parsed = safeParseJson(content);
-  if (!parsed) {
+  // First: try direct JSON parse.
+  let parsed: unknown = null;
+  let parseFailureKind: "no_json_found" | "malformed_json" | "wrong_top_level_shape" = "no_json_found";
+  let extractedCandidate: string | undefined;
+
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    // Try code fence extraction.
+    const fenceMatch = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+    if (fenceMatch) {
+      extractedCandidate = fenceMatch[1];
+      try {
+        parsed = JSON.parse(fenceMatch[1]);
+      } catch {
+        parseFailureKind = "malformed_json";
+      }
+    }
+
+    // Try raw object extraction from prose.
+    if (parsed === null) {
+      const objectMatch = content.match(/\{[\s\S]*\}/);
+      if (objectMatch) {
+        extractedCandidate = objectMatch[0];
+        try {
+          parsed = JSON.parse(objectMatch[0]);
+        } catch {
+          parseFailureKind = "malformed_json";
+        }
+      }
+    }
+
+    if (parsed === null) {
+      // Distinguish: was there a JSON-like structure at all?
+      if (content.includes("{") && content.includes("}")) {
+        parseFailureKind = "malformed_json";
+      } else {
+        parseFailureKind = "no_json_found";
+      }
+      return {
+        kind: "parse_failure",
+        parseFailureKind,
+        issues: [
+          {
+            code: "parse_failed",
+            message: `The progression response could not be parsed as JSON (${parseFailureKind}).`,
+            path: [],
+          },
+        ],
+        extractedCandidate,
+      };
+    }
+  }
+
+  // Check top-level shape before schema validation.
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     return {
       kind: "parse_failure",
+      parseFailureKind: "wrong_top_level_shape",
       issues: [
         {
           code: "parse_failed",
-          message: "The progression response could not be parsed as JSON.",
+          message: "Parsed JSON is not an object at the top level.",
           path: [],
         },
       ],
@@ -2751,12 +2927,14 @@ export function parseCurriculumProgression(content: string):
         message: issue.message,
         path: issue.path.map((segment) => String(segment)),
       })),
+      parsedJson: parsed,
     };
   }
 
   return {
     kind: "success",
     progression: validated.data,
+    parsedJson: parsed,
   };
 }
 

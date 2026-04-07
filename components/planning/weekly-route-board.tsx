@@ -564,6 +564,7 @@ export function WeeklyRouteBoard({ initialBoard, weekStartDate }: WeeklyRouteBoa
       ) : null}
 
       <DndContext
+        id={`weekly-route-board-${weekStartDate}`}
         sensors={sensors}
         collisionDetection={closestCorners}
         onDragStart={onDragStart}
