@@ -277,6 +277,10 @@ interface DiagnosticsBarProps {
   onRegenerate: () => void;
   isRegenerating: boolean;
   regenerateResult: { kind: string; reason?: string; phaseCount?: number } | null;
+  debugOpen: boolean;
+  setDebugOpen: (open: boolean) => void;
+  viewAttemptsOpen: boolean;
+  setViewAttemptsOpen: (open: boolean) => void;
 }
 
 function DiagnosticsBar({
@@ -285,6 +289,10 @@ function DiagnosticsBar({
   onRegenerate,
   isRegenerating,
   regenerateResult,
+  debugOpen,
+  setDebugOpen,
+  viewAttemptsOpen,
+  setViewAttemptsOpen,
 }: DiagnosticsBarProps) {
   const { diagnostics } = graph;
   const status = (diagnostics as any).progressionStatus ?? (diagnostics.hasExplicitProgression ? "explicit_ready" : "fallback_only");
@@ -323,6 +331,22 @@ function DiagnosticsBar({
           {(diagnostics as any).attemptCount > 0 && ` · ${(diagnostics as any).attemptCount} attempt${(diagnostics as any).attemptCount !== 1 ? "s" : ""}`}
         </span>
         <div className="ml-auto shrink-0">
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setDebugOpen(!debugOpen)}
+            className="h-7 mr-2 text-xs"
+          >
+            {debugOpen ? "Hide prompt" : "View prompt"}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setViewAttemptsOpen(!viewAttemptsOpen)}
+            className="h-7 mr-2 text-xs"
+          >
+            {viewAttemptsOpen ? "Hide attempts" : "View attempts"}
+          </Button>
           <Button
             size="sm"
             variant="outline"
@@ -497,6 +521,47 @@ interface CurriculumProgressionGraphProps {
   regenerateAction?: (sourceId: string) => Promise<{ kind: string; reason?: string; phaseCount?: number; attemptCount?: number }>;
 }
 
+
+function ViewAttemptsPanel({ attempts }: { attempts: any[] }) {
+  if (!attempts || attempts.length === 0) return null;
+  return (
+    <div className="mt-4 rounded-md border p-4 space-y-4 bg-muted/20">
+      <h3 className="font-semibold text-sm">Attempt Diagnostics</h3>
+      <div className="space-y-3">
+        {attempts.map((attempt, i) => (
+          <div key={i} className="text-xs space-y-1 p-3 border rounded bg-background">
+            <div className="flex justify-between font-medium border-b pb-1 mb-2">
+              <span>Attempt {attempt.attemptNumber}</span>
+              <span className={attempt.accepted ? "text-emerald-600" : "text-red-600"}>
+                {attempt.accepted ? "Accepted" : "Failed"}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-[11px]">
+              <div><strong>Transport:</strong> {attempt.transportStatus}</div>
+              <div><strong>Parse:</strong> {attempt.parseStatus}</div>
+              <div><strong>Schema:</strong> {attempt.schemaStatus}</div>
+              <div><strong>Semantic:</strong> {attempt.semanticStatus}</div>
+            </div>
+            {attempt.failureReason && (
+              <div className="mt-2 text-red-600">
+                <strong>Failure:</strong> {attempt.failureCategory} - {attempt.failureReason}
+              </div>
+            )}
+            {attempt.summary && (
+              <div className="mt-2 text-muted-foreground">
+                <span className="mr-3">Phases: {attempt.summary.phaseCount}</span>
+                <span className="mr-3">Edges: {attempt.summary.edgeCount}</span>
+                <span className="mr-3">Missing refs: {attempt.summary.missingSkillRefs}</span>
+                <span className="mr-3">Hard cycle: {attempt.summary.hardPrerequisiteCycle ? "Yes" : "No"}</span>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function CurriculumProgressionGraph({
   sources,
   selectedSourceId,
@@ -506,6 +571,7 @@ export function CurriculumProgressionGraph({
 }: CurriculumProgressionGraphProps) {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [debugOpen, setDebugOpen] = useState(false);
+  const [viewAttemptsOpen, setViewAttemptsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isPending, startTransition] = useTransition();
   const [regenerateResult, setRegenerateResult] = useState<{ kind: string; reason?: string; phaseCount?: number } | null>(null);
@@ -568,7 +634,15 @@ export function CurriculumProgressionGraph({
         onRegenerate={handleRegenerate}
         isRegenerating={isPending}
         regenerateResult={regenerateResult}
+        debugOpen={debugOpen}
+        setDebugOpen={setDebugOpen}
+        viewAttemptsOpen={viewAttemptsOpen}
+        setViewAttemptsOpen={setViewAttemptsOpen}
       />
+
+      {viewAttemptsOpen && (
+        <ViewAttemptsPanel attempts={(graph.diagnostics as any).rawAttemptSummaries ?? []} />
+      )}
 
       {/* Side-by-side: graph + detail panel */}
       <div className={cn("flex gap-4", selectedNode ? "items-start" : "")}>

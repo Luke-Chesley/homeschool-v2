@@ -114,12 +114,8 @@ export const CurriculumAiProgressionEdgeKindSchema = z.enum([
 export type CurriculumAiProgressionEdgeKind = z.infer<typeof CurriculumAiProgressionEdgeKindSchema>;
 
 export const CurriculumAiProgressionEdgeSchema = z.object({
-  fromSkillTitle: z.string().trim().min(1).max(180),
-  toSkillTitle: z.string().trim().min(1).max(180),
-  /** Stable skill node ID for the prerequisite. Populated by the regeneration path; optional for initial generation. */
-  fromSkillId: z.string().trim().min(1).max(80).optional(),
-  /** Stable skill node ID for the dependent skill. Populated by the regeneration path; optional for initial generation. */
-  toSkillId: z.string().trim().min(1).max(80).optional(),
+  fromSkillRef: z.string().trim().min(1).max(180),
+  toSkillRef: z.string().trim().min(1).max(180),
   kind: CurriculumAiProgressionEdgeKindSchema,
 });
 
@@ -128,9 +124,7 @@ export type CurriculumAiProgressionEdge = z.infer<typeof CurriculumAiProgression
 export const CurriculumAiProgressionPhaseSchema = z.object({
   title: z.string().trim().min(1).max(180),
   description: z.string().trim().max(600).optional(),
-  skillTitles: z.array(z.string().trim().min(1).max(180)).min(1),
-  /** Stable skill node IDs parallel to skillTitles. Populated by the regeneration path; optional for initial generation. */
-  skillIds: z.array(z.string().trim().min(1).max(80)).optional(),
+  skillRefs: z.array(z.string().trim().min(1).max(180)).min(1),
 });
 
 export type CurriculumAiProgressionPhase = z.infer<typeof CurriculumAiProgressionPhaseSchema>;

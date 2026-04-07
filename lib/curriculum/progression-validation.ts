@@ -52,46 +52,11 @@ export interface ProgressionValidationResult {
  */
 export function validateProgressionSemantics(
   progression: CurriculumAiProgression,
-  leafSkillTitles: string[],
-  skillIdToTitle?: Map<string, string>,
+  validSkillRefs: string[],
 ): ProgressionValidationResult {
   const issues: ProgressionValidationIssue[] = [];
-  const skillSet = new Set(leafSkillTitles);
-  const totalSkills = leafSkillTitles.length;
-
-  // When skill IDs are available, validate any referenced IDs exist
-  if (skillIdToTitle) {
-    const validIds = new Set(skillIdToTitle.keys());
-    for (const edge of progression.edges) {
-      if (edge.fromSkillId && !validIds.has(edge.fromSkillId)) {
-        issues.push({
-          code: "unresolved_skill_id",
-          message: `Edge fromSkillId "${edge.fromSkillId}" does not correspond to any known skill node.`,
-          context: { fromSkillId: edge.fromSkillId, fromSkillTitle: edge.fromSkillTitle },
-        });
-      }
-      if (edge.toSkillId && !validIds.has(edge.toSkillId)) {
-        issues.push({
-          code: "unresolved_skill_id",
-          message: `Edge toSkillId "${edge.toSkillId}" does not correspond to any known skill node.`,
-          context: { toSkillId: edge.toSkillId, toSkillTitle: edge.toSkillTitle },
-        });
-      }
-    }
-    for (const phase of progression.phases) {
-      if (phase.skillIds) {
-        for (const skillId of phase.skillIds) {
-          if (!validIds.has(skillId)) {
-            issues.push({
-              code: "unresolved_skill_id",
-              message: `Phase "${phase.title}" references skillId "${skillId}" which does not correspond to any known skill node.`,
-              context: { phaseTitle: phase.title, skillId },
-            });
-          }
-        }
-      }
-    }
-  }
+  const skillSet = new Set(validSkillRefs);
+  const totalSkills = validSkillRefs.length;
 
   // --- Edge validation ---
   const edgeSet = new Set<string>();
@@ -101,20 +66,14 @@ export function validateProgressionSemantics(
   let hardPrerequisiteEdges = 0;
 
   for (const edge of progression.edges) {
-    // When a stable ID is provided and the ID map is available, resolve by ID first.
-    // This lets title drift not cause false negatives on the ID-validated path.
-    const fromResolved = (edge.fromSkillId && skillIdToTitle?.has(edge.fromSkillId))
-      ? true
-      : skillSet.has(edge.fromSkillTitle);
-    const toResolved = (edge.toSkillId && skillIdToTitle?.has(edge.toSkillId))
-      ? true
-      : skillSet.has(edge.toSkillTitle);
+    const fromResolved = skillSet.has(edge.fromSkillRef);
+    const toResolved = skillSet.has(edge.toSkillRef);
 
     if (!fromResolved) {
       issues.push({
         code: "unresolved_edge_from",
-        message: `Edge fromSkillTitle "${edge.fromSkillTitle}" does not match any leaf skill in the curriculum.`,
-        context: { fromSkillTitle: edge.fromSkillTitle, toSkillTitle: edge.toSkillTitle, kind: edge.kind },
+        message: `Edge fromSkillRef "${edge.fromSkillRef}" does not match any skill in the catalog.`,
+        context: { fromSkillRef: edge.fromSkillRef, toSkillRef: edge.toSkillRef, kind: edge.kind },
       });
       unresolvedEdgeEndpoints++;
       edgesDropped++;
@@ -124,30 +83,30 @@ export function validateProgressionSemantics(
     if (!toResolved) {
       issues.push({
         code: "unresolved_edge_to",
-        message: `Edge toSkillTitle "${edge.toSkillTitle}" does not match any leaf skill in the curriculum.`,
-        context: { fromSkillTitle: edge.fromSkillTitle, toSkillTitle: edge.toSkillTitle, kind: edge.kind },
+        message: `Edge toSkillRef "${edge.toSkillRef}" does not match any skill in the catalog.`,
+        context: { fromSkillRef: edge.fromSkillRef, toSkillRef: edge.toSkillRef, kind: edge.kind },
       });
       unresolvedEdgeEndpoints++;
       edgesDropped++;
       continue;
     }
 
-    if (edge.fromSkillTitle === edge.toSkillTitle) {
+    if (edge.fromSkillRef === edge.toSkillRef) {
       issues.push({
         code: "self_loop",
-        message: `Self-loop detected: skill "${edge.fromSkillTitle}" lists itself as a prerequisite.`,
-        context: { skillTitle: edge.fromSkillTitle, kind: edge.kind },
+        message: `Self-loop detected: skill "${edge.fromSkillRef}" lists itself as a prerequisite.`,
+        context: { skillRef: edge.fromSkillRef, kind: edge.kind },
       });
       edgesDropped++;
       continue;
     }
 
-    const edgeKey = `${edge.fromSkillTitle}→${edge.toSkillTitle}`;
+    const edgeKey = `${edge.fromSkillRef}→${edge.toSkillRef}`;
     if (edgeSet.has(edgeKey)) {
       issues.push({
         code: "duplicate_edge",
-        message: `Duplicate edge from "${edge.fromSkillTitle}" to "${edge.toSkillTitle}".`,
-        context: { fromSkillTitle: edge.fromSkillTitle, toSkillTitle: edge.toSkillTitle },
+        message: `Duplicate edge from "${edge.fromSkillRef}" to "${edge.toSkillRef}".`,
+        context: { fromSkillRef: edge.fromSkillRef, toSkillRef: edge.toSkillRef },
       });
       edgesDropped++;
       continue;
@@ -161,23 +120,17 @@ export function validateProgressionSemantics(
   }
 
   // --- Hard prerequisite cycle detection ---
-  // Use stable IDs when available for cycle detection (avoids false negatives from title drift).
   const hardEdges = progression.edges.filter(
     (edge) =>
       edge.kind === "hardPrerequisite" &&
-      ((edge.fromSkillId && skillIdToTitle?.has(edge.fromSkillId)) || skillSet.has(edge.fromSkillTitle)) &&
-      ((edge.toSkillId && skillIdToTitle?.has(edge.toSkillId)) || skillSet.has(edge.toSkillTitle)) &&
-      edge.fromSkillTitle !== edge.toSkillTitle,
+      skillSet.has(edge.fromSkillRef) &&
+      skillSet.has(edge.toSkillRef) &&
+      edge.fromSkillRef !== edge.toSkillRef,
   );
 
-  // Use ID-based keys for cycle detection when both endpoints have IDs, else fall back to titles.
   const cycleNodes = detectCycles(hardEdges.map((edge) => ({
-    from: (edge.fromSkillId && edge.toSkillId && skillIdToTitle)
-      ? edge.fromSkillId
-      : edge.fromSkillTitle,
-    to: (edge.fromSkillId && edge.toSkillId && skillIdToTitle)
-      ? edge.toSkillId
-      : edge.toSkillTitle,
+    from: edge.fromSkillRef,
+    to: edge.toSkillRef,
   })));
   if (cycleNodes.length > 0) {
     issues.push({
@@ -189,7 +142,7 @@ export function validateProgressionSemantics(
 
   // --- Phase validation ---
   let unresolvedPhaseSkills = 0;
-  const assignedSkillTitles = new Set<string>();
+  const assignedSkillRefs = new Set<string>();
 
   if (progression.phases.length === 0 && totalSkills > 0) {
     issues.push({
@@ -199,28 +152,22 @@ export function validateProgressionSemantics(
   }
 
   for (const phase of progression.phases) {
-    for (let i = 0; i < phase.skillTitles.length; i++) {
-      const skillTitle = phase.skillTitles[i];
-      const skillId = phase.skillIds?.[i];
-      // Resolve by ID first when available, fall back to title matching
-      const resolvedById = skillId && skillIdToTitle?.has(skillId);
-      if (!resolvedById && !skillSet.has(skillTitle)) {
+    for (const skillRef of phase.skillRefs) {
+      if (!skillSet.has(skillRef)) {
         issues.push({
           code: "unresolved_phase_skill",
-          message: `Phase "${phase.title}" references skill "${skillTitle}" which does not match any leaf skill in the curriculum.`,
-          context: { phaseTitle: phase.title, skillTitle, skillId },
+          message: `Phase "${phase.title}" references skillRef "${skillRef}" which does not match any skill in the catalog.`,
+          context: { phaseTitle: phase.title, skillRef },
         });
         unresolvedPhaseSkills++;
       } else {
-        // Track by a canonical key (prefer ID when available)
-        assignedSkillTitles.add(resolvedById ? (skillIdToTitle!.get(skillId!)!) : skillTitle);
+        assignedSkillRefs.add(skillRef);
       }
     }
   }
 
-  const skillsAssignedToPhases = assignedSkillTitles.size;
+  const skillsAssignedToPhases = assignedSkillRefs.size;
 
-  // Warn if fewer than half the skills are assigned to phases (only for non-trivial curricula)
   if (totalSkills >= 4 && skillsAssignedToPhases < Math.ceil(totalSkills / 2)) {
     issues.push({
       code: "low_phase_coverage",
@@ -233,7 +180,9 @@ export function validateProgressionSemantics(
     (issue) =>
       issue.code !== "hard_prerequisite_cycle" &&
       issue.code !== "self_loop" &&
-      issue.code !== "empty_phases",
+      issue.code !== "empty_phases" &&
+      issue.code !== "unresolved_skill_id" &&
+      issue.code !== "unresolved_phase_skill"
   );
 
   return {

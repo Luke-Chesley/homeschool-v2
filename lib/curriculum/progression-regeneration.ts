@@ -81,13 +81,13 @@ export async function regenerateCurriculumProgression(
 
   // Build a minimal artifact shell — we only need enough structure for the prompt.
   // The actual document content is reconstructed from the skill hierarchy.
-  const minimalArtifact: CurriculumAiGeneratedArtifact = buildMinimalArtifactForProgression(source, skillNodes);
+  const minimalArtifact = buildMinimalArtifactForProgression(source, skillNodes);
 
   // Run progression generation with the real skill IDs.
   const result = await generateCurriculumProgression(
     {
       learner: { displayName: params.learnerDisplayName },
-      artifact: minimalArtifact,
+      artifact: minimalArtifact as any,
       skillRefs,
     },
     {
@@ -106,7 +106,9 @@ export async function regenerateCurriculumProgression(
       sourceId: params.sourceId,
       status: "explicit_failed",
       lastFailureReason: result.failureReason ?? "All progression generation attempts failed.",
+      lastFailureCategory: result.attempts?.[result.attempts.length - 1]?.failureCategory ?? "unknown",
       attemptCount: result.attemptCount,
+      attempts: result.attempts,
       usingInferredFallback: true,
       provenance,
     });
@@ -173,9 +175,11 @@ export async function regenerateCurriculumProgression(
     sourceId: params.sourceId,
     status: "explicit_ready",
     lastFailureReason: null,
+    lastFailureCategory: null,
     lastAcceptedPhaseCount: diag.phaseCount,
     lastAcceptedEdgeCount: diag.acceptedEdgeCount,
     attemptCount: result.attemptCount,
+    attempts: result.attempts,
     usingInferredFallback: false,
     provenance,
   });
@@ -232,9 +236,9 @@ export async function buildProgressionPromptPreview(params: {
 
   const userPrompt = buildCurriculumProgressionPrompt({
     learnerName: params.learnerDisplayName,
-    coreArtifact: minimalArtifact,
-    leafSkillTitles,
-    skillRefs,
+    sourceTitle: source.title,
+    sourceSummary: source.description || undefined,
+    skillCatalog: skillRefs.map(r => ({ skillRef: r.skillId, title: r.skillTitle })),
   });
 
   return {

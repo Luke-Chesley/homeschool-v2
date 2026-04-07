@@ -596,6 +596,26 @@ export async function generateCurriculumArtifact(
   });
 }
 
+export type ProgressionAttemptResult = {
+  attemptNumber: number
+  transportStatus: "ok" | "error"
+  rawResponseReceived: boolean
+  parseStatus: "not_attempted" | "ok" | "error"
+  schemaStatus: "not_attempted" | "ok" | "error"
+  semanticStatus: "not_attempted" | "ok" | "error"
+  accepted: boolean
+  failureCategory: "transport" | "parse" | "schema" | "semantic" | null
+  failureReason: string | null
+  summary?: {
+    phaseCount: number
+    edgeCount: number
+    unresolvedSkillRefCount: number
+    hardPrerequisiteCycle: boolean
+    missingSkillRefs: number
+    duplicatePhaseAssignments: number
+  }
+};
+
 export interface ProgressionGenerateResult {
   progression: CurriculumAiProgression | null;
   attempted: boolean;
@@ -606,13 +626,14 @@ export interface ProgressionGenerateResult {
   unresolvedCount: number;
   failureReason: string | null;
   attemptCount: number;
+  attempts: ProgressionAttemptResult[];
 }
 
 export async function generateCurriculumProgression(
   params: {
     learner: { displayName: string };
     artifact: CurriculumAiGeneratedArtifact;
-    /** Optional: pre-computed skill refs with stable IDs (for the regeneration path). */
+    /** Expected to be the exhaustive skill catalog */
     skillRefs?: Array<{ skillId: string; skillTitle: string }>;
   },
   deps?: {
@@ -625,13 +646,19 @@ export async function generateCurriculumProgression(
   const adapter = getAdapterForTask("curriculum.generate.progression");
   const model = getModelForTask("curriculum.generate.progression", getAiRoutingConfig());
   const complete = deps?.complete ?? ((options: any) => adapter.complete(options));
-  const leafSkillTitles = params.skillRefs
-    ? params.skillRefs.map((r) => r.skillTitle)
-    : extractLeafSkillTitles(params.artifact.document);
+  
+  // Use passed skillRefs or extract leaf titles to create refs.
+  const skillCatalog = params.skillRefs 
+    ? params.skillRefs.map(r => ({ skillRef: r.skillId, title: r.skillTitle }))
+    : extractLeafSkillTitles(params.artifact.document).map((title, i) => ({ skillRef: `skill_${i}`, title }));
+
+  const leafSkillTitles = skillCatalog.map(r => r.title);
+  const skillIdToTitle = new Map(skillCatalog.map(r => [r.skillRef, r.title]));
+
 
   console.info("[curriculum/ai-draft] progression generation started", {
     learner: params.learner.displayName,
-    leafSkillCount: leafSkillTitles.length,
+    leafSkillCount: skillCatalog.length,
     model,
   });
 
@@ -667,6 +694,7 @@ export async function generateCurriculumProgression(
       "Every title must match the list exactly — copy-paste each one.",
     ],
   ];
+  let attemptLogs: ProgressionAttemptResult[] = [];
   let attempts = 0;
   let lastFailureReason: string | null = null;
 
@@ -688,40 +716,66 @@ export async function generateCurriculumProgression(
             content:
               buildCurriculumProgressionPrompt({
                 learnerName: params.learner.displayName,
-                coreArtifact: params.artifact,
-                leafSkillTitles,
-                skillRefs: params.skillRefs,
+                sourceTitle: params.artifact.source.title,
+                sourceSummary: params.artifact.source.summary || params.artifact.source.description,
+                skillCatalog,
               }) + correctionBlock,
           },
         ],
       });
 
+      
+      let attemptResult: ProgressionAttemptResult = {
+        attemptNumber: attempts,
+        transportStatus: "ok",
+        rawResponseReceived: true,
+        parseStatus: "not_attempted",
+        schemaStatus: "not_attempted",
+        semanticStatus: "not_attempted",
+        accepted: false,
+        failureCategory: null,
+        failureReason: null,
+      };
+
       const parsed = parseCurriculumProgression(response.content);
       if (parsed.kind !== "success") {
         lastFailureReason = `${parsed.kind} on attempt ${attempts}`;
+        
+        attemptResult.failureCategory = parsed.kind === "parse_failure" ? "parse" : "schema";
+        attemptResult.failureReason = lastFailureReason;
+        attemptResult.parseStatus = parsed.kind === "parse_failure" ? "error" : "ok";
+        attemptResult.schemaStatus = parsed.kind === "schema_failure" ? "error" : "not_attempted";
+        
         console.warn("[curriculum/ai-draft] Progression parse/schema failed.", {
           attempt: attempts,
           kind: parsed.kind,
           issues: parsed.issues,
         });
+        
+        attemptLogs.push(attemptResult);
         continue;
       }
 
+      attemptResult.parseStatus = "ok";
+      attemptResult.schemaStatus = "ok";
+
       // Semantic validation
-      const validation = validateProgressionSemantics(parsed.progression, leafSkillTitles);
+      const validation = validateProgressionSemantics(parsed.progression, Array.from(skillIdToTitle.keys()));
       const { summary } = validation;
+
+      attemptResult.summary = {
+        phaseCount: summary.phaseCount,
+        edgeCount: summary.edgesAccepted,
+        unresolvedSkillRefCount: summary.unresolvedEdgeEndpoints + summary.unresolvedPhaseSkills,
+        hardPrerequisiteCycle: validation.issues.some(i => i.code === "hard_prerequisite_cycle"),
+        missingSkillRefs: 0,
+        duplicatePhaseAssignments: 0,
+      };
 
       console.info("[curriculum/ai-draft] progression semantic validation", {
         attempt: attempts,
         valid: validation.valid,
-        skillsInCurriculum: summary.skillsInCurriculum,
-        skillsAssignedToPhases: summary.skillsAssignedToPhases,
-        edgesAccepted: summary.edgesAccepted,
-        edgesDropped: summary.edgesDropped,
-        unresolvedEdgeEndpoints: summary.unresolvedEdgeEndpoints,
-        unresolvedPhaseSkills: summary.unresolvedPhaseSkills,
-        hardPrerequisiteEdges: summary.hardPrerequisiteEdges,
-        phaseCount: summary.phaseCount,
+        summary,
         issues: validation.issues.map((issue) => ({ code: issue.code, message: issue.message })),
       });
 
@@ -730,34 +784,61 @@ export async function generateCurriculumProgression(
           (issue) =>
             issue.code === "hard_prerequisite_cycle" ||
             issue.code === "self_loop" ||
-            issue.code === "empty_phases",
+            issue.code === "empty_phases" ||
+            issue.code === "unresolved_skill_id" ||
+            issue.code === "unresolved_phase_skill"
         );
         lastFailureReason = `semantic validation failed on attempt ${attempts}: ${blockingIssues.map((issue) => issue.code).join(", ")}`;
+        
+        attemptResult.semanticStatus = "error";
+        attemptResult.failureCategory = "semantic";
+        attemptResult.failureReason = lastFailureReason;
+
         console.warn("[curriculum/ai-draft] Progression semantic validation blocked.", {
           attempt: attempts,
           blockingIssues: blockingIssues.map((issue) => ({ code: issue.code, message: issue.message })),
         });
+        
+        attemptLogs.push(attemptResult);
         continue;
       }
 
       // Quality threshold: non-empty phases and minimal skill coverage for non-trivial curricula
-      const totalSkills = leafSkillTitles.length;
+      const totalSkills = skillCatalog.length;
       const minPhaseCoverage = totalSkills >= 4 ? Math.ceil(totalSkills * 0.4) : 0;
       if (summary.phaseCount === 0 && totalSkills > 0) {
         lastFailureReason = `no phases generated on attempt ${attempts}`;
+        
+        attemptResult.semanticStatus = "error";
+        attemptResult.failureCategory = "semantic";
+        attemptResult.failureReason = lastFailureReason;
+        
         console.warn("[curriculum/ai-draft] Progression has no phases, retrying.", { attempt: attempts, totalSkills });
+        
+        attemptLogs.push(attemptResult);
         continue;
       }
       if (summary.skillsAssignedToPhases < minPhaseCoverage) {
         lastFailureReason = `insufficient phase coverage on attempt ${attempts}: ${summary.skillsAssignedToPhases}/${totalSkills} skills assigned`;
+        
+        attemptResult.semanticStatus = "error";
+        attemptResult.failureCategory = "semantic";
+        attemptResult.failureReason = lastFailureReason;
+        
         console.warn("[curriculum/ai-draft] Progression phase coverage below threshold, retrying.", {
           attempt: attempts,
           skillsAssignedToPhases: summary.skillsAssignedToPhases,
           totalSkills,
           minPhaseCoverage,
         });
+        
+        attemptLogs.push(attemptResult);
         continue;
       }
+
+      attemptResult.semanticStatus = "ok";
+      attemptResult.accepted = true;
+      attemptLogs.push(attemptResult);
 
       console.info("[curriculum/ai-draft] Progression accepted.", {
         attempt: attempts,
@@ -774,6 +855,7 @@ export async function generateCurriculumProgression(
         unresolvedCount: summary.unresolvedEdgeEndpoints + summary.unresolvedPhaseSkills,
         failureReason: null,
         attemptCount: attempts,
+        attempts: attemptLogs,
       };
     } catch (error) {
       lastFailureReason = `model call failed on attempt ${attempts}`;
@@ -781,12 +863,23 @@ export async function generateCurriculumProgression(
         attempt: attempts,
         error,
       });
+      attemptLogs.push({
+        attemptNumber: attempts,
+        transportStatus: "error",
+        rawResponseReceived: false,
+        parseStatus: "not_attempted",
+        schemaStatus: "not_attempted",
+        semanticStatus: "not_attempted",
+        accepted: false,
+        failureCategory: "transport",
+        failureReason: lastFailureReason,
+      });
     }
   }
 
   // All attempts exhausted — log explicitly, do not silently succeed
   console.error("[curriculum/ai-draft] Progression generation failed after all attempts. Planning will fall back to inferred order.", {
-    leafSkillCount: leafSkillTitles.length,
+    leafSkillCount: skillCatalog.length,
     attempts,
     lastFailureReason,
   });
@@ -801,6 +894,7 @@ export async function generateCurriculumProgression(
     unresolvedCount: 0,
     failureReason: lastFailureReason,
     attemptCount: attempts,
+    attempts: attemptLogs,
   };
 }
 

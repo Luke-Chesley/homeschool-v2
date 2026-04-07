@@ -423,16 +423,12 @@ export function normalizeCurriculumDocument(args: {
   }
 
   if (args.progression?.edges && args.progression.edges.length > 0) {
-    const unmatchedEdgeEndpoints: Array<{ fromSkillTitle: string; toSkillTitle: string; unresolved: string[] }> = [];
+    const unmatchedEdgeEndpoints: Array<{ fromSkillRef: string; toSkillRef: string; unresolved: string[] }> = [];
 
     for (const edge of args.progression.edges) {
-      // Resolve by stable ID first (new path), fall back to title lookup (legacy path)
-      const skillNodeId = (edge.toSkillId && validNodeIds.has(edge.toSkillId))
-        ? edge.toSkillId
-        : skillIdByTitle.get(edge.toSkillTitle);
-      const prerequisiteSkillNodeId = (edge.fromSkillId && validNodeIds.has(edge.fromSkillId))
-        ? edge.fromSkillId
-        : skillIdByTitle.get(edge.fromSkillTitle);
+      // In the new system, skillRef IS the nodeId (since we pass node IDs as skillRefs)
+      const skillNodeId = validNodeIds.has(edge.toSkillRef) ? edge.toSkillRef : undefined;
+      const prerequisiteSkillNodeId = validNodeIds.has(edge.fromSkillRef) ? edge.fromSkillRef : undefined;
 
       if (skillNodeId && prerequisiteSkillNodeId) {
         prerequisites.push({
@@ -442,43 +438,33 @@ export function normalizeCurriculumDocument(args: {
           kind: edge.kind,
           metadata: {
             derivedFrom: "explicit_progression_graph",
-            resolvedById: Boolean(edge.toSkillId && validNodeIds.has(edge.toSkillId)),
+            resolvedById: true,
           },
         });
       } else {
         const unresolved: string[] = [];
-        if (!prerequisiteSkillNodeId) unresolved.push(`fromSkillTitle: "${edge.fromSkillTitle}"`);
-        if (!skillNodeId) unresolved.push(`toSkillTitle: "${edge.toSkillTitle}"`);
-        unmatchedEdgeEndpoints.push({ fromSkillTitle: edge.fromSkillTitle, toSkillTitle: edge.toSkillTitle, unresolved });
+        if (!prerequisiteSkillNodeId) unresolved.push(`fromSkillRef: "${edge.fromSkillRef}"`);
+        if (!skillNodeId) unresolved.push(`toSkillRef: "${edge.toSkillRef}"`);
+        unmatchedEdgeEndpoints.push({ fromSkillRef: edge.fromSkillRef, toSkillRef: edge.toSkillRef, unresolved });
       }
     }
 
     _droppedEdgeCount = unmatchedEdgeEndpoints.length;
 
     if (unmatchedEdgeEndpoints.length > 0) {
-      console.error("[curriculum/normalization] Progression edges dropped due to unmatched skill titles.", {
+      console.error("[curriculum/normalization] Progression edges dropped due to unmatched skill refs.", {
         sourceId: args.sourceId,
         droppedEdgeCount: unmatchedEdgeEndpoints.length,
         totalEdgeCount: args.progression.edges.length,
         acceptedEdgeCount: prerequisites.length,
         unmatchedEdges: unmatchedEdgeEndpoints.slice(0, 10),
-        availableSkillTitles: [...skillIdByTitle.keys()].slice(0, 20),
-      });
-    } else {
-      console.info("[curriculum/normalization] All progression edges resolved.", {
-        sourceId: args.sourceId,
-        acceptedEdgeCount: prerequisites.length,
       });
     }
   } else {
-    // Explicit fallback: inferred sequence — log clearly so it is observable
+    // Explicit fallback: inferred sequence
     _usingInferredFallback = true;
     console.info("[curriculum/normalization] No explicit progression edges — using inferred canonical order fallback.", {
       sourceId: args.sourceId,
-      hasProgression: Boolean(args.progression),
-      hasEdges: Boolean(args.progression?.edges),
-      edgeCount: args.progression?.edges?.length ?? 0,
-      skillCount: canonicalSkillNodeIds.length,
     });
 
     for (let i = 1; i < canonicalSkillNodeIds.length; i++) {
@@ -497,21 +483,16 @@ export function normalizeCurriculumDocument(args: {
 
   const phases: NormalizedCurriculumImport["phases"] = [];
   if (args.progression?.phases && args.progression.phases.length > 0) {
-    const unmatchedPhaseSkills: Array<{ phaseTitle: string; skillTitle: string }> = [];
+    const unmatchedPhaseSkills: Array<{ phaseTitle: string; skillRef: string }> = [];
 
     for (const [index, phase] of args.progression.phases.entries()) {
       const nodeIds: string[] = [];
-      for (let i = 0; i < phase.skillTitles.length; i++) {
-        const title = phase.skillTitles[i];
-        const skillId = phase.skillIds?.[i];
-        // Resolve by stable ID first, fall back to title lookup
-        const nodeId = (skillId && validNodeIds.has(skillId))
-          ? skillId
-          : skillIdByTitle.get(title);
+      for (const skillRef of phase.skillRefs) {
+        const nodeId = validNodeIds.has(skillRef) ? skillRef : undefined;
         if (nodeId) {
           nodeIds.push(nodeId);
         } else {
-          unmatchedPhaseSkills.push({ phaseTitle: phase.title, skillTitle: title });
+          unmatchedPhaseSkills.push({ phaseTitle: phase.title, skillRef });
         }
       }
       phases.push({
@@ -526,19 +507,12 @@ export function normalizeCurriculumDocument(args: {
     _unmatchedPhaseSkillCount = unmatchedPhaseSkills.length;
 
     if (unmatchedPhaseSkills.length > 0) {
-      console.error("[curriculum/normalization] Phase skill titles dropped due to unmatched titles.", {
+      console.error("[curriculum/normalization] Phase skill refs dropped due to unmatched refs.", {
         sourceId: args.sourceId,
         droppedCount: unmatchedPhaseSkills.length,
         unmatchedPhaseSkills: unmatchedPhaseSkills.slice(0, 10),
       });
     }
-
-    console.info("[curriculum/normalization] Phases normalized.", {
-      sourceId: args.sourceId,
-      phaseCount: phases.length,
-      totalPhaseNodeAssignments: phases.reduce((sum, phase) => sum + phase.nodeIds.length, 0),
-      unmatchedSkillCount: unmatchedPhaseSkills.length,
-    });
   }
 
   return {

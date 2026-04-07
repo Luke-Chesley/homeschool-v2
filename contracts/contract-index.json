@@ -57,25 +57,68 @@
       ]
     },
     {
-      "id": "curriculum-progression-artifact",
-      "title": "Curriculum Progression Artifact",
-      "docPath": "contracts/curriculum-progression-artifact.md",
+      "id": "curriculum-progression-generation-input",
+      "title": "Curriculum Progression Generation Input",
+      "docPath": "contracts/curriculum-progression-generation-input.md",
       "canonicalSources": [
-        "lib/prompts/curriculum-draft.ts",
-        "lib/curriculum/ai-draft-service.ts",
+        "lib/prompts/curriculum-draft.ts"
+      ],
+      "producerEntrypoints": [
+        "lib/curriculum/ai-draft-service.ts"
+      ],
+      "consumerEntrypoints": [
+        "AI Adapter"
+      ],
+      "versionFields": [
+        "contractVersion"
+      ]
+    },
+    {
+      "id": "curriculum-progression-draft",
+      "title": "Curriculum Progression Draft",
+      "docPath": "contracts/curriculum-progression-draft.md",
+      "canonicalSources": [
         "lib/curriculum/ai-draft.ts"
       ],
       "producerEntrypoints": [
-        "generateCurriculumProgression()",
-        "regenerateCurriculumProgression()"
+        "AI Adapter"
       ],
       "consumerEntrypoints": [
-        "lib/curriculum/normalization.ts",
+        "lib/curriculum/ai-draft.ts"
+      ],
+      "versionFields": []
+    },
+    {
+      "id": "curriculum-progression-resolved",
+      "title": "Curriculum Progression Resolved",
+      "docPath": "contracts/curriculum-progression-resolved.md",
+      "canonicalSources": [
         "lib/curriculum/progression-graph-model.ts"
       ],
+      "producerEntrypoints": [
+        "lib/curriculum/normalization.ts"
+      ],
+      "consumerEntrypoints": [
+        "Database"
+      ],
       "versionFields": [
-        "CURRICULUM_PROGRESSION_PROMPT_VERSION"
+        "contractVersion"
       ]
+    },
+    {
+      "id": "curriculum-progression-ui-view-model",
+      "title": "Curriculum Progression UI View Model",
+      "docPath": "contracts/curriculum-progression-ui-view-model.md",
+      "canonicalSources": [
+        "lib/curriculum/service.ts"
+      ],
+      "producerEntrypoints": [
+        "lib/curriculum/service.ts"
+      ],
+      "consumerEntrypoints": [
+        "components/curriculum/curriculum-progression-graph.tsx"
+      ],
+      "versionFields": []
     },
     {
       "id": "activity-artifact",

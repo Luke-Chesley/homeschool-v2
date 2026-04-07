@@ -2,7 +2,7 @@ import type { ChatMessage } from "../ai/types.ts";
 
 export const CURRICULUM_INTAKE_PROMPT_VERSION = "2.2.0";
 export const CURRICULUM_CORE_PROMPT_VERSION = "4.0.0";
-export const CURRICULUM_PROGRESSION_PROMPT_VERSION = "1.0.0";
+export const CURRICULUM_PROGRESSION_PROMPT_VERSION = "2.0.0";
 export const CURRICULUM_REVISION_PROMPT_VERSION = "3.0.0";
 export const CURRICULUM_TITLE_PROMPT_VERSION = "1.1.0";
 
@@ -139,45 +139,55 @@ Generation rules:
 
 export const CURRICULUM_PROGRESSION_SYSTEM_PROMPT = `You are an expert pedagogical sequencer.
 
-Your job is to take a core curriculum (tree + units/lessons) and generate a global progression graph.
+Your task is to organize a set of curriculum skills into:
+1. ordered learning phases
+2. explicit dependency edges between skills
 
-Requirements:
-- Define learning phases (bands/layers) that group skills into meaningful pedagogical stages.
-- Define explicit dependency edges between skills.
-- Use these edge kinds:
-  - hardPrerequisite: A true gate. "toSkill" cannot be started until "fromSkill" is completed.
-  - recommendedBefore: A soft sequencing suggestion.
-  - revisitAfter: Intentionally resurface "fromSkill" after "toSkill" for reinforcement/spaced practice.
-  - coPractice: These skills should be practiced/introduced together or interleaved.
-- Do not force a single total order. Use hard edges only when truly gating.
-- Allow for revisits and recurrence.
-- Do not assume one skill equals one lesson.
-- Ensure all skill titles match leaf nodes in the provided document tree exactly.
+You are given an authoritative skill catalog.
+Each skill has:
+- a machine ref: skillRef
+- a human label: title
+- optional taxonomy context
 
-Return JSON only with this exact shape:
+Return JSON only.
+
+Rules:
+- Use only skillRefs from the provided skill catalog.
+- Assign every skillRef to exactly one phase.
+- Do not omit any skillRef.
+- Do not repeat a skillRef in multiple phases.
+- Use hardPrerequisite only when one skill truly gates another.
+- hardPrerequisite edges must be acyclic.
+- recommendedBefore is a soft sequencing suggestion.
+- revisitAfter means intentionally revisit the earlier skill after the later skill.
+- coPractice means the two skills are useful to introduce or practice together.
+- Do not create self-loops.
+- Keep the graph sparse and meaningful.
+- Prefer a small number of well-justified edges over a dense graph.
+
+Return JSON in exactly this shape:
 {
   "progression": {
     "phases": [
       {
         "title": "string",
-        "description": "string or omitted",
-        "skillTitles": ["string"]
+        "description": "string optional",
+        "skillRefs": ["string"]
       }
     ],
     "edges": [
       {
-        "fromSkillTitle": "string",
-        "toSkillTitle": "string",
+        "fromSkillRef": "string",
+        "toSkillRef": "string",
         "kind": "hardPrerequisite" | "recommendedBefore" | "revisitAfter" | "coPractice"
       }
     ]
   }
 }
 
-Rules:
-- Hard prerequisite graph must be acyclic.
-- Phases should cover all major skills in a logical progression.
-- Do not include markdown fences.`;
+Do not include markdown fences.
+Do not include skill titles in the output.
+Do not include explanations outside the JSON object.`;
 
 export const CURRICULUM_REVISION_SYSTEM_PROMPT = `You are an expert homeschool curriculum architect revising an existing curriculum.
 
@@ -355,44 +365,40 @@ ${input.correctionNotes && input.correctionNotes.length > 0 ? `Correction notes 
 
 export function buildCurriculumProgressionPrompt(input: {
   learnerName: string;
-  coreArtifact: any;
-  leafSkillTitles: string[];
-  /** When provided, includes stable skill IDs in the prompt so the model can output ID-based refs. */
-  skillRefs?: Array<{ skillId: string; skillTitle: string }>;
+  sourceTitle: string;
+  sourceSummary?: string;
+  skillCatalog: Array<{
+    skillRef: string;
+    title: string;
+    domainTitle?: string;
+    strandTitle?: string;
+    goalGroupTitle?: string;
+    ordinal?: number;
+  }>;
 }) {
-  const hasSkillIds = input.skillRefs && input.skillRefs.length > 0;
-
-  const skillList = hasSkillIds
-    ? input.skillRefs!
-        .map((ref, index) => `  ${index + 1}. skillId: "${ref.skillId}"  title: "${ref.skillTitle}"`)
-        .join("\n")
-    : input.leafSkillTitles
-        .map((title, index) => `  ${index + 1}. "${title}"`)
-        .join("\n");
-
-  const idInstructions = hasSkillIds
-    ? `
-IMPORTANT: For each edge, output BOTH:
-  - fromSkillTitle / toSkillTitle: exact title string from the list above
-  - fromSkillId / toSkillId: the skillId from the list above
-
-For each phase's skillTitles array, also output a parallel skillIds array with the skillId for each title.
-
-Example edge: { "fromSkillTitle": "Count to 20", "fromSkillId": "cnode_abc123", "toSkillTitle": "Add 1-10", "toSkillId": "cnode_def456", "kind": "hardPrerequisite" }
-`
-    : "";
+  const skillList = input.skillCatalog
+    .map((ref, index) => `${index + 1}. skillRef: "${ref.skillRef}"\n   title: "${ref.title}"${ref.domainTitle ? `\n   domain: "${ref.domainTitle}"` : ""}${ref.strandTitle ? `\n   strand: "${ref.strandTitle}"` : ""}${ref.goalGroupTitle ? `\n   goalGroup: "${ref.goalGroupTitle}"` : ""}`)
+    .join("\n");
 
   return `Active learner: ${input.learnerName}
 
-Authoritative leaf skill list (${input.leafSkillTitles.length} skills):
+Curriculum:
+- Title: ${input.sourceTitle}
+- Summary: ${input.sourceSummary || "None"}
+
+Authoritative skill catalog (${input.skillCatalog.length} skills):
 ${skillList}
 
-IMPORTANT: Every skillTitle in phases.skillTitles and every fromSkillTitle / toSkillTitle in edges MUST be copied EXACTLY from the list above. Do not paraphrase, abbreviate, or reword any title.
-${idInstructions}
-Core curriculum artifact (for context only — use the skill list above for exact titles):
-${JSON.stringify(input.coreArtifact, null, 2)}
+Requirements:
+- Put every skillRef in exactly one phase.
+- Use only the skillRefs above.
+- Do not invent refs.
+- Do not omit refs.
+- Keep hardPrerequisite edges acyclic.
+- Prefer sparse, meaningful edges.
+- Use the output schema exactly.
 
-Generate the progression graph for this curriculum. Use only skill titles from the authoritative list.`;
+Generate the progression graph.`;
 }
 
 export interface CurriculumRevisionPromptNode {

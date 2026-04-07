@@ -640,6 +640,7 @@ export async function createCurriculumSourceFromAiDraftArtifact(params: {
       progressionProvenance: "initial_generation",
       progressionAttemptCount: params.progressionAttemptCount,
       progressionFailureReason: params.progressionFailureReason,
+      // Pass these if they become available or needed
     });
     const tree = await getCurriculumTree(source.id, params.householdId);
     const outline = await listCurriculumOutline(source.id);
@@ -1114,9 +1115,11 @@ export interface CurriculumProgressionDiagnostics {
   /** Explicit state from the progression_state table, or inferred from DB if not yet tracked. */
   progressionStatus: ProgressionStatus;
   lastAttemptAt: string | null;
+  lastFailureCategory: "transport" | "parse" | "schema" | "semantic" | "unknown" | null;
   lastFailureReason: string | null;
   attemptCount: number;
   provenance: ProgressionProvenance | null;
+  rawAttemptSummaries?: any[];
 }
 
 export interface CurriculumProgressionData {
@@ -1205,9 +1208,11 @@ export async function getCurriculumProgression(sourceId: string): Promise<Curric
     droppedEdgeCount: 0,
     progressionStatus,
     lastAttemptAt: stateRow?.lastAttemptAt?.toISOString() ?? null,
+    lastFailureCategory: ((stateRow?.metadata as any)?.lastFailureCategory as any) ?? null,
     lastFailureReason: stateRow?.lastFailureReason ?? null,
     attemptCount: stateRow?.attemptCount ?? 0,
     provenance: (stateRow?.provenance as ProgressionProvenance | null) ?? null,
+    rawAttemptSummaries: (stateRow?.metadata as any)?.attempts ?? [],
   };
 
   return { phases, prerequisites, diagnostics };
@@ -1216,12 +1221,14 @@ export async function getCurriculumProgression(sourceId: string): Promise<Curric
 export interface UpsertProgressionStateParams {
   sourceId: string;
   status: ProgressionStatus;
+  lastFailureCategory?: "transport" | "parse" | "schema" | "semantic" | "unknown" | null;
   lastFailureReason?: string | null;
   lastAcceptedPhaseCount?: number;
   lastAcceptedEdgeCount?: number;
   attemptCount?: number;
   usingInferredFallback?: boolean;
   provenance?: ProgressionProvenance;
+  attempts?: any[];
 }
 
 export async function upsertProgressionState(params: UpsertProgressionStateParams): Promise<void> {
@@ -1246,6 +1253,11 @@ export async function upsertProgressionState(params: UpsertProgressionStateParam
         usingInferredFallback: params.usingInferredFallback ?? existing.usingInferredFallback,
         provenance: params.provenance ?? existing.provenance,
         updatedAt: now,
+        metadata: {
+          ...(existing.metadata ?? {}),
+          lastFailureCategory: params.lastFailureCategory ?? (existing.metadata as any)?.lastFailureCategory,
+          attempts: params.attempts ?? (existing.metadata as any)?.attempts,
+        },
       })
       .where(eq(curriculumProgressionState.sourceId, params.sourceId));
   } else {
@@ -1261,6 +1273,10 @@ export async function upsertProgressionState(params: UpsertProgressionStateParam
         attemptCount: params.attemptCount ?? 0,
         usingInferredFallback: params.usingInferredFallback ?? false,
         provenance: params.provenance,
+        metadata: {
+          lastFailureCategory: params.lastFailureCategory ?? null,
+          attempts: params.attempts ?? [],
+        },
       });
   }
 }
