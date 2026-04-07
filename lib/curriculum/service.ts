@@ -1107,10 +1107,18 @@ export type ProgressionProvenance =
   | "fallback_inference";
 
 export interface CurriculumProgressionDiagnostics {
+  /** True only when there is at least one phase membership or explicit prerequisite. */
   hasExplicitProgression: boolean;
   usingInferredFallback: boolean;
   phaseCount: number;
+  /** Total phase-node memberships across all phases. */
+  phaseMembershipCount: number;
+  /** Number of phases that have zero node assignments. */
+  emptyPhaseCount: number;
+  /** Non-inferred prerequisite count. */
+  explicitPrereqCount: number;
   acceptedEdgeCount: number;
+  /** Persisted from write-time diagnostics; 0 if not yet available. */
   droppedEdgeCount: number;
   /** Explicit state from the progression_state table, or inferred from DB if not yet tracked. */
   progressionStatus: ProgressionStatus;
@@ -1184,9 +1192,22 @@ export async function getCurriculumProgression(sourceId: string): Promise<Curric
     kind: r.kind,
   }));
 
-  const hasExplicitProgression = phases.length > 0;
-  const acceptedEdgeCount = prerequisites.filter((p) => p.kind !== "inferred").length;
+  const phaseMembershipCount = phaseNodeRows.length;
+  const emptyPhaseCount = phases.filter((p) => p.skillNodeIds.length === 0).length;
+  const explicitPrereqCount = prerequisites.filter((p) => p.kind !== "inferred").length;
   const inferredEdgeCount = prerequisites.filter((p) => p.kind === "inferred").length;
+
+  // hasExplicitProgression is true only when there is usable explicit content —
+  // phases with actual memberships or explicit prerequisites. An empty phase row
+  // without any memberships does not constitute usable explicit progression.
+  const hasExplicitProgression = phaseMembershipCount > 0 || explicitPrereqCount > 0;
+
+  // Read write-time diagnostics from state metadata when available.
+  const stateMetadata = stateRow?.metadata as Record<string, unknown> | null ?? {};
+  const droppedEdgeCount = typeof stateMetadata.droppedExplicitEdgeCount === "number"
+    ? stateMetadata.droppedExplicitEdgeCount
+    : 0;
+  const acceptedEdgeCount = explicitPrereqCount;
 
   // Derive progression status: prefer the explicit state row; infer from DB if missing.
   let progressionStatus: ProgressionStatus;
@@ -1204,15 +1225,18 @@ export async function getCurriculumProgression(sourceId: string): Promise<Curric
     hasExplicitProgression,
     usingInferredFallback: !hasExplicitProgression && inferredEdgeCount > 0,
     phaseCount: phases.length,
+    phaseMembershipCount,
+    emptyPhaseCount,
+    explicitPrereqCount,
     acceptedEdgeCount,
-    droppedEdgeCount: 0,
+    droppedEdgeCount,
     progressionStatus,
     lastAttemptAt: stateRow?.lastAttemptAt?.toISOString() ?? null,
-    lastFailureCategory: ((stateRow?.metadata as any)?.lastFailureCategory as any) ?? null,
+    lastFailureCategory: (stateMetadata.lastFailureCategory as any) ?? null,
     lastFailureReason: stateRow?.lastFailureReason ?? null,
     attemptCount: stateRow?.attemptCount ?? 0,
     provenance: (stateRow?.provenance as ProgressionProvenance | null) ?? null,
-    rawAttemptSummaries: (stateRow?.metadata as any)?.attempts ?? [],
+    rawAttemptSummaries: (stateMetadata.attempts as any[]) ?? [],
   };
 
   return { phases, prerequisites, diagnostics };
@@ -1229,6 +1253,8 @@ export interface UpsertProgressionStateParams {
   usingInferredFallback?: boolean;
   provenance?: ProgressionProvenance;
   attempts?: any[];
+  /** Write-time resolution diagnostics and raw draft for debugging. */
+  debugMetadata?: Record<string, unknown> | null;
 }
 
 export async function upsertProgressionState(params: UpsertProgressionStateParams): Promise<void> {
@@ -1257,6 +1283,7 @@ export async function upsertProgressionState(params: UpsertProgressionStateParam
           ...(existing.metadata ?? {}),
           lastFailureCategory: params.lastFailureCategory ?? (existing.metadata as any)?.lastFailureCategory,
           attempts: params.attempts ?? (existing.metadata as any)?.attempts,
+          ...(params.debugMetadata ?? {}),
         },
       })
       .where(eq(curriculumProgressionState.sourceId, params.sourceId));
@@ -1276,6 +1303,7 @@ export async function upsertProgressionState(params: UpsertProgressionStateParam
         metadata: {
           lastFailureCategory: params.lastFailureCategory ?? null,
           attempts: params.attempts ?? [],
+          ...(params.debugMetadata ?? {}),
         },
       });
   }
