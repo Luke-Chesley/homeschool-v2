@@ -742,6 +742,7 @@ export async function generateCurriculumProgression(
       const response = await complete({
         model,
         temperature: 0.2,
+        maxTokens: 4096,
         systemPrompt: prompt.systemPrompt,
         messages: [
           {

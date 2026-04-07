@@ -34,6 +34,7 @@ export async function repairProgressionDraft(params: {
   complete: (options: {
     model: string;
     temperature: number;
+    maxTokens?: number;
     systemPrompt: string;
     messages: Array<{ role: string; content: string }>;
   }) => Promise<{ content: string }>;
@@ -98,6 +99,7 @@ Required JSON shape:
     const response = await complete({
       model,
       temperature: 0.1,
+      maxTokens: 4096,
       systemPrompt,
       messages: [{ role: "user", content: repairUserPrompt }],
     });

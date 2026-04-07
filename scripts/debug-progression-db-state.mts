@@ -46,6 +46,22 @@ async function main() {
     console.log(`- Last Accepted Phase Count: ${progState.lastAcceptedPhaseCount}`);
     console.log(`- Last Accepted Edge Count: ${progState.lastAcceptedEdgeCount}`);
     console.log(`- Provenance: ${progState.provenance}`);
+
+    const metadata = progState.metadata as any;
+    if (metadata?.attempts && Array.isArray(metadata.attempts)) {
+      console.log(`\n[Recent Attempts]`);
+      for (const [i, attempt] of metadata.attempts.entries()) {
+        console.log(`- Attempt ${i + 1}:`);
+        console.log(`  - Category: ${attempt.failureCategory}`);
+        console.log(`  - Reason: ${attempt.failureReason}`);
+        if (attempt.summary) {
+          console.log(`  - Summary: ${attempt.summary.phaseCount} phases, ${attempt.summary.edgeCount} edges, ${attempt.summary.missingSkillRefs} missing refs`);
+        }
+        if (attempt.adapterDebugMetadata) {
+          console.log(`  - Stop Reason: ${attempt.adapterDebugMetadata.stopReason}`);
+        }
+      }
+    }
   }
 
   // 2. Phases and Membership

@@ -39,7 +39,10 @@ function registerConfiguredAdapters() {
   if (routing.providerId === "anthropic" && !adapters.has("anthropic")) {
     const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
     if (apiKey) {
-      const adapter = (anthropicAdapter ??= new AnthropicAdapter({ apiKey }));
+      const adapter = (anthropicAdapter ??= new AnthropicAdapter({ 
+        apiKey,
+        maxTokens: routing.maxTokens,
+      }));
       registerAdapter(adapter);
     }
   }
@@ -54,6 +57,7 @@ function registerConfiguredAdapters() {
       authToken,
       numCtx,
       keepAlive,
+      maxTokens: routing.maxTokens,
     }));
     registerAdapter(adapter);
   }

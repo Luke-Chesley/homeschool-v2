@@ -18,6 +18,7 @@ export interface AnthropicAdapterOptions {
   baseURL?: string;
   providerId?: string;
   displayName?: string;
+  maxTokens?: number;
 }
 
 export class AnthropicAdapter implements AiProviderAdapter {
@@ -25,6 +26,7 @@ export class AnthropicAdapter implements AiProviderAdapter {
   readonly displayName: string;
 
   private readonly client: Anthropic;
+  private readonly maxTokens?: number;
 
   constructor(options: AnthropicAdapterOptions) {
     this.providerId = options.providerId ?? "anthropic";
@@ -34,6 +36,7 @@ export class AnthropicAdapter implements AiProviderAdapter {
       authToken: options.authToken ?? undefined,
       baseURL: options.baseURL ?? undefined,
     });
+    this.maxTokens = options.maxTokens;
   }
 
   async complete(options: CompletionOptions): Promise<CompletionResult> {
@@ -95,7 +98,7 @@ export class AnthropicAdapter implements AiProviderAdapter {
 
     return {
       model: options.model ?? "claude-sonnet-4-5",
-      max_tokens: options.maxTokens ?? DEFAULT_MAX_TOKENS,
+      max_tokens: options.maxTokens ?? this.maxTokens ?? DEFAULT_MAX_TOKENS,
       ...(options.temperature !== undefined ? { temperature: options.temperature } : {}),
       ...(system ? { system } : {}),
       messages,

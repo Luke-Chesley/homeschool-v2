@@ -1,0 +1,25 @@
+{
+  "issues": [
+    {
+      "code": "unresolved_phase_skill",
+      "message": "Phase \"Middlegame Tactics & Strategy\" references skillRef \"cnode_22\" which does not match any skill in the catalog.",
+      "context": {
+        "phaseTitle": "Middlegame Tactics & Strategy",
+        "skillRef": "cnode_22"
+      }
+    }
+  ],
+  "missingSkillRefs": [],
+  "duplicateAssignedSkillRefs": [],
+  "invalidPhaseSkillRefs": [
+    "cnode_22"
+  ],
+  "summary": {
+    "phaseCount": 5,
+    "edgeCount": 17,
+    "unresolvedSkillRefCount": 1,
+    "hardPrerequisiteCycle": false,
+    "missingSkillRefs": 0,
+    "duplicatePhaseAssignments": 0
+  }
+}

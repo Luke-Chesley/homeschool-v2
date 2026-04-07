@@ -20,6 +20,7 @@ export interface OllamaAdapterOptions {
   keepAlive?: string | number;
   providerId?: string;
   displayName?: string;
+  maxTokens?: number;
 }
 
 type OllamaChatMessage = Pick<ChatMessage, "role" | "content">;
@@ -55,6 +56,7 @@ export class OllamaAdapter implements AiProviderAdapter {
   private readonly authToken?: string;
   private readonly numCtx?: number;
   private readonly keepAlive?: string | number;
+  private readonly maxTokens?: number;
 
   constructor(options: OllamaAdapterOptions) {
     this.providerId = options.providerId ?? "ollama";
@@ -63,6 +65,7 @@ export class OllamaAdapter implements AiProviderAdapter {
     this.authToken = options.authToken?.trim() || undefined;
     this.numCtx = normalizePositiveInteger(options.numCtx);
     this.keepAlive = normalizeKeepAlive(options.keepAlive);
+    this.maxTokens = options.maxTokens;
   }
 
   async complete(options: CompletionOptions): Promise<CompletionResult> {
@@ -156,8 +159,8 @@ export class OllamaAdapter implements AiProviderAdapter {
     if (options.temperature !== undefined) {
       runtimeOptions.temperature = options.temperature;
     }
-    if (options.maxTokens !== undefined) {
-      runtimeOptions.num_predict = options.maxTokens;
+    if (options.maxTokens !== undefined || this.maxTokens !== undefined) {
+      runtimeOptions.num_predict = options.maxTokens ?? this.maxTokens;
     }
     if (this.numCtx !== undefined) {
       runtimeOptions.num_ctx = this.numCtx;

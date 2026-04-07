@@ -1,0 +1,35 @@
+{
+  "rawPayload": {
+    "model": "claude-haiku-4-5-20251001",
+    "id": "msg_01CC1rZRRFwtGWYvQBqenghL",
+    "type": "message",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "```json\n{\n  \"progression\": {\n    \"phases\": [\n      {\n        \"title\": \"Phase 1: Foundational Skills\",\n        \"description\": \"Core mechanics: piece movements, basic tactics, check/checkmate, and opening principles\",\n        \"skillRefs\": [\n          \"cnode_c48273cfe86954e228b39a9f\",\n          \"cnode_dbd19e5b5b4c0a86849dfb7d\",\n          \"cnode_235f60b9303e1cd4d3b933c0\",\n          \"cnode_9d8333e2ccdcdc13c5166216\",\n          \"cnode_cabf3fc912ccabc5412315d1\",\n          \"cnode_9d282f3e0dbc96f82f515ab0\",\n          \"cnode_e162234a6af55d8c60998ff4\",\n          \"cnode_e4764267fc35a56e8bae3b08\",\n          \"cnode_1ae73926031906a173d8b242\",\n          \"cnode_7125d420ffdbe9e17f4f11b5\",\n          \"cnode_1fb18f1da3ae89a59be06a34\",\n          \"cnode_f8c06a279faaeef7915a59b3\"\n        ]\n      },\n      {\n        \"title\": \"Phase 2: Advanced Skills\",\n        \"description\": \"Endgame mastery, tactical depth, strategic planning, and complex positions\",\n        \"skillRefs\": [\n          \"cnode_8605cc3a048bb0d4363b36b6\",\n          \"cnode_b76765b3b6ed25ae572a2b3c\",\n          \"cnode_287d1f3d8937dbebbddc06bf\",\n          \"cnode_98880ea329452ba43a3d5981\",\n          \"cnode_b4b07c217ad0fd455c9d5a0c\",\n          \"cnode_245f6bd8dcfd73ef15989ca6\",\n          \"cnode_e4897a421668f60f3a5724b0\",\n          \"cnode_b1a7f16c41511f52448e8373\",\n          \"cnode_c8edfd390d3a1c626adc30fb\",\n          \"cnode_e2093ac4f04b0e693bab5a24\",\n          \"cnode_22e2093ac4f04b0e693bab5a24\"\n        ]\n      }\n    ],\n    \"edges\": [\n      {\n        \"fromSkillRef\": \"cnode_c48273cfe86954e228b39a9f\",\n        \"toSkillRef\": \"cnode_dbd19e5b5b4c0a86849dfb7d\",\n        \"kind\": \"hardPrerequisite\"\n      },\n      {\n        \"fromSkillRef\": \"cnode_dbd19e5b5b4c0a86849dfb7d\",\n        \"toSkillRef\": \"cnode_8605cc3a048bb0d4363b36b6\",\n        \"kind\": \"hardPrerequisite\"\n      },\n      {\n        \"fromSkillRef\": \"cnode_1fb18f1da3ae89a59be06a34\",\n        \"toSkillRef\": \"cnode_245f6bd8dcfd73ef15989ca6\",\n        \"kind\": \"hardPrerequisite\"\n      },\n      {\n        \"fromSkillRef\": \"cnode_235f60b9303e1cd4d3b933c0\",\n        \"toSkillRef\": \"cnode_287d1f3d8937dbebbddc06bf\",\n        \"kind\": \"recommendedBefore\"\n      },\n      {\n        \"fromSkillRef\": \"cnode_9d282f3e0dbc96f82f515ab0\",\n        \"toSkillRef\": \"cnode_b1a7f16c41511f52448e8373\",\n        \"kind\": \"recommendedBefore\"\n      }\n    ]\n  }\n}\n```"
+      }
+    ],
+    "stop_reason": "end_turn",
+    "stop_sequence": null,
+    "stop_details": null,
+    "usage": {
+      "input_tokens": 1653,
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "cache_creation": {
+        "ephemeral_5m_input_tokens": 0,
+        "ephemeral_1h_input_tokens": 0
+      },
+      "output_tokens": 1026,
+      "service_tier": "standard",
+      "inference_geo": "not_available"
+    }
+  },
+  "stopReason": "end_turn",
+  "rawContentLength": 2333,
+  "blockCount": 1,
+  "perBlockLengths": [
+    2333
+  ]
+}

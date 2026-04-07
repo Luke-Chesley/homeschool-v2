@@ -1,0 +1,59 @@
+{
+  "issues": [
+    {
+      "code": "unresolved_phase_skill",
+      "message": "Phase \"Phase 6: Advanced Middlegame Coordination\" references skillRef \"cnode_22\" which does not match any skill in the catalog.",
+      "context": {
+        "phaseTitle": "Phase 6: Advanced Middlegame Coordination",
+        "skillRef": "cnode_22"
+      }
+    },
+    {
+      "code": "duplicate_phase_assignment",
+      "message": "SkillRef \"cnode_e4764267fc35a56e8bae3b08\" appears in 2 phases: Phase 2: Opening Principles, Phase 3: Middlegame Tactics & Threats.",
+      "context": {
+        "skillRef": "cnode_e4764267fc35a56e8bae3b08",
+        "phases": [
+          "Phase 2: Opening Principles",
+          "Phase 3: Middlegame Tactics & Threats"
+        ]
+      }
+    },
+    {
+      "code": "duplicate_phase_assignment",
+      "message": "SkillRef \"cnode_e2093ac4f04b0e693bab5a24\" appears in 2 phases: Phase 3: Middlegame Tactics & Threats, Phase 6: Advanced Middlegame Coordination.",
+      "context": {
+        "skillRef": "cnode_e2093ac4f04b0e693bab5a24",
+        "phases": [
+          "Phase 3: Middlegame Tactics & Threats",
+          "Phase 6: Advanced Middlegame Coordination"
+        ]
+      }
+    },
+    {
+      "code": "incomplete_phase_coverage",
+      "message": "Only 22 of 23 skills are assigned to phases. All 23 skills must be assigned to exactly one phase. Missing: 1 skills.",
+      "context": {
+        "skillsAssignedToPhases": 22,
+        "totalSkills": 23,
+        "missingCount": 1,
+        "missingSkillRefs": [
+          "cnode_ad400bc4a5d4c117a97adc52"
+        ]
+      }
+    }
+  ],
+  "missingSkillRefs": [],
+  "duplicateAssignedSkillRefs": [],
+  "invalidPhaseSkillRefs": [
+    "cnode_22"
+  ],
+  "summary": {
+    "phaseCount": 5,
+    "edgeCount": 14,
+    "unresolvedSkillRefCount": 0,
+    "hardPrerequisiteCycle": false,
+    "missingSkillRefs": 0,
+    "duplicatePhaseAssignments": 0
+  }
+}

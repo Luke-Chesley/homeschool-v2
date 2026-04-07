@@ -1,0 +1,25 @@
+{
+  "issues": [
+    {
+      "code": "unresolved_phase_skill",
+      "message": "Phase \"Middlegame Tactics & Threats\" references skillRef \"cnode_22093ac4f04b0e693bab5a24\" which does not match any skill in the catalog.",
+      "context": {
+        "phaseTitle": "Middlegame Tactics & Threats",
+        "skillRef": "cnode_22093ac4f04b0e693bab5a24"
+      }
+    }
+  ],
+  "missingSkillRefs": [],
+  "duplicateAssignedSkillRefs": [],
+  "invalidPhaseSkillRefs": [
+    "cnode_22093ac4f04b0e693bab5a24"
+  ],
+  "summary": {
+    "phaseCount": 6,
+    "edgeCount": 17,
+    "unresolvedSkillRefCount": 1,
+    "hardPrerequisiteCycle": false,
+    "missingSkillRefs": 0,
+    "duplicatePhaseAssignments": 0
+  }
+}

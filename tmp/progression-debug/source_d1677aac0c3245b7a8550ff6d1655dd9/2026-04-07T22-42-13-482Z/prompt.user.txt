@@ -1,0 +1,64 @@
+Active learner: Agent C Validation
+
+Curriculum:
+- Title: Summer Chess Playbook: From Moves to Matches
+- Summary: A structured, play-based curriculum designed to take a 5-year-old beginner from knowing piece movements to playing short, structured games and analyzing basic positions over 12 weeks.
+
+Authoritative skill catalog (23 skills):
+1. skillRef: "cnode_c48273cfe86954e228b39a9f"
+   title: "Recognizing when a piece is under direct attack (Check)"
+2. skillRef: "cnode_dbd19e5b5b4c0a86849dfb7d"
+   title: "Understanding the three ways to escape check (Move, Block, Capture)"
+3. skillRef: "cnode_8605cc3a048bb0d4363b36b6"
+   title: "Executing a checkmate with a Queen and King against a lone King (Corner Mate)"
+4. skillRef: "cnode_b76765b3b6ed25ae572a2b3c"
+   title: "Executing a checkmate with a Rook and King against a lone King (Back Rank Mate)"
+5. skillRef: "cnode_f8c06a279faaeef7915a59b3"
+   title: "Estimating the relative value of minor pieces (Knight vs. Bishop)"
+6. skillRef: "cnode_287d1f3d8937dbebbddc06bf"
+   title: "Identifying material imbalance after a trade"
+7. skillRef: "cnode_235f60b9303e1cd4d3b933c0"
+   title: "Capturing undefended pieces (Greedy Capture)"
+8. skillRef: "cnode_98880ea329452ba43a3d5981"
+   title: "Winning a pawn in a simple endgame"
+9. skillRef: "cnode_b4b07c217ad0fd455c9d5a0c"
+   title: "Activating the King in the endgame"
+10. skillRef: "cnode_245f6bd8dcfd73ef15989ca6"
+   title: "Using the King to support a passed pawn"
+11. skillRef: "cnode_e4897a421668f60f3a5724b0"
+   title: "Forcing promotion of a passed pawn"
+12. skillRef: "cnode_1fb18f1da3ae89a59be06a34"
+   title: "Identifying a passed pawn"
+13. skillRef: "cnode_1ae73926031906a173d8b242"
+   title: "Responding correctly to 1. d4"
+14. skillRef: "cnode_7125d420ffdbe9e17f4f11b5"
+   title: "Responding correctly to 1. e4"
+15. skillRef: "cnode_b1a7f16c41511f52448e8373"
+   title: "Identifying when the opponent has missed a key development move"
+16. skillRef: "cnode_e162234a6af55d8c60998ff4"
+   title: "Playing the standard development sequence (e.g., e4, d4, Nf3)"
+17. skillRef: "cnode_cabf3fc912ccabc5412315d1"
+   title: "Controlling the central squares (d4, e4)"
+18. skillRef: "cnode_9d282f3e0dbc96f82f515ab0"
+   title: "Developing pieces first (Knights before Bishops)"
+19. skillRef: "cnode_e4764267fc35a56e8bae3b08"
+   title: "King safety (Castling early)"
+20. skillRef: "cnode_9d8333e2ccdcdc13c5166216"
+   title: "Interposing a piece to block an attack"
+21. skillRef: "cnode_c8edfd390d3a1c626adc30fb"
+   title: "Making a prophylactic move (preventing opponent's threat)"
+22. skillRef: "cnode_e2093ac4f04b0e693bab5a24"
+   title: "Coordinating Knight jumps with pawn breaks"
+23. skillRef: "cnode_ad400bc4a5d4c117a97adc52"
+   title: "Using the Queen to support an attack"
+
+Requirements:
+- Put every skillRef in exactly one phase.
+- Use only the skillRefs above.
+- Do not invent refs.
+- Do not omit refs.
+- Keep hardPrerequisite edges acyclic.
+- Prefer sparse, meaningful edges.
+- Use the output schema exactly.
+
+Generate the progression graph.

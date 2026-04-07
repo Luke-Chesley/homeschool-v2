@@ -11,6 +11,7 @@ const aiRoutingEnvSchema = z.object({
   AI_FAST_MODEL: z.string().min(1).optional(),
   AI_GENERATION_MODEL: z.string().min(1).optional(),
   AI_FALLBACK_MODEL: z.string().min(1).optional(),
+  AI_MAX_TOKENS: z.coerce.number().int().positive().optional(),
   ANTHROPIC_API_KEY: z.string().min(1).optional(),
   OLLAMA_BASE_URL: z.string().url().optional(),
   OLLAMA_AUTH_TOKEN: z.string().min(1).optional(),
@@ -77,6 +78,7 @@ export function getAiRoutingConfig(): ModelRoutingConfig {
 
   cachedRoutingConfig = {
     providerId,
+    maxTokens: env.AI_MAX_TOKENS,
     fallbackModel:
       env.AI_FALLBACK_MODEL ??
       (providerId === "anthropic"

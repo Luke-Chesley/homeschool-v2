@@ -90,6 +90,8 @@ export interface ModelRoutingConfig {
   fallbackModel: string;
   /** Provider to use */
   providerId: string;
+  /** Global maximum output tokens for any task that does not provide its own budget. */
+  maxTokens?: number;
 }
 
 export const DEFAULT_ROUTING_CONFIG: ModelRoutingConfig = {

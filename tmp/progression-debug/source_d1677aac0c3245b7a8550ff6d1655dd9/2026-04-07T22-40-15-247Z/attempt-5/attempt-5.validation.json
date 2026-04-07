@@ -1,0 +1,39 @@
+{
+  "issues": [
+    {
+      "code": "unresolved_phase_skill",
+      "message": "Phase \"Phase 2: Advanced Skills\" references skillRef \"cnode_22e2093ac4f04b0e693bab5a24\" which does not match any skill in the catalog.",
+      "context": {
+        "phaseTitle": "Phase 2: Advanced Skills",
+        "skillRef": "cnode_22e2093ac4f04b0e693bab5a24"
+      }
+    },
+    {
+      "code": "incomplete_phase_coverage",
+      "message": "Only 22 of 23 skills are assigned to phases. All 23 skills must be assigned to exactly one phase. Missing: 1 skills.",
+      "context": {
+        "skillsAssignedToPhases": 22,
+        "totalSkills": 23,
+        "missingCount": 1,
+        "missingSkillRefs": [
+          "cnode_ad400bc4a5d4c117a97adc52"
+        ]
+      }
+    }
+  ],
+  "missingSkillRefs": [
+    "cnode_ad400bc4a5d4c117a97adc52"
+  ],
+  "duplicateAssignedSkillRefs": [],
+  "invalidPhaseSkillRefs": [
+    "cnode_22e2093ac4f04b0e693bab5a24"
+  ],
+  "summary": {
+    "phaseCount": 2,
+    "edgeCount": 5,
+    "unresolvedSkillRefCount": 1,
+    "hardPrerequisiteCycle": false,
+    "missingSkillRefs": 1,
+    "duplicatePhaseAssignments": 0
+  }
+}

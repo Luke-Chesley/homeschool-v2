@@ -1,0 +1,109 @@
+{
+  "progression": {
+    "phases": [
+      {
+        "title": "Foundational Tactics & Safety",
+        "description": "Core tactical awareness and defensive concepts that enable safe, tactical play",
+        "skillRefs": [
+          "cnode_c48273cfe86954e228b39a9f",
+          "cnode_dbd19e5b5b4c0a86849dfb7d",
+          "cnode_9d8333e2ccdcdc13c5166216",
+          "cnode_235f60b9303e1cd4d3b933c0",
+          "cnode_287d1f3d8937dbebbddc06bf",
+          "cnode_f8c06a279faaeef7915a59b3",
+          "cnode_c8edfd390d3a1c626adc30fb",
+          "cnode_e4764267fc35a56e8bae3b08"
+        ]
+      },
+      {
+        "title": "Opening Principles & Development",
+        "description": "Strategic opening play, piece development, and central control",
+        "skillRefs": [
+          "cnode_cabf3fc912ccabc5412315d1",
+          "cnode_9d282f3e0dbc96f82f515ab0",
+          "cnode_e162234a6af55d8c60998ff4",
+          "cnode_1ae73926031906a173d8b242",
+          "cnode_7125d420ffdbe9e17f4f11b5",
+          "cnode_b1a7f16c41511f52448e8373"
+        ]
+      },
+      {
+        "title": "Endgame Mastery & Advanced Tactics",
+        "description": "Pawn endgames, piece coordination, and advanced attacking patterns",
+        "skillRefs": [
+          "cnode_1fb18f1da3ae89a59be06a34",
+          "cnode_98880ea329452ba43a3d5981",
+          "cnode_b4b07c217ad0fd455c9d5a0c",
+          "cnode_245f6bd8dcfd73ef15989ca6",
+          "cnode_e4897a421668f60f3a5724b0",
+          "cnode_8605cc3a048bb0d4363b36b6",
+          "cnode_b76765b3b6ed25ae572a2b3c",
+          "cnode_e2093ac4f04b0e693bab5a24",
+          "cnode_22e2093ac4f04b0e693bab5a24"
+        ]
+      }
+    ],
+    "edges": [
+      {
+        "fromSkillRef": "cnode_c48273cfe86954e228b39a9f",
+        "toSkillRef": "cnode_dbd19e5b5b4c0a86849dfb7d",
+        "kind": "hardPrerequisite"
+      },
+      {
+        "fromSkillRef": "cnode_dbd19e5b5b4c0a86849dfb7d",
+        "toSkillRef": "cnode_9d8333e2ccdcdc13c5166216",
+        "kind": "recommendedBefore"
+      },
+      {
+        "fromSkillRef": "cnode_235f60b9303e1cd4d3b933c0",
+        "toSkillRef": "cnode_287d1f3d8937dbebbddc06bf",
+        "kind": "hardPrerequisite"
+      },
+      {
+        "fromSkillRef": "cnode_cabf3fc912ccabc5412315d1",
+        "toSkillRef": "cnode_9d282f3e0dbc96f82f515ab0",
+        "kind": "hardPrerequisite"
+      },
+      {
+        "fromSkillRef": "cnode_9d282f3e0dbc96f82f515ab0",
+        "toSkillRef": "cnode_e162234a6af55d8c60998ff4",
+        "kind": "recommendedBefore"
+      },
+      {
+        "fromSkillRef": "cnode_287d1f3d8937dbebbddc06bf",
+        "toSkillRef": "cnode_1fb18f1da3ae89a59be06a34",
+        "kind": "recommendedBefore"
+      },
+      {
+        "fromSkillRef": "cnode_1fb18f1da3ae89a59be06a34",
+        "toSkillRef": "cnode_98880ea329452ba43a3d5981",
+        "kind": "hardPrerequisite"
+      },
+      {
+        "fromSkillRef": "cnode_98880ea329452ba43a3d5981",
+        "toSkillRef": "cnode_b4b07c217ad0fd455c9d5a0c",
+        "kind": "recommendedBefore"
+      },
+      {
+        "fromSkillRef": "cnode_b4b07c217ad0fd455c9d5a0c",
+        "toSkillRef": "cnode_245f6bd8dcfd73ef15989ca6",
+        "kind": "hardPrerequisite"
+      },
+      {
+        "fromSkillRef": "cnode_245f6bd8dcfd73ef15989ca6",
+        "toSkillRef": "cnode_e4897a421668f60f3a5724b0",
+        "kind": "hardPrerequisite"
+      },
+      {
+        "fromSkillRef": "cnode_dbd19e5b5b4c0a86849dfb7d",
+        "toSkillRef": "cnode_8605cc3a048bb0d4363b36b6",
+        "kind": "recommendedBefore"
+      },
+      {
+        "fromSkillRef": "cnode_8605cc3a048bb0d4363b36b6",
+        "toSkillRef": "cnode_b76765b3b6ed25ae572a2b3c",
+        "kind": "recommendedBefore"
+      }
+    ]
+  }
+}

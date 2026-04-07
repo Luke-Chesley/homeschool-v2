@@ -1,0 +1,52 @@
+{
+  "issues": [
+    {
+      "code": "unresolved_phase_skill",
+      "message": "Phase \"Midgame Attack & Coordination\" references skillRef \"cnode_22e2093ac4f04b0e693bab5a24\" which does not match any skill in the catalog.",
+      "context": {
+        "phaseTitle": "Midgame Attack & Coordination",
+        "skillRef": "cnode_22e2093ac4f04b0e693bab5a24"
+      }
+    },
+    {
+      "code": "duplicate_phase_assignment",
+      "message": "SkillRef \"cnode_e4897a421668f60f3a5724b0\" appears in 2 phases: Midgame Attack & Coordination, Endgame Fundamentals.",
+      "context": {
+        "skillRef": "cnode_e4897a421668f60f3a5724b0",
+        "phases": [
+          "Midgame Attack & Coordination",
+          "Endgame Fundamentals"
+        ]
+      }
+    },
+    {
+      "code": "incomplete_phase_coverage",
+      "message": "Only 22 of 23 skills are assigned to phases. All 23 skills must be assigned to exactly one phase. Missing: 1 skills.",
+      "context": {
+        "skillsAssignedToPhases": 22,
+        "totalSkills": 23,
+        "missingCount": 1,
+        "missingSkillRefs": [
+          "cnode_ad400bc4a5d4c117a97adc52"
+        ]
+      }
+    }
+  ],
+  "missingSkillRefs": [
+    "cnode_ad400bc4a5d4c117a97adc52"
+  ],
+  "duplicateAssignedSkillRefs": [
+    "cnode_e4897a421668f60f3a5724b0"
+  ],
+  "invalidPhaseSkillRefs": [
+    "cnode_22e2093ac4f04b0e693bab5a24"
+  ],
+  "summary": {
+    "phaseCount": 6,
+    "edgeCount": 15,
+    "unresolvedSkillRefCount": 1,
+    "hardPrerequisiteCycle": false,
+    "missingSkillRefs": 1,
+    "duplicatePhaseAssignments": 1
+  }
+}
