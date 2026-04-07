@@ -36,6 +36,15 @@ export interface CompletionResult {
   /** Approximate token usage for billing/logging */
   usage?: { promptTokens: number; completionTokens: number };
   model?: string;
+  /** Debug instrumentation for truncation/capture pass. */
+  debugMetadata?: {
+    rawPayload?: unknown;
+    stopReason?: string;
+    finishReason?: string;
+    rawContentLength?: number;
+    blockCount?: number;
+    perBlockLengths?: number[];
+  };
 }
 
 export interface StreamChunk {

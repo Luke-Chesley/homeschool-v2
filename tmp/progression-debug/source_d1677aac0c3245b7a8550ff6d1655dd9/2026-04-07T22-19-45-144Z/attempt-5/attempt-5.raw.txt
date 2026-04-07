@@ -1,0 +1,7 @@
+Based on the objective text, here are the most relevant standards:
+
+**Primary match:** CCSS.MATH.CONTENT.4.NBT.A.2
+Read and write multi-digit whole numbers using base-ten numerals, number names, and expanded form.
+
+**Supporting:** CCSS.MATH.CONTENT.4.NBT.A.1
+Recognize that in a multi-digit whole number, a digit in one place represents ten times what it represents in the place to its right.

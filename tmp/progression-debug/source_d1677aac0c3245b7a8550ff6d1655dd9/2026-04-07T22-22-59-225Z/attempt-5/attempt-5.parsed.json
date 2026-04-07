@@ -1,0 +1,33 @@
+{
+  "phases": [
+    {
+      "title": "Phase 1: Foundations",
+      "description": "Basic concepts and introductory skills.",
+      "skillRefs": [
+        "skill_0",
+        "skill_1",
+        "skill_2"
+      ]
+    },
+    {
+      "title": "Phase 2: Intermediate",
+      "description": "Building on foundations.",
+      "skillRefs": [
+        "skill_3",
+        "skill_4"
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "fromSkillRef": "skill_0",
+      "toSkillRef": "skill_1",
+      "kind": "hardPrerequisite"
+    },
+    {
+      "fromSkillRef": "skill_1",
+      "toSkillRef": "skill_2",
+      "kind": "recommendedBefore"
+    }
+  ]
+}

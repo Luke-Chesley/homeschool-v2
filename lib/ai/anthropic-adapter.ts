@@ -49,6 +49,17 @@ export class AnthropicAdapter implements AiProviderAdapter {
           }
         : undefined,
       model: message.model,
+      debugMetadata: {
+        rawPayload: message,
+        stopReason: message.stop_reason ?? undefined,
+        rawContentLength: message.content
+          .filter((b): b is Extract<typeof b, { type: "text" }> => b.type === "text")
+          .reduce((acc, b) => acc + b.text.length, 0),
+        blockCount: message.content.length,
+        perBlockLengths: message.content
+          .filter((b): b is Extract<typeof b, { type: "text" }> => b.type === "text")
+          .map((b) => b.text.length),
+      },
     };
   }
 

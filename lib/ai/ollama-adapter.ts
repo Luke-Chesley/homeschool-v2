@@ -68,11 +68,17 @@ export class OllamaAdapter implements AiProviderAdapter {
   async complete(options: CompletionOptions): Promise<CompletionResult> {
     const response = await this.postChat(options, { stream: false });
     const payload = (await response.json()) as OllamaChatResponse;
+    const content = extractAssistantText(payload);
 
     return {
-      content: extractAssistantText(payload),
+      content,
       usage: buildUsage(payload),
       model: payload.model,
+      debugMetadata: {
+        rawPayload: payload,
+        rawContentLength: content.length,
+        blockCount: 1,
+      },
     };
   }
 

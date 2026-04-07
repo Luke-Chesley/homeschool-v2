@@ -613,6 +613,15 @@ export type ProgressionAttemptResult = {
   failureReason: string | null
   /** Raw model response text. Always stored for parse failures; stored for all attempts when possible. */
   rawResponse?: string
+  /** Debug instrumentation from adapter. */
+  adapterDebugMetadata?: {
+    rawPayload?: unknown;
+    stopReason?: string;
+    finishReason?: string;
+    rawContentLength?: number;
+    blockCount?: number;
+    perBlockLengths?: number[];
+  };
   /** Parsed JSON if parsing succeeded (before schema validation). */
   parsedJson?: unknown
   /** Sanitization results applied before semantic validation. */
@@ -761,6 +770,7 @@ export async function generateCurriculumProgression(
         failureCategory: null,
         failureReason: null,
         rawResponse,
+        adapterDebugMetadata: response.debugMetadata,
       };
 
       const parsed = parseCurriculumProgression(rawResponse);
