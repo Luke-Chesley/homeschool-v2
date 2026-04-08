@@ -16,6 +16,8 @@ import {
 } from "@/lib/prompts/activity-spec";
 import { publishActivityForLessonDraft } from "@/lib/activities/assignment-service";
 import { computeLessonDraftFingerprint } from "@/lib/lesson-draft/fingerprint";
+import { getLessonEvaluationLabel, type LessonEvaluationLevel } from "@/lib/session-workspace/evaluation";
+import { recordSessionEvaluation } from "@/lib/session-workspace/service";
 import {
   completeTodayPlanItem,
   partiallyCompleteTodayPlanItem,
@@ -58,6 +60,18 @@ export interface TodayPlanItemActionResult {
   action: TodayPlanItemAction;
   planItemId: string;
   message?: string;
+  error?: string;
+}
+
+export interface TodayPlanItemEvaluationResult {
+  ok: boolean;
+  planItemId: string;
+  evaluation?: {
+    level: LessonEvaluationLevel;
+    label: string;
+    note: string | null;
+    createdAt: string;
+  };
   error?: string;
 }
 
@@ -202,6 +216,77 @@ export async function updateTodayPlanItemAction(input: {
       action: input.action,
       planItemId: input.planItemId,
       error: err instanceof Error ? err.message : "Could not save the today action.",
+    };
+  }
+}
+
+export async function saveTodayPlanItemEvaluationAction(input: {
+  date: string;
+  planItemId: string;
+  level: LessonEvaluationLevel;
+  note?: string;
+}): Promise<TodayPlanItemEvaluationResult> {
+  try {
+    const session = await requireAppSession();
+    const workspace = await getTodayWorkspace({
+      organizationId: session.organization.id,
+      learnerId: session.activeLearner.id,
+      learnerName: session.activeLearner.displayName,
+      date: input.date,
+    });
+
+    if (!workspace) {
+      return { ok: false, planItemId: input.planItemId, error: "Workspace not found." };
+    }
+
+    const item = workspace.workspace.items.find((candidate) => candidate.id === input.planItemId);
+    if (!item) {
+      return { ok: false, planItemId: input.planItemId, error: "Lesson card not found." };
+    }
+
+    if (!item.planRecordId || !item.sessionRecordId) {
+      return {
+        ok: false,
+        planItemId: input.planItemId,
+        error: "Session record not found for this lesson card.",
+      };
+    }
+
+    const evaluation = await recordSessionEvaluation({
+      organizationId: session.organization.id,
+      learnerId: session.activeLearner.id,
+      planItemId: item.planRecordId,
+      lessonSessionId: item.sessionRecordId,
+      evaluationLevel: input.level,
+      note: input.note ?? null,
+      metadata: {
+        source: "today_workspace_evaluation",
+        weeklyRouteItemId: item.id,
+        date: input.date,
+      },
+    });
+
+    revalidatePath("/today");
+    revalidatePath("/planning");
+    revalidatePath("/tracking");
+    revalidatePath("/tracking/reports");
+
+    return {
+      ok: true,
+      planItemId: input.planItemId,
+      evaluation: {
+        level: evaluation.evaluationLevel,
+        label: getLessonEvaluationLabel(evaluation.evaluationLevel),
+        note: evaluation.note,
+        createdAt: evaluation.createdAt,
+      },
+    };
+  } catch (err) {
+    console.error("[saveTodayPlanItemEvaluationAction]", err);
+    return {
+      ok: false,
+      planItemId: input.planItemId,
+      error: err instanceof Error ? err.message : "Could not save this evaluation.",
     };
   }
 }

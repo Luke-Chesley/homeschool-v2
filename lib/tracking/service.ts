@@ -9,10 +9,12 @@ import {
   curriculumSources,
   evidenceRecordObjectives,
   evidenceRecords,
+  feedbackEntries,
   goalMappings,
   learnerProfiles,
   learningGoals,
   observationNotes,
+  planItems,
   planItemCurriculumLinks,
   progressRecords,
   progressRecordStandards,
@@ -25,6 +27,7 @@ import {
 import { buildStandardsExportRows, buildTrackingExportRows } from "@/lib/tracking/export";
 import type {
   AdaptationRecommendation,
+  EvaluationEntry,
   ReviewQueueEntry,
   TrackingCurriculumContext,
   EvidenceRecord,
@@ -107,6 +110,31 @@ function mapEvidenceKind(value: string): EvidenceRecord["kind"] {
       return "note";
     default:
       return "activity";
+  }
+}
+
+function mapEvaluationLevel(
+  value: unknown,
+  rating: number | null | undefined,
+): EvaluationEntry["level"] {
+  if (
+    value === "needs_more_work" ||
+    value === "partial" ||
+    value === "successful" ||
+    value === "exceeded"
+  ) {
+    return value;
+  }
+
+  switch (rating) {
+    case 1:
+      return "needs_more_work";
+    case 2:
+      return "partial";
+    case 3:
+      return "successful";
+    default:
+      return "exceeded";
   }
 }
 
@@ -199,6 +227,7 @@ export async function getTrackingDashboard(params: {
     curriculum,
     progressCandidates,
     noteCandidates,
+    feedbackCandidates,
     goals,
     evidenceCandidates,
     reviewCandidates,
@@ -222,6 +251,14 @@ export async function getTrackingDashboard(params: {
         eq(observationNotes.learnerId, params.learnerId),
       ),
       orderBy: [desc(observationNotes.createdAt)],
+      limit: 100,
+    }),
+    db.query.feedbackEntries.findMany({
+      where: and(
+        eq(feedbackEntries.organizationId, params.organizationId),
+        eq(feedbackEntries.learnerId, params.learnerId),
+      ),
+      orderBy: [desc(feedbackEntries.createdAt)],
       limit: 100,
     }),
     db.query.learningGoals.findMany({
@@ -256,7 +293,7 @@ export async function getTrackingDashboard(params: {
   ]);
 
   const planItemIds = [...new Set(
-    [...progressCandidates, ...noteCandidates, ...evidenceCandidates]
+    [...progressCandidates, ...noteCandidates, ...evidenceCandidates, ...feedbackCandidates]
       .map((row) => row.planItemId)
       .filter((value): value is string => typeof value === "string"),
   )];
@@ -267,6 +304,16 @@ export async function getTrackingDashboard(params: {
           where: inArray(planItemCurriculumLinks.planItemId, planItemIds),
         });
   const sourceIdByPlanItemId = new Map(planItemLinks.map((row) => [row.planItemId, row.sourceId]));
+  const planItemTitleById =
+    planItemIds.length === 0
+      ? new Map<string, string>()
+      : new Map(
+          (
+            await db.query.planItems.findMany({
+              where: inArray(planItems.id, planItemIds),
+            })
+          ).map((item) => [item.id, item.title]),
+        );
 
   const progressSourceIdByRecordId = new Map(
     progressCandidates.map((row) => [
@@ -282,6 +329,21 @@ export async function getTrackingDashboard(params: {
         .slice(0, 25)
     : progressCandidates.slice(0, 25);
   const filteredProgressIds = new Set(progress.map((row) => row.id));
+
+  const evaluationCandidates = feedbackCandidates.filter(
+    (row) => getMetadataString(row.metadata, "source") === "lesson_evaluation",
+  );
+  const evaluations = curriculum
+    ? evaluationCandidates
+        .filter((row) => {
+          const linkedSourceId =
+            (row.planItemId ? sourceIdByPlanItemId.get(row.planItemId) : undefined) ??
+            getCurriculumLinkSourceId(row.metadata);
+
+          return linkedSourceId === curriculum.sourceId;
+        })
+        .slice(0, 25)
+    : evaluationCandidates.slice(0, 25);
 
   const notes = curriculum
     ? noteCandidates
@@ -401,6 +463,22 @@ export async function getTrackingDashboard(params: {
     body: note.body,
     linkedOutcomeId: typeof note.metadata?.progressRecordId === "string" ? note.metadata.progressRecordId : undefined,
   }));
+
+  const evaluationRows: EvaluationEntry[] = evaluations.map((record) => {
+    const metadata = record.metadata ?? {};
+    const resolvedLevel = mapEvaluationLevel(metadata.evaluationLevel, record.rating);
+    const title =
+      (record.planItemId ? planItemTitleById.get(record.planItemId) : undefined) ??
+      safeText(metadata.evaluationLabel, "Lesson evaluation");
+
+    return {
+      id: record.id,
+      date: toDateOnly(record.createdAt),
+      title,
+      level: resolvedLevel,
+      note: safeText(record.body, safeText(metadata.note, "Lesson evaluation")),
+    };
+  });
 
   const mappedEvidence: EvidenceRecord[] = evidence.map((record) => ({
     id: record.id,
@@ -548,6 +626,7 @@ export async function getTrackingDashboard(params: {
     },
     outcomes,
     observations,
+    evaluations: evaluationRows,
     evidence: mappedEvidence,
     standards,
     goals: goalRows,

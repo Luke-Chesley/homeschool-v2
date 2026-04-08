@@ -1,3 +1,5 @@
+import type { LessonEvaluationLevel } from "@/lib/session-workspace/evaluation";
+
 export type OutcomeStatus = "completed" | "partial" | "skipped";
 export type MasterySignal = "secure" | "developing" | "emerging" | "needs_review";
 export type EvidenceKind = "worksheet" | "photo" | "activity" | "note" | "audio";
@@ -39,6 +41,14 @@ export interface ObservationEntry {
   tone: ObservationTone;
   body: string;
   linkedOutcomeId?: string;
+}
+
+export interface EvaluationEntry {
+  id: string;
+  date: string;
+  title: string;
+  level: LessonEvaluationLevel;
+  note: string;
 }
 
 export interface EvidenceRecord {
@@ -109,6 +119,7 @@ export interface TrackingDashboard {
   summary: TrackingSummary;
   outcomes: TrackingOutcome[];
   observations: ObservationEntry[];
+  evaluations: EvaluationEntry[];
   evidence: EvidenceRecord[];
   standards: StandardCoverageRow[];
   goals: GoalProgressRow[];

@@ -5,8 +5,13 @@ import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { HomeschoolAttendanceRecord } from "@/lib/homeschool/attendance/types";
-import { formatMinutes, formatOutcomeDelta, formatTrackingDate } from "@/lib/tracking/service";
+import {
+  formatMinutes,
+  formatOutcomeDelta,
+  formatTrackingDate,
+} from "@/lib/tracking/service";
 import type { TrackingDashboard } from "@/lib/tracking/types";
+import { getLessonEvaluationLabel } from "@/lib/session-workspace/evaluation";
 import { cn } from "@/lib/utils";
 
 const masteryTone: Record<string, string> = {
@@ -20,6 +25,13 @@ const statusTone: Record<string, string> = {
   completed: "text-secondary-foreground",
   partial: "text-amber-800",
   skipped: "text-destructive",
+};
+
+const evaluationTone: Record<string, string> = {
+  needs_more_work: "border-destructive/20 bg-destructive/10 text-destructive",
+  partial: "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200",
+  successful: "border-secondary/20 bg-secondary/18 text-secondary-foreground",
+  exceeded: "border-primary/20 bg-primary/10 text-primary",
 };
 
 export function TrackingOverview({
@@ -164,6 +176,41 @@ export function TrackingOverview({
                       {formatTrackingDate(observation.date)}
                     </p>
                     <p className="mt-3 text-sm leading-6 text-muted-foreground">{observation.body}</p>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Lesson evaluations</CardTitle>
+              <CardDescription>
+                Broad completion signals for later curriculum review.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {dashboard.evaluations.length === 0 ? (
+                <TrackingEmptyState
+                  title="No lesson evaluations yet"
+                  body="Evaluation records will appear here once a lesson card is rated from the Today workspace."
+                />
+              ) : (
+                dashboard.evaluations.map((evaluation) => (
+                  <div
+                    key={evaluation.id}
+                    className="rounded-[1.4rem] border border-border/70 bg-background/70 p-4"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="font-semibold">{evaluation.title}</p>
+                      <Badge variant="outline" className={evaluationTone[evaluation.level]}>
+                        {getLessonEvaluationLabel(evaluation.level)}
+                      </Badge>
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {formatTrackingDate(evaluation.date)}
+                    </p>
+                    <p className="mt-3 text-sm leading-6 text-muted-foreground">{evaluation.note}</p>
                   </div>
                 ))
               )}

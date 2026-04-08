@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { AlertTriangle, CheckCircle2, Loader2, Sparkles } from "lucide-react";
 
 import { LessonPlanPanel } from "@/components/planning/lesson-plan-panel";
+import { LessonEvaluationPopover } from "@/components/planning/lesson-evaluation-popover";
 import {
   LessonDraftRenderer,
   LegacyLessonDraftNotice,
@@ -15,11 +16,13 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { MarkdownContent } from "@/components/ui/markdown-content";
 import type { StructuredLessonDraft } from "@/lib/lesson-draft/types";
+import { type LessonEvaluationLevel } from "@/lib/session-workspace/evaluation";
 import type { DailyWorkspace, DailyWorkspaceLessonDraft } from "@/lib/planning/types";
 import { cn } from "@/lib/utils";
 import {
   generateLessonDraftActivityAction,
   getLessonDraftPromptPreviewAction,
+  saveTodayPlanItemEvaluationAction,
   type LessonDraftActivityStatus,
   type TodayPlanItemAction,
   updateTodayPlanItemAction,
@@ -415,6 +418,8 @@ function TodayPlanItemActionButtons({
         ) : null}
       </div>
 
+      <TodayPlanItemEvaluationControl item={item} date={date} />
+
       {confirmationText ? (
         <div className="flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-foreground">
           <CheckCircle2 className="size-4 text-primary" />
@@ -427,6 +432,104 @@ function TodayPlanItemActionButtons({
           {error}
         </p>
       ) : null}
+    </div>
+  );
+}
+
+type SavedEvaluation = {
+  level: LessonEvaluationLevel;
+  label: string;
+  note: string | null;
+  createdAt: string;
+};
+
+function TodayPlanItemEvaluationControl({
+  item,
+  date,
+}: {
+  item: DailyWorkspace["items"][number];
+  date: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [selectedLevel, setSelectedLevel] = useState<LessonEvaluationLevel | null>(null);
+  const [note, setNote] = useState("");
+  const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [savedEvaluation, setSavedEvaluation] = useState<SavedEvaluation | null>(null);
+
+  useEffect(() => {
+    setOpen(false);
+    setSelectedLevel(null);
+    setNote("");
+    setError(null);
+    setSavedEvaluation(null);
+  }, [item.id]);
+
+  function handleOpenChange(nextOpen: boolean) {
+    setOpen(nextOpen);
+    if (!nextOpen) {
+      setError(null);
+    }
+  }
+
+  function handleSubmit() {
+    if (!selectedLevel) {
+      setError("Choose an evaluation level first.");
+      return;
+    }
+
+    setError(null);
+    startTransition(async () => {
+      const result = await saveTodayPlanItemEvaluationAction({
+        date,
+        planItemId: item.id,
+        level: selectedLevel,
+        note,
+      });
+
+      if (!result.ok || !result.evaluation) {
+        setError(result.error ?? "Could not save this evaluation.");
+        return;
+      }
+
+      setSavedEvaluation(result.evaluation);
+      setOpen(false);
+      setSelectedLevel(null);
+      setNote("");
+    });
+  }
+
+  return (
+    <div className="relative flex flex-col items-end gap-2">
+      <button
+        type="button"
+        onClick={() => handleOpenChange(!open)}
+        className={cn(
+          buttonVariants({ variant: "outline", size: "sm" }),
+          savedEvaluation ? "border-primary/30 bg-primary/5 text-primary" : undefined,
+        )}
+      >
+        {open ? "Close" : "Evaluate"}
+      </button>
+
+      {savedEvaluation ? (
+        <p className="max-w-[16rem] text-right text-xs leading-5 text-muted-foreground">
+          Saved: <span className="font-medium text-foreground">{savedEvaluation.label}</span>
+          {savedEvaluation.note ? <span>{` · ${savedEvaluation.note}`}</span> : null}
+        </p>
+      ) : null}
+
+      <LessonEvaluationPopover
+        open={open}
+        onOpenChange={handleOpenChange}
+        selectedLevel={selectedLevel}
+        onLevelChange={setSelectedLevel}
+        note={note}
+        onNoteChange={setNote}
+        onSubmit={handleSubmit}
+        submitting={isPending}
+        error={error}
+      />
     </div>
   );
 }

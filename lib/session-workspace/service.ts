@@ -12,6 +12,11 @@ import {
   progressRecords,
   reviewQueueItems,
 } from "@/lib/db/schema";
+import {
+  getLessonEvaluationLabel,
+  getLessonEvaluationRating,
+  type LessonEvaluationLevel,
+} from "@/lib/session-workspace/evaluation";
 
 type CompletionStatus =
   | "completed_as_planned"
@@ -320,5 +325,54 @@ export async function completeSessionWorkspace(params: {
     progressRecord,
     evidenceRecord,
     reviewQueueItem: reviewQueueItem ?? null,
+  };
+}
+
+export async function recordSessionEvaluation(params: {
+  organizationId: string;
+  learnerId: string;
+  planItemId: string;
+  lessonSessionId: string;
+  evaluationLevel: LessonEvaluationLevel;
+  note?: string | null;
+  metadata?: Record<string, unknown>;
+}) {
+  const repos = createRepositories(getDb());
+  const now = new Date();
+  const evaluationLabel = getLessonEvaluationLabel(params.evaluationLevel);
+  const rating = getLessonEvaluationRating(params.evaluationLevel);
+  const body = params.note?.trim() || evaluationLabel;
+
+  const feedbackEntry = await repos.tracking.createFeedbackEntry({
+    organizationId: params.organizationId,
+    learnerId: params.learnerId,
+    authorAdultUserId: null,
+    lessonSessionId: params.lessonSessionId,
+    planItemId: params.planItemId,
+    activityAttemptId: null,
+    progressRecordId: null,
+    evidenceRecordId: null,
+    artifactId: null,
+    scopeType: "session",
+    feedbackType: "rubric",
+    rating,
+    body,
+    visibility: "shared",
+    metadata: {
+      source: "lesson_evaluation",
+      evaluationLevel: params.evaluationLevel,
+      evaluationLabel,
+      note: params.note?.trim() || null,
+      ...(params.metadata ?? {}),
+    },
+  });
+
+  return {
+    feedbackEntry,
+    createdAt: now.toISOString(),
+    evaluationLevel: params.evaluationLevel,
+    evaluationLabel,
+    rating,
+    note: params.note?.trim() || null,
   };
 }
