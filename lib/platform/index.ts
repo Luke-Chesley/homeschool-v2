@@ -11,3 +11,4 @@ export {
   createServerSupabaseClient,
   createServiceRoleSupabaseClient,
 } from "@/lib/platform/supabase";
+export { trackOperationalError, trackProductEvent } from "@/lib/platform/observability";

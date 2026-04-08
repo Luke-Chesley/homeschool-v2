@@ -15,6 +15,7 @@ import { z } from "zod";
 import { AiTaskNameSchema } from "@/lib/ai/types";
 import { requireAppSession } from "@/lib/app-session/server";
 import {
+  dispatchCurriculumGeneration,
   dispatchLessonDraft,
   dispatchWorksheetGeneration,
   dispatchInteractiveGeneration,
@@ -61,6 +62,12 @@ export async function POST(req: NextRequest) {
   try {
     let job;
     switch (taskName) {
+      case "curriculum.generate":
+        job = await dispatchCurriculumGeneration(
+          inputs as unknown as Parameters<typeof dispatchCurriculumGeneration>[0],
+          dispatchContext,
+        );
+        break;
       case "lesson.draft":
         job = await dispatchLessonDraft(
           inputs as unknown as Parameters<typeof dispatchLessonDraft>[0],

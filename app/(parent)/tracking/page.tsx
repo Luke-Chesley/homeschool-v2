@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { TrackingOverview, TrackingShell } from "@/components/tracking";
 import { requireAppSession } from "@/lib/app-session/server";
+import { getRecentHomeschoolAttendance } from "@/lib/homeschool/attendance/service";
 import {
   getTrackingDashboard,
   updateRecommendationDecision,
@@ -48,6 +49,10 @@ export default async function TrackingPage({ searchParams }: TrackingPageProps) 
     learnerId: session.activeLearner.id,
     learnerName: session.activeLearner.displayName,
   });
+  const attendanceRecords = await getRecentHomeschoolAttendance({
+    organizationId: session.organization.id,
+    learnerId: session.activeLearner.id,
+  });
 
   return (
     <TrackingShell
@@ -55,7 +60,11 @@ export default async function TrackingPage({ searchParams }: TrackingPageProps) 
       title="Tracking that keeps objectives, evidence, and progress in one place."
       description="This workspace records what was planned, what happened, and what still needs review or adjustment."
     >
-      <TrackingOverview dashboard={dashboard} />
+      <TrackingOverview
+        dashboard={dashboard}
+        attendanceRecords={attendanceRecords}
+        todayDate={new Date().toISOString().slice(0, 10)}
+      />
     </TrackingShell>
   );
 }

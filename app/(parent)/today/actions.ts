@@ -1,5 +1,7 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
+
 import { requireAppSession } from "@/lib/app-session/server";
 import { createRepositories } from "@/lib/db";
 import { getDb } from "@/lib/db/server";
@@ -14,6 +16,15 @@ import {
 } from "@/lib/prompts/activity-spec";
 import { publishActivityForLessonDraft } from "@/lib/activities/assignment-service";
 import { computeLessonDraftFingerprint } from "@/lib/lesson-draft/fingerprint";
+import {
+  completeTodayPlanItem,
+  partiallyCompleteTodayPlanItem,
+  pushTodayPlanItemToTomorrow,
+  resetTodayPlanItem,
+  repeatTodayPlanItemTomorrow,
+  skipTodayPlanItem,
+  swapTodayPlanItemWithAlternate,
+} from "@/lib/planning/today-service";
 
 // ---------------------------------------------------------------------------
 // Lesson-draft activity status
@@ -30,6 +41,23 @@ export interface LessonDraftActivityState {
   status?: LessonDraftActivityStatus;
   sessionId?: string;
   activityId?: string;
+  error?: string;
+}
+
+export type TodayPlanItemAction =
+  | "complete"
+  | "reset"
+  | "partial"
+  | "push_to_tomorrow"
+  | "skip_today"
+  | "repeat_tomorrow"
+  | "swap_with_alternate";
+
+export interface TodayPlanItemActionResult {
+  ok: boolean;
+  action: TodayPlanItemAction;
+  planItemId: string;
+  message?: string;
   error?: string;
 }
 
@@ -75,6 +103,106 @@ export async function getLessonDraftActivityStatusAction(
   } catch (err) {
     console.error("[getLessonDraftActivityStatusAction]", err);
     return { ok: false, error: err instanceof Error ? err.message : "Status check failed" };
+  }
+}
+
+export async function updateTodayPlanItemAction(input: {
+  date: string;
+  planItemId: string;
+  action: TodayPlanItemAction;
+  alternateWeeklyRouteItemId?: string;
+}): Promise<TodayPlanItemActionResult> {
+  try {
+    const session = await requireAppSession();
+
+    if (input.action === "complete") {
+      await completeTodayPlanItem({
+        organizationId: session.organization.id,
+        learnerId: session.activeLearner.id,
+        weeklyRouteItemId: input.planItemId,
+        date: input.date,
+      });
+    } else if (input.action === "reset") {
+      await resetTodayPlanItem({
+        organizationId: session.organization.id,
+        learnerId: session.activeLearner.id,
+        weeklyRouteItemId: input.planItemId,
+        date: input.date,
+      });
+    } else if (input.action === "partial") {
+      await partiallyCompleteTodayPlanItem({
+        organizationId: session.organization.id,
+        learnerId: session.activeLearner.id,
+        weeklyRouteItemId: input.planItemId,
+        date: input.date,
+      });
+    } else if (input.action === "skip_today") {
+      await skipTodayPlanItem({
+        organizationId: session.organization.id,
+        learnerId: session.activeLearner.id,
+        weeklyRouteItemId: input.planItemId,
+        date: input.date,
+      });
+    } else if (input.action === "push_to_tomorrow") {
+      await pushTodayPlanItemToTomorrow(
+        session.activeLearner.id,
+        input.planItemId,
+        input.date,
+      );
+    } else if (input.action === "repeat_tomorrow") {
+      await repeatTodayPlanItemTomorrow(
+        session.activeLearner.id,
+        input.planItemId,
+        input.date,
+      );
+    } else if (
+      input.action === "swap_with_alternate" &&
+      input.alternateWeeklyRouteItemId
+    ) {
+      await swapTodayPlanItemWithAlternate(
+        session.activeLearner.id,
+        input.planItemId,
+        input.alternateWeeklyRouteItemId,
+        input.date,
+      );
+    } else {
+      return {
+        ok: false,
+        action: input.action,
+        planItemId: input.planItemId,
+        error: "That action is missing required data.",
+      };
+    }
+
+    revalidatePath("/today");
+    revalidatePath("/planning");
+    revalidatePath("/tracking");
+    revalidatePath("/tracking/reports");
+
+    const messageByAction: Record<TodayPlanItemAction, string> = {
+      complete: "Marked done and saved to today's record.",
+      reset: "Returned to today's plan and cleared the saved completion.",
+      partial: "Marked partial and carried the remainder forward.",
+      push_to_tomorrow: "Moved forward to tomorrow.",
+      skip_today: "Skipped today and saved to today's record.",
+      repeat_tomorrow: "Added a repeat for tomorrow.",
+      swap_with_alternate: "Replaced with a lighter option.",
+    };
+
+    return {
+      ok: true,
+      action: input.action,
+      planItemId: input.planItemId,
+      message: messageByAction[input.action],
+    };
+  } catch (err) {
+    console.error("[updateTodayPlanItemAction]", err);
+    return {
+      ok: false,
+      action: input.action,
+      planItemId: input.planItemId,
+      error: err instanceof Error ? err.message : "Could not save the today action.",
+    };
   }
 }
 

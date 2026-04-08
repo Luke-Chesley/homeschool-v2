@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 
 import type { StructuredLessonDraft } from "@/lib/lesson-draft/types";
 import { isStructuredLessonDraft } from "@/lib/lesson-draft/types";
@@ -11,13 +11,18 @@ import {
 } from "@/lib/curriculum/service";
 import { getDb } from "@/lib/db/server";
 import {
+  evidenceRecordObjectives,
   evidenceRecords,
+  feedbackEntries,
   interactiveActivities,
   lessonSessions,
   planDays,
   planItemCurriculumLinks,
   planItems,
   plans,
+  progressRecords,
+  progressRecordStandards,
+  reviewQueueItems,
   routeOverrideEvents,
   weeklyRouteItems,
   weeklyRoutes,
@@ -606,9 +611,10 @@ function buildPlanItem(
     },
     workflow,
     note:
-      routeItem.manualOverrideKind === "none"
+      routeItem.manualOverrideNote ??
+      (routeItem.manualOverrideKind === "none"
         ? undefined
-        : `Manual override: ${routeItem.manualOverrideKind}`,
+        : `Manual override: ${routeItem.manualOverrideKind}`),
   };
 }
 
@@ -1091,6 +1097,179 @@ export async function completeTodayPlanItem(params: {
   }));
 }
 
+export async function resetTodayPlanItem(params: {
+  organizationId: string;
+  learnerId: string;
+  weeklyRouteItemId: string;
+  date: string;
+}) {
+  const materializedPlanItem = await findMaterializedPlanItemForRouteItem(params.weeklyRouteItemId);
+
+  if (materializedPlanItem) {
+    const db = getDb();
+    const session = await db.query.lessonSessions.findFirst({
+      where: and(
+        eq(lessonSessions.organizationId, params.organizationId),
+        eq(lessonSessions.learnerId, params.learnerId),
+        eq(lessonSessions.planItemId, materializedPlanItem.planItem.id),
+        eq(lessonSessions.sessionDate, params.date),
+      ),
+      orderBy: [desc(lessonSessions.updatedAt)],
+    });
+
+    if (session) {
+      const progress = await db.query.progressRecords.findMany({
+        where: and(
+          eq(progressRecords.lessonSessionId, session.id),
+          eq(progressRecords.planItemId, materializedPlanItem.planItem.id),
+        ),
+        orderBy: [desc(progressRecords.createdAt)],
+      });
+      const progressIds = progress.map((row) => row.id);
+
+      const autoEvidence = await db.query.evidenceRecords.findMany({
+        where: and(
+          eq(evidenceRecords.lessonSessionId, session.id),
+          eq(evidenceRecords.evidenceType, "note"),
+          isNull(evidenceRecords.artifactId),
+        ),
+        orderBy: [desc(evidenceRecords.createdAt)],
+      });
+      const autoEvidenceIds = autoEvidence.map((row) => row.id);
+
+      await db.transaction(async (tx) => {
+        if (progressIds.length > 0) {
+          await tx
+            .delete(progressRecordStandards)
+            .where(inArray(progressRecordStandards.progressRecordId, progressIds));
+        }
+
+        if (autoEvidenceIds.length > 0) {
+          await tx
+            .delete(evidenceRecordObjectives)
+            .where(inArray(evidenceRecordObjectives.evidenceRecordId, autoEvidenceIds));
+        }
+
+        if (progressIds.length > 0) {
+          await tx
+            .delete(feedbackEntries)
+            .where(inArray(feedbackEntries.progressRecordId, progressIds));
+        }
+
+        if (autoEvidenceIds.length > 0) {
+          await tx
+            .delete(feedbackEntries)
+            .where(inArray(feedbackEntries.evidenceRecordId, autoEvidenceIds));
+          await tx
+            .delete(evidenceRecords)
+            .where(inArray(evidenceRecords.id, autoEvidenceIds));
+        }
+
+        await tx
+          .delete(reviewQueueItems)
+          .where(
+            and(
+              eq(reviewQueueItems.subjectType, "session"),
+              eq(reviewQueueItems.subjectId, session.id),
+            ),
+          );
+
+        if (progressIds.length > 0) {
+          await tx.delete(progressRecords).where(inArray(progressRecords.id, progressIds));
+        }
+
+        await tx
+          .update(lessonSessions)
+          .set({
+            status: "planned",
+            completionStatus: "not_started",
+            reviewState: "not_required",
+            actualMinutes: null,
+            completedAt: null,
+            reviewedAt: null,
+            reviewedByAdultUserId: null,
+            summary: null,
+            notes: null,
+            retrospective: null,
+            nextAction: null,
+            deviationReason: null,
+            updatedAt: new Date(),
+          })
+          .where(eq(lessonSessions.id, session.id));
+      });
+    }
+  }
+
+  await updateWeeklyRouteItem(params.learnerId, params.weeklyRouteItemId, (current) => ({
+    state: "scheduled",
+    scheduledDate: params.date,
+    manualOverrideKind:
+      current.manualOverrideKind === "skip_acknowledged" ? "none" : current.manualOverrideKind,
+    manualOverrideNote:
+      current.manualOverrideNote === "Completed from today workspace."
+        ? null
+        : current.manualOverrideNote,
+    eventType: "repair_applied",
+    payload: {
+      action: "reset_today_status",
+      toDate: params.date,
+    },
+  }));
+}
+
+export async function partiallyCompleteTodayPlanItem(params: {
+  organizationId: string;
+  learnerId: string;
+  weeklyRouteItemId: string;
+  date: string;
+}) {
+  const materializedPlanItem = await findMaterializedPlanItemForRouteItem(params.weeklyRouteItemId);
+  const tomorrow = addDays(params.date, 1);
+
+  if (materializedPlanItem) {
+    await completeSessionWorkspace({
+      organizationId: params.organizationId,
+      learnerId: params.learnerId,
+      planId: materializedPlanItem.planItem.planId,
+      planDayId: materializedPlanItem.planItem.planDayId,
+      planItemId: materializedPlanItem.planItem.id,
+      sessionDate: params.date,
+      scheduledMinutes: materializedPlanItem.planItem.estimatedMinutes ?? null,
+      actualMinutes: Math.max(15, Math.round((materializedPlanItem.planItem.estimatedMinutes ?? 30) / 2)),
+      completionStatus: "partially_completed",
+      summary: `Partially completed ${materializedPlanItem.planItem.title}.`,
+      notes: null,
+      retrospective: "Stopped before finishing the full lesson.",
+      nextAction: `Carry the remaining work into ${tomorrow}.`,
+      deviationReason: "partial_completion",
+      metadata: {
+        weeklyRouteItemId: params.weeklyRouteItemId,
+        source: "today_workspace_partial",
+      },
+    });
+  }
+
+  await updateWeeklyRouteItem(params.learnerId, params.weeklyRouteItemId, (current, weekStartDate) => {
+    const weekDates = Array.from({ length: 5 }, (_, index) => addDays(weekStartDate, index));
+    const withinWeek = weekDates.includes(tomorrow);
+
+    return {
+      state: withinWeek ? "scheduled" : "queued",
+      scheduledDate: withinWeek ? tomorrow : null,
+      manualOverrideKind: current.manualOverrideKind === "none" ? "deferred" : current.manualOverrideKind,
+      manualOverrideNote: withinWeek
+        ? `Marked partial on ${params.date}; carried into ${tomorrow}.`
+        : `Marked partial on ${params.date}; remaining work moved back to the backlog.`,
+      eventType: "defer",
+      payload: {
+        action: "mark_partial",
+        fromDate: params.date,
+        toDate: withinWeek ? tomorrow : null,
+      },
+    };
+  });
+}
+
 export async function pushTodayPlanItemToTomorrow(
   learnerId: string,
   weeklyRouteItemId: string,
@@ -1145,6 +1324,51 @@ export async function removeTodayPlanItem(learnerId: string, weeklyRouteItemId: 
     payload: {
       action: "remove_today",
       fromDate: date,
+    },
+  }));
+}
+
+export async function skipTodayPlanItem(params: {
+  organizationId: string;
+  learnerId: string;
+  weeklyRouteItemId: string;
+  date: string;
+}) {
+  const materializedPlanItem = await findMaterializedPlanItemForRouteItem(params.weeklyRouteItemId);
+
+  if (materializedPlanItem) {
+    await completeSessionWorkspace({
+      organizationId: params.organizationId,
+      learnerId: params.learnerId,
+      planId: materializedPlanItem.planItem.planId,
+      planDayId: materializedPlanItem.planItem.planDayId,
+      planItemId: materializedPlanItem.planItem.id,
+      sessionDate: params.date,
+      scheduledMinutes: materializedPlanItem.planItem.estimatedMinutes ?? null,
+      actualMinutes: 0,
+      completionStatus: "skipped",
+      summary: `Skipped ${materializedPlanItem.planItem.title}.`,
+      notes: null,
+      retrospective: "Life happened; this lesson was not run today.",
+      nextAction: null,
+      deviationReason: "life_happened",
+      metadata: {
+        weeklyRouteItemId: params.weeklyRouteItemId,
+        source: "today_workspace_skip",
+      },
+    });
+  }
+
+  await updateWeeklyRouteItem(params.learnerId, params.weeklyRouteItemId, (current) => ({
+    state: "queued",
+    scheduledDate: null,
+    manualOverrideKind:
+      current.manualOverrideKind === "none" ? "skip_acknowledged" : current.manualOverrideKind,
+    manualOverrideNote: `Skipped on ${params.date}.`,
+    eventType: "skip_acknowledged",
+    payload: {
+      action: "skip_today",
+      fromDate: params.date,
     },
   }));
 }

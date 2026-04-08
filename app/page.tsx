@@ -1,7 +1,10 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { ArrowRight, BookOpen, Bot, CalendarDays, PlaySquare } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
+import { getAppSession } from "@/lib/app-session/server";
+import { getHomeschoolOnboardingStatus } from "@/lib/homeschool/onboarding/service";
 
 const launchItems = [
   {
@@ -30,7 +33,14 @@ const launchItems = [
   },
 ];
 
-export default function HomePage() {
+export default async function HomePage() {
+  const session = await getAppSession();
+  const onboarding = await getHomeschoolOnboardingStatus(session.organization.id);
+
+  if (!onboarding.isComplete) {
+    redirect("/onboarding");
+  }
+
   return (
     <main className="mx-auto flex min-h-[calc(100dvh-var(--global-tabs-height))] w-full max-w-7xl flex-col px-5 py-8 sm:px-6 lg:px-8">
       <section className="border-b border-border/70 pb-6">

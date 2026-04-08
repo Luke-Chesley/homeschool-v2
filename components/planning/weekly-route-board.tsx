@@ -31,11 +31,11 @@ interface WeeklyRouteBoardProps {
 }
 
 const STATE_OPTIONS: Array<{ value: WeeklyRouteBoardItem["state"]; label: string }> = [
-  { value: "queued", label: "Queued" },
-  { value: "scheduled", label: "Scheduled" },
-  { value: "in_progress", label: "In progress" },
+  { value: "queued", label: "Backlog" },
+  { value: "scheduled", label: "Planned" },
+  { value: "in_progress", label: "Working" },
   { value: "done", label: "Done" },
-  { value: "removed", label: "Removed" },
+  { value: "removed", label: "Paused" },
 ];
 
 function parseDateOrThrow(value: string) {
@@ -58,7 +58,7 @@ function getWeekdayDates(weekStartDate: string) {
 
 function getColumnLabel(columnId: ColumnId) {
   if (columnId === "unassigned") {
-    return "Unassigned";
+    return "Flex / unscheduled";
   }
 
   return new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(
@@ -228,7 +228,7 @@ function RouteColumn({
     >
       <CardHeader className="pb-3">
         <CardTitle className="text-base">{getColumnLabel(columnId)}</CardTitle>
-        <CardDescription>{items.length} items</CardDescription>
+        <CardDescription>{items.length} planned items</CardDescription>
       </CardHeader>
       <CardContent ref={setNodeRef} className="min-w-0 space-y-2">
         <SortableContext items={items.map((item) => item.id)} strategy={verticalListSortingStrategy}>
@@ -553,7 +553,7 @@ export function WeeklyRouteBoard({ initialBoard, weekStartDate }: WeeklyRouteBoa
         {isSaving ? (
           <>
             <span>•</span>
-            <span>Saving changes...</span>
+            <span>Saving parent changes...</span>
           </>
         ) : null}
       </div>

@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Check, Plus } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -98,11 +99,33 @@ export function UserManager({
         </p>
       </div>
 
+      <Card className="border-border/70 bg-card/70">
+        <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-start sm:justify-between">
+          <div className="space-y-1">
+            <Badge variant="secondary" className="w-fit">
+              Active household
+            </Badge>
+            <p className="font-serif text-2xl font-semibold tracking-tight">{organization.name}</p>
+            <p className="text-sm text-muted-foreground">
+              This is the current household workspace. Selecting a learner changes the active
+              learner inside this household, not the household itself.
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-border/70 bg-background/80 px-4 py-3 text-sm text-muted-foreground">
+            <p className="font-medium text-foreground">Workspace ID</p>
+            <p className="font-mono text-xs">{organization.id}</p>
+          </div>
+        </CardContent>
+      </Card>
+
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
         <Card>
           <CardHeader>
-            <CardTitle>{organization.name}</CardTitle>
-            <CardDescription>Select who the app is currently acting on.</CardDescription>
+            <CardTitle>Learners in {organization.name}</CardTitle>
+            <CardDescription>
+              Select who the app is currently acting on inside this active household.
+            </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3">
             {learners.length === 0 ? (

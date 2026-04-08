@@ -1,8 +1,10 @@
 import Link from "next/link";
 
+import { AttendanceCard } from "@/components/tracking/attendance-card";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import type { HomeschoolAttendanceRecord } from "@/lib/homeschool/attendance/types";
 import { formatMinutes, formatOutcomeDelta, formatTrackingDate } from "@/lib/tracking/service";
 import type { TrackingDashboard } from "@/lib/tracking/types";
 import { cn } from "@/lib/utils";
@@ -20,7 +22,15 @@ const statusTone: Record<string, string> = {
   skipped: "text-destructive",
 };
 
-export function TrackingOverview({ dashboard }: { dashboard: TrackingDashboard }) {
+export function TrackingOverview({
+  dashboard,
+  attendanceRecords,
+  todayDate,
+}: {
+  dashboard: TrackingDashboard;
+  attendanceRecords: HomeschoolAttendanceRecord[];
+  todayDate: string;
+}) {
   return (
     <div className="grid gap-6">
       <section className="grid gap-4 lg:grid-cols-5">
@@ -234,6 +244,8 @@ export function TrackingOverview({ dashboard }: { dashboard: TrackingDashboard }
               )}
             </CardContent>
           </Card>
+
+          <AttendanceCard todayDate={todayDate} records={attendanceRecords} />
 
           <Card>
             <CardHeader>

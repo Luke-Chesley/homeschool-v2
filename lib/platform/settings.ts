@@ -1,5 +1,6 @@
 import "@/lib/server-only";
 
+import { homeschoolTemplate } from "@/config/templates/homeschool";
 import { createRepositories } from "@/lib/db";
 import { ensureDatabaseReady, getDb } from "@/lib/db/server";
 
@@ -25,15 +26,15 @@ type PlatformDefaults = NonNullable<OrganizationPlatformSettingsRecord>;
 
 const TEMPLATE_DEFAULTS: Record<TemplateKey, Omit<PlatformDefaults, "id" | "organizationId" | "createdAt" | "updatedAt">> = {
   homeschool: {
-    workflowMode: "family_guided",
-    reportingMode: "progress_journal",
+    workflowMode: homeschoolTemplate.defaults.workflowMode,
+    reportingMode: homeschoolTemplate.defaults.reportingMode,
     templateKey: "homeschool",
-    primaryGuideLabel: "Parent",
-    learnerLabel: "Learner",
-    sessionLabel: "Lesson",
-    moduleLabel: "Unit",
-    activityLabel: "Practice",
-    checkpointLabel: "Checkpoint",
+    primaryGuideLabel: homeschoolTemplate.labels.primaryGuide,
+    learnerLabel: homeschoolTemplate.labels.learner,
+    sessionLabel: homeschoolTemplate.labels.session,
+    moduleLabel: homeschoolTemplate.labels.module,
+    activityLabel: homeschoolTemplate.labels.activity,
+    checkpointLabel: homeschoolTemplate.labels.checkpoint,
     terminology: {
       guidePlural: "Parents",
       learnerPlural: "Learners",
@@ -50,7 +51,7 @@ const TEMPLATE_DEFAULTS: Record<TemplateKey, Omit<PlatformDefaults, "id" | "orga
       suggestedTypes: ["note", "artifact_output", "activity_outcome"],
     },
     reportDefaults: {
-      packs: ["progress_journal", "homeschool_records"],
+      packs: homeschoolTemplate.defaults.reportPacks,
     },
     metadata: {},
   },

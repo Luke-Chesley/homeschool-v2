@@ -45,6 +45,12 @@ const STATIC_PROMPTS: PromptRecord[] = [
     notes: "Conversational intake for AI curriculum drafting",
   },
   {
+    task: "curriculum.generate",
+    version: CURRICULUM_CORE_PROMPT_VERSION,
+    systemPrompt: CURRICULUM_CORE_SYSTEM_PROMPT,
+    notes: "Alias prompt for async curriculum generation jobs",
+  },
+  {
     task: "curriculum.generate.core",
     version: CURRICULUM_CORE_PROMPT_VERSION,
     systemPrompt: CURRICULUM_CORE_SYSTEM_PROMPT,

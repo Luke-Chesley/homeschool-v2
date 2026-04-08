@@ -10,9 +10,11 @@ import { getLiveCurriculumSource } from "@/lib/curriculum/service";
 import {
   completeTodayPlanItem,
   getTodayWorkspace,
+  partiallyCompleteTodayPlanItem,
   repeatTodayPlanItemTomorrow,
   pushTodayPlanItemToTomorrow,
   removeTodayPlanItem,
+  skipTodayPlanItem,
   swapTodayPlanItemWithAlternate,
 } from "@/lib/planning/today-service";
 
@@ -78,6 +80,20 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
         weeklyRouteItemId: planItemId,
         date: date ?? new Date().toISOString().slice(0, 10),
       });
+    } else if (action === "partial") {
+      await partiallyCompleteTodayPlanItem({
+        organizationId: session.organization.id,
+        learnerId: session.activeLearner.id,
+        weeklyRouteItemId: planItemId,
+        date: date ?? new Date().toISOString().slice(0, 10),
+      });
+    } else if (action === "skip_today") {
+      await skipTodayPlanItem({
+        organizationId: session.organization.id,
+        learnerId: session.activeLearner.id,
+        weeklyRouteItemId: planItemId,
+        date: date ?? new Date().toISOString().slice(0, 10),
+      });
     } else if (action === "push_to_tomorrow") {
       await pushTodayPlanItemToTomorrow(
         session.activeLearner.id,
@@ -128,7 +144,7 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
       <div className="mb-5 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
         <span className="font-medium text-foreground">Live curriculum: {liveSource.title}</span>
         <span>{formatLongDate(workspace.date)}</span>
-        <span>{workspace.items.length} items</span>
+        <span>{workspace.items.length} lessons in motion</span>
         <span>{sessionTiming.resolvedTotalMinutes} min</span>
       </div>
       <TodayWorkspaceView workspace={workspace} sourceId={liveSource.id} />

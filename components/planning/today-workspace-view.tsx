@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Loader2, Sparkles } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Loader2, Sparkles } from "lucide-react";
 
 import { LessonPlanPanel } from "@/components/planning/lesson-plan-panel";
 import {
@@ -21,6 +21,8 @@ import {
   generateLessonDraftActivityAction,
   getLessonDraftPromptPreviewAction,
   type LessonDraftActivityStatus,
+  type TodayPlanItemAction,
+  updateTodayPlanItemAction,
 } from "@/app/(parent)/today/actions";
 
 interface TodayWorkspaceViewProps {
@@ -61,6 +63,29 @@ function getReviewLabel(reviewState?: string | null) {
 function canRepeatToTomorrow(date: string) {
   const day = new Date(`${date}T12:00:00.000Z`).getUTCDay();
   return day >= 1 && day <= 4;
+}
+
+function getCompletionDisplay(
+  item: DailyWorkspace["items"][number],
+  feedbackMessage?: string | null,
+) {
+  if (feedbackMessage) {
+    return feedbackMessage;
+  }
+
+  if (item.completionStatus === "completed_as_planned") {
+    return "Confirmed done and saved to today's record.";
+  }
+
+  if (item.completionStatus === "partially_completed") {
+    return "Marked partial and carried forward.";
+  }
+
+  if (item.completionStatus === "skipped") {
+    return "Skipped today and recorded.";
+  }
+
+  return null;
 }
 
 // Typed draft state: can hold structured, legacy markdown, or null
@@ -243,6 +268,169 @@ function LessonDraftActivityControl({
   );
 }
 
+function TodayPlanItemActionButtons({
+  item,
+  date,
+  alternateWeeklyRouteItemId,
+  repeatTomorrowAllowed,
+  compact = false,
+}: {
+  item: DailyWorkspace["items"][number];
+  date: string;
+  alternateWeeklyRouteItemId?: string;
+  repeatTomorrowAllowed?: boolean;
+  compact?: boolean;
+}) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const [pendingAction, setPendingAction] = useState<TodayPlanItemAction | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPendingAction(null);
+    setError(null);
+  }, [item.status, item.completionStatus, item.note]);
+
+  const isDone =
+    item.status === "completed" || item.completionStatus === "completed_as_planned";
+  const hasSavedCompletion =
+    item.completionStatus != null && item.completionStatus !== "not_started";
+
+  function runAction(action: TodayPlanItemAction) {
+    setError(null);
+    setPendingAction(action);
+
+    startTransition(async () => {
+      const result = await updateTodayPlanItemAction({
+        date,
+        planItemId: item.id,
+        action,
+        alternateWeeklyRouteItemId,
+      });
+
+      if (!result.ok) {
+        setError(result.error ?? "Could not save this change.");
+        setPendingAction(null);
+        return;
+      }
+
+      setSuccessMessage(result.message ?? "Saved.");
+      setPendingAction(null);
+      router.refresh();
+    });
+  }
+
+  const confirmationText = getCompletionDisplay(item, successMessage);
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-2 sm:justify-end">
+        <Button
+          size="sm"
+          disabled={isPending || isDone}
+          onClick={() => runAction("complete")}
+        >
+          {pendingAction === "complete" ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : isDone ? (
+            <CheckCircle2 className="size-3.5" />
+          ) : null}
+          {isDone ? "Done saved" : "Mark done"}
+        </Button>
+        {hasSavedCompletion ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={isPending}
+            onClick={() => runAction("reset")}
+          >
+            {pendingAction === "reset" ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : null}
+            Undo
+          </Button>
+        ) : null}
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={isPending || hasSavedCompletion}
+          onClick={() => runAction("partial")}
+        >
+          {pendingAction === "partial" ? <Loader2 className="size-3.5 animate-spin" /> : null}
+          Mark partial
+        </Button>
+        {!compact ? (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={isPending || hasSavedCompletion}
+            onClick={() => runAction("push_to_tomorrow")}
+          >
+            {pendingAction === "push_to_tomorrow" ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : null}
+            Push forward
+          </Button>
+        ) : null}
+        {!compact ? (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={isPending || hasSavedCompletion}
+            onClick={() => runAction("skip_today")}
+          >
+            {pendingAction === "skip_today" ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : null}
+            Skip today
+          </Button>
+        ) : null}
+        {repeatTomorrowAllowed ? (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={isPending || hasSavedCompletion}
+            onClick={() => runAction("repeat_tomorrow")}
+          >
+            {pendingAction === "repeat_tomorrow" ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : null}
+            Repeat tomorrow
+          </Button>
+        ) : null}
+        {alternateWeeklyRouteItemId ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={isPending || hasSavedCompletion}
+            onClick={() => runAction("swap_with_alternate")}
+            className="text-muted-foreground"
+          >
+            {pendingAction === "swap_with_alternate" ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : null}
+            {compact ? "Lighter option" : "Use lighter option"}
+          </Button>
+        ) : null}
+      </div>
+
+      {confirmationText ? (
+        <div className="flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-foreground">
+          <CheckCircle2 className="size-4 text-primary" />
+          <span>{confirmationText}</span>
+        </div>
+      ) : null}
+
+      {error ? (
+        <p className="rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 
 export function TodayWorkspaceView({ workspace, sourceId }: TodayWorkspaceViewProps) {
@@ -339,7 +527,7 @@ export function TodayRouteItemsSection({
       <section className="space-y-4 xl:sticky xl:top-24">
         <div className="border-b border-border/70 pb-4">
           <p className="text-sm text-muted-foreground">{formatPlannerDate(workspace.date)}</p>
-          <h2 className="font-serif text-2xl">Route</h2>
+          <h2 className="font-serif text-2xl">Today</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             {workspace.items.length} items · {totalMinutes} min
           </p>
@@ -366,30 +554,13 @@ export function TodayRouteItemsSection({
                       <span>{item.workflow.evidenceCount} evidence</span>
                     </div>
                   ) : null}
-                  <div className="flex flex-wrap gap-2">
-                    <Link
-                      href={`/today?date=${workspace.date}&action=complete&planItemId=${item.id}`}
-                      className={buttonVariants({ variant: "default", size: "sm" })}
-                    >
-                      Complete
-                    </Link>
-                    {repeatTomorrowAllowed ? (
-                      <Link
-                        href={`/today?date=${workspace.date}&action=repeat_tomorrow&planItemId=${item.id}`}
-                        className={buttonVariants({ variant: "outline", size: "sm" })}
-                      >
-                        Repeat
-                      </Link>
-                    ) : null}
-                    {alternate ? (
-                      <Link
-                        href={`/today?date=${workspace.date}&action=swap_with_alternate&planItemId=${item.id}&alternateWeeklyRouteItemId=${alternate.id}`}
-                        className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "text-muted-foreground")}
-                      >
-                        Swap
-                      </Link>
-                    ) : null}
-                  </div>
+                  <TodayPlanItemActionButtons
+                    item={item}
+                    date={workspace.date}
+                    alternateWeeklyRouteItemId={alternate?.id}
+                    repeatTomorrowAllowed={repeatTomorrowAllowed}
+                    compact
+                  />
                 </div>
               </Card>
             );
@@ -404,7 +575,7 @@ export function TodayRouteItemsSection({
       <div className="flex flex-col gap-2 border-b border-border/70 pb-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-sm text-muted-foreground">{formatPlannerDate(workspace.date)}</p>
-          <h2 className="font-serif text-2xl">Daily plan</h2>
+          <h2 className="font-serif text-2xl">Daily workspace</h2>
         </div>
         <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
           <span>{workspace.items.length} items</span>
@@ -418,7 +589,14 @@ export function TodayRouteItemsSection({
           const alternate = workspace.alternatesByPlanItemId[item.id]?.[0];
 
           return (
-            <Card key={item.id}>
+            <Card
+              key={item.id}
+              className={cn(
+                item.status === "completed" || item.completionStatus === "completed_as_planned"
+                  ? "border-primary/30 bg-primary/5"
+                  : undefined,
+              )}
+            >
               <div className="flex flex-col gap-4 p-5">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0 space-y-2">
@@ -449,36 +627,12 @@ export function TodayRouteItemsSection({
                     {item.note ? <p className="text-sm text-muted-foreground">{item.note}</p> : null}
                   </div>
 
-                  <div className="flex flex-wrap gap-2 sm:justify-end">
-                    <Link
-                      href={`/today?date=${workspace.date}&action=complete&planItemId=${item.id}`}
-                      className={buttonVariants({ variant: "default", size: "sm" })}
-                    >
-                      Complete
-                    </Link>
-                    <Link
-                      href={`/today?date=${workspace.date}&action=push_to_tomorrow&planItemId=${item.id}`}
-                      className={buttonVariants({ variant: "outline", size: "sm" })}
-                    >
-                      Tomorrow
-                    </Link>
-                    {repeatTomorrowAllowed ? (
-                      <Link
-                        href={`/today?date=${workspace.date}&action=repeat_tomorrow&planItemId=${item.id}`}
-                        className={buttonVariants({ variant: "outline", size: "sm" })}
-                      >
-                        Repeat
-                      </Link>
-                    ) : null}
-                    {alternate ? (
-                      <Link
-                        href={`/today?date=${workspace.date}&action=swap_with_alternate&planItemId=${item.id}&alternateWeeklyRouteItemId=${alternate.id}`}
-                        className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "text-muted-foreground")}
-                      >
-                        Swap
-                      </Link>
-                    ) : null}
-                  </div>
+                  <TodayPlanItemActionButtons
+                    item={item}
+                    date={workspace.date}
+                    alternateWeeklyRouteItemId={alternate?.id}
+                    repeatTomorrowAllowed={repeatTomorrowAllowed}
+                  />
                 </div>
               </div>
             </Card>
@@ -503,9 +657,9 @@ function TodayLessonDraftArticle({
 
   return (
     <section className="space-y-4">
-      <div className="border-b border-border/70 pb-4">
-        <p className="text-sm text-muted-foreground">{workspace.leadItem.sourceLabel}</p>
-        <h2 className="font-serif text-3xl">Lesson draft</h2>
+        <div className="border-b border-border/70 pb-4">
+          <p className="text-sm text-muted-foreground">{workspace.leadItem.sourceLabel}</p>
+          <h2 className="font-serif text-3xl">Lesson draft</h2>
       </div>
 
       <Card>
@@ -526,7 +680,7 @@ function TodayLessonDraftArticle({
         <div className="space-y-2">
           <h3 className="text-sm font-medium text-foreground">Activity</h3>
           <p className="text-xs text-muted-foreground">
-            One activity generated from this lesson draft. Regenerate when the draft changes.
+            Keep AI actions limited: use this to generate or regenerate the one activity tied to today&apos;s lesson draft.
           </p>
           <LessonDraftActivityControl
             date={workspace.date}

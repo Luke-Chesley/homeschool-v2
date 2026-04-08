@@ -576,6 +576,31 @@ export async function createCurriculumSource(input: CreateCurriculumSourceInput)
   return mapped;
 }
 
+export async function importStructuredCurriculumDocument(params: {
+  householdId: string;
+  imported: ImportedCurriculumDocument;
+  sourceId?: string;
+}) {
+  if (params.sourceId) {
+    return importNormalizedTree(params.sourceId, params.imported);
+  }
+
+  const source = await createSourceRecord(
+    {
+      householdId: params.householdId,
+      title: params.imported.title,
+      description: params.imported.description,
+      kind: params.imported.kind,
+      academicYear: params.imported.academicYear,
+      subjects: params.imported.subjects,
+      gradeLevels: params.imported.gradeLevels,
+    },
+    { status: "active", metadata: params.imported.metadata },
+  );
+
+  return importNormalizedTree(source.id, params.imported);
+}
+
 export async function importCurriculumSourceFromLocalJson(
   householdId: string,
   sourceId?: string,

@@ -1,59 +1,22 @@
 "use client";
 
-import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 
-import { AddSourceModalContent } from "@/components/curriculum/AddSourceModal";
+import { HomeschoolCurriculumIntakeForm } from "@/components/curriculum/homeschool-curriculum-intake-form";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export function NewCurriculumClientPage({
-  householdId,
   activeLearner,
+  defaultSchoolYearLabel,
 }: {
-  householdId: string;
   activeLearner: {
     displayName: string;
     firstName: string;
   };
+  defaultSchoolYearLabel?: string | null;
 }) {
-  const router = useRouter();
-  const [creating, setCreating] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-
-  async function handleCreated(data: {
-    householdId: string;
-    title?: string;
-    description?: string;
-    kind?: import("@/lib/curriculum/types").CurriculumSourceKind;
-    subjects?: string[];
-    gradeLevels?: string[];
-    academicYear?: string;
-    importPreset?: "local_curriculum_json";
-  }) {
-    setCreating(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/curriculum/sources", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      if (!res.ok) throw new Error("Failed to create curriculum source.");
-      const created = await res.json();
-      router.push(`/curriculum/${created.id}`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error");
-      setCreating(false);
-    }
-  }
-
-  function handleCreatedSourceId(sourceId: string) {
-    router.push(`/curriculum/${sourceId}`);
-  }
-
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-4 py-8 sm:px-6 lg:px-8">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -80,22 +43,10 @@ export function NewCurriculumClientPage({
           <CardTitle>Choose an entry point</CardTitle>
         </CardHeader>
         <CardContent className="p-4 sm:p-6">
-          {error && (
-            <p className="mb-4 rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {error}
-            </p>
-          )}
-          {creating ? (
-            <p className="text-sm text-muted-foreground">Creating curriculum…</p>
-          ) : (
-            <AddSourceModalContent
-              householdId={householdId}
-              activeLearner={activeLearner}
-              onCreated={handleCreated}
-              onCreatedSourceId={handleCreatedSourceId}
-              onClose={() => router.back()}
-            />
-          )}
+          <HomeschoolCurriculumIntakeForm
+            activeLearnerName={activeLearner.displayName}
+            defaultSchoolYearLabel={defaultSchoolYearLabel}
+          />
         </CardContent>
       </Card>
     </div>

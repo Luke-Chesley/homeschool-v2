@@ -1,9 +1,26 @@
 import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import type {
+  HomeschoolMonthlySummary,
+  HomeschoolTranscriptSkeleton,
+  HomeschoolWeeklySummary,
+} from "@/lib/homeschool/reporting/types";
 import { getTrackingExportPreview } from "@/lib/tracking/service";
 import type { TrackingDashboard } from "@/lib/tracking/types";
+import { cn } from "@/lib/utils";
 
-export function ReportsView({ dashboard }: { dashboard: TrackingDashboard }) {
+export function ReportsView({
+  dashboard,
+  weeklySummary,
+  monthlySummary,
+  transcript,
+}: {
+  dashboard: TrackingDashboard;
+  weeklySummary: HomeschoolWeeklySummary;
+  monthlySummary: HomeschoolMonthlySummary;
+  transcript: HomeschoolTranscriptSkeleton;
+}) {
   const exports = getTrackingExportPreview(dashboard);
   const objectiveCount = dashboard.standards.length;
   const evidenceCount = dashboard.evidence.length;
@@ -35,65 +52,62 @@ export function ReportsView({ dashboard }: { dashboard: TrackingDashboard }) {
       <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
         <Card>
           <CardHeader>
-            <CardTitle>Objective coverage and gaps</CardTitle>
+            <CardTitle>Weekly summary</CardTitle>
             <CardDescription>
-              Coverage tracks both completed evidence and visible gaps, instead of only counting planned exposure.
+              A parent-facing recap of what moved forward, what slipped, and whether the week stayed workable.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {dashboard.standards.map((standard) => (
-              <div
-                key={standard.id}
-                className="rounded-[1.4rem] border border-border/70 bg-background/70 p-4"
-              >
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-semibold">{standard.code}</p>
-                      <Badge variant="outline">{standard.subject}</Badge>
-                    </div>
-                    <p className="mt-2 text-sm leading-6 text-muted-foreground">{standard.label}</p>
-                  </div>
-                  <Badge className="bg-card text-foreground">{standard.status.replace("_", " ")}</Badge>
-                </div>
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-2xl bg-card px-4 py-3">
-                    <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Evidence count</p>
-                    <p className="mt-2 text-sm font-semibold">{standard.evidenceCount}</p>
-                  </div>
-                  <div className="rounded-2xl bg-card px-4 py-3">
-                    <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Latest evidence</p>
-                    <p className="mt-2 text-sm font-semibold">{standard.latestEvidence}</p>
-                  </div>
-                </div>
+            <div className="grid gap-3 sm:grid-cols-4">
+              <div className="rounded-2xl bg-card px-4 py-3">
+                <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Completed</p>
+                <p className="mt-2 text-sm font-semibold">{weeklySummary.completedCount}</p>
               </div>
-            ))}
+              <div className="rounded-2xl bg-card px-4 py-3">
+                <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Partial</p>
+                <p className="mt-2 text-sm font-semibold">{weeklySummary.partialCount}</p>
+              </div>
+              <div className="rounded-2xl bg-card px-4 py-3">
+                <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Skipped</p>
+                <p className="mt-2 text-sm font-semibold">{weeklySummary.skippedCount}</p>
+              </div>
+              <div className="rounded-2xl bg-card px-4 py-3">
+                <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Attendance days</p>
+                <p className="mt-2 text-sm font-semibold">{weeklySummary.attendanceCount}</p>
+              </div>
+            </div>
+            <p className="rounded-[1.4rem] border border-border/70 bg-background/70 p-4 text-sm leading-6 text-muted-foreground">
+              {weeklySummary.narrative}
+            </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>Progress signals</CardTitle>
+            <CardTitle>Monthly summary</CardTitle>
             <CardDescription>
-              Goals stay visible alongside the objective rows so planning can follow the evidence.
+              A compact records view for attendance and completed work across the last month.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {dashboard.goals.map((goal) => (
-              <div key={goal.id} className="rounded-[1.4rem] border border-border/70 bg-background/70 p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="font-semibold">{goal.title}</p>
-                  <Badge variant="outline">{goal.subject}</Badge>
+            <div className="rounded-[1.4rem] border border-border/70 bg-background/70 p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Attendance rate</p>
+              <p className="mt-2 text-3xl font-semibold">{monthlySummary.attendanceRate}%</p>
+            </div>
+            <div className="rounded-[1.4rem] border border-border/70 bg-background/70 p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Lessons completed</p>
+              <p className="mt-2 text-3xl font-semibold">
+                {monthlySummary.completedLessonCount}/{monthlySummary.totalLessonCount}
+              </p>
+            </div>
+            <div className="space-y-2">
+              {monthlySummary.subjectBreakdown.map((entry) => (
+                <div key={entry.subject} className="flex items-center justify-between rounded-xl border border-border/70 bg-background/70 px-3 py-2 text-sm">
+                  <span>{entry.subject}</span>
+                  <Badge variant="outline">{entry.count} lessons</Badge>
                 </div>
-                <p className="mt-3 text-sm leading-6 text-muted-foreground">{goal.progressLabel}</p>
-                <p className="mt-3 text-sm font-medium">{goal.nextMove}</p>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {goal.linkedStandards.map((standard) => (
-                    <Badge key={standard}>{standard}</Badge>
-                  ))}
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </CardContent>
         </Card>
       </section>
@@ -126,26 +140,51 @@ export function ReportsView({ dashboard }: { dashboard: TrackingDashboard }) {
 
         <Card>
           <CardHeader>
-            <CardTitle>Objective export preview</CardTitle>
+            <CardTitle>Transcript skeleton</CardTitle>
             <CardDescription>
-              Compact rows for coverage reports, compliance snapshots, and organizational summaries.
+              Older learners can start from a legible subject-level skeleton instead of a blank document.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {exports.standardRows.map((row) => (
-              <div key={row.code} className="rounded-[1.4rem] border border-border/70 bg-background/70 p-4">
+            <div className="rounded-[1.4rem] border border-border/70 bg-background/70 p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                {transcript.learnerName} · {transcript.gradeLabel}
+              </p>
+            </div>
+            {transcript.entries.map((entry) => (
+              <div key={entry.subject} className="rounded-[1.4rem] border border-border/70 bg-background/70 p-4">
                 <div className="flex items-center justify-between gap-3">
-                  <p className="font-semibold">{row.code}</p>
-                  <Badge variant="outline">{row.status}</Badge>
+                  <p className="font-semibold">{entry.courseTitle}</p>
+                  <Badge variant="outline">{entry.status}</Badge>
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {row.subject} · {row.evidenceCount} evidence items
+                  {entry.subject} · {entry.evidenceCount} lesson records
                 </p>
-                <p className="mt-3 text-sm leading-6 text-muted-foreground">{row.latestEvidence}</p>
               </div>
             ))}
           </CardContent>
         </Card>
+      </section>
+
+      <section className="flex flex-wrap gap-2">
+        <a
+          href="/api/homeschool/reports/export?kind=progress_report"
+          className={cn(buttonVariants({ size: "sm" }))}
+        >
+          Export progress report
+        </a>
+        <a
+          href="/api/homeschool/reports/export?kind=attendance_log"
+          className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+        >
+          Export attendance log
+        </a>
+        <a
+          href="/api/homeschool/reports/export?kind=transcript_skeleton"
+          className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+        >
+          Export transcript skeleton
+        </a>
       </section>
     </div>
   );

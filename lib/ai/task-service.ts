@@ -2,17 +2,29 @@ import "@/lib/server-only";
 
 import { createHash, randomUUID } from "node:crypto";
 
+import { eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { parseActivityDefinition } from "@/lib/activities/types";
+import {
+  createCurriculumSourceFromAiDraftArtifact,
+  setLiveCurriculumSource,
+} from "@/lib/curriculum/service";
+import { generateCurriculumArtifact } from "@/lib/curriculum/ai-draft-service";
 import { getRepositories } from "@/lib/db";
-import { ensureDatabaseReady } from "@/lib/db/server";
+import { ensureDatabaseReady, getDb } from "@/lib/db/server";
+import { organizations } from "@/lib/db/schema";
+import type { HomeschoolCurriculumGenerationJobInput } from "@/lib/homeschool/onboarding/service";
+import { recordHomeschoolAuditEvent } from "@/lib/homeschool/reporting/service";
 import type { StructuredLessonDraft } from "@/lib/lesson-draft/types";
 import {
   validateLessonDraft,
   hasProsyContent,
   buildCorrectionNotes,
 } from "@/lib/lesson-draft/validate";
+import { getTodayWorkspace } from "@/lib/planning/today-service";
+import { getOrCreateWeeklyRouteBoardForLearner } from "@/lib/planning/weekly-route-service";
+import { trackProductEvent } from "@/lib/platform/observability";
 import {
   buildLessonDraftUserPrompt,
   LESSON_DRAFT_PROMPT_VERSION,
@@ -672,6 +684,16 @@ export async function dispatchPlanAdaptation(
   });
 }
 
+export async function dispatchCurriculumGeneration(
+  input: HomeschoolCurriculumGenerationJobInput,
+  options: DispatchTaskOptions,
+) {
+  return dispatchGenerationJob("curriculum.generate", input, {
+    ...options,
+    artifactTitle: options.artifactTitle ?? "Curriculum generation",
+  });
+}
+
 export async function getAiGenerationJob(jobId: string) {
   await ensureDatabaseReady();
   return getRepositories().aiPlatform.findJobById(jobId);
@@ -699,6 +721,126 @@ export async function processAiGenerationJob(jobId: string) {
     let artifactBody: string | null = null;
 
     switch (job.taskName as AiTaskName) {
+      case "curriculum.generate": {
+        const input = job.inputs as unknown as HomeschoolCurriculumGenerationJobInput;
+        const generation = await generateCurriculumArtifact({
+          learner: input.learner,
+          messages: input.messages,
+        });
+
+        if (generation.kind === "failure") {
+          throw new Error(generation.userSafeMessage);
+        }
+
+        const created = await createCurriculumSourceFromAiDraftArtifact({
+          householdId: job.organizationId,
+          artifact: generation.artifact,
+        });
+        await setLiveCurriculumSource(job.organizationId, created.sourceId);
+        const { weekStartDate } = await getOrCreateWeeklyRouteBoardForLearner({
+          learnerId: input.learner.id,
+          sourceId: created.sourceId,
+        });
+        await getTodayWorkspace({
+          organizationId: job.organizationId,
+          learnerId: input.learner.id,
+          learnerName: input.workflow.learnerName,
+          date: input.workflow.dailyWorkspaceDate,
+        });
+
+        if (input.workflow.kind === "homeschool_onboarding") {
+          const db = getDb();
+          const organization = await db.query.organizations.findFirst({
+            where: (table, { eq }) => eq(table.id, job.organizationId),
+          });
+          if (organization) {
+            const metadata =
+              typeof organization.metadata === "object" &&
+              organization.metadata !== null &&
+              !Array.isArray(organization.metadata)
+                ? (organization.metadata as Record<string, unknown>)
+                : {};
+            const homeschool =
+              typeof metadata.homeschool === "object" &&
+              metadata.homeschool !== null &&
+              !Array.isArray(metadata.homeschool)
+                ? (metadata.homeschool as Record<string, unknown>)
+                : {};
+            const onboarding =
+              typeof homeschool.onboarding === "object" &&
+              homeschool.onboarding !== null &&
+              !Array.isArray(homeschool.onboarding)
+                ? (homeschool.onboarding as Record<string, unknown>)
+                : {};
+
+            await db
+              .update(organizations)
+              .set({
+                metadata: {
+                  ...metadata,
+                  homeschool: {
+                    ...homeschool,
+                    onboarding: {
+                      ...onboarding,
+                      status: "complete",
+                      completedAt: new Date().toISOString(),
+                    },
+                  },
+                },
+                updatedAt: new Date(),
+              })
+              .where(eq(organizations.id, job.organizationId));
+          }
+
+          await recordHomeschoolAuditEvent({
+            organizationId: job.organizationId,
+            learnerId: input.learner.id,
+            entityType: "onboarding",
+            entityId: created.sourceId,
+            eventType: "onboarding.completed",
+            summary: `Completed homeschool onboarding for ${input.workflow.householdName ?? "the household"}.`,
+            metadata: {
+              learnerCount: input.workflow.learnerCount ?? 1,
+              curriculumMode: input.workflow.curriculumMode,
+              subjects: input.workflow.subjects,
+            },
+          });
+          trackProductEvent({
+            name: "homeschool_onboarding_completed",
+            organizationId: job.organizationId,
+            learnerId: input.learner.id,
+            metadata: {
+              learnerCount: input.workflow.learnerCount ?? 1,
+              curriculumMode: input.workflow.curriculumMode,
+            },
+          });
+        } else {
+          await recordHomeschoolAuditEvent({
+            organizationId: job.organizationId,
+            learnerId: input.learner.id,
+            entityType: "curriculum",
+            entityId: created.sourceId,
+            eventType: "curriculum.created",
+            summary: `Created curriculum "${created.sourceTitle}" via async AI decomposition.`,
+            metadata: {
+              curriculumMode: input.workflow.curriculumMode,
+              subjects: input.workflow.subjects,
+            },
+          });
+        }
+
+        output = {
+          sourceId: created.sourceId,
+          sourceTitle: created.sourceTitle,
+          weekStartDate,
+          learnerId: input.learner.id,
+          redirectTo:
+            input.workflow.kind === "homeschool_onboarding"
+              ? "/today"
+              : `/curriculum/${created.sourceId}`,
+        };
+        break;
+      }
       case "lesson.draft": {
         const result = await generateLessonDraft(job.inputs as unknown as LessonDraftInput);
         output = result.output;
