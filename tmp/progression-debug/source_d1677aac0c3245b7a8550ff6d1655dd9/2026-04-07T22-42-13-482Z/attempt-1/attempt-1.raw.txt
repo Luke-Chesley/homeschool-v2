@@ -134,3 +134,23 @@
   }
 }
 ```
+
+
+
+Alright, I'm just taking some notes here so we can kind of go back over this.I guess one of the main B2B asks is you approach like some department that needs some onboarding docs and you just say, you know, give me all of your stuff and I'll make an appropriate onboarding scenario based on your internal docs, something like that.
+Like we would say, you know, show us what you're working on and what your requirements are for a new hire slash, you know, training, and then we can generate the curriculum and do the tracking.
+Yeah, I agree on the homeschooling. We need more customization and more product development on our side to fully serve that crowd.
+I don't know if we... Oh, you're saying in the creator-led professional program, we approach creators that want to create a course, and we market to them. Is that what you're saying here?
+You know, for the homeschooling one, there is the always option, we put it on an app, and we just can, you know, use the microphone to record the sessions, right, and then offer that as a value.and use AI to like you know transcribe and summarize it and what not 
+Yeah, if I'm thinking about Canvas and Google Classroom, those are very distributing PDF-type things, distributing materials, and then they have multiple-choice quizzes and stuff, so it's not – they probably could integrate AI, but that's where we would move faster as a startup rather than waiting for them to do everything.
+I think we don't have to look for just people who are trying to get this full flow, but also people looking for any steps along this flow, right? And then we can sort of bring them in to the rest of it or just offer pieces, you know, piecemeal.
+I mean, I already know some teachers I can interview to ask how their lesson planning works and stuff. I can talk to them. And my dad runs basically an education system for some utility vegetation management thing that he distributes curriculum to people to teach them how to take care of the wildlife. You know correctly, so that's another part.
+Yeah, I'm not worried about the engineering milestones, you know, that's basically probably fairly straightforward to implement once I get going.
+
+
+
+
+So I guess based on all this, what would a reasonable launch schedule look like? Say I did the work here in this repo in a week. So I need to do some market research. I need to talk to some people about their needs. And then I could just, you know, maybe start in the homeschooling one and then see where that takes mea
+
+
+I'm interested in this creator-led professional program thing. I'm not exactly sure how to market that or get into that, but it's an interesting thought. If that's what you're talking about. You know, marketing to people who, you know, say there's like a niche YouTuber who teaches you how to make homemade mead. This is what I'm thinking of. And this guy wants to make a course on how to do that and sell the course. I can sell my product to him for him to make the course. Is that what you're talking about here? I think that's an interesting thing worth exploring.

@@ -568,8 +568,11 @@ function AttemptCard({ attempt }: { attempt: any }) {
       <div className="flex justify-between font-medium border-b pb-1.5 mb-1">
         <span className="text-sm">Attempt {attempt.attemptNumber}</span>
         <span className={cn("text-sm font-semibold", attempt.accepted ? "text-emerald-600" : "text-red-600")}>
-          {attempt.accepted ? "Accepted" : "Failed"}
-          {attempt.repairAttempt?.success && " (after repair)"}
+          {attempt.accepted
+            ? attempt.repairAttempt?.accepted
+              ? "Accepted (after repair)"
+              : "Accepted"
+            : "Rejected"}
         </span>
       </div>
 
@@ -625,10 +628,24 @@ function AttemptCard({ attempt }: { attempt: any }) {
         </div>
       )}
 
-      {/* Repair attempt note */}
+      {/* Repair attempt status — shows explicit lifecycle, not just "succeeded" */}
       {attempt.repairAttempt?.attempted && (
-        <div className={cn("text-[11px]", attempt.repairAttempt.success ? "text-emerald-600" : "text-amber-600")}>
-          Repair pass: {attempt.repairAttempt.success ? "succeeded" : `failed — ${attempt.repairAttempt.failureReason}`}
+        <div className="text-[11px] space-y-0.5 border-t pt-1">
+          <div className="font-medium text-muted-foreground">Repair pass:</div>
+          {attempt.repairAttempt.accepted ? (
+            <div className="text-emerald-600">Repair response received → parsed → schema OK → semantically valid → accepted</div>
+          ) : attempt.repairAttempt.repairedValidation ? (
+            <div className="text-amber-600">
+              Repair response received → parsed → schema OK → <strong>semantically invalid</strong>
+              {attempt.repairAttempt.repairedValidation.missingSkillRefs.length > 0 && (
+                <span> (still missing {attempt.repairAttempt.repairedValidation.missingSkillRefs.length} skills)</span>
+              )}
+            </div>
+          ) : (
+            <div className="text-red-600">
+              Repair failed — {attempt.repairAttempt.failureReason}
+            </div>
+          )}
         </div>
       )}
 

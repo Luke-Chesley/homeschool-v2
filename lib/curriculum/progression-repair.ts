@@ -99,7 +99,7 @@ Required JSON shape:
     const response = await complete({
       model,
       temperature: 0.1,
-      maxTokens: 4096,
+      maxTokens: 16000,
       systemPrompt,
       messages: [{ role: "user", content: repairUserPrompt }],
     });

@@ -632,10 +632,35 @@ export type ProgressionAttemptResult = {
   missingSkillRefs?: string[]
   duplicateAssignedSkillRefs?: string[]
   invalidPhaseSkillRefs?: string[]
+  /** Effective settings used for the model call on this attempt. */
+  effectiveSettings?: {
+    model: string
+    temperature: number
+    maxTokens: number
+  }
   /** Repair attempt info (if a repair pass was run). */
   repairAttempt?: {
     attempted: boolean
-    success: boolean
+    /** True only when the repaired draft passed full semantic validation. */
+    semanticSucceeded: boolean
+    /** True only when the repaired draft was accepted (= semanticSucceeded). */
+    accepted: boolean
+    rawResponse: string | null
+    /** Validation result run against the repaired draft. */
+    repairedValidation: {
+      valid: boolean
+      issues: Array<{ code: string; message: string; context?: Record<string, unknown> }>
+      missingSkillRefs: string[]
+      duplicateAssignedSkillRefs: string[]
+      invalidPhaseSkillRefs: string[]
+      summary: {
+        skillsInCurriculum: number
+        skillsAssignedToPhases: number
+        edgesAccepted: number
+        edgesDropped: number
+        phaseCount: number
+      }
+    } | null
     failureReason: string | null
   }
   summary?: {
@@ -670,7 +695,7 @@ export async function generateCurriculumProgression(
   },
   deps?: {
     resolvePrompt?: typeof resolvePrompt;
-    complete?: (options: any) => Promise<{ content: string }>;
+    complete?: (options: any) => Promise<{ content: string; debugMetadata?: unknown }>;
   },
 ): Promise<ProgressionGenerateResult> {
   const resolvePromptFn = deps?.resolvePrompt ?? resolvePrompt;
@@ -739,10 +764,12 @@ export async function generateCurriculumProgression(
           ? `\n\nCorrection notes for this retry:\n${correctionNotes.map((note, i) => `${i + 1}. ${note}`).join("\n")}`
           : "";
 
+      const callMaxTokens = 16000;
+      const callTemperature = 0.2;
       const response = await complete({
         model,
-        temperature: 0.2,
-        maxTokens: 4096,
+        temperature: callTemperature,
+        maxTokens: callMaxTokens,
         systemPrompt: prompt.systemPrompt,
         messages: [
           {
@@ -771,7 +798,12 @@ export async function generateCurriculumProgression(
         failureCategory: null,
         failureReason: null,
         rawResponse,
-        adapterDebugMetadata: response.debugMetadata,
+        adapterDebugMetadata: response.debugMetadata as ProgressionAttemptResult["adapterDebugMetadata"],
+        effectiveSettings: {
+          model,
+          temperature: callTemperature,
+          maxTokens: callMaxTokens,
+        },
       };
 
       const parsed = parseCurriculumProgression(rawResponse);
@@ -884,9 +916,13 @@ export async function generateCurriculumProgression(
             parseFn: parseCurriculumProgression,
           });
 
+          // Always record whether repair was attempted and the raw response — regardless of outcome.
           attemptResult.repairAttempt = {
             attempted: repairResult.attempted,
-            success: repairResult.success,
+            semanticSucceeded: false,
+            accepted: false,
+            rawResponse: repairResult.rawResponse,
+            repairedValidation: null,
             failureReason: repairResult.failureReason,
           };
 
@@ -897,18 +933,36 @@ export async function generateCurriculumProgression(
               ? repairedSanitization.sanitized
               : repairResult.repairedProgression;
             const repairedValidation = validateProgressionSemantics(repairedProgression, validSkillRefs);
+            const rv = repairedValidation.summary;
+
+            // Always record the re-validation result so callers can inspect it.
+            attemptResult.repairAttempt.repairedValidation = {
+              valid: repairedValidation.valid,
+              issues: repairedValidation.issues.map((i) => ({ code: i.code, message: i.message, context: i.context })),
+              missingSkillRefs: repairedValidation.missingSkillRefs,
+              duplicateAssignedSkillRefs: repairedValidation.duplicateAssignedSkillRefs,
+              invalidPhaseSkillRefs: repairedValidation.invalidPhaseSkillRefs,
+              summary: {
+                skillsInCurriculum: rv.skillsInCurriculum,
+                skillsAssignedToPhases: rv.skillsAssignedToPhases,
+                edgesAccepted: rv.edgesAccepted,
+                edgesDropped: rv.edgesDropped,
+                phaseCount: rv.phaseCount,
+              },
+            };
 
             if (repairedValidation.valid) {
-              const rs = repairedValidation.summary;
-              // Update attempt result with repaired data.
+              // Repair response was parsed AND semantically valid — accepted.
+              attemptResult.repairAttempt.semanticSucceeded = true;
+              attemptResult.repairAttempt.accepted = true;
               attemptResult.semanticStatus = "ok";
               attemptResult.accepted = true;
               attemptResult.missingSkillRefs = repairedValidation.missingSkillRefs;
               attemptResult.duplicateAssignedSkillRefs = repairedValidation.duplicateAssignedSkillRefs;
               attemptResult.summary = {
-                phaseCount: rs.phaseCount,
-                edgeCount: rs.edgesAccepted,
-                unresolvedSkillRefCount: rs.unresolvedEdgeEndpoints + rs.unresolvedPhaseSkills,
+                phaseCount: rv.phaseCount,
+                edgeCount: rv.edgesAccepted,
+                unresolvedSkillRefCount: rv.unresolvedEdgeEndpoints + rv.unresolvedPhaseSkills,
                 hardPrerequisiteCycle: false,
                 missingSkillRefs: 0,
                 duplicatePhaseAssignments: 0,
@@ -917,9 +971,9 @@ export async function generateCurriculumProgression(
 
               console.info("[curriculum/ai-draft] Repaired progression accepted.", {
                 attempt: attempts,
-                phaseCount: rs.phaseCount,
-                edgeCount: rs.edgesAccepted,
-                skillsAssigned: rs.skillsAssignedToPhases,
+                phaseCount: rv.phaseCount,
+                edgeCount: rv.edgesAccepted,
+                skillsAssigned: rv.skillsAssignedToPhases,
               });
 
               return {
@@ -927,15 +981,18 @@ export async function generateCurriculumProgression(
                 attempted: true,
                 parsed: true,
                 semanticValidation: true,
-                phaseCount: rs.phaseCount,
-                edgeCount: rs.edgesAccepted,
-                unresolvedCount: rs.unresolvedEdgeEndpoints + rs.unresolvedPhaseSkills,
+                phaseCount: rv.phaseCount,
+                edgeCount: rv.edgesAccepted,
+                unresolvedCount: rv.unresolvedEdgeEndpoints + rv.unresolvedPhaseSkills,
                 failureReason: null,
                 attemptCount: attempts,
                 attempts: attemptLogs,
               };
             } else {
-              console.warn("[curriculum/ai-draft] Repaired draft still invalid.", {
+              // Repair response parsed OK but repaired draft is still semantically invalid.
+              attemptResult.repairAttempt.failureReason =
+                `Repaired draft still semantically invalid: ${repairedValidation.issues.map((i) => i.code).join(", ")}`;
+              console.warn("[curriculum/ai-draft] Repaired draft still semantically invalid.", {
                 attempt: attempts,
                 missingAfterRepair: repairedValidation.missingSkillRefs.length,
                 issues: repairedValidation.issues.map((i) => i.code),

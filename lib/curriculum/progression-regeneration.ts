@@ -397,6 +397,15 @@ export async function regenerateCurriculumProgression(
       resolvedExplicitEdgeCount: diagnostics.totalAcceptedEdges,
       droppedExplicitEdgeCount: diagnostics.droppedEdgeCount,
       unresolvedSkillRefCount: diagnostics.unresolvedSkillRefCount,
+      persistenceSummary: {
+        accepted: true,
+        persisted: true,
+        acceptedPhaseCount: resolvedPhases.length,
+        acceptedPhaseMembershipCount: diagnostics.totalAssignedSkillRefs,
+        acceptedExplicitEdgeCount: diagnostics.totalAcceptedEdges,
+        droppedEdgeCount: diagnostics.droppedEdgeCount,
+        finalStatus: "explicit_ready",
+      },
     },
   });
 

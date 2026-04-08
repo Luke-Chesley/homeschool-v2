@@ -472,5 +472,6 @@ test("generateCurriculumProgression: repair pass accepts a draft with correctabl
   // Should have recorded a repair attempt on the first attempt.
   const attemptWithRepair = result.attempts.find((a) => a.repairAttempt?.attempted);
   assert.ok(attemptWithRepair, "Expected at least one attempt to record a repair pass");
-  assert.equal(attemptWithRepair?.repairAttempt?.success, true);
+  // accepted means: repair response received, parsed, schema valid, AND semantically valid
+  assert.equal(attemptWithRepair?.repairAttempt?.accepted, true, "repairAttempt.accepted should be true when repair passed semantic validation");
 });

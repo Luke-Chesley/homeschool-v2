@@ -532,6 +532,7 @@ export async function generateLessonDraft(
     const result = await adapter.completeJson<Record<string, unknown>>({
       model,
       messages,
+      maxTokens: 8000,
     });
 
     lastRaw = result ?? {};

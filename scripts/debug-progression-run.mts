@@ -103,6 +103,17 @@ async function main() {
   await fs.writeFile(path.join(debugDir, "prompt.system.txt"), promptTemplate.systemPrompt);
   await fs.writeFile(path.join(debugDir, "prompt.user.txt"), userPrompt);
 
+  // Save run manifest with all static metadata known up front.
+  const manifestInitial = {
+    runId: timestamp,
+    sourceId,
+    learnerName,
+    promptVersion: CURRICULUM_PROGRESSION_PROMPT_VERSION,
+    skillCount: skillNodes.length,
+    timestamp: new Date().toISOString(),
+  };
+  await fs.writeFile(path.join(debugDir, "manifest.json"), JSON.stringify(manifestInitial, null, 2));
+
   console.log(`Prompts saved to ${debugDir}`);
 
   // 4. Run progression generation
@@ -151,9 +162,14 @@ async function main() {
 
     const prefix = path.join(attemptDir, `attempt-${i + 1}`);
 
+    // ── Save effective settings ──────────────────────────────────────────────
+    if (attempt.effectiveSettings) {
+      await fs.writeFile(`${prefix}.settings.json`, JSON.stringify(attempt.effectiveSettings, null, 2));
+    }
+
     if (attempt.rawResponse) {
       await fs.writeFile(`${prefix}.raw.txt`, attempt.rawResponse);
-      
+
       const truncation = detectTruncation(attempt.rawResponse);
       console.log(`\nAttempt ${i + 1}:`);
       console.log(`- Raw Length: ${attempt.rawResponse.length}`);
@@ -161,11 +177,17 @@ async function main() {
       console.log(`- Parse Status: ${attempt.parseStatus} (${attempt.parseFailureKind ?? "ok"})`);
       console.log(`- Schema Status: ${attempt.schemaStatus}`);
       console.log(`- Semantic Status: ${attempt.semanticStatus}`);
-      
+      console.log(`- Accepted: ${attempt.accepted}`);
+
       if (attempt.adapterDebugMetadata) {
         await fs.writeFile(`${prefix}.adapter.json`, JSON.stringify(attempt.adapterDebugMetadata, null, 2));
-        console.log(`- Stop Reason: ${attempt.adapterDebugMetadata.stopReason}`);
-        console.log(`- Finish Reason: ${attempt.adapterDebugMetadata.finishReason}`);
+        const meta = attempt.adapterDebugMetadata as any;
+        const inputTokens = meta.rawPayload?.usage?.input_tokens ?? "?";
+        const outputTokens = meta.rawPayload?.usage?.output_tokens ?? "?";
+        console.log(`- Stop Reason: ${meta.stopReason} | Input tokens: ${inputTokens} | Output tokens: ${outputTokens}`);
+        if (meta.stopReason && meta.stopReason !== "end_turn") {
+          console.log(`  *** NOT end_turn — possible truncation from provider ***`);
+        }
       }
 
       const balance = getBraceBalance(attempt.rawResponse);
@@ -187,9 +209,28 @@ async function main() {
       }, null, 2));
     }
 
+    // ── Save full repair artifacts ───────────────────────────────────────────
     if (attempt.repairAttempt?.attempted) {
-      await fs.writeFile(`${prefix}.repair.json`, JSON.stringify(attempt.repairAttempt, null, 2));
-      console.log(`- Repair: ${attempt.repairAttempt.success ? "SUCCESS" : "FAILED"} (${attempt.repairAttempt.failureReason})`);
+      const repairMeta = attempt.repairAttempt as any;
+      if (repairMeta.rawResponse) {
+        await fs.writeFile(`${prefix}.repair.raw.txt`, repairMeta.rawResponse);
+      }
+      // Save repair validation (covers both accepted and still-invalid cases)
+      await fs.writeFile(`${prefix}.repair.json`, JSON.stringify({
+        attempted: repairMeta.attempted,
+        semanticSucceeded: repairMeta.semanticSucceeded,
+        accepted: repairMeta.accepted,
+        failureReason: repairMeta.failureReason,
+        repairedValidation: repairMeta.repairedValidation ?? null,
+      }, null, 2));
+
+      if (repairMeta.accepted) {
+        console.log(`- Repair: ACCEPTED (semantically valid after repair)`);
+      } else if (repairMeta.repairedValidation) {
+        console.log(`- Repair: parsed OK but repaired draft still semantically invalid (${repairMeta.failureReason})`);
+      } else {
+        console.log(`- Repair: FAILED — ${repairMeta.failureReason}`);
+      }
     }
   }
 
@@ -198,6 +239,43 @@ async function main() {
   await printDbSummary(db, sourceId);
 
   printFinalDiagnosis(result);
+
+  // 7. Save final manifest with complete run summary.
+  const lastAttempt = result.attempts[result.attempts.length - 1];
+  const accepted = !!result.progression;
+  const finalManifest = {
+    runId: timestamp,
+    sourceId,
+    learnerName,
+    promptVersion: CURRICULUM_PROGRESSION_PROMPT_VERSION,
+    skillCount: skillNodes.length,
+    timestamp: new Date().toISOString(),
+    provider: lastAttempt?.effectiveSettings ? "configured" : "unknown",
+    model: lastAttempt?.effectiveSettings?.model ?? "unknown",
+    effectiveSettings: lastAttempt?.effectiveSettings ?? null,
+    attemptCount: result.attemptCount,
+    accepted,
+    // Lifecycle summary
+    lifecycle: {
+      responseReceived: !!lastAttempt?.rawResponseReceived,
+      parseSucceeded: lastAttempt?.parseStatus === "ok",
+      schemaSucceeded: lastAttempt?.schemaStatus === "ok",
+      semanticSucceeded: lastAttempt?.semanticStatus === "ok",
+      repairAttempted: !!lastAttempt?.repairAttempt?.attempted,
+      repairSemanticSucceeded: lastAttempt?.repairAttempt?.semanticSucceeded ?? false,
+      accepted,
+      // Note: this debug script does not persist to DB — persisted is always false here
+      persisted: false,
+    },
+    stopReason: (lastAttempt?.adapterDebugMetadata as any)?.stopReason ?? null,
+    outputTokens: (lastAttempt?.adapterDebugMetadata as any)?.rawPayload?.usage?.output_tokens ?? null,
+    inputTokens: (lastAttempt?.adapterDebugMetadata as any)?.rawPayload?.usage?.input_tokens ?? null,
+    failureReason: result.failureReason ?? null,
+    acceptedPhaseCount: accepted ? result.progression!.phases.length : null,
+    acceptedEdgeCount: accepted ? result.progression!.edges.length : null,
+  };
+  await fs.writeFile(path.join(debugDir, "manifest.json"), JSON.stringify(finalManifest, null, 2));
+  console.log(`\nFinal manifest saved to ${path.join(debugDir, "manifest.json")}`);
 }
 
 function detectTruncation(text: string) {
