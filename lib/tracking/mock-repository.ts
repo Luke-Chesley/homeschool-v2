@@ -1,4 +1,5 @@
 import type {
+  EvaluationEntry,
   EvidenceRecord,
   GoalProgressRow,
   ObservationEntry,
@@ -112,6 +113,8 @@ const observations: ObservationEntry[] = [
     linkedOutcomeId: "outcome-5",
   },
 ];
+
+const evaluations: EvaluationEntry[] = [];
 
 const evidence: EvidenceRecord[] = [
   {
@@ -237,6 +240,7 @@ export function getTrackingRepository() {
         },
         outcomes,
         observations,
+        evaluations,
         evidence,
         standards,
         goals,

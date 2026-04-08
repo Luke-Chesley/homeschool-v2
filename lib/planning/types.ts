@@ -1,5 +1,6 @@
 import type { WeeklyRouteBoardItem } from "@/lib/curriculum-routing/types";
 import type { StructuredLessonDraft } from "@/lib/lesson-draft/types";
+import type { LessonEvaluationLevel } from "@/lib/session-workspace/evaluation";
 
 export type EnergyLevel = "low" | "steady" | "high";
 
@@ -89,6 +90,12 @@ export interface PlanItem {
     reviewState: string | null;
     evidenceCount: number;
     activityCount: number;
+  };
+  latestEvaluation?: {
+    level: LessonEvaluationLevel;
+    label: string;
+    note?: string;
+    createdAt: string;
   };
   note?: string;
 }

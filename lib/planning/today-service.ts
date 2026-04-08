@@ -34,6 +34,11 @@ import type {
   WeeklyRouteItem,
 } from "@/lib/planning/types";
 import { completeSessionWorkspace, ensureSessionWorkspace } from "@/lib/session-workspace/service";
+import {
+  getLessonEvaluationLabel,
+  getLessonEvaluationLevelFromRating,
+  type LessonEvaluationLevel,
+} from "@/lib/session-workspace/evaluation";
 import type { AppWorkspace } from "@/lib/users/service";
 import { duplicateWeeklyRouteItem, getOrCreateWeeklyRouteBoardForLearner } from "@/lib/planning/weekly-route-service";
 import type { WeeklyRouteBoard } from "@/lib/curriculum-routing";
@@ -66,6 +71,15 @@ function formatPlannerDate(date: string) {
     month: "short",
     day: "numeric",
   }).format(new Date(`${date}T12:00:00`));
+}
+
+function isLessonEvaluationLevel(value: unknown): value is LessonEvaluationLevel {
+  return (
+    value === "needs_more_work" ||
+    value === "partial" ||
+    value === "successful" ||
+    value === "exceeded"
+  );
 }
 
 export function buildTodayLessonDraftFingerprint(itemIds: string[]) {
@@ -961,6 +975,71 @@ export async function getTodayWorkspace(params: {
 
   workspace.items = syncedItems;
   workspace.leadItem = syncedItems[0] ?? workspace.leadItem;
+
+  const syncedSessionIds = syncedItems
+    .map((item) => item.sessionRecordId)
+    .filter((value): value is string => Boolean(value));
+  const syncedPlanItemIds = syncedItems
+    .map((item) => item.planRecordId)
+    .filter((value): value is string => Boolean(value));
+
+  if (syncedSessionIds.length > 0 && syncedPlanItemIds.length > 0) {
+    const db = getDb();
+    const latestFeedbackRows = await db.query.feedbackEntries.findMany({
+      where: and(
+        inArray(feedbackEntries.lessonSessionId, syncedSessionIds),
+        inArray(feedbackEntries.planItemId, syncedPlanItemIds),
+      ),
+      orderBy: [desc(feedbackEntries.createdAt)],
+    });
+
+    const latestEvaluationByPlanItemId = new Map<
+      string,
+      {
+        level: LessonEvaluationLevel;
+        label: string;
+        note?: string;
+        createdAt: string;
+      }
+    >();
+
+    for (const entry of latestFeedbackRows) {
+      if (!entry.planItemId || latestEvaluationByPlanItemId.has(entry.planItemId)) {
+        continue;
+      }
+
+      const metadata = isRecord(entry.metadata) ? entry.metadata : null;
+      if (!metadata || metadata.source !== "lesson_evaluation") {
+        continue;
+      }
+
+      const level = isLessonEvaluationLevel(metadata.evaluationLevel)
+        ? metadata.evaluationLevel
+        : getLessonEvaluationLevelFromRating(entry.rating) ?? "successful";
+
+      latestEvaluationByPlanItemId.set(entry.planItemId, {
+        level,
+        label:
+          typeof metadata.evaluationLabel === "string"
+            ? metadata.evaluationLabel
+            : getLessonEvaluationLabel(level),
+        note:
+          typeof metadata.note === "string" && metadata.note.trim().length > 0
+            ? metadata.note
+            : undefined,
+        createdAt: entry.createdAt.toISOString(),
+      });
+    }
+
+    workspace.items = workspace.items.map((item) => {
+      const latestEvaluation = item.planRecordId
+        ? latestEvaluationByPlanItemId.get(item.planRecordId)
+        : undefined;
+
+      return latestEvaluation ? { ...item, latestEvaluation } : item;
+    });
+    workspace.leadItem = workspace.items[0] ?? workspace.leadItem;
+  }
 
   return {
     workspace,
