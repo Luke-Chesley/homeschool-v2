@@ -77,6 +77,10 @@ export const DEFAULT_ROUTING_CONFIG: ModelRoutingConfig = {
   },
 };
 
+export function getAiRoutingConfig(): ModelRoutingConfig {
+  return DEFAULT_ROUTING_CONFIG;
+}
+
 export function getModelForTask(
   taskName: AiTaskName,
   config: ModelRoutingConfig = DEFAULT_ROUTING_CONFIG,

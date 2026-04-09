@@ -1,8 +1,7 @@
 import "@/lib/server-only";
 
-import { getAdapterForTask } from "@/lib/ai/registry";
-import { getModelForTask } from "@/lib/ai/provider-adapter";
-import { getAiRoutingConfig } from "@/lib/ai/routing";
+import { getLearningCoreGatewayAdapter } from "@/lib/ai/learning-core-adapter";
+import { getAiRoutingConfig, getModelForTask } from "@/lib/ai/provider-adapter";
 import type { ChatMessage } from "@/lib/ai/types";
 import { resolvePrompt } from "@/lib/prompts/store";
 import {
@@ -198,7 +197,7 @@ export async function continueCurriculumAiDraftConversation(params: {
   messages: CurriculumAiChatMessage[];
 }): Promise<CurriculumAiChatTurn> {
   const prompt = await resolvePrompt("curriculum.intake", CURRICULUM_INTAKE_PROMPT_VERSION);
-  const adapter = getAdapterForTask("curriculum.intake");
+  const adapter = getLearningCoreGatewayAdapter();
   const model = getModelForTask("curriculum.intake", getAiRoutingConfig());
   const messages = normalizeMessages(params.messages);
 
@@ -419,7 +418,7 @@ export async function generateCurriculumArtifact(
 ): Promise<CurriculumAiGenerateResult> {
   const resolvePromptFn = deps?.resolvePrompt ?? resolvePrompt;
   const prompt = await resolvePromptFn("curriculum.generate.core", CURRICULUM_CORE_PROMPT_VERSION);
-  const adapter = getAdapterForTask("curriculum.generate.core");
+  const adapter = getLearningCoreGatewayAdapter();
   const model = getModelForTask("curriculum.generate.core", getAiRoutingConfig());
   const complete = deps?.complete ?? ((options: any) => adapter.complete(options));
   const messages = normalizeMessages(params.messages);
@@ -700,7 +699,7 @@ export async function generateCurriculumProgression(
 ): Promise<ProgressionGenerateResult> {
   const resolvePromptFn = deps?.resolvePrompt ?? resolvePrompt;
   const prompt = await resolvePromptFn("curriculum.generate.progression", CURRICULUM_PROGRESSION_PROMPT_VERSION);
-  const adapter = getAdapterForTask("curriculum.generate.progression");
+  const adapter = getLearningCoreGatewayAdapter();
   const model = getModelForTask("curriculum.generate.progression", getAiRoutingConfig());
   const complete = deps?.complete ?? ((options: any) => adapter.complete(options));
   
@@ -1089,7 +1088,7 @@ async function generateCurriculumRevisionDecision(params: {
   snapshot: CurriculumRevisionSnapshot;
 }): Promise<CurriculumAiRevisionTurn | CurriculumAiFailureResult> {
   const prompt = await resolvePrompt("curriculum.revise", CURRICULUM_REVISION_PROMPT_VERSION);
-  const adapter = getAdapterForTask("curriculum.revise");
+  const adapter = getLearningCoreGatewayAdapter();
   const model = getModelForTask("curriculum.revise", getAiRoutingConfig());
   const normalizedMessages = normalizeMessages(params.messages);
   const snapshotSummary = buildRevisionPromptSummary(

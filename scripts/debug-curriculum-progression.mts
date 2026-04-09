@@ -37,8 +37,12 @@ import {
   CURRICULUM_PROGRESSION_SYSTEM_PROMPT,
   CURRICULUM_PROGRESSION_PROMPT_VERSION,
 } from "../lib/prompts/curriculum-draft.ts";
-import { getModelForTask, DEFAULT_ROUTING_CONFIG } from "../lib/ai/provider-adapter.ts";
-import { getAiRoutingConfig } from "../lib/ai/routing.ts";
+import {
+  getAiRoutingConfig,
+  getModelForTask,
+  DEFAULT_ROUTING_CONFIG,
+} from "../lib/ai/provider-adapter.ts";
+import { getLearningCoreGatewayAdapter } from "../lib/ai/learning-core-adapter.ts";
 
 // ── Setup ──────────────────────────────────────────────────────────────────────
 
@@ -366,8 +370,7 @@ let rerunAttempts = 0;
 let rerunFailureReason: string | null = null;
 console.log(`\n  Calling ${providerId} adapter (${selectedModel})...`);
 
-const { getAdapterForTask } = await import("../lib/ai/registry.ts");
-const adapter = getAdapterForTask(TASK);
+const adapter = getLearningCoreGatewayAdapter();
 
 const attemptNotes: string[][] = [
   [],
