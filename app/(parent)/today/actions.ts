@@ -6,16 +6,9 @@ import { requireAppSession } from "@/lib/app-session/server";
 import { createRepositories } from "@/lib/db";
 import { getDb } from "@/lib/db/server";
 import { getTodayWorkspace } from "@/lib/planning/today-service";
-import {
-  buildActivityContextFromLessonDraft,
-  buildPromptInput,
-} from "@/lib/activities/generation-context";
-import {
-  ACTIVITY_SPEC_SYSTEM_PROMPT,
-  buildActivitySpecUserPrompt,
-} from "@/lib/prompts/activity-spec";
 import { publishActivityForLessonDraft } from "@/lib/activities/assignment-service";
 import { computeLessonDraftFingerprint } from "@/lib/lesson-draft/fingerprint";
+import { previewLessonDraftActivityPrompt } from "@/lib/learning-core/activity";
 import { getLessonEvaluationLabel, type LessonEvaluationLevel } from "@/lib/session-workspace/evaluation";
 import { recordSessionEvaluation } from "@/lib/session-workspace/service";
 import {
@@ -386,15 +379,13 @@ export async function getLessonDraftPromptPreviewAction(
     const lessonDraft = workspaceResult.workspace.lessonDraft?.structured;
     if (!lessonDraft) return { ok: false, error: "No lesson draft available" };
 
-    const ctx = buildActivityContextFromLessonDraft({
+    const preview = await previewLessonDraftActivityPrompt({
       lessonDraft,
       learnerName: session.activeLearner.displayName,
       workflowMode,
       planItems: workspaceResult.workspace.items,
     });
-
-    const userPrompt = buildActivitySpecUserPrompt(buildPromptInput(ctx));
-    return { ok: true, systemPrompt: ACTIVITY_SPEC_SYSTEM_PROMPT, userPrompt };
+    return { ok: true, systemPrompt: preview.systemPrompt, userPrompt: preview.userPrompt };
   } catch (err) {
     console.error("[getLessonDraftPromptPreviewAction]", err);
     return { ok: false, error: err instanceof Error ? err.message : "Failed to build prompt" };

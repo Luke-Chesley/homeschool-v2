@@ -127,9 +127,9 @@ test("routing config includes progression tasks", () => {
   );
 });
 
-test("getModelForTask returns explicit model for progression tasks", () => {
+test("getModelForTask returns a learning-core managed route for progression tasks", () => {
   const progressionModel = getModelForTask("curriculum.generate.progression", getAiRoutingConfig());
-  assert.ok(progressionModel !== undefined);
+  assert.ok(progressionModel.startsWith("learning-core/"));
 });
 
 test("generateCurriculumArtifact performs two passes and merges progression", async () => {

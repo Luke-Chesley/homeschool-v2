@@ -150,13 +150,15 @@ const explicitlyRouted = routingConfig.taskDefaults?.[TASK] !== undefined;
 console.log(`  Task:                ${TASK}`);
 console.log(`  Provider:            ${providerId}`);
 console.log(`  Model selected:      ${selectedModel}`);
-console.log(`  Default (mock) model: ${defaultModel}`);
+console.log(`  Default managed route: ${defaultModel}`);
 console.log(`  Explicitly routed:   ${explicitlyRouted}`);
 console.log(`  Prompt version:      ${CURRICULUM_PROGRESSION_PROMPT_VERSION}`);
 
-if (providerId === "mock") {
-  console.log(`\n  ⚠️  WARNING: Using MOCK adapter — no real AI calls will be made.`);
-  console.log(`     Set ANTHROPIC_API_KEY in environment to use the real model.`);
+if (providerId === "learning-core") {
+  console.log(`\n  Provider access is delegated to learning-core.`);
+  console.log(`     Configure Anthropic/OpenAI/Ollama env in the learning-core repo, not here.`);
+} else {
+  throw new Error(`Unexpected provider routing: expected learning-core, received ${providerId}`);
 }
 
 // ── 3. Skill nodes from DB ─────────────────────────────────────────────────────
@@ -362,46 +364,40 @@ let parseResult: ReturnType<typeof parseCurriculumProgression> | null = null;
 let validationResult: ReturnType<typeof validateProgressionSemantics> | null = null;
 let rerunAttempts = 0;
 let rerunFailureReason: string | null = null;
-let canRunLive = providerId !== "mock";
+console.log(`\n  Calling ${providerId} adapter (${selectedModel})...`);
 
-if (!canRunLive) {
-  console.log(`\n  ⚠️  MOCK adapter active — skipping live AI call.`);
-  console.log(`     Inspect DB state and title mismatches above for diagnosis.`);
-} else {
-  console.log(`\n  Calling ${providerId} adapter (${selectedModel})...`);
+const { getAdapterForTask } = await import("../lib/ai/registry.ts");
+const adapter = getAdapterForTask(TASK);
 
-  const { getAdapterForTask } = await import("../lib/ai/registry.ts");
-  const adapter = getAdapterForTask(TASK);
+const attemptNotes: string[][] = [
+  [],
+  [
+    "Ensure ALL skill titles match EXACTLY the titles in the authoritative leaf skill list.",
+    "Copy the exact string from the list — do not paraphrase, abbreviate, or rephrase.",
+    "Avoid cycles in hard prerequisites.",
+    "Every phase must include at least one skill from the authoritative list.",
+  ],
+];
 
-  const attemptNotes: string[][] = [
-    [],
-    [
-      "Ensure ALL skill titles match EXACTLY the titles in the authoritative leaf skill list.",
-      "Copy the exact string from the list — do not paraphrase, abbreviate, or rephrase.",
-      "Avoid cycles in hard prerequisites.",
-      "Every phase must include at least one skill from the authoritative list.",
-    ],
-  ];
+for (const correctionNotes of attemptNotes) {
+  rerunAttempts++;
+  const correctionBlock = correctionNotes.length > 0
+    ? `\n\nCorrection notes for this retry:\n${correctionNotes.map((n, i) => `${i + 1}. ${n}`).join("\n")}`
+    : "";
 
-  for (const correctionNotes of attemptNotes) {
-    rerunAttempts++;
-    const correctionBlock = correctionNotes.length > 0
-      ? `\n\nCorrection notes for this retry:\n${correctionNotes.map((n, i) => `${i + 1}. ${n}`).join("\n")}`
-      : "";
-
-    try {
-      console.log(`\n  Attempt ${rerunAttempts}...`);
-      const response = await adapter.complete({
-        model: selectedModel,
-        temperature: 0.2,
-        systemPrompt: CURRICULUM_PROGRESSION_SYSTEM_PROMPT,
-        messages: [
-          {
-            role: "user",
-            content: userPromptContent + correctionBlock,
-          },
-        ],
-      });
+  try {
+    console.log(`\n  Attempt ${rerunAttempts}...`);
+    const response = await adapter.complete({
+      model: selectedModel,
+      temperature: 0.2,
+      systemPrompt: CURRICULUM_PROGRESSION_SYSTEM_PROMPT,
+      messages: [
+        {
+          role: "user",
+          content: userPromptContent + correctionBlock,
+        },
+      ],
+    });
 
       rawResponse = response.content;
       const rawPath = writeTmp(`debug-progression-raw-attempt${rerunAttempts}.txt`, rawResponse);
@@ -476,25 +472,22 @@ if (!canRunLive) {
       rerunFailureReason = null;
       console.log(`\n  ✓ Attempt ${rerunAttempts} ACCEPTED`);
       break;
-    } catch (err: unknown) {
-      const errMsg = err instanceof Error ? err.message : String(err);
-      rerunFailureReason = `model call error on attempt ${rerunAttempts}: ${errMsg}`;
-      console.error(`  Model call error:`, errMsg);
-    }
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    rerunFailureReason = `model call error on attempt ${rerunAttempts}: ${errMsg}`;
+    console.error(`  Model call error:`, errMsg);
   }
+}
 
-  if (rerunFailureReason) {
-    console.log(`\n  ✗ All attempts exhausted. Last failure: ${rerunFailureReason}`);
-  }
+if (rerunFailureReason) {
+  console.log(`\n  ✗ All attempts exhausted. Last failure: ${rerunFailureReason}`);
 }
 
 // ── 7. Compare raw second-pass output to persisted state ──────────────────────
 
 sep("7. COMPARISON: SECOND-PASS OUTPUT vs PERSISTED STATE");
 
-if (!canRunLive) {
-  console.log("  (Skipped — mock adapter, no live output to compare)");
-} else if (!parseResult || parseResult.kind !== "success") {
+if (!parseResult || parseResult.kind !== "success") {
   console.log(`  No usable parsed progression to compare (parse failed: ${rerunFailureReason})`);
 } else {
   const freshPhases = parseResult.progression.phases;
@@ -550,7 +543,7 @@ if (mismatchCount > 0) {
 }
 
 sub("8b. Phases with zero valid skills");
-if (canRunLive && parseResult?.kind === "success") {
+if (parseResult?.kind === "success") {
   const titleSet = new Set(dbSkillTitles);
   for (const phase of parseResult.progression.phases) {
     const valid = phase.skillTitles.filter((t) => titleSet.has(t)).length;
@@ -586,21 +579,17 @@ if (hasInferredOnly) {
 sub("8e. Provider / model check");
 console.log(`  Provider: ${providerId}`);
 console.log(`  Model:    ${selectedModel}`);
-if (providerId === "mock") {
-  console.log(`  ⚠️  Mock provider — the real curriculum.generate.progression was NEVER called.`);
-  console.log(`     This is the most likely cause of empty/inferred-only progression.`);
-}
 
 // ── 9. Diagnosis summary ─────────────────────────────────────────────────────
 
 sep("9. DIAGNOSIS SUMMARY");
 
-const ranLive = canRunLive && rawResponse !== null;
+const ranLive = rawResponse !== null;
 const parsedOk = parseResult?.kind === "success";
 const validatedOk = validationResult?.valid === true;
 const persistedOk = hasExplicitPhases || hasExplicitEdges;
 
-console.log(`  Did the second pass run?          ${ranLive ? "YES (this run)" : "NO (mock adapter active)"}`);
+console.log(`  Did the second pass run?          ${ranLive ? "YES (this run)" : "NO (learning-core call failed before response)"}`);
 console.log(`  Did it parse?                     ${ranLive ? (parsedOk ? "YES" : "NO") : "N/A"}`);
 console.log(`  Did it validate?                  ${ranLive ? (validatedOk ? "YES" : "NO") : "N/A"}`);
 console.log(`  Are explicit phases in DB?        ${hasExplicitPhases ? "YES" : "NO"}`);
@@ -619,11 +608,7 @@ if (!hasExplicitPhases && !hasExplicitEdges) {
 }
 
 console.log(`\n  MOST LIKELY ROOT CAUSE:`);
-if (!canRunLive) {
-  console.log(`  1. Mock AI adapter — progression generation was NEVER attempted with real model.`);
-  console.log(`     The ANTHROPIC_API_KEY is not set, so every curriculum generation used mock.`);
-  console.log(`     Mock adapter returns stub output that is not valid progression JSON.`);
-} else if (ranLive && parsedOk && validatedOk && !persistedOk) {
+if (ranLive && parsedOk && validatedOk && !persistedOk) {
   console.log(`  3. Pass 2 produced valid progression but import/persistence dropped it.`);
   console.log(`     Check: does importNormalizedTree receive artifact.progression correctly?`);
 } else if (ranLive && parsedOk && !validatedOk) {
@@ -631,6 +616,9 @@ if (!canRunLive) {
   console.log(`     Check: validation issues above for specific blocking problems.`);
 } else if (ranLive && !parsedOk) {
   console.log(`  1. Pass 2 never produced usable phases — parse/schema failed.`);
+} else if (rerunFailureReason) {
+  console.log(`  1. learning-core gateway call failed before a usable response was produced.`);
+  console.log(`     Error: ${rerunFailureReason}`);
 } else if (mismatchCount > 0) {
   console.log(`  6. Title/ref mismatches: model receives raw titles, normalization maps cleaned titles.`);
   console.log(`     The skill refs in progression output cannot be resolved in normalization lookup.`);
@@ -639,9 +627,9 @@ if (!canRunLive) {
 }
 
 console.log(`\n  RECOMMENDED NEXT FIX:`);
-if (!canRunLive) {
-  console.log(`  1. Set ANTHROPIC_API_KEY in .env.local and re-run curriculum generation.`);
-  console.log(`     Without this, pass 2 uses mock output → always falls back to inferred ordering.`);
+if (rerunFailureReason) {
+  console.log(`  1. Configure provider env in /home/luke/Desktop/learning-core/.env.example and start the service.`);
+  console.log(`     Without this, live gateway calls will fail and progression debugging stays local-only.`);
   console.log(`  2. Confirm the Inngest job that runs pass 2 has access to the API key in production.`);
 } else if (ranLive && parsedOk && validatedOk && !persistedOk) {
   console.log(`  Trace importNormalizedTree call — verify artifact.progression is non-null at call time.`);

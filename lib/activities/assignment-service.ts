@@ -25,7 +25,7 @@ import { getTodayWorkspace } from "@/lib/planning/today-service";
 import type { PlanItem } from "@/lib/planning/types";
 import type { StructuredLessonDraft } from "@/lib/lesson-draft/types";
 import { computeLessonDraftFingerprint } from "@/lib/lesson-draft/fingerprint";
-import { generateActivitySpecForLessonDraft } from "./generation-service";
+import { generateLessonDraftActivitySpec } from "@/lib/learning-core/activity";
 
 // ---------------------------------------------------------------------------
 // Lesson-draft-owned activity publishing
@@ -70,9 +70,11 @@ export async function publishActivityForLessonDraft(params: {
     await repos.activities.archiveActivitiesForSession(params.lessonSessionId);
   }
 
-  const genResult = await generateActivitySpecForLessonDraft({
+  const genResult = await generateLessonDraftActivitySpec({
     lessonDraft: params.lessonDraft,
     learnerName: params.learnerName,
+    lessonSessionId: params.lessonSessionId,
+    leadPlanItemId: params.leadPlanItemId ?? null,
     workflowMode: params.workflowMode,
     planItems: params.planItems,
   });
@@ -88,15 +90,15 @@ export async function publishActivityForLessonDraft(params: {
     artifactId: null,
     activityType: "activity_spec",
     status: "published",
-    title: genResult.spec.title,
+    title: genResult.artifact.title,
     schemaVersion: "2",
-    definition: genResult.spec as unknown as Record<string, unknown>,
+    definition: genResult.artifact as unknown as Record<string, unknown>,
     masteryRubric: {
-      activityKind: genResult.spec.activityKind,
-      scoringMode: genResult.spec.scoringModel.mode,
-      linkedObjectiveIds: genResult.spec.linkedObjectiveIds,
-      aiGenerated: genResult.aiGenerated,
-      promptVersion: genResult.promptVersion,
+      activityKind: genResult.artifact.activityKind,
+      scoringMode: genResult.artifact.scoringModel.mode,
+      linkedObjectiveIds: genResult.artifact.linkedObjectiveIds,
+      aiGenerated: true,
+      promptVersion: genResult.lineage.skill_version,
     },
     metadata: {
       sessionId: params.lessonSessionId,
@@ -104,10 +106,14 @@ export async function publishActivityForLessonDraft(params: {
       trackedPlanItemIds: planItems.map((p) => p.id),
       linkedSkillTitles: planItems.map((p) => p.title),
       standardIds: planItems.flatMap((p) => p.standards ?? []),
-      estimatedMinutes: genResult.spec.estimatedMinutes,
-      interactionMode: genResult.spec.interactionMode,
+      estimatedMinutes: genResult.artifact.estimatedMinutes,
+      interactionMode: genResult.artifact.interactionMode,
       lessonTitle: params.lessonDraft.title,
       lessonFocus: params.lessonDraft.lesson_focus,
+      learningCoreRequestId: genResult.trace.request_id,
+      learningCoreOperation: genResult.lineage.operation_name,
+      learningCoreProvider: genResult.lineage.provider,
+      learningCoreModel: genResult.lineage.model,
     },
   });
 }

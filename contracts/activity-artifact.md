@@ -8,9 +8,9 @@
 The Activity Artifact represents a structured, AI-generated specification for an interactive learner experience. It is designed to be rendered deterministically by a bounded component library, avoiding arbitrary UI code.
 
 ## Producers
-- **Entrypoints:** `ActivityGenerationService.generateActivity()`
+- **Entrypoints:** `learning-core /v1/operations/generate-activities-from-plan-session/execute`
 - **Canonical Source Files:**
-  - `lib/prompts/activity-spec.ts` (JSON shape in `ACTIVITY_SPEC_SYSTEM_PROMPT`)
+  - `lib/learning-core/activity.ts` (typed app adapter and boundary validation)
   - `lib/activities/spec.ts` (Zod schema for v2 specs)
 
 ## Consumers
@@ -62,8 +62,8 @@ The Activity Artifact represents a structured, AI-generated specification for an
 | score | attempt | Calculated based on the `scoringModel` during or after the session. |
 
 ## Defaults & Fallbacks
-- **Completion Rules:** Defaults to `all_interactive_components`.
-- **Hint Strategy:** Defaults to `on_request`.
+- **Completion Rules:** Defaults are owned by `learning-core`; the app does not inject local fallbacks.
+- **Hint Strategy:** Defaults are owned by `learning-core`; missing or invalid fields should fail at the service boundary.
 
 ## Validation & Invariants
 - **Interactive Component:** At least one interactive component (e.g., `short_answer`, `single_select`) must be present.
@@ -81,4 +81,5 @@ The Activity Artifact represents a structured, AI-generated specification for an
 
 ## Known Gaps / TODOs
 - **Legacy Compatibility:** Transitioning from v1 (blueprint) to v2 (spec) is ongoing.
+- **Cross-Repo Contract Sharing:** `learning-core` is now the producer, but the app still keeps a local consumer schema for fail-fast boundary validation until shared contract codegen exists.
 - **Renderer Parity:** Not all components in the spec have equivalent renderers in all platforms.

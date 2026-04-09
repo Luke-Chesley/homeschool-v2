@@ -7,7 +7,8 @@
  * Uses Vercel AI SDK conventions for the SSE format so the client-side
  * useChat hook can consume it.
  *
- * Integration point: wire up real provider adapters in lib/ai/registry.ts.
+ * The app no longer talks to model providers directly.
+ * Streaming goes through the learning-core gateway adapter.
  */
 
 import { NextRequest } from "next/server";

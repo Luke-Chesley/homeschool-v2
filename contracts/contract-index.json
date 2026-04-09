@@ -125,17 +125,17 @@
       "title": "Activity Artifact",
       "docPath": "contracts/activity-artifact.md",
       "canonicalSources": [
-        "lib/prompts/activity-spec.ts",
+        "lib/learning-core/activity.ts",
         "lib/activities/spec.ts"
       ],
       "producerEntrypoints": [
-        "ActivityGenerationService.generateActivity()"
+        "learning-core /v1/operations/generate-activities-from-plan-session/execute"
       ],
       "consumerEntrypoints": [
         "components/activities/ActivityRenderer.tsx"
       ],
       "versionFields": [
-        "ACTIVITY_SPEC_PROMPT_VERSION",
+        "skill_version",
         "schemaVersion"
       ]
     }

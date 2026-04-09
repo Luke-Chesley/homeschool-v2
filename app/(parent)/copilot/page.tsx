@@ -97,8 +97,8 @@ export default async function CopilotPage({ searchParams }: Props) {
           <CopilotPromptPreview promptPreview={promptPreview} />
 
           <p className="px-1 text-xs text-muted-foreground/60">
-            Copilot provider and model routing come from{" "}
-            <code className="font-mono text-[10px]">lib/ai/routing.ts</code>.
+            Copilot provider and model routing are managed by the external{" "}
+            <code className="font-mono text-[10px]">learning-core</code> service.
           </p>
         </div>
       </div>
