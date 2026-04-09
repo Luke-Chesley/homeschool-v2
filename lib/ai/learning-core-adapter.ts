@@ -8,6 +8,7 @@ import type {
   StructuredCompletionOptions,
 } from "./provider-adapter";
 
+import { getLearningCoreEnv } from "@/lib/env/server";
 import { postLearningCore } from "@/lib/learning-core/client";
 
 const GATEWAY_PROVIDER_ID = "learning-core";
@@ -54,19 +55,43 @@ export class LearningCoreGatewayAdapter implements AiProviderAdapter {
   }
 
   async *stream(options: CompletionOptions): AsyncIterable<StreamChunk> {
-    const response = await fetchStreamingGateway("/v1/gateway/stream", {
-      task_name: normalizeTaskName(options.model),
-      model: options.model,
-      system_prompt: options.systemPrompt,
-      temperature: options.temperature,
-      max_tokens: options.maxTokens,
-      messages: options.messages,
-    });
+    try {
+      const response = await fetchStreamingGateway("/v1/gateway/stream", {
+        task_name: normalizeTaskName(options.model),
+        model: options.model,
+        system_prompt: options.systemPrompt,
+        temperature: options.temperature,
+        max_tokens: options.maxTokens,
+        messages: options.messages,
+      });
 
-    for await (const chunk of iterateNdjson<{ delta?: string; done?: boolean }>(response)) {
+      for await (const chunk of iterateNdjson<{ delta?: string; done?: boolean }>(response)) {
+        yield {
+          delta: typeof chunk.delta === "string" ? chunk.delta : "",
+          done: Boolean(chunk.done),
+        };
+      }
+    } catch (streamError) {
+      const fallback = await this.complete(options).catch((completeError) => {
+        if (completeError instanceof Error) {
+          throw completeError;
+        }
+        if (streamError instanceof Error) {
+          throw streamError;
+        }
+        throw new Error("learning-core streaming request failed.");
+      });
+
+      if (fallback.content) {
+        yield {
+          delta: fallback.content,
+          done: false,
+        };
+      }
+
       yield {
-        delta: typeof chunk.delta === "string" ? chunk.delta : "",
-        done: Boolean(chunk.done),
+        delta: "",
+        done: true,
       };
     }
   }
@@ -130,8 +155,7 @@ function safeParseJson<T>(content: string): T | null {
 }
 
 async function fetchStreamingGateway(path: string, body: unknown) {
-  const { getServerEnv } = await import("@/lib/env/server");
-  const env = getServerEnv();
+  const env = getLearningCoreEnv();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };

@@ -65,3 +65,28 @@ export function getDatabaseEnv() {
   cachedDatabaseEnv = parsed.data;
   return cachedDatabaseEnv;
 }
+
+const learningCoreEnvSchema = z.object({
+  LEARNING_CORE_BASE_URL: z.string().trim().min(1),
+  LEARNING_CORE_API_KEY: optionalNonEmptyString,
+});
+
+let cachedLearningCoreEnv: z.infer<typeof learningCoreEnvSchema> | undefined;
+
+export function getLearningCoreEnv() {
+  if (cachedLearningCoreEnv) {
+    return cachedLearningCoreEnv;
+  }
+
+  const parsed = learningCoreEnvSchema.safeParse({
+    LEARNING_CORE_BASE_URL: process.env.LEARNING_CORE_BASE_URL,
+    LEARNING_CORE_API_KEY: process.env.LEARNING_CORE_API_KEY,
+  });
+
+  if (!parsed.success) {
+    throw new Error(`Invalid learning-core environment:\n${formatEnvIssues(parsed.error.issues)}`);
+  }
+
+  cachedLearningCoreEnv = parsed.data;
+  return cachedLearningCoreEnv;
+}
