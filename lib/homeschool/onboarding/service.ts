@@ -65,27 +65,6 @@ export const HomeschoolCurriculumIntakeSchema = z.object({
 export type HomeschoolOnboardingPayload = z.infer<typeof HomeschoolOnboardingSchema>;
 export type HomeschoolCurriculumIntakePayload = z.infer<typeof HomeschoolCurriculumIntakeSchema>;
 
-export type HomeschoolCurriculumGenerationJobInput = {
-  learner: {
-    id: string;
-    organizationId: string;
-    displayName: string;
-    firstName: string;
-    lastName: string | null;
-    status: "active" | "paused" | "archived";
-  };
-  messages: CurriculumAiChatMessage[];
-  workflow: {
-    kind: "homeschool_onboarding" | "curriculum_intake";
-    householdName?: string;
-    learnerName: string;
-    dailyWorkspaceDate: string;
-    learnerCount?: number;
-    subjects: string[];
-    curriculumMode: "ai_decompose";
-  };
-};
-
 function asRecord(value: unknown): Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return {};
@@ -337,17 +316,6 @@ function buildAiMessages(input: HomeschoolOnboardingInput): CurriculumAiChatMess
   ];
 }
 
-function learnerRowToJobLearner(learner: typeof learners.$inferSelect) {
-  return {
-    id: learner.id,
-    organizationId: learner.organizationId,
-    displayName: learner.displayName,
-    firstName: learner.firstName,
-    lastName: learner.lastName,
-    status: learner.status,
-  };
-}
-
 export async function getHomeschoolOnboardingStatus(organizationId: string) {
   const organization = await getDb().query.organizations.findFirst({
     where: eq(organizations.id, organizationId),
@@ -523,66 +491,6 @@ export async function prepareHomeschoolOnboarding(rawInput: unknown) {
       subjects: normalizedSubjects,
     },
     primaryLearner,
-  };
-}
-
-export function buildHomeschoolCurriculumGenerationJobInputForOnboarding(params: {
-  input: HomeschoolOnboardingPayload;
-  primaryLearner: typeof learners.$inferSelect;
-}): HomeschoolCurriculumGenerationJobInput {
-  return {
-    learner: learnerRowToJobLearner(params.primaryLearner),
-    messages: buildAiMessages({
-      ...params.input,
-      subjects: normalizeSubjects(params.input.subjects),
-    }),
-    workflow: {
-      kind: "homeschool_onboarding",
-      householdName: params.input.householdName,
-      learnerName: params.primaryLearner.displayName,
-      dailyWorkspaceDate: new Date().toISOString().slice(0, 10),
-      learnerCount: params.input.learners.length,
-      subjects: normalizeSubjects(params.input.subjects),
-      curriculumMode: "ai_decompose",
-    },
-  };
-}
-
-export function buildHomeschoolCurriculumGenerationJobInputForCurriculumIntake(
-  input: HomeschoolCurriculumIntakePayload,
-): HomeschoolCurriculumGenerationJobInput {
-  const normalizedSubjects = normalizeSubjects(input.subjects);
-
-  return {
-    learner: {
-      id: input.learnerId,
-      organizationId: input.organizationId,
-      displayName: input.learnerName,
-      firstName: input.learnerFirstName,
-      lastName: input.learnerLastName ?? null,
-      status: "active",
-    },
-    messages: buildAiMessages({
-      organizationId: input.organizationId,
-      householdName: "Homeschool",
-      preferredSchoolDays: [...homeschoolTemplate.defaults.schoolDays],
-      dailyTimeBudgetMinutes: homeschoolTemplate.defaults.dailyTimeBudgetMinutes,
-      subjects: normalizedSubjects,
-      learners: [{ displayName: input.learnerName }],
-      curriculumMode: "ai_decompose",
-      curriculumTitle: input.curriculumTitle,
-      curriculumSummary: input.curriculumSummary,
-      curriculumText: input.curriculumText,
-      schoolYearLabel: input.schoolYearLabel,
-      teachingStyle: input.teachingStyle,
-    }),
-    workflow: {
-      kind: "curriculum_intake",
-      learnerName: input.learnerName,
-      dailyWorkspaceDate: new Date().toISOString().slice(0, 10),
-      subjects: normalizedSubjects,
-      curriculumMode: "ai_decompose",
-    },
   };
 }
 

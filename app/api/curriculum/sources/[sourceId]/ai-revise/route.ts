@@ -10,7 +10,6 @@ import {
   buildCurriculumRevisionPromptPreview,
   reviseCurriculumFromConversation,
 } from "@/lib/curriculum/ai-draft-service";
-import { CURRICULUM_REVISION_PROMPT_VERSION } from "@/lib/prompts/curriculum-draft";
 
 interface RouteContext {
   params: Promise<{
@@ -46,7 +45,6 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       });
 
       return NextResponse.json({
-        promptVersion: CURRICULUM_REVISION_PROMPT_VERSION,
         debug: promptPreview,
       });
     }

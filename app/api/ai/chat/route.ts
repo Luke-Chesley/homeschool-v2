@@ -8,16 +8,16 @@
  * useChat hook can consume it.
  *
  * The app no longer talks to model providers directly.
- * Streaming goes through the learning-core gateway adapter.
+ * Streaming is simulated from a single learning-core operation result.
  */
 
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { requireAppSession } from "@/lib/app-session/server";
-import { streamChatAnswer } from "@/lib/ai/task-service";
 import { getCopilotStore } from "@/lib/ai/copilot-store";
 import { CopilotContextSchema } from "@/lib/ai/types";
 import type { ChatMessage, CopilotContext } from "@/lib/ai/types";
+import { executeCopilotChat } from "@/lib/learning-core/copilot";
 
 const RequestSchema = z.object({
   sessionId: z.string().optional(),
@@ -103,13 +103,16 @@ export async function POST(req: NextRequest) {
           encoder.encode(`data: ${JSON.stringify({ sessionId: activeSessionId })}\n\n`)
         );
 
-        for await (const delta of streamChatAnswer({
+        const result = await executeCopilotChat({
           messages: messages as ChatMessage[],
           context: normalizedContext,
-        })) {
-          fullResponse += delta;
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ delta })}\n\n`));
-        }
+          organizationId: appSession.organization.id,
+          learnerId: appSession.activeLearner.id,
+        });
+
+        const delta = result.artifact.answer;
+        fullResponse += delta;
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ delta })}\n\n`));
 
         await store.appendMessage(activeSessionId!, {
           role: "assistant",

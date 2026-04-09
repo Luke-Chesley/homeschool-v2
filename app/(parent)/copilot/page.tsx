@@ -5,7 +5,7 @@ import type { CopilotContext } from "@/lib/ai/types";
 import { requireAppSession } from "@/lib/app-session/server";
 import { getLiveCurriculumSource } from "@/lib/curriculum/service";
 import { toWeekStartDate } from "@/lib/curriculum-routing";
-import { resolvePrompt } from "@/lib/prompts/store";
+import { previewCopilotChat } from "@/lib/learning-core/copilot";
 import { buildCopilotPlanningContext } from "@/lib/planning/copilot-snapshot";
 import { getOrCreateWeeklyRouteBoardForLearner } from "@/lib/planning/weekly-route-service";
 
@@ -59,8 +59,12 @@ export default async function CopilotPage({ searchParams }: Props) {
     feedbackNotes: snapshot?.feedbackNotes ?? [],
     recentOutcomes: [],
   };
-  const promptRecord = await resolvePrompt("chat.answer");
-  const promptPreview = buildPromptPreview(promptRecord.systemPrompt, context);
+  const promptPreview = await previewCopilotChat({
+    messages: [],
+    context,
+    organizationId: session.organization.id,
+    learnerId: session.activeLearner.id,
+  });
 
   return (
     <main className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-5 py-6 sm:px-6 lg:px-8">
@@ -104,9 +108,4 @@ export default async function CopilotPage({ searchParams }: Props) {
       </div>
     </main>
   );
-}
-
-function buildPromptPreview(systemPrompt: string, context: CopilotContext) {
-  const contextString = JSON.stringify(context, null, 2);
-  return `${systemPrompt}\n\nContext:\n${contextString}`;
 }

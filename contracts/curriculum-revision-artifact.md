@@ -2,60 +2,64 @@
 
 - **Status:** Active
 - **Canonical Artifact Name:** CurriculumRevisionTurn
-- **Current Version:** 2.2.0 (Prompt Version)
+- **Current Version:** learning-core skill version
 
 ## Purpose
-The Curriculum Revision Artifact represents the outcome of a curriculum editing conversation. It can either ask for clarification or provide a fully revised curriculum artifact based on the parent's request (split, rename, adjust, or rewrite).
+The Curriculum Revision Artifact is the structured response returned by `learning-core` for `curriculum_revise`. It either asks for clarification or returns a full revised curriculum artifact ready for persistence.
 
 ## Producers
-- **Entrypoints:** `runCurriculumRevisionDecision()`
+- **Entrypoints:** `learning-core: POST /v1/operations/curriculum_revise/execute`
 - **Canonical Source Files:**
-  - `lib/prompts/curriculum-draft.ts` (JSON shape in `CURRICULUM_REVISION_SYSTEM_PROMPT`)
-  - `lib/curriculum/revision-model.ts`
+  - `learning-core/learning_core/skills/curriculum_revise/SKILL.md`
+  - `learning-core/learning_core/contracts/curriculum.py`
+  - `lib/curriculum/ai-draft-service.ts`
 
 ## Consumers
 - **Entrypoints:**
-  - `app/api/curriculum/revision/route.ts` (if applicable)
+  - `app/api/curriculum/sources/[sourceId]/ai-revise/route.ts`
+  - `lib/curriculum/service.ts`
 - **Processing Logic:**
-  - The `apply` action triggers a full replacement or update of the current curriculum draft with the new `artifact`.
+  - If `action = "apply"`, the returned `artifact` replaces the prior draft/source state and is re-normalized.
+  - If `action = "clarify"`, the app surfaces `assistantMessage` and does not mutate curriculum state.
 
 ## Persistence
-- **Storage Location:** 
-  - If applied, the new `artifact` replaces the previous state in `curriculum_sources.metadata` and is then normalized into the `curriculum_items` table.
-- **Storage Shape:** 
-  - The revised `artifact` follows the same JSON shape as documented in `curriculum-artifact.md`.
+- **Storage Location:** Applied revisions update the curriculum source metadata and downstream normalized curriculum tables.
+- **Storage Shape:** The nested `artifact` field follows the same shape documented in `curriculum-artifact.md`.
 
 ## Field Definitions
 
 ### Required Fields
 | Field | Type | Description |
 |-------|------|-------------|
-| assistantMessage | string | AI's response to the parent. |
-| action | enum | `clarify` (ask for info) or `apply` (update curriculum). |
-| changeSummary | string[] | Bullet points explaining what was changed. |
+| assistantMessage | string | Parent-facing response for the revision turn. |
+| action | enum | `clarify` or `apply`. |
+| changeSummary | string[] | Concise summary of what changed or what will change. |
 
 ### Optional Fields
 | Field | Type | Description |
 |-------|------|-------------|
-| artifact | object | The full revised curriculum artifact (required when `action` is `apply`). |
+| artifact | object | Full revised curriculum artifact when `action = "apply"`. |
+
+### Derived / Computed Fields
+| Field | Source | Logic |
+|-------|--------|-------|
+| lineage.skill_version | learning-core response | Stored by the app for auditing which revision skill version produced the turn. |
 
 ## Defaults & Fallbacks
-- **Full Revised Artifact:** When action is `apply`, the model MUST return the entire revised artifact, not just the diff. Unchanged branches are inherited from the previous state.
+- `homeschool-v2` does not synthesize partial diffs or fallback revisions. `learning-core` must return a valid turn or fail.
 
 ## Validation & Invariants
-- **Inheritance:** Unchanged branches must be preserved.
-- **Tree Shape:** Must maintain the canonical `domain -> strand -> goal group -> skill` hierarchy.
-- **Action Coherence:** If `action` is `apply`, the `artifact` field must be present and valid.
+- `artifact` must be present when `action = "apply"`.
+- The revised artifact must preserve the canonical curriculum hierarchy.
+- Clarification turns must not mutate persisted curriculum state.
 
 ## Ownership & Hierarchy
 - **Parent:** Curriculum Source
-- **Children:** Same as `curriculum-artifact.md`.
+- **Children:** Revised curriculum artifact plus normalized curriculum items if applied
 
 ## Change Impact
-- **Downstream Effects:** Applying a revision impacts all existing planning and lesson drafts that were based on the previous version.
-- **Related Contracts:**
-  - `curriculum-artifact.md`: The shape of the `artifact` field.
+- **Downstream Effects:** Applied revisions can invalidate prior plans, session drafts, and progression outputs.
+- **Related Contracts:** `curriculum-artifact.md`
 
 ## Known Gaps / TODOs
-- **Diffing:** The system currently replaces the whole artifact rather than applying a targeted patch, making version history coarse.
-- **Clarification:** Clarify how "clarify" mode handles partial information capture.
+- Revision history is still coarse because the app stores whole-artifact revisions rather than structural diffs.

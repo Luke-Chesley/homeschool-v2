@@ -8,7 +8,7 @@ import {
   getTodayWorkspace,
   saveTodayLessonDraft,
 } from "@/lib/planning/today-service";
-import { buildLessonDraftPromptPreview, generateLessonDraft } from "@/lib/ai/task-service";
+import { executeSessionGenerate, previewSessionGenerate } from "@/lib/learning-core/session";
 
 const RequestSchema = z.object({
   date: z.string().optional(),
@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
     sourceSessionMinutes: sessionTiming.sourceSessionMinutes,
     lessonOverrideMinutes: sessionTiming.lessonOverrideMinutes,
     timingSource: sessionTiming.timingSource,
-  } satisfies import("@/lib/ai/task-service").LessonDraftResolvedTiming;
+  };
 
   const lessonDraftInput = {
     title: sourceTitle,
@@ -111,17 +111,28 @@ export async function POST(req: NextRequest) {
   };
 
   if (parsed.data.debug) {
-    const promptPreview = await buildLessonDraftPromptPreview(lessonDraftInput);
+    const promptPreview = await previewSessionGenerate({
+      input: lessonDraftInput,
+      surface: "planning",
+      organizationId: session.organization.id,
+      learnerId: session.activeLearner.id,
+      planItemIds: workspace.items.map((item) => item.id),
+    });
 
     return NextResponse.json({
-      promptVersion: "preview",
       sourceTitle,
       date,
       debug: promptPreview,
     });
   }
 
-  const result = await generateLessonDraft(lessonDraftInput);
+  const result = await executeSessionGenerate({
+    input: lessonDraftInput,
+    surface: "planning",
+    organizationId: session.organization.id,
+    learnerId: session.activeLearner.id,
+    planItemIds: workspace.items.map((item) => item.id),
+  });
   const routeFingerprint = buildTodayLessonDraftFingerprint(workspace.items.map((item) => item.id));
   const artifact = await getRepositories().activities.createArtifact({
     organizationId: session.organization.id,
@@ -131,15 +142,14 @@ export async function POST(req: NextRequest) {
     artifactType: "lesson_plan",
     title: `${sourceTitle} lesson draft`,
     status: "ready",
-    // Store structured draft as JSON string in the body field
-    body: JSON.stringify(result.output),
-    promptVersion: result.lineage.promptRef.version,
+    body: JSON.stringify(result.artifact),
+    promptVersion: result.lineage.skill_version,
     promptTemplateId: null,
     generationJobId: null,
     storagePath: null,
-    providerId: result.lineage.providerId,
-    modelId: result.lineage.modelId,
-    inputHash: result.lineage.inputHash,
+    providerId: result.lineage.provider,
+    modelId: result.lineage.model,
+    inputHash: null,
     lineageParentId: null,
     supersededByArtifactId: null,
     approvedAt: null,
@@ -148,12 +158,12 @@ export async function POST(req: NextRequest) {
       date,
       sourceId: workspaceResult.sourceId,
       routeFingerprint,
-      schemaVersion: result.output.schema_version,
+      schemaVersion: result.artifact.schema_version,
     },
     qaMetadata: {
-      lineageId: result.lineage.id,
+      requestId: result.trace.request_id,
     },
-    costMetadata: result.usage ?? {},
+    costMetadata: {},
     metadata: {
       routeItemIds: workspace.items.map((item) => item.id),
     },
@@ -165,8 +175,8 @@ export async function POST(req: NextRequest) {
     sourceId: workspaceResult.sourceId,
     sourceTitle,
     routeFingerprint,
-    structured: result.output,
-    promptVersion: result.lineage.promptRef.version,
+    structured: result.artifact,
+    promptVersion: result.lineage.skill_version,
   });
 
   return NextResponse.json({
@@ -183,5 +193,7 @@ export async function POST(req: NextRequest) {
       weekLabel: planningContext?.weeklyPlanningSnapshot?.weekLabel,
       weekHighlights: planningContext?.weeklyPlanningSnapshot?.highlights ?? [],
     },
+    lineage: result.lineage,
+    trace: result.trace,
   });
 }

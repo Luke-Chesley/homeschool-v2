@@ -1,85 +1,77 @@
 # Contract: Curriculum Artifact
 
 - **Status:** Active
-- **Canonical Artifact Name:** CurriculumDraft
-- **Current Version:** 3.2.0 (Prompt Version)
+- **Canonical Artifact Name:** CurriculumArtifact
+- **Current Version:** learning-core skill version
 
 ## Purpose
-The Curriculum Artifact represents the first-class output of the AI curriculum generation process. It provides the hierarchical structure of learning goals (the "document"), the chronological sequence of lessons (the "outline"), and an explicit progression model.
+The Curriculum Artifact is the durable structured output returned by `learning-core` when the app executes `curriculum_generate`. It is the source material that `homeschool-v2` normalizes and persists as curriculum records.
 
 ## Producers
-- **Entrypoints:** `CurriculumAiDraftService.generateCurriculumArtifact()` (Two-pass internal orchestration)
+- **Entrypoints:** `learning-core: POST /v1/operations/curriculum_generate/execute`
 - **Canonical Source Files:**
-  - `lib/prompts/curriculum-draft.ts` (JSON shape in `CURRICULUM_GENERATION_SYSTEM_PROMPT` and `CURRICULUM_PROGRESSION_SYSTEM_PROMPT`)
+  - `learning-core/learning_core/skills/curriculum_generate/SKILL.md`
+  - `learning-core/learning_core/contracts/curriculum.py`
   - `lib/curriculum/ai-draft-service.ts`
 
 ## Consumers
 - **Entrypoints:**
-  - `app/api/curriculum/draft/route.ts` (if applicable)
   - `lib/curriculum/normalization.ts`
+  - `lib/curriculum/service.ts`
 - **Processing Logic:**
-  - `lib/curriculum/normalization.ts`: Transforms the raw AI artifact into normalized `CurriculumNode`, `CurriculumUnit`, and `CurriculumLesson` entities for persistence in the database.
+  - `homeschool-v2` persists the raw artifact in source metadata and normalizes units, lessons, and tree nodes into product tables.
 
 ## Persistence
-- **Storage Location:** 
-  - Raw JSON is stored in `curriculum_sources.metadata`.
-  - Normalized data is persisted in the `curriculum_items` table.
-- **Storage Shape:** 
-  - The raw JSON follows the generation prompt shape.
-  - Normalized database rows follow the schema in `lib/db/schema/curriculum.ts` where `itemType` distinguishes units and lessons.
+- **Storage Location:**
+  - Raw artifact in `curriculum_sources.metadata`
+  - Normalized nodes in `curriculum_items`
+- **Storage Shape:**
+  - Raw shape follows the `CurriculumArtifact` schema from `learning-core`.
+  - Normalized rows follow the local curriculum DB schema.
 
 ## Field Definitions
 
 ### Required Fields
 | Field | Type | Description |
 |-------|------|-------------|
-| source | object | Metadata about the curriculum (title, description, subjects, gradeLevels). |
-| intakeSummary | string | Summary of the intake conversation. |
-| pacing | object | Pacing expectations (totalWeeks, sessionsPerWeek, totalSessions). |
-| document | object | The hierarchical curriculum tree (Domain -> Strand -> Goal group -> Skill[]). |
-| units | array | Chronological units containing lesson sequences. |
+| source | object | Curriculum metadata such as title, summary, subjects, and framing notes. |
+| intakeSummary | string | Summary of the intake conversation that grounded generation. |
+| pacing | object | Declared pacing expectations for the curriculum. |
+| document | object | Canonical domain -> strand -> goal group -> skill hierarchy. |
+| units | array | Ordered teachable sequence built from the hierarchy. |
 
 ### Optional Fields
 | Field | Type | Description |
 |-------|------|-------------|
-| progression | object | Explicit global progression graph (phases and dependency edges). |
-| source.academicYear | string | The intended academic year. |
-| source.parentNotes | string[] | Additional notes for the parent. |
-| source.rationale | string[] | Rationale for the curriculum design. |
-| pacing.coverageNotes | string[] | Notes on how the scope is covered. |
-| units[].lessons[].subject | string | Subject for a specific lesson. |
+| source.academicYear | string | Intended academic year when supplied. |
+| source.parentNotes | string[] | Parent-facing notes or constraints. |
+| source.rationale | string[] | Design rationale returned by the skill. |
+| pacing.coverageNotes | string[] | Notes about scope and sequencing. |
 
 ### Derived / Computed Fields
 | Field | Source | Logic |
 |-------|--------|-------|
-| normalizedPath | document | Path string like `domain/strand/goal_group/skill` used for node matching. |
-| sequenceIndex | document/units | Order of appearance in the nested document or lesson list. |
+| normalizedPath | document | Generated during normalization for stable node identity and graph linking. |
+| sequenceIndex | units/document | Generated during normalization for ordering. |
 
 ## Defaults & Fallbacks
-- **Estimated Minutes:** Defaults to `pacing.sessionMinutes` or 30 if not specified in individual lessons.
-- **Progression:** If the `progression` section is missing, the system may fall back to inferred linear order from the document tree, but this is deprecated.
-- **Title:** The generation prompt is instructed to produce a concise, parent-facing title.
+- **None in app code:** `homeschool-v2` does not inject prompt-side defaults for this artifact. Missing required fields should fail at the boundary.
 
 ## Validation & Invariants
-- **Tree Depth:** Always `Domain` -> `Strand` -> `Goal Group` -> `Skill`.
-- **Progression Skills:** All `skillTitles` in phases and edges MUST exist as leaf nodes in the `document` tree.
-- **Cycle Detection:** `hardPrerequisite` edges must form an acyclic graph.
-- **Relationship:** Every skill must belong to a goal group, every goal group to a strand, etc.
-- **Units/Lessons:** Must cover the curriculum in a teachable order.
-- **Pacing:** Total sessions must align with the requested scope and weekly cadence.
+- Tree shape is always `domain -> strand -> goal group -> skill`.
+- Lessons must remain teachable in the declared pacing.
+- Skills referenced by units and lessons must exist in the tree.
 
 ## Ownership & Hierarchy
-- **Parent:** Household + Learner
-- **Children:** Units (Sequence), Nodes (Hierarchy)
+- **Parent:** Curriculum Source
+- **Children:** Curriculum items, units, lessons, downstream progression records
 
 ## Change Impact
-- **Downstream Effects:** 
-  - Changes to `progression` affect weekly route generation and the global planner's sequencing.
-  - Changes to pacing fields impact planning logic and lesson draft timing.
+- **Downstream Effects:** Changes here affect normalization, planning, and progression generation.
 - **Related Contracts:**
-  - `curriculum-revision-artifact.md`: Inherits and modifies this shape.
-  - `lesson-draft-artifact.md`: Consumes lessons and objectives from this artifact.
+  - `curriculum-revision-artifact.md`
+  - `curriculum-progression-generation-input.md`
+  - `lesson-draft-artifact.md`
 
 ## Known Gaps / TODOs
-- **Skill IDs:** The raw artifact uses titles as keys; IDs are generated during normalization.
-- **Timing:** Pacing is currently descriptive; stronger validation between unit sessions and lesson counts is needed.
+- Cross-repo contract codegen does not exist yet, so the app still validates the boundary with local consumer code and docs.

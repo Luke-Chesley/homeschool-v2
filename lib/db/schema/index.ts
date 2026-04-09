@@ -1,5 +1,4 @@
 export * from "@/lib/db/schema/activities";
-export * from "@/lib/db/schema/aiPlatform";
 export * from "@/lib/db/schema/copilot";
 export * from "@/lib/db/schema/curriculum";
 export * from "@/lib/db/schema/curriculumRouting";

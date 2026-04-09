@@ -15,27 +15,28 @@ make typecheck            # tsc --noEmit
 pnpm build                # Production build
 pnpm lint                 # ESLint via Next.js
 pnpm test:curriculum      # Run curriculum unit tests (Node test runner)
+pnpm test:architecture    # Assert the old AI prompt/gateway paths are gone
 bash ./scripts/verify-before-merge.sh  # typecheck + browser smoke test (run after merging to main)
 ```
 
-Environment: copy `.env.example` to `.env.local` and fill in Supabase, DB, AI provider, and Inngest keys.
+Environment: copy `.env.example` to `.env.local` and fill in Supabase, DB, and service-boundary keys. AI provider/model keys live in `learning-core`, not this repo.
 
 ## Architecture
 
-**Stack**: Next.js 15 App Router + React 19 + TypeScript (strict) + Tailwind v4 + Supabase (auth + Postgres) + Drizzle ORM + Inngest (background jobs) + Zod
+**Stack**: Next.js 15 App Router + React 19 + TypeScript (strict) + Tailwind v4 + Supabase (auth + Postgres) + Drizzle ORM + Inngest + Zod + external `learning-core`
 
 **Layer boundaries**:
 - `app/` — routes, layouts, server actions, page loaders only
   - `app/(parent)/` — parent workspace routes: `today`, `planning`, `curriculum`, `tracking`, `copilot`
   - `app/(learner)/` — learner-facing routes
 - `components/` — UI primitives (`components/ui/`) and product feature components
-- `lib/` — auth, database clients, domain logic, AI orchestration, planning/scheduling
+- `lib/` — auth, database clients, domain logic, typed `learning-core` clients, planning/scheduling
 
 **Key conventions**:
-- AI work runs via Inngest background jobs, never blocking request handlers
+- Extracted AI work runs through `learning-core` operation endpoints. The app sends structured envelopes and persists returned artifacts.
 - Supabase for auth (no custom username/password)
 - Drizzle ORM for all DB access; schema in `lib/db/schema/`, per-domain repositories in `lib/db/repositories/`
-- AI provider system is multi-adapter (`lib/ai/`): Anthropic, Ollama, and mock adapters behind a provider-agnostic interface (`provider-adapter.ts`); model routing via `routing.ts`
+- Provider/model routing, prompts, prompt previews, and skill execution live in `learning-core`, not in `homeschool-v2`
 - `cn()` from `lib/utils.ts` for class merging (clsx + tailwind-merge)
 - UI components use `class-variance-authority` (CVA) for variants
 - Path alias `@/*` maps to the project root

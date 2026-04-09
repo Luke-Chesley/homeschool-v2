@@ -385,7 +385,7 @@ export async function getLessonDraftPromptPreviewAction(
       workflowMode,
       planItems: workspaceResult.workspace.items,
     });
-    return { ok: true, systemPrompt: preview.systemPrompt, userPrompt: preview.userPrompt };
+    return { ok: true, systemPrompt: preview.system_prompt, userPrompt: preview.user_prompt };
   } catch (err) {
     console.error("[getLessonDraftPromptPreviewAction]", err);
     return { ok: false, error: err instanceof Error ? err.message : "Failed to build prompt" };

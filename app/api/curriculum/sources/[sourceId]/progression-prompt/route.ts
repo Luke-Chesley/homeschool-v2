@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { requireAppSession } from "@/lib/app-session/server";
 import { buildProgressionPromptPreview } from "@/lib/curriculum/progression-regeneration";
-import { CURRICULUM_PROGRESSION_PROMPT_VERSION } from "@/lib/prompts/curriculum-draft";
 
 interface RouteContext {
   params: Promise<{ sourceId: string }>;
@@ -20,7 +19,6 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
     });
 
     return NextResponse.json({
-      promptVersion: CURRICULUM_PROGRESSION_PROMPT_VERSION,
       debug: preview,
     });
   } catch (error) {

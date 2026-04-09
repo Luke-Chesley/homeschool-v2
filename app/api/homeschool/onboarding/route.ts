@@ -6,12 +6,9 @@ import {
   getAppSession,
 } from "@/lib/app-session/server";
 import {
-  buildHomeschoolCurriculumGenerationJobInputForOnboarding,
   completeHomeschoolOnboarding,
   HomeschoolOnboardingSchema,
-  prepareHomeschoolOnboarding,
 } from "@/lib/homeschool/onboarding/service";
-import { dispatchCurriculumGeneration } from "@/lib/ai/task-service";
 import { trackOperationalError } from "@/lib/platform/observability";
 
 export async function POST(req: NextRequest) {
@@ -30,32 +27,6 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    if (parsed.data.curriculumMode === "ai_decompose") {
-      const prepared = await prepareHomeschoolOnboarding(parsed.data);
-      const job = await dispatchCurriculumGeneration(
-        buildHomeschoolCurriculumGenerationJobInputForOnboarding(prepared),
-        {
-          organizationId: session.organization.id,
-          learnerId: prepared.primaryLearner.id,
-        },
-      );
-      const response = NextResponse.json(
-        { mode: "queued", jobId: job.jobId, status: "queued" },
-        { status: 202 },
-      );
-      response.cookies.set(APP_ORGANIZATION_COOKIE, session.organization.id, {
-        httpOnly: true,
-        sameSite: "lax",
-        path: "/",
-      });
-      response.cookies.set(APP_LEARNER_COOKIE, prepared.primaryLearner.id, {
-        httpOnly: true,
-        sameSite: "lax",
-        path: "/",
-      });
-      return response;
-    }
-
     const result = await completeHomeschoolOnboarding(parsed.data);
     const response = NextResponse.json(result, { status: 200 });
     response.cookies.set(APP_ORGANIZATION_COOKIE, session.organization.id, {
