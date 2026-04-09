@@ -83,6 +83,8 @@ Most non-UI logic lives here.
   Environment parsing and validation.
 - `lib/platform/`
   Platform integrations such as Supabase setup.
+- `lib/learning-core/`
+  HTTP client adapters and request builders for the external Python AI service.
 - `lib/users/`
   Workspace bootstrapping, learner creation, and user-related service logic.
 - `lib/activities/`
@@ -94,13 +96,13 @@ Most non-UI logic lives here.
 - `lib/tracking/`
   Tracking/reporting domain logic.
 - `lib/ai/`
-  AI/copilot task and store logic.
+  Remaining in-repo AI/copilot task and store logic that has not been extracted yet.
 - `lib/standards/`
   Standards-related domain logic.
 - `lib/storage/`
   Storage client helpers.
 - `lib/prompts/`
-  Prompt definitions and prompt management.
+  Remaining in-repo prompt definitions that have not been moved to `learning-core` yet.
 
 ### `contracts/`
 
@@ -172,9 +174,12 @@ If you are trying to find the source of behavior, these are the usual starting p
 
 - `http://localhost:3000` is reserved for the main checkout.
 - Branch worktrees under `.worktrees/` should use their own ports.
+- The app now expects a separate `learning-core` service on `LEARNING_CORE_BASE_URL` for extracted AI operations.
+- Local split-dev is two processes:
+  `homeschool-v2` on `http://localhost:3000` and `learning-core` on `http://127.0.0.1:8000`.
 - The minimum verification gate is currently `corepack pnpm typecheck`.
 - Before merging a branch back to `main`, run `bash ./scripts/verify-before-merge.sh` from the target checkout so the typecheck and UI smoke test both pass.
-- Ollama local AI works through `AI_PROVIDER=ollama` plus `OLLAMA_BASE_URL=http://localhost:11434` in `.env.local`.
-  Set `OLLAMA_AUTH_TOKEN` only if your Ollama server requires a bearer token.
-  Optional tuning vars: `OLLAMA_NUM_CTX` and `OLLAMA_KEEP_ALIVE`.
+- AI provider credentials and model-routing env now belong in the separate `learning-core` repo.
+- `homeschool-v2` should only carry the service boundary vars:
+  `LEARNING_CORE_BASE_URL` and optionally `LEARNING_CORE_API_KEY`.
 - If major structure or subsystem ownership changes, update this README in the same task.

@@ -4,9 +4,8 @@
  * Dispatches a long-running AI generation job (Inngest async).
  * Returns immediately with a job ID; the caller polls for completion.
  *
- * Integration point: when Inngest is configured, the job is dispatched via
- * inngest.send("ai/generation.requested", ...). Until then, this runs the
- * mock adapter inline.
+ * Integration point: generation execution is routed through learning-core.
+ * The app owns the job record and artifact persistence, not provider access.
  */
 
 import { NextRequest, NextResponse } from "next/server";

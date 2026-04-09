@@ -6,7 +6,7 @@
  * makes it easy to version prompts, route to different models, and audit
  * lineage.
  *
- * Provider-agnostic: concrete implementations live in adapters/, not here.
+ * Provider execution now lives behind the learning-core boundary.
  */
 
 import { z } from "zod";
@@ -18,13 +18,7 @@ import { z } from "zod";
 export const ModelIdSchema = z.string().min(1);
 export type ModelId = z.infer<typeof ModelIdSchema>;
 
-export const ProviderIdSchema = z.enum([
-  "anthropic",
-  "openai",
-  "google",
-  "ollama",
-  "mock",
-]);
+export const ProviderIdSchema = z.enum(["learning-core"]);
 export type ProviderId = z.infer<typeof ProviderIdSchema>;
 
 // ---------------------------------------------------------------------------
