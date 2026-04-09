@@ -14,8 +14,7 @@ import {
   sanitizeProgressionRefs,
 } from "../lib/curriculum/progression-sanitization.ts";
 import { normalizeCurriculumDocument } from "../lib/curriculum/normalization.ts";
-import { getModelForTask } from "../lib/ai/provider-adapter.ts";
-import { getAiRoutingConfig } from "../lib/ai/routing.ts";
+import { getAiRoutingConfig, getModelForTask } from "../lib/ai/provider-adapter.ts";
 
 const learner = {
   firstName: "Ava",

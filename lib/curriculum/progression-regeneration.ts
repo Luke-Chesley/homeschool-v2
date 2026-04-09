@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 
 import { getDb } from "@/lib/db/server";
 import { curriculumNodes, curriculumPhases, curriculumPhaseNodes, curriculumSkillPrerequisites } from "@/lib/db/schema";
-import { getAdapterForTask } from "@/lib/ai/registry";
+import { getLearningCoreGatewayAdapter } from "@/lib/ai/learning-core-adapter";
 import { resolvePrompt } from "@/lib/prompts/store";
 import {
   buildCurriculumProgressionPrompt,
@@ -234,7 +234,7 @@ export async function regenerateCurriculumProgression(
     {
       resolvePrompt,
       complete: (options: any) => {
-        const adapter = getAdapterForTask("curriculum.generate.progression");
+        const adapter = getLearningCoreGatewayAdapter();
         return adapter.complete(options);
       },
     },

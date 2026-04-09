@@ -31,9 +31,8 @@ import {
 } from "@/lib/prompts/lesson-draft";
 import { resolvePrompt } from "@/lib/prompts/store";
 
-import { getAdapterForTask } from "./registry";
-import { getModelForTask } from "./provider-adapter";
-import { getAiRoutingConfig } from "./routing";
+import { getLearningCoreGatewayAdapter } from "./learning-core-adapter";
+import { getAiRoutingConfig, getModelForTask } from "./provider-adapter";
 import type { AiTaskName, ArtifactLineage, ChatMessage, CopilotContext, GenerationJob } from "./types";
 
 const StandardsSuggestOutputSchema = z.object({
@@ -178,7 +177,7 @@ function getTaskRuntime(taskName: AiTaskName) {
   const routing = getAiRoutingConfig();
 
   return {
-    adapter: getAdapterForTask(taskName),
+    adapter: getLearningCoreGatewayAdapter(),
     model: getModelForTask(taskName, routing),
   };
 }

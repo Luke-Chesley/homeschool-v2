@@ -1,185 +1,122 @@
 # Homeschool V2
 
-Homeschool V2 is a Next.js App Router repo for a planning-first homeschool platform. This README is meant to answer the practical question: where does stuff live, and what controls what?
+Homeschool V2 is the Next.js app for the product. It owns the UI, app routes, auth/session handling, product data, and app-facing endpoints.
 
-## What This Repo Is
+`learning-core` is now a separate Python service. It owns provider SDKs, model execution, and the extracted AI runtime.
 
-- `app/` holds routes, layouts, and API handlers.
-- `components/` holds UI, grouped by feature area.
-- `lib/` holds domain logic, session/auth code, DB access, and integration helpers.
-- `contracts/` holds first-class contracts for all AI-generated artifacts.
-- `docs/` holds plans and architecture/product notes.
-- `scripts/`, `supabase/`, and `drizzle/` hold local dev and data infrastructure.
+## Read This First
 
-## High-Level Mental Model
+- `app/(parent)` and `app/(learner)` are route groups, not URL segments.
+- The parent workspace gate and shell live in `app/(parent)/layout.tsx`.
+- `http://localhost:3000` is reserved for the main checkout at `/home/luke/Desktop/homeschool-v2`.
+- AI provider credentials and model config no longer belong in this repo. They belong in `learning-core`.
 
-Most features in this repo follow the same path:
+## Route Map
 
-1. A route in `app/` renders a page or handles a request.
-2. That route uses UI from `components/<feature>/`.
-3. Page and API logic call service/domain code in `lib/<feature>/`.
-4. Session and auth context come from `lib/app-session/` and `lib/auth/`.
-5. Data access goes through `lib/db/` repositories, schema, and server DB helpers.
+| URL | Open These Files First |
+| --- | --- |
+| `/today` | `app/(parent)/today/page.tsx`, `app/(parent)/today/actions.ts`, `lib/planning/today-service.ts` |
+| `/planning` | `app/(parent)/planning/page.tsx`, `components/planning/`, `lib/planning/` |
+| `/curriculum` | `app/(parent)/curriculum/page.tsx`, `components/curriculum/`, `lib/curriculum/` |
+| `/tracking` | `app/(parent)/tracking/page.tsx`, `components/tracking/`, `lib/tracking/`, `lib/homeschool/attendance/` |
+| `/copilot` | `app/(parent)/copilot/page.tsx`, `components/copilot/`, `lib/ai/task-service.ts`, `lib/prompts/store.ts`, `lib/learning-core/` |
+| `/users` | `app/users/page.tsx`, `components/users/`, `lib/users/` |
+| `/onboarding` | `app/onboarding/page.tsx`, `lib/homeschool/onboarding/`, `app/api/homeschool/onboarding/route.ts` |
+| `/sample-activity` | `app/sample-activity/page.tsx`, `components/activities/`, `lib/activities/` |
 
-If you want to understand how a feature works, look at those layers in that order.
+## Where To Start
 
-## Repo Structure
+If you are trying to change one part of the app, start here instead of scanning the whole repo.
 
-### `app/`
+- Today workspace and lesson planning:
+  `app/(parent)/today/page.tsx`, `app/(parent)/today/actions.ts`, `lib/planning/today-service.ts`
+- Parent shell, redirects, and workspace access:
+  `app/(parent)/layout.tsx`, `components/parent-shell/`, `components/navigation/`
+- Learner management:
+  `app/users/page.tsx`, `lib/users/service.ts`, `app/api/users/route.ts`
+- App session and auth bootstrap:
+  `app/api/app-session/route.ts`, `lib/app-session/`, `lib/auth/`
+- Curriculum generation, review, and source updates:
+  `app/api/curriculum/`, `lib/curriculum/ai-draft-service.ts`, `lib/curriculum/service.ts`
+- Copilot chat and AI job entrypoints:
+  `app/api/ai/`, `lib/ai/task-service.ts`, `lib/ai/copilot-store.ts`
+- Activity rendering and activity data:
+  `components/activities/`, `lib/activities/`, `lib/learning-core/activity.ts`
+- Database shape and repositories:
+  `lib/db/schema/`, `lib/db/repositories/`, `lib/db/server.ts`
 
-This is the main entrypoint for the product.
+## AI Boundary
 
-- `app/layout.tsx`
-  Root layout for the whole app.
-- `app/page.tsx`
-  Public landing page.
-- `app/(parent)/`
-  Parent/admin workspace routes such as today, curriculum, planning, tracking, and copilot.
-- `app/(learner)/`
-  Learner-facing routes with a simplified shell.
-- `app/api/`
-  Server route handlers for app session state, users, curriculum, AI chat, activities, and other server mutations.
-- `app/users/`
-  Learner/user management surface.
-- `app/sample-activity/`
-  Activity/testing surface.
+The repo is mid-migration. The important ownership line is:
 
-### `components/`
+- `learning-core` owns provider SDKs, provider env, model execution, and extracted skill logic.
+- `homeschool-v2` owns app routes, app endpoints, persistence, prompt previews, and the remaining orchestration that has not moved yet.
 
-Feature UI and shared UI primitives.
+If you are looking for AI-related code:
 
-- `components/ui/`
-  Shared low-level components.
-- `components/navigation/`
-  Global tabs and nav configuration.
-- `components/parent-shell/`
-  Parent workspace shell, sidebar, and topbar.
-- `components/activities/`
-  Activity UI.
-- `components/planning/`
-  Planning-related UI.
-- `components/curriculum/`
-  Curriculum UI and source-management components.
-- `components/tracking/`
-  Tracking/reporting UI.
-- `components/copilot/`
-  AI/copilot UI.
-- `components/users/`
-  Learner/user management UI.
-- `components/theme/`
-  Theme toggle and theme-related client behavior.
+- `lib/learning-core/`
+  The HTTP client boundary to the external Python service.
+- `lib/ai/task-service.ts`
+  Remaining app-side orchestration for chat, job dispatch, lesson draft generation, worksheet generation, and other app workflows.
+- `lib/prompts/`
+  Legacy prompt and preview templates that are still used locally by curriculum and copilot flows.
+- `app/api/ai/*` and `app/api/curriculum/*`
+  App-facing endpoints. These are entrypoints and wrappers around app behavior. They are not provider SDK implementations.
 
-### `lib/`
+## Key Directories
 
-Most non-UI logic lives here.
-
+- `app/`
+  Pages, layouts, server actions, and API routes.
+- `components/`
+  Feature UI and shared UI primitives.
 - `lib/app-session/`
-  App workspace/session resolution, including active learner context.
+  Active workspace and learner/session resolution.
 - `lib/auth/`
   Browser/server/admin auth helpers.
 - `lib/db/`
-  Database client setup, schema, repositories, and DB-facing helpers.
-- `lib/env/`
-  Environment parsing and validation.
-- `lib/platform/`
-  Platform integrations such as Supabase setup.
-- `lib/learning-core/`
-  HTTP client adapters and request builders for the external Python AI service.
-- `lib/users/`
-  Workspace bootstrapping, learner creation, and user-related service logic.
-- `lib/activities/`
-  Activity/session/domain logic.
+  Database schema, repositories, and DB helpers.
 - `lib/planning/`
-  Planning domain types, repositories, and services.
+  Planning services, weekly routes, and today workspace logic.
 - `lib/curriculum/`
-  Curriculum domain types, services, import logic, and repositories.
+  Curriculum services, AI draft orchestration, import logic, and source management.
+- `lib/activities/`
+  Activity definitions, parsing, and rendering support.
 - `lib/tracking/`
-  Tracking/reporting domain logic.
-- `lib/ai/`
-  Remaining in-repo AI/copilot task and store logic that has not been extracted yet.
-- `lib/standards/`
-  Standards-related domain logic.
-- `lib/storage/`
-  Storage client helpers.
-- `lib/prompts/`
-  Remaining in-repo prompt definitions that have not been moved to `learning-core` yet.
+  Tracking and reporting logic.
+- `lib/homeschool/`
+  Onboarding, attendance, reporting, and homeschool-specific flows.
+- `contracts/`
+  Contracts for AI-generated artifacts. Update these when artifact shape or lifecycle changes.
+- `docs/`
+  Plans, architecture notes, and product documentation.
 
-### `contracts/`
+## Workspace Files And Local Clutter
 
-First-class contracts for all AI-generated artifacts.
-
-- `contracts/README.md`
-  Explains how to use and update contracts.
-- `contracts/contract-index.json`
-  Machine-readable registry of artifact contracts.
-- Artifact docs (`curriculum-artifact.md`, etc.)
-  Detailed shape, field, and lifecycle documentation.
-
-### `docs/`
-
-Project documentation and implementation notes.
-
-- `docs/plans/`
-  Working plan documents for major slices of the product.
-
-### `scripts/`
-
-Local dev helpers for:
-
-- Supabase stack control
-- Inngest dev process
-- local tool and environment checks
-
-### `supabase/`
-
-Local Supabase configuration for local stack development.
-
-### `drizzle/`
-
-Drizzle migration metadata and generated data-layer artifacts.
-
-## Local Workspace And Non-Product Directories
-
-These matter during development, but they are not app feature code:
+These exist in the repo, but they are not the main product code path:
 
 - `.worktrees/`
-  Temporary git worktrees for isolated branch work. The canonical `main` checkout is `/home/luke/Desktop/homeschool-v2`.
-- `.next/`
-  Next.js dev/build output.
-- `node_modules/`
-  Installed dependencies.
-- `.playwright-cli/`
-  Local browser automation support files.
-
-## Common Control Points
-
-If you are trying to find the source of behavior, these are the usual starting points:
-
-- Route access and shell choice:
-  `app/layout.tsx`, `app/(parent)/layout.tsx`, `app/(learner)/layout.tsx`
-
-- Auth and app session loading:
-  `lib/auth/`, `lib/app-session/`, `app/api/app-session/`
-
-- Database-backed data access:
-  `lib/db/server.ts`, `lib/db/schema/`, `lib/db/repositories/`
-
-- Feature logic:
-  `lib/<feature>/`, `components/<feature>/`, and matching `app/...` routes
-
-- API entrypoints:
-  `app/api/**/route.ts`
+  Temporary branch worktrees.
+- `.agents/`, `.claude/`, `.codex/`
+  Local agent tooling and instructions.
+- `.next/`, `node_modules/`
+  Build and dependency output.
+- `curriculum.json`
+  Local data/debug artifact.
+- `skills-lock.json`
+  Local tooling lock file.
+- `ollama_debug_tui.py`
+  Local debugging script.
+- `tmp/`
+  Scratch output from debug scripts.
 
 ## Development Notes
 
-- `http://localhost:3000` is reserved for the main checkout.
-- Branch worktrees under `.worktrees/` should use their own ports.
-- The app now expects a separate `learning-core` service on `LEARNING_CORE_BASE_URL` for extracted AI operations.
-- Local split-dev is two processes:
+- Start the main app from `/home/luke/Desktop/homeschool-v2` with `corepack pnpm dev` or `make dev`.
+- Branch worktrees under `.worktrees/` must run on their own port, not `3000`.
+- Local split development is two processes:
   `homeschool-v2` on `http://localhost:3000` and `learning-core` on `http://127.0.0.1:8000`.
-- The minimum verification gate is currently `corepack pnpm typecheck`.
-- Before merging a branch back to `main`, run `bash ./scripts/verify-before-merge.sh` from the target checkout so the typecheck and UI smoke test both pass.
-- AI provider credentials and model-routing env now belong in the separate `learning-core` repo.
-- `homeschool-v2` should only carry the service boundary vars:
+- `homeschool-v2` should only carry the service boundary env:
   `LEARNING_CORE_BASE_URL` and optionally `LEARNING_CORE_API_KEY`.
-- If major structure or subsystem ownership changes, update this README in the same task.
+- The minimum verification gate is `corepack pnpm typecheck`.
+- Before merging a branch into `main`, run `bash ./scripts/verify-before-merge.sh` from the main checkout.
+- If major structure or ownership changes, update this README in the same task.

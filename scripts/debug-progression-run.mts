@@ -12,7 +12,7 @@ import { eq } from "drizzle-orm";
 import { getCurriculumSource } from "@/lib/curriculum/service";
 import { generateCurriculumProgression } from "@/lib/curriculum/ai-draft-service";
 import { resolvePrompt } from "@/lib/prompts/store";
-import { getAdapterForTask } from "@/lib/ai/registry";
+import { getLearningCoreGatewayAdapter } from "@/lib/ai/learning-core-adapter";
 import {
   buildCurriculumProgressionPrompt,
   CURRICULUM_PROGRESSION_PROMPT_VERSION,
@@ -135,7 +135,7 @@ async function main() {
     {
       resolvePrompt: async () => promptTemplate,
       complete: async (options) => {
-        const adapter = getAdapterForTask(modelTask);
+        const adapter = getLearningCoreGatewayAdapter();
         const finalOptions = {
           ...options,
           ...(maxOutputTokens ? { maxTokens: maxOutputTokens } : {}),
