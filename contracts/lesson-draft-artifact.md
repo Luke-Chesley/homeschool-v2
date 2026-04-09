@@ -55,7 +55,7 @@ The Lesson Draft Artifact is the structured session plan returned by `learning-c
 | follow_through | string | Carry-forward note for the next session. |
 | co_teacher_notes | string[] | Notes for another adult. |
 | accommodations | string[] | Learner accommodations. |
-| lesson_shape | string | High-level planning pattern used by the skill. |
+| lesson_shape | enum | Machine-readable planning pattern slug: `balanced`, `direct_instruction`, `discussion_heavy`, `project_based`, `practice_heavy`, or `gentle_short_blocks`. |
 
 ### Derived / Computed Fields
 | Field | Source | Logic |
@@ -70,6 +70,7 @@ The Lesson Draft Artifact is the structured session plan returned by `learning-c
 - At least one instructional block must exist.
 - At least one visible check for understanding must exist.
 - Text remains short and operational.
+- `lesson_shape`, when present, must be one of the canonical producer slugs. Prose labels are invalid.
 
 ## Ownership & Hierarchy
 - **Parent:** Daily planning context / generated artifact record

@@ -46,6 +46,7 @@
       "docPath": "contracts/lesson-draft-artifact.md",
       "canonicalSources": [
         "learning-core/learning_core/skills/session_generate/SKILL.md",
+        "learning-core/learning_core/contracts/lesson_draft.py",
         "learning-core/learning_core/contracts/session_plan.py",
         "lib/learning-core/session.ts"
       ],
