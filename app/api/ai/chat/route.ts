@@ -125,7 +125,11 @@ export async function POST(req: NextRequest) {
       } catch (err) {
         console.error("[api/ai/chat] Streaming error:", err);
         controller.enqueue(
-          encoder.encode(`data: ${JSON.stringify({ error: "Stream failed" })}\n\n`)
+          encoder.encode(
+            `data: ${JSON.stringify({
+              error: err instanceof Error ? err.message : "Stream failed",
+            })}\n\n`
+          )
         );
         controller.close();
       }

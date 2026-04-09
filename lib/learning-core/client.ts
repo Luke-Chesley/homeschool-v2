@@ -1,13 +1,13 @@
 import "@/lib/server-only";
 
-import { getServerEnv } from "@/lib/env/server";
+import { getLearningCoreEnv } from "@/lib/env/server";
 
 function trimTrailingSlash(value: string) {
   return value.endsWith("/") ? value.slice(0, -1) : value;
 }
 
 function getLearningCoreBaseUrl() {
-  const env = getServerEnv();
+  const env = getLearningCoreEnv();
   const baseUrl = env.LEARNING_CORE_BASE_URL?.trim();
 
   if (!baseUrl) {
@@ -18,7 +18,7 @@ function getLearningCoreBaseUrl() {
 }
 
 function getLearningCoreHeaders() {
-  const env = getServerEnv();
+  const env = getLearningCoreEnv();
   const apiKey = env.LEARNING_CORE_API_KEY?.trim();
 
   return {
@@ -49,4 +49,3 @@ export async function postLearningCore<T>(path: string, body: unknown): Promise<
 
   return payload as T;
 }
-

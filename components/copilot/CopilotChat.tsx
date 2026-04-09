@@ -79,35 +79,37 @@ export function CopilotChat({ sessionId: initialSessionId, initialMessages = [],
           const json = line.slice(6);
           if (!json.trim()) continue;
 
+          let event: any;
           try {
-            const event = JSON.parse(json);
-
-            if (event.sessionId && !sessionId) {
-              setSessionId(event.sessionId);
-            }
-
-            if (event.delta) {
-              accumulated += event.delta;
-              setStreamingContent(accumulated);
-            }
-
-            if (event.done) {
-              setMessages((prev) => [
-                ...prev,
-                {
-                  role: "assistant" as const,
-                  content: accumulated,
-                  createdAt: new Date().toISOString(),
-                },
-              ]);
-              setStreamingContent(null);
-            }
-
-            if (event.error) {
-              throw new Error(event.error);
-            }
-          } catch (parseErr) {
+            event = JSON.parse(json);
+          } catch {
             // Skip malformed events
+            continue;
+          }
+
+          if (event.sessionId && !sessionId) {
+            setSessionId(event.sessionId);
+          }
+
+          if (event.delta) {
+            accumulated += event.delta;
+            setStreamingContent(accumulated);
+          }
+
+          if (event.error) {
+            throw new Error(event.error);
+          }
+
+          if (event.done) {
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: "assistant" as const,
+                content: accumulated,
+                createdAt: new Date().toISOString(),
+              },
+            ]);
+            setStreamingContent(null);
           }
         }
       }
