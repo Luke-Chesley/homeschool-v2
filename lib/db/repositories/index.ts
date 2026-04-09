@@ -1,6 +1,5 @@
 import type { HomeschoolDb } from "@/lib/db/client";
 import { createActivitiesRepository } from "@/lib/db/repositories/activities";
-import { createAiPlatformRepository } from "@/lib/db/repositories/ai-platform";
 import { createCopilotRepository } from "@/lib/db/repositories/copilot";
 import { createCurriculumRepository } from "@/lib/db/repositories/curriculum";
 import { createCurriculumRoutingRepository } from "@/lib/db/repositories/curriculum-routing";
@@ -15,7 +14,6 @@ export function createRepositories(db: HomeschoolDb) {
     organizations: createOrganizationRepository(db),
     learners: createLearnerRepository(db),
     standards: createStandardsRepository(db),
-    aiPlatform: createAiPlatformRepository(db),
     curriculum: createCurriculumRepository(db),
     curriculumRouting: createCurriculumRoutingRepository(db),
     planning: createPlanningRepository(db),

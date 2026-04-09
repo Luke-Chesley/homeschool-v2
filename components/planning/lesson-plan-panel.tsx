@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Loader2, Sparkles } from "lucide-react";
 
+import { LearningCorePromptPreviewCard } from "@/components/debug/LearningCorePromptPreviewCard";
 import {
   LessonDraftRenderer,
   LegacyLessonDraftNotice,
@@ -43,7 +44,20 @@ type LessonPlanState =
 type PromptDebugState =
   | { status: "idle"; open: false }
   | { status: "loading"; open: true }
-  | { status: "ready"; open: true; systemPrompt: string; userPrompt: string }
+  | {
+      status: "ready";
+      open: true;
+      preview: {
+        operation_name: string;
+        skill_name: string;
+        skill_version: string;
+        request_id: string;
+        allowed_tools: string[];
+        system_prompt: string;
+        user_prompt: string;
+        request_envelope: unknown;
+      };
+    }
   | { status: "error"; open: true; message: string };
 
 export function LessonPlanPanel({
@@ -143,7 +157,19 @@ export function LessonPlanPanel({
       });
 
       const data = (await response.json()) as
-        | { debug: { systemPrompt: string; userPrompt: string }; error?: string }
+        | {
+            debug: {
+              operation_name: string;
+              skill_name: string;
+              skill_version: string;
+              request_id: string;
+              allowed_tools: string[];
+              system_prompt: string;
+              user_prompt: string;
+              request_envelope: unknown;
+            };
+            error?: string;
+          }
         | { error: string };
 
       if (!response.ok) {
@@ -157,8 +183,7 @@ export function LessonPlanPanel({
       setPromptDebugState({
         status: "ready",
         open: true,
-        systemPrompt: data.debug.systemPrompt,
-        userPrompt: data.debug.userPrompt,
+        preview: data.debug,
       });
     } catch (error) {
       setPromptDebugState({
@@ -238,18 +263,7 @@ export function LessonPlanPanel({
             ) : null}
             {promptDebugState.status === "ready" ? (
               <div className="grid gap-4">
-                <div>
-                  <p className="text-sm font-medium text-foreground">System</p>
-                  <pre className="mt-2 overflow-x-auto whitespace-pre-wrap rounded-lg border border-border/70 bg-muted/35 p-3 text-xs leading-6 text-foreground">
-                    {promptDebugState.systemPrompt}
-                  </pre>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-foreground">User</p>
-                  <pre className="mt-2 max-h-[22rem] overflow-auto whitespace-pre-wrap rounded-lg border border-border/70 bg-muted/35 p-3 text-xs leading-6 text-foreground">
-                    {promptDebugState.userPrompt}
-                  </pre>
-                </div>
+                <LearningCorePromptPreviewCard preview={promptDebugState.preview} />
               </div>
             ) : null}
           </div>

@@ -4,12 +4,7 @@ import { eq } from "drizzle-orm";
 
 import { getDb } from "@/lib/db/server";
 import { curriculumNodes, curriculumPhases, curriculumPhaseNodes, curriculumSkillPrerequisites } from "@/lib/db/schema";
-import { getLearningCoreGatewayAdapter } from "@/lib/ai/learning-core-adapter";
-import { resolvePrompt } from "@/lib/prompts/store";
-import {
-  buildCurriculumProgressionPrompt,
-  CURRICULUM_PROGRESSION_PROMPT_VERSION,
-} from "@/lib/prompts/curriculum-draft";
+import { previewProgressionGenerate } from "@/lib/learning-core/curriculum";
 
 import {
   getCurriculumSource,
@@ -231,13 +226,6 @@ export async function regenerateCurriculumProgression(
       artifact: minimalArtifact as any,
       skillRefs,
     },
-    {
-      resolvePrompt,
-      complete: (options: any) => {
-        const adapter = getLearningCoreGatewayAdapter();
-        return adapter.complete(options);
-      },
-    },
   );
 
   const provenance: ProgressionProvenance = "manual_regeneration";
@@ -247,7 +235,7 @@ export async function regenerateCurriculumProgression(
       sourceId: params.sourceId,
       status: "explicit_failed",
       lastFailureReason: result.failureReason ?? "All progression generation attempts failed.",
-      lastFailureCategory: result.attempts?.[result.attempts.length - 1]?.failureCategory ?? "unknown",
+      lastFailureCategory: "unknown",
       attemptCount: result.attemptCount,
       attempts: result.attempts,
       usingInferredFallback: true,
@@ -436,7 +424,7 @@ export async function buildProgressionPromptPreview(params: {
   sourceId: string;
   householdId: string;
   learnerDisplayName: string;
-}): Promise<{ systemPrompt: string; userPrompt: string }> {
+}) {
   const source = await getCurriculumSource(params.sourceId, params.householdId);
   if (!source) {
     throw new Error(`Curriculum source not found: ${params.sourceId}`);
@@ -454,22 +442,15 @@ export async function buildProgressionPromptPreview(params: {
 
   const skillRefs = skillNodes.map((n) => ({ skillId: n.id, skillTitle: n.title }));
 
-  const prompt = await resolvePrompt(
-    "curriculum.generate.progression",
-    CURRICULUM_PROGRESSION_PROMPT_VERSION,
-  );
-
-  const userPrompt = buildCurriculumProgressionPrompt({
-    learnerName: params.learnerDisplayName,
-    sourceTitle: source.title,
-    sourceSummary: source.description || undefined,
-    skillCatalog: skillRefs.map((r) => ({ skillRef: r.skillId, title: r.skillTitle })),
+  return previewProgressionGenerate({
+    input: {
+      learnerName: params.learnerDisplayName,
+      sourceTitle: source.title,
+      sourceSummary: source.description || undefined,
+      skillCatalog: skillRefs.map((r) => ({ skillRef: r.skillId, title: r.skillTitle })),
+    },
+    organizationId: params.householdId,
   });
-
-  return {
-    systemPrompt: prompt.systemPrompt,
-    userPrompt,
-  };
 }
 
 // ── Prompt-only helpers (not used for persistence) ───────────────────────────

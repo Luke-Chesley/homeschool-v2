@@ -7,35 +7,8 @@ import { validateActivitySpec } from "@/lib/activities/validation";
 import type { StructuredLessonDraft } from "@/lib/lesson-draft/types";
 import type { PlanItem } from "@/lib/planning/types";
 
-import { postLearningCore } from "./client";
-
-const LearningCorePromptPreviewSchema = z.object({
-  system_prompt: z.string().min(1),
-  user_prompt: z.string().min(1),
-});
-
-const LearningCoreLineageSchema = z.object({
-  operation_name: z.string().min(1),
-  skill_name: z.string().min(1),
-  skill_version: z.string().min(1),
-  provider: z.string().min(1),
-  model: z.string().min(1),
-  executed_at: z.string().min(1),
-});
-
-const LearningCoreTraceSchema = z.object({
-  request_id: z.string().min(1),
-  operation_name: z.string().min(1),
-  allowed_tools: z.array(z.string()),
-  prompt_preview: LearningCorePromptPreviewSchema,
-  executed_at: z.string().min(1),
-});
-
-const LearningCoreActivityExecuteResponseSchema = z.object({
-  artifact: ActivitySpecSchema,
-  lineage: LearningCoreLineageSchema,
-  trace: LearningCoreTraceSchema,
-});
+import { buildLearningCoreEnvelope } from "./envelope";
+import { executeLearningCoreOperation, previewLearningCoreOperation } from "./operations";
 
 function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.length > 0))];
@@ -88,32 +61,44 @@ function assertStrictActivityArtifact(value: z.infer<typeof ActivitySpecSchema>)
 export async function previewLessonDraftActivityPrompt(
   params: BuildLearningCoreActivityInputParams,
 ) {
-  const payload = await postLearningCore(
-    "/v1/operations/generate-activities-from-plan-session/prompt-preview",
-    {
+  return previewLearningCoreOperation(
+    "activity_generate",
+    buildLearningCoreEnvelope({
       input: buildLearningCoreActivityGenerateInput(params),
-    },
+      surface: "today_workspace",
+      lessonSessionId: params.lessonSessionId ?? null,
+      planItemIds: (params.planItems ?? []).map((item) => item.id),
+      workflowMode: params.workflowMode ?? null,
+      requestOrigin: "server_action",
+      debug: true,
+      presentationContext: {
+        audience: "internal",
+        displayIntent: "preview",
+        shouldReturnPromptPreview: true,
+      },
+    }),
   );
-
-  const parsed = LearningCorePromptPreviewSchema.parse(payload);
-  return {
-    systemPrompt: parsed.system_prompt,
-    userPrompt: parsed.user_prompt,
-  };
 }
 
 export async function generateLessonDraftActivitySpec(
   params: BuildLearningCoreActivityInputParams,
 ) {
-  const payload = await postLearningCore(
-    "/v1/operations/generate-activities-from-plan-session/execute",
-    {
+  const parsed = await executeLearningCoreOperation(
+    "activity_generate",
+    buildLearningCoreEnvelope({
       input: buildLearningCoreActivityGenerateInput(params),
-    },
+      surface: "today_workspace",
+      lessonSessionId: params.lessonSessionId ?? null,
+      planItemIds: (params.planItems ?? []).map((item) => item.id),
+      workflowMode: params.workflowMode ?? null,
+      requestOrigin: "server_action",
+      presentationContext: {
+        audience: "parent",
+        displayIntent: "final",
+      },
+    }),
+    ActivitySpecSchema,
   );
-
-  const parsed = LearningCoreActivityExecuteResponseSchema.parse(payload);
   assertStrictActivityArtifact(parsed.artifact);
   return parsed;
 }
-

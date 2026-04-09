@@ -8,7 +8,7 @@
 The Activity Artifact represents a structured, AI-generated specification for an interactive learner experience. It is designed to be rendered deterministically by a bounded component library, avoiding arbitrary UI code.
 
 ## Producers
-- **Entrypoints:** `learning-core /v1/operations/generate-activities-from-plan-session/execute`
+- **Entrypoints:** `learning-core /v1/operations/activity_generate/execute`
 - **Canonical Source Files:**
   - `lib/learning-core/activity.ts` (typed app adapter and boundary validation)
   - `lib/activities/spec.ts` (Zod schema for v2 specs)
@@ -80,6 +80,5 @@ The Activity Artifact represents a structured, AI-generated specification for an
   - `lesson-draft-artifact.md`: Provides the context for activity generation.
 
 ## Known Gaps / TODOs
-- **Legacy Compatibility:** Transitioning from v1 (blueprint) to v2 (spec) is ongoing.
 - **Cross-Repo Contract Sharing:** `learning-core` is now the producer, but the app still keeps a local consumer schema for fail-fast boundary validation until shared contract codegen exists.
 - **Renderer Parity:** Not all components in the spec have equivalent renderers in all platforms.

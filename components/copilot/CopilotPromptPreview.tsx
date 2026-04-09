@@ -3,9 +3,19 @@
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
+import { LearningCorePromptPreviewCard } from "@/components/debug/LearningCorePromptPreviewCard";
 
 interface CopilotPromptPreviewProps {
-  promptPreview: string;
+  promptPreview: {
+    operation_name: string;
+    skill_name: string;
+    skill_version: string;
+    request_id: string;
+    allowed_tools: string[];
+    system_prompt: string;
+    user_prompt: string;
+    request_envelope: unknown;
+  };
 }
 
 export function CopilotPromptPreview({ promptPreview }: CopilotPromptPreviewProps) {
@@ -34,14 +44,12 @@ export function CopilotPromptPreview({ promptPreview }: CopilotPromptPreviewProp
           <div>
             <p className="text-sm font-medium text-foreground">Prompt preview</p>
             <p className="text-xs leading-5 text-muted-foreground">
-              Exact system prompt plus injected context.
+              Exact request envelope and effective prompts returned by learning-core.
             </p>
           </div>
 
-          <div className="mt-4 rounded-lg border border-border/70 bg-muted/25">
-            <pre className="max-h-[26rem] overflow-auto whitespace-pre-wrap break-words p-4 text-xs leading-6 text-foreground">
-              {promptPreview}
-            </pre>
+          <div className="mt-4 rounded-lg border border-border/70 bg-muted/25 p-4">
+            <LearningCorePromptPreviewCard preview={promptPreview} />
           </div>
         </div>
       ) : null}

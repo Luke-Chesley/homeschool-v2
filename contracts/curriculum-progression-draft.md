@@ -1,51 +1,63 @@
 # Contract: Curriculum Progression Draft
 
 - **Status:** Active
-- **Canonical Artifact Name:** CurriculumProgressionDraft
-- **Current Version:** 2.0
+- **Canonical Artifact Name:** ProgressionArtifact
+- **Current Version:** learning-core skill version
 
 ## Purpose
-Defines the only valid model output shape for progression generation. It strictly uses `skillRef` for linkage, eliminating title-based or hybrid matching.
+The Curriculum Progression Draft is the structured output returned by `learning-core` when the app executes `progression_generate`. It defines learning phases and dependency edges using stable `skillRef` identifiers.
 
 ## Producers
-- **Entrypoints:** The AI model responding to the progression generation prompt.
+- **Entrypoints:** `learning-core: POST /v1/operations/progression_generate/execute`
+- **Canonical Source Files:**
+  - `learning-core/learning_core/skills/progression_generate/SKILL.md`
+  - `learning-core/learning_core/contracts/progression.py`
 
 ## Consumers
-- **Entrypoints:** `lib/curriculum/ai-draft.ts` (Parser) and `lib/curriculum/progression-validation.ts`.
+- **Entrypoints:**
+  - `lib/curriculum/ai-draft-service.ts`
+  - `lib/curriculum/progression-regeneration.ts`
+- **Processing Logic:**
+  - The app resolves `skillRef` values back to persisted curriculum nodes before storing progression data.
 
 ## Persistence
-- **Storage Location:** Raw attempt responses may be stored in DB progression state metadata for telemetry and debugging.
+- **Storage Location:** Stored only after app-side resolution/normalization. Raw draft output may be kept in debug metadata.
+- **Storage Shape:** Direct JSON object with `phases` and `edges`.
 
 ## Field Definitions
 
-```typescript
-{
-  "progression": {
-    "phases": [
-      {
-        "title": "string",
-        "description": "string optional",
-        "skillRefs": ["skill_ref_1", "skill_ref_2"]
-      }
-    ],
-    "edges": [
-      {
-        "fromSkillRef": "skill_ref_a",
-        "toSkillRef": "skill_ref_b",
-        "kind": "hardPrerequisite" | "recommendedBefore" | "revisitAfter" | "coPractice"
-      }
-    ]
-  }
-}
-```
+### Required Fields
+| Field | Type | Description |
+|-------|------|-------------|
+| phases | array | Ordered learning phases. |
+| edges | array | Explicit dependency edges between skills. |
 
-## Hard Rules
-- Output refs only, not titles.
-- Every `skillRef` must come from the provided skill catalog.
-- Every skill must appear in exactly one phase.
-- No duplicate phase assignment.
-- No self-loops.
+### Optional Fields
+| Field | Type | Description |
+|-------|------|-------------|
+| phases[].description | string | Optional description for a phase. |
+
+### Derived / Computed Fields
+| Field | Source | Logic |
+|-------|--------|-------|
+| lineage.skill_version | learning-core response | Captured by the app for audit/debug. |
+
+## Defaults & Fallbacks
+- The app does not infer missing phases or edges at generation time. It consumes the returned artifact or treats the call as failed.
+
+## Validation & Invariants
+- Every `skillRef` must come from the input skill catalog.
+- Every `skillRef` must appear in exactly one phase.
 - `hardPrerequisite` edges must be acyclic.
-- `revisitAfter` and `coPractice` may be cyclic.
-- No markdown fences in the parsed output.
-- JSON object only.
+- No self-loops.
+
+## Ownership & Hierarchy
+- **Parent:** Curriculum source
+- **Children:** Resolved progression phases and edges
+
+## Change Impact
+- **Downstream Effects:** Changes affect progression normalization, curriculum graph display, and planning order.
+- **Related Contracts:** `curriculum-progression-resolved.md`
+
+## Known Gaps / TODOs
+- The app still resolves `skillRef` values locally because persisted curriculum nodes remain product-owned records.

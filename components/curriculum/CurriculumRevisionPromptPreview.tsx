@@ -3,13 +3,27 @@
 import * as React from "react";
 import { Loader2 } from "lucide-react";
 
+import { LearningCorePromptPreviewCard } from "@/components/debug/LearningCorePromptPreviewCard";
 import { Button } from "@/components/ui/button";
 import type { CurriculumAiChatMessage } from "@/lib/curriculum/ai-draft";
 
 type PromptPreviewState =
   | { status: "idle"; open: false }
   | { status: "loading"; open: true }
-  | { status: "ready"; open: true; systemPrompt: string; userPrompt: string }
+  | {
+      status: "ready";
+      open: true;
+      preview: {
+        operation_name: string;
+        skill_name: string;
+        skill_version: string;
+        request_id: string;
+        allowed_tools: string[];
+        system_prompt: string;
+        user_prompt: string;
+        request_envelope: unknown;
+      };
+    }
   | { status: "error"; open: true; message: string };
 
 interface CurriculumRevisionPromptPreviewProps {
@@ -54,7 +68,19 @@ export function CurriculumRevisionPromptPreview({
       });
 
       const data = (await response.json()) as
-        | { debug: { systemPrompt: string; userPrompt: string }; error?: string }
+        | {
+            debug: {
+              operation_name: string;
+              skill_name: string;
+              skill_version: string;
+              request_id: string;
+              allowed_tools: string[];
+              system_prompt: string;
+              user_prompt: string;
+              request_envelope: unknown;
+            };
+            error?: string;
+          }
         | { error: string };
 
       if (!response.ok) {
@@ -68,8 +94,7 @@ export function CurriculumRevisionPromptPreview({
       setState({
         status: "ready",
         open: true,
-        systemPrompt: data.debug.systemPrompt,
-        userPrompt: data.debug.userPrompt,
+        preview: data.debug,
       });
     } catch (error) {
       setState({
@@ -125,18 +150,7 @@ export function CurriculumRevisionPromptPreview({
 
           {state.status === "ready" ? (
             <div className="mt-4 grid gap-4">
-              <div>
-                <p className="text-sm font-medium text-foreground">System</p>
-                <pre className="mt-2 max-h-[12rem] overflow-auto whitespace-pre-wrap rounded-lg border border-border/70 bg-muted/35 p-3 text-xs leading-6 text-foreground">
-                  {state.systemPrompt}
-                </pre>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-foreground">User</p>
-                <pre className="mt-2 max-h-[20rem] overflow-auto whitespace-pre-wrap rounded-lg border border-border/70 bg-muted/35 p-3 text-xs leading-6 text-foreground">
-                  {state.userPrompt}
-                </pre>
-              </div>
+              <LearningCorePromptPreviewCard preview={state.preview} />
             </div>
           ) : null}
         </div>

@@ -1,27 +1,35 @@
 # Artifact Contracts
 
-This directory serves as the first-class contract registry for all generated artifacts in the Homeschool V2 system.
+This directory is the contract registry for the durable artifacts and view models that `homeschool-v2` persists or consumes.
+
+`learning-core` now owns:
+- prompt templates
+- `SKILL.md` instructions
+- prompt assembly
+- provider/model selection
+- execution
+- prompt preview generation
+
+These contract docs therefore describe the boundary between the product app and `learning-core`, not app-owned prompt files.
 
 ## Purpose
 
-Generated artifacts (curriculum, lesson plans, activities) are the core of the system. To ensure reliability and maintainability, we explicitly document:
-- What each artifact is and its purpose.
-- Its required, optional, and defaulted fields.
-- The producers (code/prompts) and consumers (UI/services) of the artifact.
-- Where it is persisted and how it is validated.
+- Document the shape of generated artifacts and transient generation inputs.
+- Make producer and consumer ownership explicit across the two repos.
+- Define persistence and downstream breakage when shapes change.
 
-## How to Use These Contracts
+## How To Use These Contracts
 
-- **For Developers:** Consult these docs before changing any prompt that generates structured data or any service that consumes it.
-- **For AI Agents:** Use these docs as the ground truth for the shape of the data you are expected to produce or modify.
-- **For Onboarding:** Read these to understand the data flow between the AI generation layer and the operational application.
+- Before changing any generated artifact shape, update the matching contract here in the same change.
+- When the producer lives in `learning-core`, update both the contract doc here and the source contract/schema in `learning-core`.
+- When a debug route or persistence flow changes, update the producer/consumer paths in `contract-index.json`.
 
-## How to Update
+## Required Updates
 
-1. If you change the shape, required fields, defaults, versioning, or persistence of a generated artifact, you **must** update the matching contract file in this directory.
-2. If you create a new type of generated artifact, create a new contract file using `_template.md` and add it to `contract-index.json`.
-3. Run `npm run contracts:check` (or equivalent) to ensure the registry remains structurally sound.
+1. If you change required fields, optional fields, defaults, lineage/version fields, or persistence shape, update the matching contract file.
+2. If you add a new artifact or durable generation input, create a contract from `_template.md` and register it in `contract-index.json`.
+3. Run `npm run contracts:check` before finishing.
 
 ## Index
 
-See [contract-index.json](./contract-index.json) for a machine-readable registry of all contracts and their associated code paths.
+See [contract-index.json](./contract-index.json) for the machine-readable registry.

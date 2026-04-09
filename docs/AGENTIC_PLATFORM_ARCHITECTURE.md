@@ -18,10 +18,9 @@ This should preserve the product's current control model: AI helps, but the adul
 
 ## Executive Summary
 
-The repo already contains most of the foundation needed for an agentic system:
+The product now contains most of the foundation needed for an agentic system:
 
-- a task-based AI layer instead of one giant prompt helper
-- durable AI job persistence
+- a separate `learning-core` runtime instead of app-owned prompt execution
 - copilot threads, messages, and structured actions
 - durable lesson sessions and plan items
 - schema-driven interactive activities instead of arbitrary generated code
@@ -72,12 +71,12 @@ The system already has strong architectural anchors for agentic behavior.
 - [docs/VISION.md](/home/luke/Desktop/homeschool-v2/docs/VISION.md)
 - [lib/platform/settings.ts](/home/luke/Desktop/homeschool-v2/lib/platform/settings.ts)
 
-### AI tasking and job persistence
+### Learning-core boundary and operation calls
 
-- [lib/ai/types.ts](/home/luke/Desktop/homeschool-v2/lib/ai/types.ts)
-- [lib/ai/task-service.ts](/home/luke/Desktop/homeschool-v2/lib/ai/task-service.ts)
-- [lib/db/schema/aiPlatform.ts](/home/luke/Desktop/homeschool-v2/lib/db/schema/aiPlatform.ts)
-- [app/api/ai/generate/route.ts](/home/luke/Desktop/homeschool-v2/app/api/ai/generate/route.ts)
+- [lib/learning-core/operations.ts](/home/luke/Desktop/homeschool-v2/lib/learning-core/operations.ts)
+- [lib/learning-core/copilot.ts](/home/luke/Desktop/homeschool-v2/lib/learning-core/copilot.ts)
+- [lib/learning-core/session.ts](/home/luke/Desktop/homeschool-v2/lib/learning-core/session.ts)
+- [lib/learning-core/curriculum.ts](/home/luke/Desktop/homeschool-v2/lib/learning-core/curriculum.ts)
 
 ### Copilot context, threads, and actions
 
@@ -108,8 +107,8 @@ The system already has strong architectural anchors for agentic behavior.
 
 ### Transcript and intake generation patterns
 
-- [lib/prompts/curriculum-draft.ts](/home/luke/Desktop/homeschool-v2/lib/prompts/curriculum-draft.ts)
 - [lib/curriculum/ai-draft-service.ts](/home/luke/Desktop/homeschool-v2/lib/curriculum/ai-draft-service.ts)
+- [app/api/homeschool/onboarding/route.ts](/home/luke/Desktop/homeschool-v2/app/api/homeschool/onboarding/route.ts)
 
 ## Working Definition Of Agentic
 

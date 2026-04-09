@@ -5,17 +5,19 @@
       "title": "Curriculum Artifact",
       "docPath": "contracts/curriculum-artifact.md",
       "canonicalSources": [
-        "lib/prompts/curriculum-draft.ts",
+        "learning-core/learning_core/skills/curriculum_generate/SKILL.md",
+        "learning-core/learning_core/contracts/curriculum.py",
         "lib/curriculum/ai-draft-service.ts"
       ],
       "producerEntrypoints": [
-        "CurriculumAiDraftService.generateDraft()"
+        "learning-core: POST /v1/operations/curriculum_generate/execute"
       ],
       "consumerEntrypoints": [
-        "lib/curriculum/normalization.ts"
+        "lib/curriculum/normalization.ts",
+        "lib/curriculum/service.ts"
       ],
       "versionFields": [
-        "CURRICULUM_GENERATION_PROMPT_VERSION"
+        "lineage.skill_version"
       ]
     },
     {
@@ -23,17 +25,19 @@
       "title": "Curriculum Revision Artifact",
       "docPath": "contracts/curriculum-revision-artifact.md",
       "canonicalSources": [
-        "lib/prompts/curriculum-draft.ts",
-        "lib/curriculum/revision-model.ts"
+        "learning-core/learning_core/skills/curriculum_revise/SKILL.md",
+        "learning-core/learning_core/contracts/curriculum.py",
+        "lib/curriculum/ai-draft-service.ts"
       ],
       "producerEntrypoints": [
-        "runCurriculumRevisionDecision()"
+        "learning-core: POST /v1/operations/curriculum_revise/execute"
       ],
       "consumerEntrypoints": [
-        "app/api/curriculum/revision/route.ts"
+        "app/api/curriculum/sources/[sourceId]/ai-revise/route.ts",
+        "lib/curriculum/service.ts"
       ],
       "versionFields": [
-        "CURRICULUM_REVISION_PROMPT_VERSION"
+        "lineage.skill_version"
       ]
     },
     {
@@ -41,18 +45,20 @@
       "title": "Lesson Draft Artifact",
       "docPath": "contracts/lesson-draft-artifact.md",
       "canonicalSources": [
-        "lib/prompts/lesson-draft.ts",
-        "lib/lesson-draft/types.ts"
+        "learning-core/learning_core/skills/session_generate/SKILL.md",
+        "learning-core/learning_core/contracts/session_plan.py",
+        "lib/learning-core/session.ts"
       ],
       "producerEntrypoints": [
-        "TaskService.generateLessonDraft()"
+        "learning-core: POST /v1/operations/session_generate/execute",
+        "app/api/ai/lesson-plan/route.ts"
       ],
       "consumerEntrypoints": [
         "app/(parent)/today/page.tsx",
         "components/activities/ActivityShell.tsx"
       ],
       "versionFields": [
-        "LESSON_DRAFT_PROMPT_VERSION",
+        "lineage.skill_version",
         "schema_version"
       ]
     },
@@ -61,16 +67,20 @@
       "title": "Curriculum Progression Generation Input",
       "docPath": "contracts/curriculum-progression-generation-input.md",
       "canonicalSources": [
-        "lib/prompts/curriculum-draft.ts"
+        "learning-core/learning_core/contracts/operation.py",
+        "learning-core/learning_core/contracts/progression.py",
+        "lib/learning-core/curriculum.ts"
       ],
       "producerEntrypoints": [
-        "lib/curriculum/ai-draft-service.ts"
+        "lib/curriculum/ai-draft-service.ts",
+        "lib/curriculum/progression-regeneration.ts"
       ],
       "consumerEntrypoints": [
-        "AI Adapter"
+        "learning-core: POST /v1/operations/progression_generate/prompt-preview",
+        "learning-core: POST /v1/operations/progression_generate/execute"
       ],
       "versionFields": [
-        "contractVersion"
+        "request_envelope.request_id"
       ]
     },
     {
@@ -78,31 +88,37 @@
       "title": "Curriculum Progression Draft",
       "docPath": "contracts/curriculum-progression-draft.md",
       "canonicalSources": [
-        "lib/curriculum/ai-draft.ts"
+        "learning-core/learning_core/skills/progression_generate/SKILL.md",
+        "learning-core/learning_core/contracts/progression.py"
       ],
       "producerEntrypoints": [
-        "AI Adapter"
+        "learning-core: POST /v1/operations/progression_generate/execute"
       ],
       "consumerEntrypoints": [
-        "lib/curriculum/ai-draft.ts"
+        "lib/curriculum/ai-draft-service.ts",
+        "lib/curriculum/progression-regeneration.ts"
       ],
-      "versionFields": []
+      "versionFields": [
+        "lineage.skill_version"
+      ]
     },
     {
       "id": "curriculum-progression-resolved",
       "title": "Curriculum Progression Resolved",
       "docPath": "contracts/curriculum-progression-resolved.md",
       "canonicalSources": [
-        "lib/curriculum/progression-graph-model.ts"
+        "lib/curriculum/progression-graph-model.ts",
+        "lib/curriculum/normalization.ts"
       ],
       "producerEntrypoints": [
         "lib/curriculum/normalization.ts"
       ],
       "consumerEntrypoints": [
-        "Database"
+        "lib/curriculum/service.ts",
+        "lib/curriculum-routing/service.ts"
       ],
       "versionFields": [
-        "contractVersion"
+        "diagnostics.contractVersion"
       ]
     },
     {
@@ -110,9 +126,11 @@
       "title": "Curriculum Progression UI View Model",
       "docPath": "contracts/curriculum-progression-ui-view-model.md",
       "canonicalSources": [
-        "lib/curriculum/service.ts"
+        "lib/curriculum/service.ts",
+        "components/curriculum/curriculum-progression-graph.tsx"
       ],
       "producerEntrypoints": [
+        "app/api/curriculum/sources/[sourceId]/graph/route.ts",
         "lib/curriculum/service.ts"
       ],
       "consumerEntrypoints": [
@@ -125,17 +143,19 @@
       "title": "Activity Artifact",
       "docPath": "contracts/activity-artifact.md",
       "canonicalSources": [
-        "lib/learning-core/activity.ts",
-        "lib/activities/spec.ts"
+        "learning-core/learning_core/skills/activity_generate/SKILL.md",
+        "learning-core/learning_core/contracts/activity.py",
+        "lib/learning-core/activity.ts"
       ],
       "producerEntrypoints": [
-        "learning-core /v1/operations/generate-activities-from-plan-session/execute"
+        "learning-core: POST /v1/operations/activity_generate/execute"
       ],
       "consumerEntrypoints": [
-        "components/activities/ActivityRenderer.tsx"
+        "components/activities/ActivityRenderer.tsx",
+        "lib/activities/assignment-service.ts"
       ],
       "versionFields": [
-        "skill_version",
+        "lineage.skill_version",
         "schemaVersion"
       ]
     }

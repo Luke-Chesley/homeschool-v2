@@ -1,5 +1,5 @@
 import { readFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 
 /**
  * Contract Check Script
@@ -37,6 +37,34 @@ interface ContractIndex {
   contracts: ContractEntry[];
 }
 
+function findHomeschoolRoot(startDir: string): string {
+  let current = startDir;
+
+  while (dirname(current) !== current) {
+    if (basename(current) === 'homeschool-v2') {
+      return current;
+    }
+    current = dirname(current);
+  }
+
+  throw new Error(`Could not locate homeschool-v2 root from ${startDir}`);
+}
+
+function resolveCanonicalSourcePath(source: string): string {
+  const cwd = process.cwd();
+  const directPath = join(cwd, source);
+  if (existsSync(directPath)) {
+    return directPath;
+  }
+
+  if (source.startsWith('learning-core/')) {
+    const homeschoolRoot = findHomeschoolRoot(cwd);
+    return join(dirname(homeschoolRoot), source);
+  }
+
+  return directPath;
+}
+
 function checkContracts() {
   const indexPath = join(process.cwd(), 'contracts', 'contract-index.json');
   
@@ -72,7 +100,7 @@ function checkContracts() {
 
     // 3. Check canonical sources
     for (const source of contract.canonicalSources) {
-      const sourcePath = join(process.cwd(), source);
+      const sourcePath = resolveCanonicalSourcePath(source);
       if (!existsSync(sourcePath)) {
         console.error(`  ❌ Error: Canonical source file not found: ${source}`);
         hasErrors = true;
