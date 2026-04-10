@@ -131,6 +131,7 @@ export interface RenderComponentProps {
   onChange: (componentId: string, value: unknown) => void;
   feedback?: ComponentRendererProps<ComponentSpec>["feedback"];
   onRequestFeedback?: ComponentRendererProps<ComponentSpec>["onRequestFeedback"];
+  onRequestTransition?: ComponentRendererProps<ComponentSpec>["onRequestTransition"];
   disabled?: boolean;
   hintStrategy?: "on_request" | "always" | "after_wrong_attempt";
 }
@@ -141,6 +142,7 @@ export function renderComponent({
   onChange,
   feedback,
   onRequestFeedback,
+  onRequestTransition,
   disabled,
   hintStrategy,
 }: RenderComponentProps): React.ReactElement {
@@ -153,7 +155,16 @@ export function renderComponent({
     );
   }
 
-  return renderer({ spec, value, onChange, feedback, onRequestFeedback, disabled, hintStrategy }) ?? (
+  return renderer({
+    spec,
+    value,
+    onChange,
+    feedback,
+    onRequestFeedback,
+    onRequestTransition,
+    disabled,
+    hintStrategy,
+  }) ?? (
     <div className="rounded-lg border border-dashed border-border/50 p-3 text-xs text-muted-foreground">
       Component error: {spec.type}
     </div>
