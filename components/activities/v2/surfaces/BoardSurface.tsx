@@ -17,6 +17,7 @@ import {
 } from "@/lib/activities/widgets";
 import { cn } from "@/lib/utils";
 import type { ComponentRendererProps } from "../types";
+import { useSurfaceDrag } from "./use-surface-drag";
 
 const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"] as const;
 const RANKS_WHITE = ["8", "7", "6", "5", "4", "3", "2", "1"] as const;
@@ -202,18 +203,15 @@ export function BoardSurface({
 
   const [runtimeWidget, setRuntimeWidget] = React.useState<ChessBoardWidgetPayload>(initialWidget);
   const [selectedSquare, setSelectedSquare] = React.useState<string | null>(null);
-  const [draggedSquare, setDraggedSquare] = React.useState<string | null>(null);
   const [legalTargets, setLegalTargets] = React.useState<string[]>([]);
   const [draftMove, setDraftMove] = React.useState<{ from: string; to: string } | null>(null);
   const [pendingTransition, setPendingTransition] = React.useState(false);
   const [transitionError, setTransitionError] = React.useState<string | null>(null);
   const [transitionFeedback, setTransitionFeedback] = React.useState<ActivityComponentFeedback | null>(null);
-  const [supportsPointerDrag, setSupportsPointerDrag] = React.useState(false);
 
   React.useEffect(() => {
     setRuntimeWidget(initialWidget);
     setSelectedSquare(null);
-    setDraggedSquare(null);
     setLegalTargets([]);
     setDraftMove(null);
     setTransitionError(null);
@@ -227,18 +225,6 @@ export function BoardSurface({
     }
     setRuntimeWidget(canonicalWidget);
   }, [value]);
-
-  React.useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    const mediaQuery = window.matchMedia("(pointer: fine)");
-    const update = () => setSupportsPointerDrag(mediaQuery.matches);
-    update();
-    mediaQuery.addEventListener("change", update);
-    return () => mediaQuery.removeEventListener("change", update);
-  }, []);
 
   const renderFen = readFen(value, runtimeWidget.state.fen);
   const widgetForRequest: ChessBoardWidgetPayload = {
@@ -270,10 +256,26 @@ export function BoardSurface({
   const caption = widgetCaption(widgetForRequest);
   const moveHint = buildMoveHint(widgetForRequest);
   const annotations = widgetForRequest.annotations ?? { arrows: [], highlightSquares: [] };
-  const hasPointerDrag =
-    supportsPointerDrag &&
+  const dragEnabled =
     allowInput &&
+    !boardLocked &&
     widgetForRequest.interaction.selectionMode !== "click_click";
+
+  const surfaceDrag = useSurfaceDrag(
+    {
+      onDragEnd: (sourceId, targetId) => {
+        if (!targetId || sourceId === targetId) {
+          return;
+        }
+        if (widgetForRequest.interaction.submissionMode === "explicit_submit") {
+          stageExplicitMove(sourceId, targetId);
+          return;
+        }
+        void submitMove(sourceId, targetId);
+      },
+    },
+    { disabled: !dragEnabled },
+  );
 
   async function requestTransition(
     learnerAction:
@@ -347,7 +349,7 @@ export function BoardSurface({
     const nextWidget = transition.canonicalWidget as ChessBoardWidgetPayload;
     setRuntimeWidget(nextWidget);
     setSelectedSquare(null);
-    setDraggedSquare(null);
+    surfaceDrag.cancel();
     setLegalTargets([]);
     setDraftMove(null);
     setTransitionError(null);
@@ -418,7 +420,7 @@ export function BoardSurface({
 
     setRuntimeWidget(transition.canonicalWidget as ChessBoardWidgetPayload);
     setSelectedSquare(null);
-    setDraggedSquare(null);
+    surfaceDrag.cancel();
     setLegalTargets([]);
     setDraftMove(null);
     setTransitionError(null);
@@ -550,7 +552,10 @@ export function BoardSurface({
               </div>
             )}
 
-            <div className="grid h-full w-full grid-cols-8 grid-rows-8 gap-px bg-border/40">
+            <div
+              ref={surfaceDrag.containerRef}
+              className="grid h-full w-full grid-cols-8 grid-rows-8 gap-px bg-border/40 touch-none"
+            >
               {ranks.map((rank) =>
                 files.map((file) => {
                   const square = `${file}${rank}`;
@@ -562,8 +567,11 @@ export function BoardSurface({
                   const isHighlighted = annotations.highlightSquares.includes(square);
                   const isDraftTarget = draftMove?.to === square;
                   const isDraftSource = draftMove?.from === square;
+                  const isDragSource = surfaceDrag.state.dragging === square;
+                  const isDragHover = surfaceDrag.state.hoverTarget === square && surfaceDrag.isDragging;
                   const topLeftRank = widgetForRequest.display.showCoordinates && file === files[0];
                   const bottomRightFile = widgetForRequest.display.showCoordinates && rank === ranks[ranks.length - 1];
+                  const dragHandlers = piece && dragEnabled ? surfaceDrag.getHandlers(square) : undefined;
 
                   return (
                     <button
@@ -571,24 +579,9 @@ export function BoardSurface({
                       type="button"
                       disabled={!allowInput || boardLocked}
                       onClick={() => void handleSquareClick(square)}
-                      onDragOver={(event) => {
-                        if (hasPointerDrag && draggedSquare) {
-                          event.preventDefault();
-                        }
-                      }}
-                      onDrop={(event) => {
-                        event.preventDefault();
-                        if (!hasPointerDrag || !draggedSquare || draggedSquare === square || boardLocked) {
-                          return;
-                        }
-                        if (widgetForRequest.interaction.submissionMode === "explicit_submit") {
-                          stageExplicitMove(draggedSquare, square);
-                          return;
-                        }
-                        void submitMove(draggedSquare, square);
-                      }}
-                      onDragEnd={() => setDraggedSquare(null)}
+                      {...dragHandlers}
                       data-square={square}
+                      data-drag-id={square}
                       data-piece={piece ? `${piece.color}${piece.type}` : undefined}
                       aria-label={square}
                       className={cn(
@@ -600,6 +593,7 @@ export function BoardSurface({
                         isLegalTarget && "ring-2 ring-inset ring-primary/45",
                         isHighlighted && "ring-2 ring-inset ring-amber-400/70",
                         (isDraftSource || isDraftTarget) && "ring-2 ring-inset ring-sky-500/65",
+                        isDragHover && "ring-2 ring-inset ring-primary/60",
                       )}
                     >
                       {topLeftRank && (
@@ -625,18 +619,11 @@ export function BoardSurface({
 
                       {piece ? (
                         <span
-                          draggable={hasPointerDrag && !boardLocked}
-                          onDragStart={() => {
-                            if (!hasPointerDrag || boardLocked) {
-                              return;
-                            }
-                            setDraggedSquare(square);
-                            void handleSquareSelection(square);
-                          }}
                           className={cn(
                             "relative z-10 select-none text-[clamp(1.45rem,4.6vw,2.35rem)] leading-none",
                             piece.color === "w" ? "text-white drop-shadow-[0_1px_0_rgba(0,0,0,0.45)]" : "text-slate-950",
-                            hasPointerDrag && !boardLocked && "cursor-grab active:cursor-grabbing",
+                            dragEnabled && "cursor-grab active:cursor-grabbing",
+                            isDragSource && "opacity-40",
                           )}
                         >
                           {PIECE_SYMBOLS[`${piece.color}${piece.type}`]}
