@@ -1,6 +1,58 @@
 import { z } from "zod";
 
 const ChessSquareSchema = z.string().regex(/^[a-h][1-8]$/);
+const OptionalWidgetTextSchema = z.string().trim().min(1).optional();
+
+function enforceResetSemantics(
+  value: { allowReset: boolean; resetPolicy: WidgetResetPolicy; attemptPolicy: WidgetAttemptPolicy },
+  ctx: z.RefinementCtx,
+) {
+  if (value.allowReset && value.resetPolicy === "not_allowed") {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["allowReset"],
+      message: "allowReset cannot be true when resetPolicy is 'not_allowed'.",
+    });
+  }
+  if (!value.allowReset && value.resetPolicy !== "not_allowed") {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["resetPolicy"],
+      message: "resetPolicy must be 'not_allowed' when allowReset is false.",
+    });
+  }
+  if (value.attemptPolicy === "single_attempt" && value.allowReset) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["attemptPolicy"],
+      message: "single_attempt widgets cannot allow reset.",
+    });
+  }
+}
+
+function enforceFeedbackSemantics(
+  value: { interaction: { submissionMode: WidgetSubmissionMode; mode: string }; feedback: { mode: WidgetFeedbackMode } },
+  ctx: z.RefinementCtx,
+) {
+  if (
+    value.feedback.mode === "explicit_submit" &&
+    value.interaction.submissionMode !== "explicit_submit"
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["feedback", "mode"],
+      message: "feedback.mode='explicit_submit' requires interaction.submissionMode='explicit_submit'.",
+    });
+  }
+
+  if (value.interaction.mode === "view_only" && value.feedback.mode !== "none") {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["feedback", "mode"],
+      message: "view_only widgets must use feedback.mode='none'.",
+    });
+  }
+}
 
 export const WidgetSurfaceKindSchema = z.enum([
   "board_surface",
@@ -59,6 +111,7 @@ export type BoardSurfaceDisplay = z.infer<typeof BoardSurfaceDisplaySchema>;
 
 export const BoardSurfaceStateSchema = z.object({
   fen: z.string().min(1),
+  initialFen: z.string().min(1).optional(),
 });
 export type BoardSurfaceState = z.infer<typeof BoardSurfaceStateSchema>;
 
@@ -70,7 +123,7 @@ export const BoardSurfaceInteractionSchema = z.object({
   allowReset: z.boolean().default(true),
   resetPolicy: WidgetResetPolicySchema.default("reset_to_initial"),
   attemptPolicy: WidgetAttemptPolicySchema.default("allow_retry"),
-});
+}).superRefine(enforceResetSemantics);
 export type BoardSurfaceInteraction = z.infer<typeof BoardSurfaceInteractionSchema>;
 
 export const BoardSurfaceFeedbackSchema = z.object({
@@ -90,10 +143,12 @@ export const BoardSurfaceAnnotationsSchema = z.object({
 });
 export type BoardSurfaceAnnotations = z.infer<typeof BoardSurfaceAnnotationsSchema>;
 
-export const ChessBoardWidgetPayloadSchema = z.object({
+const ChessBoardWidgetPayloadObjectSchema = z.object({
   surfaceKind: z.literal("board_surface"),
   engineKind: z.literal("chess"),
   version: z.literal("1"),
+  instructionText: OptionalWidgetTextSchema,
+  caption: OptionalWidgetTextSchema,
   surface: BoardSurfaceConfigSchema,
   display: BoardSurfaceDisplaySchema.default({}),
   state: BoardSurfaceStateSchema,
@@ -102,6 +157,7 @@ export const ChessBoardWidgetPayloadSchema = z.object({
   evaluation: ChessEvaluationSchema,
   annotations: BoardSurfaceAnnotationsSchema,
 });
+export const ChessBoardWidgetPayloadSchema = ChessBoardWidgetPayloadObjectSchema.superRefine(enforceFeedbackSemantics);
 export type ChessBoardWidgetPayload = z.infer<typeof ChessBoardWidgetPayloadSchema>;
 
 export const ExpressionSurfaceConfigSchema = z.object({
@@ -112,6 +168,7 @@ export type ExpressionSurfaceConfig = z.infer<typeof ExpressionSurfaceConfigSche
 
 export const ExpressionSurfaceDisplaySchema = z.object({
   surfaceRole: WidgetSurfaceRoleSchema.default("primary"),
+  showPromptLatex: z.boolean().default(true),
 });
 export type ExpressionSurfaceDisplay = z.infer<typeof ExpressionSurfaceDisplaySchema>;
 
@@ -122,11 +179,12 @@ export const ExpressionSurfaceStateSchema = z.object({
 export type ExpressionSurfaceState = z.infer<typeof ExpressionSurfaceStateSchema>;
 
 export const ExpressionSurfaceInteractionSchema = z.object({
-  mode: z.enum(["expression_entry", "equation_entry", "step_entry"]).default("expression_entry"),
+  mode: z.enum(["view_only", "expression_entry", "equation_entry", "step_entry"]).default("expression_entry"),
   submissionMode: WidgetSubmissionModeSchema.default("explicit_submit"),
+  allowReset: z.boolean().default(true),
   resetPolicy: WidgetResetPolicySchema.default("reset_to_initial"),
   attemptPolicy: WidgetAttemptPolicySchema.default("allow_retry"),
-});
+}).superRefine(enforceResetSemantics);
 export type ExpressionSurfaceInteraction = z.infer<typeof ExpressionSurfaceInteractionSchema>;
 
 export const ExpressionSurfaceFeedbackSchema = z.object({
@@ -146,10 +204,12 @@ export const ExpressionSurfaceAnnotationsSchema = z.object({
 });
 export type ExpressionSurfaceAnnotations = z.infer<typeof ExpressionSurfaceAnnotationsSchema>;
 
-export const MathSymbolicWidgetPayloadSchema = z.object({
+const MathSymbolicWidgetPayloadObjectSchema = z.object({
   surfaceKind: z.literal("expression_surface"),
   engineKind: z.literal("math_symbolic"),
   version: z.literal("1"),
+  instructionText: OptionalWidgetTextSchema,
+  caption: OptionalWidgetTextSchema,
   surface: ExpressionSurfaceConfigSchema,
   display: ExpressionSurfaceDisplaySchema.default({}),
   state: ExpressionSurfaceStateSchema,
@@ -158,6 +218,7 @@ export const MathSymbolicWidgetPayloadSchema = z.object({
   evaluation: MathSymbolicEvaluationSchema,
   annotations: ExpressionSurfaceAnnotationsSchema,
 });
+export const MathSymbolicWidgetPayloadSchema = MathSymbolicWidgetPayloadObjectSchema.superRefine(enforceFeedbackSemantics);
 export type MathSymbolicWidgetPayload = z.infer<typeof MathSymbolicWidgetPayloadSchema>;
 
 export const GraphSurfaceConfigSchema = z.object({
@@ -169,6 +230,7 @@ export type GraphSurfaceConfig = z.infer<typeof GraphSurfaceConfigSchema>;
 
 export const GraphSurfaceDisplaySchema = z.object({
   surfaceRole: WidgetSurfaceRoleSchema.default("primary"),
+  showAxisLabels: z.boolean().default(true),
 });
 export type GraphSurfaceDisplay = z.infer<typeof GraphSurfaceDisplaySchema>;
 
@@ -179,11 +241,12 @@ export const GraphSurfaceStateSchema = z.object({
 export type GraphSurfaceState = z.infer<typeof GraphSurfaceStateSchema>;
 
 export const GraphSurfaceInteractionSchema = z.object({
-  mode: z.enum(["plot_point", "plot_curve", "analyze_graph"]).default("plot_point"),
+  mode: z.enum(["view_only", "plot_point", "plot_curve", "analyze_graph"]).default("plot_point"),
   submissionMode: WidgetSubmissionModeSchema.default("explicit_submit"),
+  allowReset: z.boolean().default(true),
   resetPolicy: WidgetResetPolicySchema.default("reset_to_initial"),
   attemptPolicy: WidgetAttemptPolicySchema.default("allow_retry"),
-});
+}).superRefine(enforceResetSemantics);
 export type GraphSurfaceInteraction = z.infer<typeof GraphSurfaceInteractionSchema>;
 
 export const GraphSurfaceFeedbackSchema = z.object({
@@ -202,10 +265,12 @@ export const GraphSurfaceAnnotationsSchema = z.object({
 });
 export type GraphSurfaceAnnotations = z.infer<typeof GraphSurfaceAnnotationsSchema>;
 
-export const GraphingWidgetPayloadSchema = z.object({
+const GraphingWidgetPayloadObjectSchema = z.object({
   surfaceKind: z.literal("graph_surface"),
   engineKind: z.literal("graphing"),
   version: z.literal("1"),
+  instructionText: OptionalWidgetTextSchema,
+  caption: OptionalWidgetTextSchema,
   surface: GraphSurfaceConfigSchema,
   display: GraphSurfaceDisplaySchema.default({}),
   state: GraphSurfaceStateSchema,
@@ -214,13 +279,16 @@ export const GraphingWidgetPayloadSchema = z.object({
   evaluation: GraphingEvaluationSchema,
   annotations: GraphSurfaceAnnotationsSchema,
 });
+export const GraphingWidgetPayloadSchema = GraphingWidgetPayloadObjectSchema.superRefine(enforceFeedbackSemantics);
 export type GraphingWidgetPayload = z.infer<typeof GraphingWidgetPayloadSchema>;
 
 export const InteractiveWidgetPayloadSchema = z.discriminatedUnion("engineKind", [
-  ChessBoardWidgetPayloadSchema,
-  MathSymbolicWidgetPayloadSchema,
-  GraphingWidgetPayloadSchema,
-]);
+  ChessBoardWidgetPayloadObjectSchema,
+  MathSymbolicWidgetPayloadObjectSchema,
+  GraphingWidgetPayloadObjectSchema,
+]).superRefine((widget, ctx) => {
+  enforceFeedbackSemantics(widget, ctx);
+});
 export type InteractiveWidgetPayload = z.infer<typeof InteractiveWidgetPayloadSchema>;
 
 export const BoardSurfaceMoveSchema = z.object({
@@ -246,5 +314,24 @@ export function widgetAcceptsInput(widget: InteractiveWidgetPayload) {
   if (widget.engineKind === "chess") {
     return widget.interaction.mode === "move_input";
   }
-  return true;
+  return widget.interaction.mode !== "view_only";
+}
+
+export function widgetSurfaceRole(widget: InteractiveWidgetPayload) {
+  if (widget.engineKind === "chess") {
+    return widget.display.boardRole;
+  }
+  return widget.display.surfaceRole;
+}
+
+export function widgetAllowsReset(widget: InteractiveWidgetPayload) {
+  return widget.interaction.allowReset && widget.interaction.resetPolicy !== "not_allowed";
+}
+
+export function widgetInstructionText(widget: InteractiveWidgetPayload) {
+  return widget.instructionText;
+}
+
+export function widgetCaption(widget: InteractiveWidgetPayload) {
+  return widget.caption;
 }

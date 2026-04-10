@@ -18,8 +18,8 @@ import { renderComponent } from "./ComponentRegistry";
 import { isInteractiveComponentSpec, type ComponentSpec } from "@/lib/activities/components";
 import type { ActivityComponentFeedback } from "@/lib/activities/feedback";
 import type { ActivitySpec } from "@/lib/activities/spec";
-import type { InteractiveWidgetPayload } from "@/lib/activities/widgets";
-import type { WidgetLearnerAction, WidgetTransitionArtifact } from "@/lib/activities/widget-transition";
+import type { InteractiveWidgetComponent, InteractiveWidgetPayload } from "@/lib/activities/widgets";
+import { readBoardMove, type WidgetLearnerAction, type WidgetTransitionArtifact } from "@/lib/activities/widget-transition";
 import { ACTIVITY_KIND_LABELS } from "@/lib/activities/kinds";
 
 // ---------------------------------------------------------------------------
@@ -72,6 +72,15 @@ export function ActivitySpecRenderer({
 }: ActivitySpecRendererProps) {
   const [evidence, setEvidence] = React.useState<ActivitySpecEvidence>(initialEvidence);
   const [feedbackByComponent, setFeedbackByComponent] = React.useState<Record<string, ActivityComponentFeedback>>({});
+  const [widgetByComponent, setWidgetByComponent] = React.useState<Record<string, InteractiveWidgetPayload>>(
+    () => buildInitialWidgetState(spec, initialEvidence),
+  );
+
+  React.useEffect(() => {
+    setEvidence(initialEvidence);
+    setFeedbackByComponent({});
+    setWidgetByComponent(buildInitialWidgetState(spec, initialEvidence));
+  }, [spec]);
 
   function handleComponentChange(componentId: string, value: unknown) {
     const next = { ...evidence, [componentId]: value };
@@ -123,6 +132,12 @@ export function ActivitySpecRenderer({
       learnerAction,
       currentValue,
     );
+    if (transition?.canonicalWidget) {
+      setWidgetByComponent((current) => ({
+        ...current,
+        [componentId]: transition.canonicalWidget,
+      }));
+    }
     const immediateFeedback = transition?.immediateFeedback;
     if (immediateFeedback) {
       setFeedbackByComponent((current) => ({
@@ -243,19 +258,26 @@ export function ActivitySpecRenderer({
       <div className="flex flex-col gap-5">
         {spec.components.map((component) => (
           <div key={component.id}>
-            {renderComponent({
-              spec: component,
-              value: evidence[component.id],
-              onChange: handleComponentChange,
-              feedback: feedbackByComponent[component.id] ?? null,
-              onRequestFeedback: handleComponentFeedback,
-              onRequestTransition: handleComponentTransition,
-              disabled: submitted,
-              hintStrategy,
-            })}
-            {feedbackByComponent[component.id] && shouldRenderFeedbackBanner(component) && (
-              <ComponentFeedbackBanner feedback={feedbackByComponent[component.id]} />
-            )}
+            {(() => {
+              const resolvedComponent = resolveComponent(component, widgetByComponent[component.id]);
+              return (
+                <>
+                  {renderComponent({
+                    spec: resolvedComponent,
+                    value: evidence[component.id],
+                    onChange: handleComponentChange,
+                    feedback: feedbackByComponent[component.id] ?? null,
+                    onRequestFeedback: handleComponentFeedback,
+                    onRequestTransition: handleComponentTransition,
+                    disabled: submitted,
+                    hintStrategy,
+                  })}
+                  {feedbackByComponent[component.id] && shouldRenderFeedbackBanner(resolvedComponent) && (
+                    <ComponentFeedbackBanner feedback={feedbackByComponent[component.id]} />
+                  )}
+                </>
+              );
+            })()}
           </div>
         ))}
       </div>
@@ -304,6 +326,59 @@ export function ActivitySpecRenderer({
       )}
     </div>
   );
+}
+
+function buildInitialWidgetState(
+  spec: ActivitySpec,
+  initialEvidence: ActivitySpecEvidence,
+): Record<string, InteractiveWidgetPayload> {
+  const state: Record<string, InteractiveWidgetPayload> = {};
+
+  for (const component of spec.components) {
+    if (component.type !== "interactive_widget") {
+      continue;
+    }
+
+    state[component.id] = restoreWidgetFromEvidence(component, initialEvidence[component.id]);
+  }
+
+  return state;
+}
+
+function restoreWidgetFromEvidence(
+  component: InteractiveWidgetComponent,
+  evidence: unknown,
+): InteractiveWidgetPayload {
+  if (component.widget.engineKind !== "chess") {
+    return component.widget;
+  }
+
+  const restoredMove = readBoardMove(evidence);
+  if (!restoredMove?.fenAfter) {
+    return component.widget;
+  }
+
+  return {
+    ...component.widget,
+    state: {
+      ...component.widget.state,
+      fen: restoredMove.fenAfter,
+    },
+  };
+}
+
+function resolveComponent(
+  component: ComponentSpec,
+  widget: InteractiveWidgetPayload | undefined,
+): ComponentSpec {
+  if (component.type !== "interactive_widget" || !widget) {
+    return component;
+  }
+
+  return {
+    ...component,
+    widget,
+  };
 }
 
 function shouldRenderFeedbackBanner(component: ComponentSpec) {

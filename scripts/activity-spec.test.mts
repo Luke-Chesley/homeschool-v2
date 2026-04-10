@@ -146,6 +146,8 @@ const chessSpec: ActivitySpec = {
         version: "1",
         surfaceKind: "board_surface",
         engineKind: "chess",
+        instructionText: "Play the move on the board first.",
+        caption: "Use the board as the main evidence.",
         surface: { orientation: "white" },
         display: {
           showSideToMove: true,
@@ -153,7 +155,10 @@ const chessSpec: ActivitySpec = {
           showMoveHint: true,
           boardRole: "primary",
         },
-        state: { fen: "4k3/8/8/8/8/8/4Q3/4K3 w - - 0 1" },
+        state: {
+          fen: "4k3/8/8/8/8/8/4Q3/4K3 w - - 0 1",
+          initialFen: "4k3/8/8/8/8/8/4Q3/4K3 w - - 0 1",
+        },
         interaction: {
           mode: "move_input",
           submissionMode: "immediate",
@@ -211,6 +216,22 @@ test("validateActivitySpec — accepts a valid chess board spec", () => {
   assert.equal(result.valid, true, `Expected valid but got errors: ${result.errors.join(", ")}`);
 });
 
+test("InteractiveWidgetComponentSchema — enforces reset/retry semantics", () => {
+  assert.throws(() =>
+    InteractiveWidgetComponentSchema.parse({
+      ...chessSpec.components[0],
+      widget: {
+        ...chessSpec.components[0].widget,
+        interaction: {
+          ...chessSpec.components[0].widget.interaction,
+          attemptPolicy: "single_attempt",
+          allowReset: true,
+          resetPolicy: "reset_to_initial",
+        },
+      },
+    }));
+});
+
 test("WidgetTransitionArtifactSchema — parses backend transition payloads", () => {
   const parsed = WidgetTransitionArtifactSchema.parse({
     schemaVersion: "1",
@@ -248,6 +269,39 @@ test("WidgetTransitionArtifactSchema — parses backend transition payloads", ()
 
   assert.equal(parsed.accepted, true);
   assert.equal(parsed.canonicalWidget.engineKind, "chess");
+});
+
+test("WidgetTransitionArtifactSchema — accepts retryable transition results with null nextResponse", () => {
+  const parsed = WidgetTransitionArtifactSchema.parse({
+    schemaVersion: "1",
+    componentId: "mate-in-one",
+    componentType: "interactive_widget",
+    widgetEngineKind: "chess",
+    accepted: true,
+    normalizedLearnerAction: {
+      from: "e2",
+      to: "e4",
+      san: "Qe4+",
+      uci: "e2e4",
+    },
+    nextResponse: null,
+    canonicalWidget: chessSpec.components[0].widget,
+    legalTargets: [],
+    immediateFeedback: {
+      schemaVersion: "1",
+      componentId: "mate-in-one",
+      componentType: "interactive_widget",
+      widgetEngineKind: "chess",
+      status: "incorrect",
+      feedbackMessage: "That move does not match the expected move for this position.",
+      confidence: 0.99,
+      allowRetry: true,
+      evaluationMethod: "deterministic",
+    },
+  });
+
+  assert.equal(parsed.nextResponse, null);
+  assert.equal(parsed.immediateFeedback?.allowRetry, true);
 });
 
 test("validateActivitySpec — rejects unknown component type", () => {
