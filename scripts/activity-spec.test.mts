@@ -20,6 +20,7 @@ import {
   isInteractiveComponentSpec,
 } from "../lib/activities/components.ts";
 import { InteractiveWidgetComponentSchema } from "../lib/activities/widgets.ts";
+import { WidgetTransitionArtifactSchema } from "../lib/activities/widget-transition.ts";
 import { interpretScore } from "../lib/activities/scoring.ts";
 import type { ActivitySpec } from "../lib/activities/spec.ts";
 
@@ -146,9 +147,25 @@ const chessSpec: ActivitySpec = {
         surfaceKind: "board_surface",
         engineKind: "chess",
         surface: { orientation: "white" },
+        display: {
+          showSideToMove: true,
+          showCoordinates: true,
+          showMoveHint: true,
+          boardRole: "primary",
+        },
         state: { fen: "4k3/8/8/8/8/8/4Q3/4K3 w - - 0 1" },
         interaction: {
           mode: "move_input",
+          submissionMode: "immediate",
+          selectionMode: "click_click",
+          showLegalTargets: true,
+          allowReset: true,
+          resetPolicy: "reset_to_initial",
+          attemptPolicy: "allow_retry",
+        },
+        feedback: {
+          mode: "immediate",
+          displayMode: "inline",
         },
         evaluation: {
           expectedMoves: ["Qb5+", "e2b5"],
@@ -192,6 +209,45 @@ test("validateActivitySpec — accepts a valid offline spec", () => {
 test("validateActivitySpec — accepts a valid chess board spec", () => {
   const result = validateActivitySpec(chessSpec);
   assert.equal(result.valid, true, `Expected valid but got errors: ${result.errors.join(", ")}`);
+});
+
+test("WidgetTransitionArtifactSchema — parses backend transition payloads", () => {
+  const parsed = WidgetTransitionArtifactSchema.parse({
+    schemaVersion: "1",
+    componentId: "mate-in-one",
+    componentType: "interactive_widget",
+    widgetEngineKind: "chess",
+    accepted: true,
+    normalizedLearnerAction: {
+      from: "e2",
+      to: "b5",
+      san: "Qb5+",
+      uci: "e2b5",
+    },
+    nextResponse: {
+      from: "e2",
+      to: "b5",
+      san: "Qb5+",
+      uci: "e2b5",
+      fenAfter: "4k3/8/8/1Q6/8/8/8/4K3 b - - 1 1",
+    },
+    canonicalWidget: chessSpec.components[0].widget,
+    legalTargets: [],
+    immediateFeedback: {
+      schemaVersion: "1",
+      componentId: "mate-in-one",
+      componentType: "interactive_widget",
+      widgetEngineKind: "chess",
+      status: "correct",
+      feedbackMessage: "That move matches the expected move.",
+      confidence: 0.99,
+      allowRetry: false,
+      evaluationMethod: "deterministic",
+    },
+  });
+
+  assert.equal(parsed.accepted, true);
+  assert.equal(parsed.canonicalWidget.engineKind, "chess");
 });
 
 test("validateActivitySpec — rejects unknown component type", () => {

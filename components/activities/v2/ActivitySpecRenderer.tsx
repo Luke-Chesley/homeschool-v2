@@ -18,6 +18,8 @@ import { renderComponent } from "./ComponentRegistry";
 import { isInteractiveComponentSpec, type ComponentSpec } from "@/lib/activities/components";
 import type { ActivityComponentFeedback } from "@/lib/activities/feedback";
 import type { ActivitySpec } from "@/lib/activities/spec";
+import type { InteractiveWidgetPayload } from "@/lib/activities/widgets";
+import type { WidgetLearnerAction, WidgetTransitionArtifact } from "@/lib/activities/widget-transition";
 import { ACTIVITY_KIND_LABELS } from "@/lib/activities/kinds";
 
 // ---------------------------------------------------------------------------
@@ -41,6 +43,13 @@ export interface ActivitySpecRendererProps {
     componentType: ComponentSpec["type"],
     value: unknown,
   ) => Promise<ActivityComponentFeedback | null>;
+  onComponentTransitionRequest?: (
+    componentId: string,
+    componentType: ComponentSpec["type"],
+    widget: InteractiveWidgetPayload,
+    learnerAction: WidgetLearnerAction,
+    currentValue: unknown,
+  ) => Promise<WidgetTransitionArtifact | null>;
   onSubmit?: (evidence: ActivitySpecEvidence) => void;
   submitting?: boolean;
   submitted?: boolean;
@@ -56,6 +65,7 @@ export function ActivitySpecRenderer({
   estimatedMinutes,
   onEvidenceChange,
   onComponentFeedbackRequest,
+  onComponentTransitionRequest,
   onSubmit,
   submitting,
   submitted,
@@ -93,6 +103,34 @@ export function ActivitySpecRenderer({
       }));
     }
     return feedback;
+  }
+
+  async function handleComponentTransition(
+    componentId: string,
+    componentType: ComponentSpec["type"],
+    widget: InteractiveWidgetPayload,
+    learnerAction: WidgetLearnerAction,
+    currentValue: unknown,
+  ) {
+    if (!onComponentTransitionRequest) {
+      return null;
+    }
+
+    const transition = await onComponentTransitionRequest(
+      componentId,
+      componentType,
+      widget,
+      learnerAction,
+      currentValue,
+    );
+    const immediateFeedback = transition?.immediateFeedback;
+    if (immediateFeedback) {
+      setFeedbackByComponent((current) => ({
+        ...current,
+        [componentId]: immediateFeedback,
+      }));
+    }
+    return transition;
   }
 
   // Calculate completion progress
@@ -211,10 +249,11 @@ export function ActivitySpecRenderer({
               onChange: handleComponentChange,
               feedback: feedbackByComponent[component.id] ?? null,
               onRequestFeedback: handleComponentFeedback,
+              onRequestTransition: handleComponentTransition,
               disabled: submitted,
               hintStrategy,
             })}
-            {feedbackByComponent[component.id] && (
+            {feedbackByComponent[component.id] && shouldRenderFeedbackBanner(component) && (
               <ComponentFeedbackBanner feedback={feedbackByComponent[component.id]} />
             )}
           </div>
@@ -265,6 +304,14 @@ export function ActivitySpecRenderer({
       )}
     </div>
   );
+}
+
+function shouldRenderFeedbackBanner(component: ComponentSpec) {
+  if (component.type !== "interactive_widget") {
+    return true;
+  }
+
+  return component.widget.feedback.displayMode !== "inline";
 }
 
 // ---------------------------------------------------------------------------

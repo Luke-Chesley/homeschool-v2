@@ -20,6 +20,8 @@ import type {
 import type { ActivityComponentFeedback } from "@/lib/activities/feedback";
 import { isActivitySpec } from "@/lib/activities/spec";
 import type { ActivitySpec } from "@/lib/activities/spec";
+import type { InteractiveWidgetPayload } from "@/lib/activities/widgets";
+import type { WidgetLearnerAction, WidgetTransitionArtifact } from "@/lib/activities/widget-transition";
 import { ActivitySpecRenderer } from "./v2/ActivitySpecRenderer";
 import { QuizRenderer } from "./QuizRenderer";
 import { FlashcardsRenderer } from "./FlashcardsRenderer";
@@ -42,6 +44,13 @@ export interface ActivityRendererProps {
     componentType: string,
     value: unknown,
   ) => Promise<ActivityComponentFeedback | null>;
+  onComponentTransitionRequest?: (
+    componentId: string,
+    componentType: string,
+    widget: InteractiveWidgetPayload,
+    learnerAction: WidgetLearnerAction,
+    currentValue: unknown,
+  ) => Promise<WidgetTransitionArtifact | null>;
   onSubmit?: (answers: AttemptAnswer[]) => void;
   submitting?: boolean;
   submitted?: boolean;
@@ -53,6 +62,7 @@ export function ActivityRenderer({
   estimatedMinutes,
   onAnswerChange,
   onComponentFeedbackRequest,
+  onComponentTransitionRequest,
   onSubmit,
   submitting,
   submitted,
@@ -79,6 +89,7 @@ export function ActivityRenderer({
           onAnswerChange?.(answers, evidence);
         }}
         onComponentFeedbackRequest={onComponentFeedbackRequest}
+        onComponentTransitionRequest={onComponentTransitionRequest}
         onSubmit={(evidence) => {
           const answers = Object.entries(evidence).map(([questionId, value]) => ({
             questionId,

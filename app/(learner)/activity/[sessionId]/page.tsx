@@ -11,6 +11,8 @@ import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ActivityRenderer } from "@/components/activities/ActivityRenderer";
 import { ActivityComponentFeedbackSchema, type ActivityComponentFeedback } from "@/lib/activities/feedback";
+import { WidgetTransitionArtifactSchema, type WidgetLearnerAction } from "@/lib/activities/widget-transition";
+import type { InteractiveWidgetPayload } from "@/lib/activities/widgets";
 import type { ActivitySession, ActivityAttempt, AttemptAnswer } from "@/lib/activities/types";
 
 interface Props {
@@ -125,6 +127,37 @@ export default function ActivitySessionPage({ params }: Props) {
     return ActivityComponentFeedbackSchema.parse(payload);
   }
 
+  async function handleComponentTransition(
+    componentId: string,
+    componentType: string,
+    widget: InteractiveWidgetPayload,
+    learnerAction: WidgetLearnerAction,
+    currentResponse: unknown,
+  ) {
+    if (!attempt) {
+      return null;
+    }
+
+    const response = await fetch(`/api/activities/attempts/${attempt.id}/transition`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        componentId,
+        componentType,
+        widget,
+        learnerAction,
+        currentResponse,
+      }),
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const payload = await response.json();
+    return WidgetTransitionArtifactSchema.parse(payload);
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24">
@@ -157,6 +190,7 @@ export default function ActivitySessionPage({ params }: Props) {
         estimatedMinutes={session.estimatedMinutes}
         onAnswerChange={handleAnswerChange}
         onComponentFeedbackRequest={handleComponentFeedback}
+        onComponentTransitionRequest={handleComponentTransition}
         onSubmit={handleSubmit}
         submitting={submitting}
         submitted={submitted}

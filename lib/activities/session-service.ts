@@ -1,12 +1,14 @@
 import "@/lib/server-only";
 
 import type { ActivityComponentFeedback, RequestActivityComponentFeedback } from "./feedback";
+import type { RequestActivityComponentTransition } from "./widget-transition";
 import { getAttemptStore } from "./attempt-store";
 import type { ActivityAttempt, ActivityOutcome, ActivitySession, AttemptAnswer } from "./types";
 import { parseActivityDefinition } from "./types";
 import { parseActivitySpec, isActivitySpec, ActivitySpecSchema } from "./spec";
 import { ensurePublishedActivitiesForLearner } from "./assignment-service";
 import { requestLearningCoreActivityFeedback } from "@/lib/learning-core/activity-feedback";
+import { requestLearningCoreWidgetTransition } from "@/lib/learning-core/widget-transition";
 import {
   applyOutcomeFeedbackToSkillState,
   classifyProgressOutcome,
@@ -432,6 +434,49 @@ export async function requestActivityComponentFeedback(
     componentType: component.type,
     widget: component.type === "interactive_widget" ? component.widget : undefined,
     learnerResponse: input.learnerResponse,
+    learnerId,
+    lessonSessionId: session.lessonId ?? session.id,
+    attemptId,
+    timeSpentMs: input.timeSpentMs,
+  });
+}
+
+export async function requestActivityComponentTransition(
+  attemptId: string,
+  input: RequestActivityComponentTransition,
+  learnerId: string,
+) {
+  const attempt = await getAttemptStore().get(attemptId);
+  if (!attempt) {
+    throw new Error(`Attempt not found: ${attemptId}`);
+  }
+
+  if (attempt.learnerId !== learnerId) {
+    throw new Error("Attempt does not belong to the active learner.");
+  }
+
+  const session = await getSession(attempt.sessionId);
+  if (!session || !isActivitySpec(session.definition)) {
+    throw new Error("Widget transitions are only available for structured activity specs.");
+  }
+
+  const spec = parseActivitySpec(session.definition);
+  if (!spec) {
+    throw new Error("Could not parse the activity spec for widget transition.");
+  }
+
+  const component = spec.components.find((item) => item.id === input.componentId);
+  if (!component || component.type !== input.componentType || component.type !== "interactive_widget") {
+    throw new Error("Requested widget transition for an unknown interactive widget component.");
+  }
+
+  return requestLearningCoreWidgetTransition({
+    activityId: session.activityId,
+    componentId: component.id,
+    componentType: component.type,
+    widget: input.widget,
+    learnerAction: input.learnerAction,
+    currentResponse: input.currentResponse,
     learnerId,
     lessonSessionId: session.lessonId ?? session.id,
     attemptId,
