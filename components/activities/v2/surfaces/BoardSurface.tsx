@@ -3,16 +3,20 @@
 import * as React from "react";
 import { RotateCcw } from "lucide-react";
 
-import { cn } from "@/lib/utils";
-import type { ComponentRendererProps } from "../types";
-import type {
-  ChessBoardWidgetPayload,
-  InteractiveWidgetComponent,
-} from "@/lib/activities/widgets";
+import type { ActivityComponentFeedback } from "@/lib/activities/feedback";
+import { Button } from "@/components/ui/button";
 import {
   type BoardSurfaceMove,
   BoardSurfaceMoveSchema,
+  ChessBoardWidgetPayloadSchema,
+  type ChessBoardWidgetPayload,
+  type InteractiveWidgetComponent,
+  widgetAllowsReset,
+  widgetCaption,
+  widgetInstructionText,
 } from "@/lib/activities/widgets";
+import { cn } from "@/lib/utils";
+import type { ComponentRendererProps } from "../types";
 
 const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"] as const;
 const RANKS_WHITE = ["8", "7", "6", "5", "4", "3", "2", "1"] as const;
@@ -43,10 +47,26 @@ function readMoveFromValue(value: unknown): BoardSurfaceMove | null {
   return parsed.success ? parsed.data : null;
 }
 
+function readCanonicalWidgetFromValue(value: unknown): ChessBoardWidgetPayload | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const parsed = ChessBoardWidgetPayloadSchema.safeParse(
+    (value as { canonicalWidget?: unknown }).canonicalWidget,
+  );
+  return parsed.success ? parsed.data : null;
+}
+
 function readFen(value: unknown, fallbackFen: string | undefined) {
-  const parsed = readMoveFromValue(value);
-  if (parsed?.fenAfter) {
-    return parsed.fenAfter;
+  const canonicalWidget = readCanonicalWidgetFromValue(value);
+  if (canonicalWidget) {
+    return canonicalWidget.state.fen;
+  }
+
+  const parsedMove = readMoveFromValue(value);
+  if (parsedMove?.fenAfter) {
+    return parsedMove.fenAfter;
   }
 
   if (value && typeof value === "object" && !Array.isArray(value)) {
@@ -148,6 +168,17 @@ function buildMoveHint(widget: ChessBoardWidgetPayload) {
   return "Choose a piece, then choose its destination.";
 }
 
+function buildPersistedResponseValue(response: unknown, canonicalWidget: ChessBoardWidgetPayload) {
+  if (!response || typeof response !== "object" || Array.isArray(response)) {
+    return response;
+  }
+
+  return {
+    ...(response as Record<string, unknown>),
+    canonicalWidget,
+  };
+}
+
 export function BoardSurface({
   spec,
   value,
@@ -167,29 +198,53 @@ export function BoardSurface({
 
   const markerId = React.useId();
   const orientation = readOrientation(spec);
-  const widget: ChessBoardWidgetPayload = spec.widget;
-  const [currentWidget, setCurrentWidget] = React.useState<ChessBoardWidgetPayload>(widget);
+  const initialWidget: ChessBoardWidgetPayload = spec.widget;
+
+  const [runtimeWidget, setRuntimeWidget] = React.useState<ChessBoardWidgetPayload>(initialWidget);
   const [selectedSquare, setSelectedSquare] = React.useState<string | null>(null);
   const [draggedSquare, setDraggedSquare] = React.useState<string | null>(null);
   const [legalTargets, setLegalTargets] = React.useState<string[]>([]);
   const [draftMove, setDraftMove] = React.useState<{ from: string; to: string } | null>(null);
   const [pendingTransition, setPendingTransition] = React.useState(false);
   const [transitionError, setTransitionError] = React.useState<string | null>(null);
+  const [transitionFeedback, setTransitionFeedback] = React.useState<ActivityComponentFeedback | null>(null);
+  const [supportsPointerDrag, setSupportsPointerDrag] = React.useState(false);
 
   React.useEffect(() => {
-    setCurrentWidget(widget);
+    setRuntimeWidget(initialWidget);
     setSelectedSquare(null);
     setDraggedSquare(null);
     setLegalTargets([]);
     setDraftMove(null);
     setTransitionError(null);
-  }, [widget]);
+    setTransitionFeedback(null);
+  }, [initialWidget]);
 
-  const renderFen = readFen(value, currentWidget.state.fen);
+  React.useEffect(() => {
+    const canonicalWidget = readCanonicalWidgetFromValue(value);
+    if (!canonicalWidget) {
+      return;
+    }
+    setRuntimeWidget(canonicalWidget);
+  }, [value]);
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia("(pointer: fine)");
+    const update = () => setSupportsPointerDrag(mediaQuery.matches);
+    update();
+    mediaQuery.addEventListener("change", update);
+    return () => mediaQuery.removeEventListener("change", update);
+  }, []);
+
+  const renderFen = readFen(value, runtimeWidget.state.fen);
   const widgetForRequest: ChessBoardWidgetPayload = {
-    ...currentWidget,
+    ...runtimeWidget,
     state: {
-      ...currentWidget.state,
+      ...runtimeWidget.state,
       fen: renderFen,
     },
   };
@@ -203,21 +258,28 @@ export function BoardSurface({
     );
   }
 
-  const boardLocked = disabled || pendingTransition || (feedback != null && feedback.allowRetry === false);
+  const activeFeedback = transitionFeedback ?? feedback ?? null;
+  const boardLocked = disabled || pendingTransition || activeFeedback?.allowRetry === false;
   const allowInput = widgetForRequest.interaction.mode === "move_input";
+  const allowReset = widgetAllowsReset(widgetForRequest);
   const files = orientation === "black" ? [...FILES].reverse() : [...FILES];
   const ranks = orientation === "black" ? [...RANKS_BLACK] : [...RANKS_WHITE];
-  const inlineFeedback = widgetForRequest.feedback.displayMode === "inline" ? feedback : null;
+  const inlineFeedback = widgetForRequest.feedback.displayMode === "inline" ? activeFeedback : null;
   const sideToMoveLabel = parsedPosition.sideToMove === "white" ? "White to move" : "Black to move";
+  const instructionText = widgetInstructionText(widgetForRequest);
+  const caption = widgetCaption(widgetForRequest);
   const moveHint = buildMoveHint(widgetForRequest);
   const annotations = widgetForRequest.annotations ?? { arrows: [], highlightSquares: [] };
+  const hasPointerDrag =
+    supportsPointerDrag &&
+    allowInput &&
+    widgetForRequest.interaction.selectionMode !== "click_click";
 
   async function requestTransition(
     learnerAction:
       | { type: "select_square"; square: string }
       | { type: "submit_move"; move: Record<string, unknown> }
       | { type: "reset" },
-    currentValue: unknown = value,
   ) {
     if (!onRequestTransition) {
       return null;
@@ -231,7 +293,7 @@ export function BoardSurface({
         spec.type,
         widgetForRequest,
         learnerAction,
-        currentValue,
+        value,
       );
     } finally {
       setPendingTransition(false);
@@ -259,6 +321,7 @@ export function BoardSurface({
     setDraftMove(null);
     setLegalTargets(widgetForRequest.interaction.showLegalTargets ? transition.legalTargets : []);
     setTransitionError(null);
+    setTransitionFeedback(null);
   }
 
   async function submitMove(from: string, to: string) {
@@ -276,23 +339,36 @@ export function BoardSurface({
 
     if (!transition.accepted) {
       setTransitionError(transition.errorMessage ?? "That move was not accepted.");
+      setSelectedSquare(from);
+      setLegalTargets(widgetForRequest.interaction.showLegalTargets ? transition.legalTargets : []);
       return;
     }
 
-    setCurrentWidget(transition.canonicalWidget as ChessBoardWidgetPayload);
+    const nextWidget = transition.canonicalWidget as ChessBoardWidgetPayload;
+    setRuntimeWidget(nextWidget);
     setSelectedSquare(null);
     setDraggedSquare(null);
     setLegalTargets([]);
     setDraftMove(null);
     setTransitionError(null);
-    onChange(spec.id, transition.nextResponse ?? transition.normalizedLearnerAction ?? {});
+    setTransitionFeedback(transition.immediateFeedback ?? null);
 
-    if (!transition.immediateFeedback && onRequestFeedback && widgetForRequest.feedback.mode === "explicit_submit") {
-      await onRequestFeedback(
-        spec.id,
-        spec.type,
-        transition.nextResponse ?? transition.normalizedLearnerAction ?? {},
-      );
+    const shouldClearValue = transition.immediateFeedback?.allowRetry === true && transition.nextResponse == null;
+    const nextValue = shouldClearValue
+      ? null
+      : buildPersistedResponseValue(
+          transition.nextResponse ?? transition.normalizedLearnerAction ?? null,
+          nextWidget,
+        );
+    onChange(spec.id, nextValue);
+
+    if (
+      !transition.immediateFeedback &&
+      onRequestFeedback &&
+      widgetForRequest.feedback.mode === "explicit_submit" &&
+      nextValue != null
+    ) {
+      await onRequestFeedback(spec.id, spec.type, nextValue);
     }
   }
 
@@ -301,6 +377,7 @@ export function BoardSurface({
     setSelectedSquare(null);
     setLegalTargets([]);
     setTransitionError(null);
+    setTransitionFeedback(null);
   }
 
   async function handleSquareClick(square: string) {
@@ -330,22 +407,23 @@ export function BoardSurface({
   }
 
   async function handleReset() {
-    if (boardLocked || !widgetForRequest.interaction.allowReset) {
+    if (boardLocked || !allowReset) {
       return;
     }
 
-    const transition = await requestTransition({ type: "reset" }, value);
+    const transition = await requestTransition({ type: "reset" });
     if (!transition) {
       return;
     }
 
-    setCurrentWidget(transition.canonicalWidget as ChessBoardWidgetPayload);
+    setRuntimeWidget(transition.canonicalWidget as ChessBoardWidgetPayload);
     setSelectedSquare(null);
     setDraggedSquare(null);
     setLegalTargets([]);
     setDraftMove(null);
     setTransitionError(null);
-    onChange(spec.id, transition.nextResponse ?? {});
+    setTransitionFeedback(null);
+    onChange(spec.id, transition.nextResponse ?? null);
   }
 
   async function handleSubmitDraftMove() {
@@ -355,21 +433,58 @@ export function BoardSurface({
     await submitMove(draftMove.from, draftMove.to);
   }
 
-  const hasPointerDrag = widgetForRequest.interaction.selectionMode !== "click_click";
-
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0 space-y-1.5">
-          <p className="text-sm font-medium leading-relaxed">{spec.prompt}</p>
-          {moveHint && (
-            <p className="text-xs text-muted-foreground">{moveHint}</p>
-          )}
+      <div className="space-y-3">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0 space-y-1.5">
+            <p className="text-sm font-medium leading-relaxed">{spec.prompt}</p>
+            {instructionText && (
+              <p className="text-sm text-muted-foreground">{instructionText}</p>
+            )}
+            {moveHint && (
+              <p className="text-xs text-muted-foreground">{moveHint}</p>
+            )}
+          </div>
+
+          <div className="flex shrink-0 flex-col items-end gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {widgetForRequest.display.showSideToMove && (
+                <span className="rounded-full border border-border bg-background px-2.5 py-1 text-[11px] font-medium text-foreground">
+                  {sideToMoveLabel}
+                </span>
+              )}
+              <span className="rounded-full border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground">
+                {orientation === "white" ? "White at bottom" : "Black at bottom"}
+              </span>
+            </div>
+
+            {allowReset && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleReset}
+                disabled={boardLocked}
+                className="h-8 gap-1.5 px-2.5 text-xs text-muted-foreground"
+              >
+                <RotateCcw className="size-3.5" />
+                Reset
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {caption && (
+          <p className="text-xs text-muted-foreground">{caption}</p>
+        )}
+
+        <div className="min-h-4">
           {transitionError && (
             <p className="text-xs text-destructive">{transitionError}</p>
           )}
           {pendingTransition && (
-            <p className="text-xs text-muted-foreground">Updating board…</p>
+            <p className="text-xs text-muted-foreground">Updating board...</p>
           )}
           {!pendingTransition && inlineFeedback && (
             <p
@@ -382,36 +497,11 @@ export function BoardSurface({
             </p>
           )}
         </div>
-
-        <div className="flex shrink-0 flex-col items-end gap-2">
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            {widgetForRequest.display.showSideToMove && (
-              <span className="rounded-full border border-border bg-background px-2.5 py-1 text-[11px] font-medium text-foreground">
-                {sideToMoveLabel}
-              </span>
-            )}
-            <span className="rounded-full border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground">
-              {orientation === "white" ? "White at bottom" : "Black at bottom"}
-            </span>
-          </div>
-
-          {widgetForRequest.interaction.allowReset && (
-            <button
-              type="button"
-              onClick={handleReset}
-              disabled={boardLocked}
-              className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-muted/40 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <RotateCcw className="size-3.5" />
-              Reset
-            </button>
-          )}
-        </div>
       </div>
 
-      <div className="rounded-2xl border border-border/70 bg-card/90 p-3 sm:p-4">
+      <div className="rounded-xl border border-border/70 bg-card p-3 sm:p-4">
         <div className="mx-auto flex w-full max-w-[34rem] flex-col gap-3">
-          <div className="relative aspect-square w-full overflow-hidden rounded-xl border border-border/70 bg-[#efe7d3] shadow-sm">
+          <div className="relative aspect-square w-full overflow-hidden rounded-lg border border-border/70 bg-[#efe7d3] shadow-sm">
             <svg
               aria-hidden="true"
               className="pointer-events-none absolute inset-0 z-20"
@@ -452,7 +542,15 @@ export function BoardSurface({
               })}
             </svg>
 
-            <div className="grid h-full grid-cols-8">
+            {pendingTransition && (
+              <div className="absolute inset-0 z-30 flex items-center justify-center bg-background/50 backdrop-blur-[1px]">
+                <span className="rounded-md border border-border bg-background px-3 py-1.5 text-xs text-muted-foreground">
+                  Updating board...
+                </span>
+              </div>
+            )}
+
+            <div className="grid h-full w-full grid-cols-8 grid-rows-8 gap-px bg-border/40">
               {ranks.map((rank) =>
                 files.map((file) => {
                   const square = `${file}${rank}`;
@@ -491,9 +589,10 @@ export function BoardSurface({
                       }}
                       onDragEnd={() => setDraggedSquare(null)}
                       data-square={square}
+                      data-piece={piece ? `${piece.color}${piece.type}` : undefined}
                       aria-label={square}
                       className={cn(
-                        "group relative flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
+                        "group relative flex aspect-square min-w-0 items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
                         isDarkSquare ? "bg-[#7b5e45]" : "bg-[#f7f0dd]",
                         !allowInput && "cursor-default",
                         boardLocked && "cursor-wait",
@@ -519,14 +618,14 @@ export function BoardSurface({
                           aria-hidden="true"
                           className={cn(
                             "pointer-events-none absolute rounded-full bg-primary/30",
-                            piece ? "inset-2 border border-primary/25" : "size-3",
+                            piece ? "inset-[18%] border border-primary/25" : "size-3.5",
                           )}
                         />
                       )}
 
                       {piece ? (
                         <span
-                          draggable={allowInput && hasPointerDrag && !boardLocked}
+                          draggable={hasPointerDrag && !boardLocked}
                           onDragStart={() => {
                             if (!hasPointerDrag || boardLocked) {
                               return;
@@ -537,7 +636,7 @@ export function BoardSurface({
                           className={cn(
                             "relative z-10 select-none text-[clamp(1.45rem,4.6vw,2.35rem)] leading-none",
                             piece.color === "w" ? "text-white drop-shadow-[0_1px_0_rgba(0,0,0,0.45)]" : "text-slate-950",
-                            allowInput && !boardLocked && "cursor-grab active:cursor-grabbing",
+                            hasPointerDrag && !boardLocked && "cursor-grab active:cursor-grabbing",
                           )}
                         >
                           {PIECE_SYMBOLS[`${piece.color}${piece.type}`]}
@@ -560,14 +659,15 @@ export function BoardSurface({
                   Submit the move only when you are ready to check it.
                 </p>
               </div>
-              <button
+              <Button
                 type="button"
+                size="sm"
                 onClick={() => void handleSubmitDraftMove()}
                 disabled={!draftMove || boardLocked}
-                className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                className="h-8 px-3 text-xs"
               >
                 Submit move
-              </button>
+              </Button>
             </div>
           )}
         </div>

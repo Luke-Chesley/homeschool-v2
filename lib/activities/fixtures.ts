@@ -35,10 +35,31 @@ export const FIXTURE_SESSIONS: ActivitySession[] = [
             version: "1",
             surfaceKind: "board_surface",
             engineKind: "chess",
+            instructionText: "Play the move directly on the board.",
+            caption: "Use the board first, then check the feedback.",
             surface: { orientation: "white" },
-            state: { fen: "4k3/8/8/8/8/8/4Q3/4K3 w - - 0 1" },
+            state: {
+              fen: "4k3/8/8/8/8/8/4Q3/4K3 w - - 0 1",
+              initialFen: "4k3/8/8/8/8/8/4Q3/4K3 w - - 0 1",
+            },
+            display: {
+              showSideToMove: true,
+              showCoordinates: true,
+              showMoveHint: true,
+              boardRole: "primary",
+            },
             interaction: {
               mode: "move_input",
+              submissionMode: "immediate",
+              selectionMode: "click_click",
+              showLegalTargets: true,
+              allowReset: true,
+              resetPolicy: "reset_to_initial",
+              attemptPolicy: "allow_retry",
+            },
+            feedback: {
+              mode: "immediate",
+              displayMode: "inline",
             },
             evaluation: {
               expectedMoves: ["Qb5+", "e2b5"],
