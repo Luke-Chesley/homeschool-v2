@@ -23,7 +23,7 @@ export const LessonBlockSchema = z.object({
   teacher_action: z.string().min(1).max(MAX_ACTION_STRING),
   learner_action: z.string().min(1).max(MAX_ACTION_STRING),
   check_for: z.string().max(MAX_SHORT_STRING).optional(),
-  materials_needed: z.array(z.string().max(100)).optional(),
+  materials_needed: z.array(z.string().max(MAX_SHORT_STRING)).optional(),
   optional: z.boolean().optional(),
 });
 
@@ -49,7 +49,7 @@ export const StructuredLessonDraftSchema = z
     success_criteria: z.array(z.string().min(1).max(MAX_SHORT_STRING)).min(1).max(6),
     total_minutes: z.number().int().positive(),
     blocks: z.array(LessonBlockSchema).min(1),
-    materials: z.array(z.string().max(120)),
+    materials: z.array(z.string().max(MAX_SHORT_STRING)),
     teacher_notes: z.array(z.string().max(MAX_SHORT_STRING)),
     adaptations: z.array(LessonAdaptationSchema),
 
