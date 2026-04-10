@@ -7,7 +7,7 @@
  */
 
 import { ActivitySpecSchema, type ActivitySpec } from "./spec.ts";
-import { COMPONENT_TYPE_LIST, INTERACTIVE_COMPONENT_TYPES } from "./components.ts";
+import { COMPONENT_TYPE_LIST, isInteractiveComponentSpec } from "./components.ts";
 
 export interface ValidationResult {
   valid: boolean;
@@ -56,7 +56,7 @@ function runSemanticChecks(
 
   // Must have at least one interactive component (not just content)
   const hasInteractive = spec.components.some((c) =>
-    INTERACTIVE_COMPONENT_TYPES.includes(c.type),
+    isInteractiveComponentSpec(c),
   );
   if (!hasInteractive) {
     errors.push("Activity must have at least one interactive component.");

@@ -8,6 +8,72 @@
 import type { ActivitySession } from "./types";
 
 export const FIXTURE_SESSIONS: ActivitySession[] = [
+  // --- Structured chess board ---
+  {
+    id: "session-chess-001",
+    learnerId: "learner-demo",
+    activityId: "activity-chess-001",
+    status: "not_started",
+    estimatedMinutes: 6,
+    standardIds: [],
+    definition: {
+      schemaVersion: "2",
+      title: "Find the checking move",
+      purpose: "Study the position and play the queen move that gives check.",
+      activityKind: "guided_practice",
+      linkedObjectiveIds: [],
+      linkedSkillTitles: ["forcing check"],
+      estimatedMinutes: 6,
+      interactionMode: "digital",
+      components: [
+        {
+          type: "interactive_widget",
+          id: "mate-in-one",
+          prompt: "White to move. Find the queen move that gives check.",
+          required: true,
+          widget: {
+            version: "1",
+            surfaceKind: "board_surface",
+            engineKind: "chess",
+            surface: { orientation: "white" },
+            state: { fen: "4k3/8/8/8/8/8/4Q3/4K3 w - - 0 1" },
+            interaction: {
+              mode: "move_input",
+            },
+            evaluation: {
+              expectedMoves: ["Qb5+", "e2b5"],
+            },
+            annotations: {
+              highlightSquares: ["e2", "b5", "e8"],
+              arrows: [],
+            },
+          },
+        },
+      ],
+      completionRules: { strategy: "all_interactive_components" },
+      evidenceSchema: {
+        captureKinds: ["answer_response"],
+        requiresReview: false,
+        autoScorable: true,
+      },
+      scoringModel: {
+        mode: "correctness_based",
+        masteryThreshold: 0.8,
+        reviewThreshold: 0.6,
+      },
+      adaptationRules: {
+        hintStrategy: "on_request",
+        allowSkip: false,
+        allowRetry: true,
+      },
+      teacherSupport: {
+        setupNotes: "Let the learner inspect checks, captures, and threats before moving.",
+        discussionQuestions: ["What line does the queen use to give check?"],
+        masteryIndicators: ["Learner finds the checking move from the board position."],
+      },
+    } as unknown as ActivitySession["definition"],
+  },
+
   // --- Quiz ---
   {
     id: "session-quiz-001",

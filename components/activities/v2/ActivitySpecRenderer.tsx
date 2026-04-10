@@ -11,11 +11,12 @@
  */
 
 import * as React from "react";
-import { Clock, CheckCircle, BookOpen, MapPin } from "lucide-react";
+import { Clock, CheckCircle, BookOpen, MapPin, AlertCircle, CircleCheck, CircleDashed } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { renderComponent } from "./ComponentRegistry";
-import { INTERACTIVE_COMPONENT_TYPES } from "@/lib/activities/components";
+import { isInteractiveComponentSpec, type ComponentSpec } from "@/lib/activities/components";
+import type { ActivityComponentFeedback } from "@/lib/activities/feedback";
 import type { ActivitySpec } from "@/lib/activities/spec";
 import { ACTIVITY_KIND_LABELS } from "@/lib/activities/kinds";
 
@@ -35,6 +36,11 @@ export interface ActivitySpecRendererProps {
   initialEvidence?: ActivitySpecEvidence;
   estimatedMinutes?: number;
   onEvidenceChange?: (evidence: ActivitySpecEvidence) => void;
+  onComponentFeedbackRequest?: (
+    componentId: string,
+    componentType: ComponentSpec["type"],
+    value: unknown,
+  ) => Promise<ActivityComponentFeedback | null>;
   onSubmit?: (evidence: ActivitySpecEvidence) => void;
   submitting?: boolean;
   submitted?: boolean;
@@ -49,22 +55,48 @@ export function ActivitySpecRenderer({
   initialEvidence = {},
   estimatedMinutes,
   onEvidenceChange,
+  onComponentFeedbackRequest,
   onSubmit,
   submitting,
   submitted,
 }: ActivitySpecRendererProps) {
   const [evidence, setEvidence] = React.useState<ActivitySpecEvidence>(initialEvidence);
+  const [feedbackByComponent, setFeedbackByComponent] = React.useState<Record<string, ActivityComponentFeedback>>({});
 
   function handleComponentChange(componentId: string, value: unknown) {
     const next = { ...evidence, [componentId]: value };
     setEvidence(next);
+    setFeedbackByComponent((current) => {
+      if (!(componentId in current)) {
+        return current;
+      }
+      const { [componentId]: _removed, ...rest } = current;
+      return rest;
+    });
     onEvidenceChange?.(next);
   }
 
+  async function handleComponentFeedback(
+    componentId: string,
+    componentType: ComponentSpec["type"],
+    value: unknown,
+  ) {
+    if (!onComponentFeedbackRequest) {
+      return null;
+    }
+
+    const feedback = await onComponentFeedbackRequest(componentId, componentType, value);
+    if (feedback) {
+      setFeedbackByComponent((current) => ({
+        ...current,
+        [componentId]: feedback,
+      }));
+    }
+    return feedback;
+  }
+
   // Calculate completion progress
-  const interactiveComponents = spec.components.filter((c) =>
-    INTERACTIVE_COMPONENT_TYPES.includes(c.type),
-  );
+  const interactiveComponents = spec.components.filter((c) => isInteractiveComponentSpec(c));
   const answeredCount = interactiveComponents.filter((c) => {
     const v = evidence[c.id];
     if (v == null || v === "" || (Array.isArray(v) && v.length === 0)) return false;
@@ -177,9 +209,14 @@ export function ActivitySpecRenderer({
               spec: component,
               value: evidence[component.id],
               onChange: handleComponentChange,
+              feedback: feedbackByComponent[component.id] ?? null,
+              onRequestFeedback: handleComponentFeedback,
               disabled: submitted,
               hintStrategy,
             })}
+            {feedbackByComponent[component.id] && (
+              <ComponentFeedbackBanner feedback={feedbackByComponent[component.id]} />
+            )}
           </div>
         ))}
       </div>
@@ -315,6 +352,37 @@ function TeacherSupportPanel({ support }: { support: NonNullable<ActivitySpec["t
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function ComponentFeedbackBanner({ feedback }: { feedback: ActivityComponentFeedback }) {
+  const icon = feedback.status === "correct"
+    ? <CircleCheck className="mt-0.5 size-4 shrink-0" />
+    : feedback.status === "partial"
+      ? <CircleDashed className="mt-0.5 size-4 shrink-0" />
+      : <AlertCircle className="mt-0.5 size-4 shrink-0" />;
+
+  const tone = feedback.status === "correct"
+    ? "border-emerald-200 bg-emerald-50/80 text-emerald-900"
+    : feedback.status === "partial"
+      ? "border-amber-200 bg-amber-50/80 text-amber-900"
+      : "border-border bg-muted/50 text-foreground";
+
+  return (
+    <div className={cn("mt-3 rounded-xl border px-3 py-2.5 text-sm", tone)}>
+      <div className="flex items-start gap-2">
+        {icon}
+        <div className="space-y-1">
+          <p>{feedback.feedbackMessage}</p>
+          {feedback.hint && (
+            <p className="text-xs opacity-85">Hint: {feedback.hint}</p>
+          )}
+          {feedback.nextStep && (
+            <p className="text-xs opacity-85">Next step: {feedback.nextStep}</p>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

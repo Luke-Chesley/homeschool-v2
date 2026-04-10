@@ -10,6 +10,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ActivityRenderer } from "@/components/activities/ActivityRenderer";
+import { ActivityComponentFeedbackSchema, type ActivityComponentFeedback } from "@/lib/activities/feedback";
 import type { ActivitySession, ActivityAttempt, AttemptAnswer } from "@/lib/activities/types";
 
 interface Props {
@@ -97,6 +98,33 @@ export default function ActivitySessionPage({ params }: Props) {
     }
   }
 
+  async function handleComponentFeedback(
+    componentId: string,
+    componentType: string,
+    learnerResponse: unknown,
+  ): Promise<ActivityComponentFeedback | null> {
+    if (!attempt) {
+      return null;
+    }
+
+    const response = await fetch(`/api/activities/attempts/${attempt.id}/feedback`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        componentId,
+        componentType,
+        learnerResponse,
+      }),
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const payload = await response.json();
+    return ActivityComponentFeedbackSchema.parse(payload);
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24">
@@ -128,6 +156,7 @@ export default function ActivitySessionPage({ params }: Props) {
         attempt={attempt}
         estimatedMinutes={session.estimatedMinutes}
         onAnswerChange={handleAnswerChange}
+        onComponentFeedbackRequest={handleComponentFeedback}
         onSubmit={handleSubmit}
         submitting={submitting}
         submitted={submitted}

@@ -5,7 +5,7 @@
 - **Current Version:** 2 (Schema Version)
 
 ## Purpose
-The Activity Artifact represents a structured, AI-generated specification for an interactive learner experience. It is designed to be rendered deterministically by a bounded component library, avoiding arbitrary UI code.
+The Activity Artifact represents a structured, AI-generated specification for an interactive learner experience. It is designed to be rendered deterministically by a bounded component library, avoiding arbitrary UI code. Rich interactive tasks are represented through the bounded `interactive_widget` host rather than one-off top-level component types.
 
 ## Producers
 - **Entrypoints:** `learning-core /v1/operations/activity_generate/execute`
@@ -17,9 +17,12 @@ The Activity Artifact represents a structured, AI-generated specification for an
 - **Entrypoints:**
   - `app/(learner)/activity/[id]/page.tsx`
   - `components/activities/ActivityRenderer.tsx`
+  - `app/api/activities/attempts/[attemptId]/feedback/route.ts`
 - **Processing Logic:**
   - Renderers in `components/activities/` interpret the `components` list to display the UI.
   - The `scoringModel` and `evidenceSchema` define how the runtime captures and scores learner input.
+  - Runtime feedback requests resolve the current component from the persisted ActivitySpec and send it to `learning-core` for bounded component-level evaluation.
+  - `interactive_widget` delegates rendering to a generic host that chooses a bounded surface such as `board_surface`, `expression_surface`, or `graph_surface`.
 
 ## Persistence
 - **Storage Location:** 
@@ -67,8 +70,16 @@ The Activity Artifact represents a structured, AI-generated specification for an
 
 ## Validation & Invariants
 - **Interactive Component:** At least one interactive component (e.g., `short_answer`, `single_select`) must be present.
+- **Conditional Interactivity:** `interactive_widget` only counts as interactive when the nested widget mode accepts input.
 - **Component IDs:** Must be unique within the activity.
 - **Auto-scorable:** `autoScorable` evidence only works with `correctness_based` scoring.
+
+## Notable Component Shapes
+
+- `interactive_widget`
+  - Bounded host for engine-backed tasks such as chess positions, symbolic math, and graphs
+  - Contains nested `widget` data with `surfaceKind`, `engineKind`, `state`, `interaction`, `evaluation`, and `annotations`
+  - Used for board-based tasks, structured expression input, and graph interactions without adding more top-level one-off components
 
 ## Ownership & Hierarchy
 - **Parent:** Lesson Draft / Plan Item

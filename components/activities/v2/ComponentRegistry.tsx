@@ -44,6 +44,7 @@ import {
   BuildStepsComponent,
   DragArrangeComponent,
 } from "./StructuredComponents";
+import { WidgetHost } from "./WidgetHost";
 
 // Assessment / reflection components
 import {
@@ -101,6 +102,7 @@ const REGISTRY: Partial<Record<ComponentSpec["type"], RendererFn>> = {
   sort_into_groups: (p) => <SortIntoGroupsComponent {...(p as Parameters<typeof SortIntoGroupsComponent>[0])} />,
   build_steps: (p) => <BuildStepsComponent {...(p as Parameters<typeof BuildStepsComponent>[0])} />,
   drag_arrange: (p) => <DragArrangeComponent {...(p as Parameters<typeof DragArrangeComponent>[0])} />,
+  interactive_widget: (p) => <WidgetHost {...(p as Parameters<typeof WidgetHost>[0])} />,
 
   // Assessment
   reflection_prompt: (p) => <ReflectionPromptComponent {...(p as Parameters<typeof ReflectionPromptComponent>[0])} />,
@@ -127,6 +129,8 @@ export interface RenderComponentProps {
   spec: ComponentSpec;
   value: unknown;
   onChange: (componentId: string, value: unknown) => void;
+  feedback?: ComponentRendererProps<ComponentSpec>["feedback"];
+  onRequestFeedback?: ComponentRendererProps<ComponentSpec>["onRequestFeedback"];
   disabled?: boolean;
   hintStrategy?: "on_request" | "always" | "after_wrong_attempt";
 }
@@ -135,6 +139,8 @@ export function renderComponent({
   spec,
   value,
   onChange,
+  feedback,
+  onRequestFeedback,
   disabled,
   hintStrategy,
 }: RenderComponentProps): React.ReactElement {
@@ -147,7 +153,7 @@ export function renderComponent({
     );
   }
 
-  return renderer({ spec, value, onChange, disabled, hintStrategy }) ?? (
+  return renderer({ spec, value, onChange, feedback, onRequestFeedback, disabled, hintStrategy }) ?? (
     <div className="rounded-lg border border-dashed border-border/50 p-3 text-xs text-muted-foreground">
       Component error: {spec.type}
     </div>

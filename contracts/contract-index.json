@@ -146,13 +146,18 @@
       "canonicalSources": [
         "learning-core/learning_core/skills/activity_generate/SKILL.md",
         "learning-core/learning_core/contracts/activity.py",
-        "lib/learning-core/activity.ts"
+        "lib/learning-core/activity.ts",
+        "lib/activities/components.ts",
+        "lib/activities/widgets.ts"
       ],
       "producerEntrypoints": [
         "learning-core: POST /v1/operations/activity_generate/execute"
       ],
       "consumerEntrypoints": [
         "components/activities/ActivityRenderer.tsx",
+        "components/activities/v2/ComponentRegistry.tsx",
+        "components/activities/v2/WidgetHost.tsx",
+        "app/api/activities/attempts/[attemptId]/feedback/route.ts",
         "lib/activities/assignment-service.ts"
       ],
       "versionFields": [

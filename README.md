@@ -32,6 +32,7 @@ This repo no longer owns extracted prompt templates or a generic AI gateway.
 | `/curriculum` | `app/(parent)/curriculum/page.tsx`, `components/curriculum/`, `lib/curriculum/ai-draft-service.ts`, `lib/curriculum/progression-regeneration.ts`, `lib/learning-core/curriculum.ts` |
 | `/tracking` | `app/(parent)/tracking/page.tsx`, `components/tracking/`, `lib/tracking/`, `lib/homeschool/attendance/` |
 | `/copilot` | `app/(parent)/copilot/page.tsx`, `components/copilot/`, `components/debug/`, `app/api/ai/chat/route.ts`, `lib/learning-core/copilot.ts`, `lib/ai/copilot-store.ts` |
+| `/activity/[sessionId]` | `app/(learner)/activity/[sessionId]/page.tsx`, `components/activities/`, `lib/activities/`, `app/api/activities/attempts/[attemptId]/feedback/route.ts`, `lib/learning-core/activity-feedback.ts` |
 | `/users` | `app/users/page.tsx`, `components/users/`, `lib/users/` |
 | `/onboarding` | `app/onboarding/page.tsx`, `lib/homeschool/onboarding/`, `app/api/homeschool/onboarding/route.ts`, `lib/learning-core/curriculum.ts` |
 | `/sample-activity` | `app/sample-activity/page.tsx`, `components/activities/`, `lib/activities/` |
@@ -62,6 +63,8 @@ If you are tracing an AI flow in this repo:
 
 - `lib/learning-core/`
   Thin typed HTTP clients for operation preview/execute.
+- `lib/learning-core/activity-feedback.ts`
+  Typed runtime feedback client for learner component answers.
 - `app/api/ai/chat/route.ts`
   Copilot request entrypoint. Sends structured chat context to `learning-core`.
 - `app/api/ai/lesson-plan/route.ts`

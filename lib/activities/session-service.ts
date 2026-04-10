@@ -1,10 +1,12 @@
 import "@/lib/server-only";
 
+import type { ActivityComponentFeedback, RequestActivityComponentFeedback } from "./feedback";
 import { getAttemptStore } from "./attempt-store";
 import type { ActivityAttempt, ActivityOutcome, ActivitySession, AttemptAnswer } from "./types";
 import { parseActivityDefinition } from "./types";
 import { parseActivitySpec, isActivitySpec, ActivitySpecSchema } from "./spec";
 import { ensurePublishedActivitiesForLearner } from "./assignment-service";
+import { requestLearningCoreActivityFeedback } from "@/lib/learning-core/activity-feedback";
 import {
   applyOutcomeFeedbackToSkillState,
   classifyProgressOutcome,
@@ -392,6 +394,49 @@ export async function autosave(
   uiState?: Record<string, unknown>,
 ): Promise<ActivityAttempt> {
   return getAttemptStore().save(attemptId, answers, uiState);
+}
+
+export async function requestActivityComponentFeedback(
+  attemptId: string,
+  input: RequestActivityComponentFeedback,
+  learnerId: string,
+): Promise<ActivityComponentFeedback> {
+  const attempt = await getAttemptStore().get(attemptId);
+  if (!attempt) {
+    throw new Error(`Attempt not found: ${attemptId}`);
+  }
+
+  if (attempt.learnerId !== learnerId) {
+    throw new Error("Attempt does not belong to the active learner.");
+  }
+
+  const session = await getSession(attempt.sessionId);
+  if (!session || !isActivitySpec(session.definition)) {
+    throw new Error("Runtime feedback is only available for structured activity specs.");
+  }
+
+  const spec = parseActivitySpec(session.definition);
+  if (!spec) {
+    throw new Error("Could not parse the activity spec for runtime feedback.");
+  }
+
+  const component = spec.components.find((item) => item.id === input.componentId);
+  if (!component || component.type !== input.componentType) {
+    throw new Error("Requested component feedback for an unknown component.");
+  }
+
+  return requestLearningCoreActivityFeedback({
+    activityId: session.activityId,
+    activitySpec: spec,
+    componentId: component.id,
+    componentType: component.type,
+    widget: component.type === "interactive_widget" ? component.widget : undefined,
+    learnerResponse: input.learnerResponse,
+    learnerId,
+    lessonSessionId: session.lessonId ?? session.id,
+    attemptId,
+    timeSpentMs: input.timeSpentMs,
+  });
 }
 
 export async function submitAttempt(attemptId: string): Promise<ActivityOutcome> {

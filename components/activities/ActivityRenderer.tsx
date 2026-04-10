@@ -17,6 +17,7 @@ import type {
   HybridLayoutActivity,
   HybridComponent,
 } from "@/lib/activities/types";
+import type { ActivityComponentFeedback } from "@/lib/activities/feedback";
 import { isActivitySpec } from "@/lib/activities/spec";
 import type { ActivitySpec } from "@/lib/activities/spec";
 import { ActivitySpecRenderer } from "./v2/ActivitySpecRenderer";
@@ -32,10 +33,15 @@ import { FileSubmissionRenderer } from "./FileSubmissionRenderer";
 import { SupervisorSignOffRenderer } from "./SupervisorSignOffRenderer";
 
 export interface ActivityRendererProps {
-  definition: ActivityDefinition;
+  definition: ActivityDefinition | ActivitySpec;
   attempt?: ActivityAttempt | null;
   estimatedMinutes?: number;
   onAnswerChange?: (answers: AttemptAnswer[], uiState?: Record<string, unknown>) => void;
+  onComponentFeedbackRequest?: (
+    componentId: string,
+    componentType: string,
+    value: unknown,
+  ) => Promise<ActivityComponentFeedback | null>;
   onSubmit?: (answers: AttemptAnswer[]) => void;
   submitting?: boolean;
   submitted?: boolean;
@@ -46,6 +52,7 @@ export function ActivityRenderer({
   attempt,
   estimatedMinutes,
   onAnswerChange,
+  onComponentFeedbackRequest,
   onSubmit,
   submitting,
   submitted,
@@ -71,6 +78,7 @@ export function ActivityRenderer({
           }));
           onAnswerChange?.(answers, evidence);
         }}
+        onComponentFeedbackRequest={onComponentFeedbackRequest}
         onSubmit={(evidence) => {
           const answers = Object.entries(evidence).map(([questionId, value]) => ({
             questionId,

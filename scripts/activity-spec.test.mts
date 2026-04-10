@@ -14,7 +14,12 @@ import test from "node:test";
 
 import { validateActivitySpec } from "../lib/activities/validation.ts";
 import { parseActivitySpec, isActivitySpec } from "../lib/activities/spec.ts";
-import { COMPONENT_TYPE_LIST, INTERACTIVE_COMPONENT_TYPES } from "../lib/activities/components.ts";
+import {
+  COMPONENT_TYPE_LIST,
+  INTERACTIVE_COMPONENT_TYPES,
+  isInteractiveComponentSpec,
+} from "../lib/activities/components.ts";
+import { InteractiveWidgetComponentSchema } from "../lib/activities/widgets.ts";
 import { interpretScore } from "../lib/activities/scoring.ts";
 import type { ActivitySpec } from "../lib/activities/spec.ts";
 
@@ -121,6 +126,54 @@ const offlineSpec: ActivitySpec = {
   },
 };
 
+const chessSpec: ActivitySpec = {
+  schemaVersion: "2",
+  title: "Find the checking move",
+  purpose: "Play the queen move that gives check from the given position.",
+  activityKind: "guided_practice",
+  linkedObjectiveIds: [],
+  linkedSkillTitles: ["forcing check"],
+  estimatedMinutes: 6,
+  interactionMode: "digital",
+  components: [
+    {
+      type: "interactive_widget",
+      id: "mate-in-one",
+      prompt: "White to move. Find the queen move that gives check.",
+      required: true,
+      widget: {
+        version: "1",
+        surfaceKind: "board_surface",
+        engineKind: "chess",
+        surface: { orientation: "white" },
+        state: { fen: "4k3/8/8/8/8/8/4Q3/4K3 w - - 0 1" },
+        interaction: {
+          mode: "move_input",
+        },
+        evaluation: {
+          expectedMoves: ["Qb5+", "e2b5"],
+        },
+        annotations: {
+          arrows: [],
+          highlightSquares: [],
+        },
+      },
+      required: true,
+    },
+  ],
+  completionRules: { strategy: "all_interactive_components" },
+  evidenceSchema: {
+    captureKinds: ["answer_response"],
+    requiresReview: false,
+    autoScorable: true,
+  },
+  scoringModel: {
+    mode: "correctness_based",
+    masteryThreshold: 0.8,
+    reviewThreshold: 0.6,
+  },
+};
+
 // ---------------------------------------------------------------------------
 // Test: schema validation
 // ---------------------------------------------------------------------------
@@ -133,6 +186,11 @@ test("validateActivitySpec — accepts a valid spec", () => {
 
 test("validateActivitySpec — accepts a valid offline spec", () => {
   const result = validateActivitySpec(offlineSpec);
+  assert.equal(result.valid, true, `Expected valid but got errors: ${result.errors.join(", ")}`);
+});
+
+test("validateActivitySpec — accepts a valid chess board spec", () => {
+  const result = validateActivitySpec(chessSpec);
   assert.equal(result.valid, true, `Expected valid but got errors: ${result.errors.join(", ")}`);
 });
 
@@ -209,6 +267,13 @@ test("parseActivitySpec — returns null for invalid spec", () => {
   assert.equal(parseActivitySpec("not an object"), null);
 });
 
+test("InteractiveWidgetComponentSchema — parses nested widget payload", () => {
+  const parsed = InteractiveWidgetComponentSchema.parse(chessSpec.components[0]);
+  assert.equal(parsed.type, "interactive_widget");
+  assert.equal(parsed.widget.surfaceKind, "board_surface");
+  assert.equal(parsed.widget.engineKind, "chess");
+});
+
 // ---------------------------------------------------------------------------
 // Test: component library
 // ---------------------------------------------------------------------------
@@ -220,7 +285,7 @@ test("COMPONENT_TYPE_LIST — contains all expected types", () => {
     "single_select", "multi_select", "rating", "confidence_check",
     "checklist", "ordered_sequence", "matching_pairs",
     "categorization", "sort_into_groups", "label_map", "hotspot_select",
-    "build_steps", "drag_arrange",
+    "build_steps", "drag_arrange", "interactive_widget",
     "reflection_prompt", "rubric_self_check",
     "file_upload", "image_capture", "audio_capture",
     "observation_record", "teacher_checkoff",
@@ -230,6 +295,7 @@ test("COMPONENT_TYPE_LIST — contains all expected types", () => {
     assert.ok(COMPONENT_TYPE_LIST.includes(type as typeof COMPONENT_TYPE_LIST[number]),
       `Missing component type: ${type}`);
   }
+  assert.equal(COMPONENT_TYPE_LIST.includes("chess_board" as never), false);
 });
 
 test("INTERACTIVE_COMPONENT_TYPES — does not include content-only types", () => {
@@ -241,6 +307,23 @@ test("INTERACTIVE_COMPONENT_TYPES — does not include content-only types", () =
       `Content type should not be interactive: ${type}`,
     );
   }
+});
+
+test("isInteractiveComponentSpec — interactive widget is interactive only with input enabled", () => {
+  assert.equal(isInteractiveComponentSpec(chessSpec.components[0]), true);
+  assert.equal(
+    isInteractiveComponentSpec({
+      ...chessSpec.components[0],
+      widget: {
+        ...chessSpec.components[0].widget,
+        interaction: {
+          ...chessSpec.components[0].widget.interaction,
+          mode: "view_only",
+        },
+      },
+    }),
+    false,
+  );
 });
 
 // ---------------------------------------------------------------------------

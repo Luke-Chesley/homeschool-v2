@@ -14,6 +14,7 @@
  */
 
 import { z } from "zod";
+import { InteractiveWidgetComponentSchema, widgetAcceptsInput } from "./widgets";
 
 // ---------------------------------------------------------------------------
 // Shared evidence shape (each component produces one of these when completed)
@@ -464,6 +465,7 @@ export const ComponentSpecSchema = z.discriminatedUnion("type", [
   HotspotSelectComponentSchema,
   BuildStepsComponentSchema,
   DragArrangeComponentSchema,
+  InteractiveWidgetComponentSchema,
   ReflectionPromptComponentSchema,
   RubricSelfCheckComponentSchema,
   FileUploadComponentSchema,
@@ -502,6 +504,7 @@ export const COMPONENT_TYPE_LIST: ComponentType[] = [
   "hotspot_select",
   "build_steps",
   "drag_arrange",
+  "interactive_widget",
   "reflection_prompt",
   "rubric_self_check",
   "file_upload",
@@ -543,6 +546,16 @@ export const INTERACTIVE_COMPONENT_TYPES: ComponentType[] = [
   "choose_next_step",
   "construction_space",
 ];
+
+export function isInteractiveComponentSpec(component: ComponentSpec): boolean {
+  if (INTERACTIVE_COMPONENT_TYPES.includes(component.type)) {
+    return true;
+  }
+  if (component.type === "interactive_widget") {
+    return widgetAcceptsInput(component.widget);
+  }
+  return false;
+}
 
 /** Component types that are content-only (no evidence captured). */
 export const CONTENT_COMPONENT_TYPES: ComponentType[] = [
