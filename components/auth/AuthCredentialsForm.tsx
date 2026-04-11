@@ -1,0 +1,178 @@
+"use client";
+
+import * as React from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { getBrowserAuthClient } from "@/lib/auth/browser";
+
+type AuthCredentialsFormProps = {
+  mode: "login" | "sign_up";
+};
+
+export function AuthCredentialsForm({ mode }: AuthCredentialsFormProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [email, setEmail] = React.useState("");
+  const [password, setPassword] = React.useState("");
+  const [fullName, setFullName] = React.useState("");
+  const [submitting, setSubmitting] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [notice, setNotice] = React.useState<string | null>(null);
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSubmitting(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const auth = getBrowserAuthClient();
+
+      if (mode === "login") {
+        const { error: authError } = await auth.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        });
+
+        if (authError) {
+          throw authError;
+        }
+
+        const next = searchParams.get("next") || "/";
+        router.replace(next);
+        router.refresh();
+        return;
+      }
+
+      const redirectTo = `${window.location.origin}/auth/confirm`;
+      const { data, error: authError } = await auth.auth.signUp({
+        email: email.trim(),
+        password,
+        options: {
+          emailRedirectTo: redirectTo,
+          data: fullName.trim() ? { full_name: fullName.trim() } : undefined,
+        },
+      });
+
+      if (authError) {
+        throw authError;
+      }
+
+      if (data.session) {
+        router.replace("/auth/setup");
+        router.refresh();
+        return;
+      }
+
+      setNotice("Check your email to finish account setup.");
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Authentication failed.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Card className="border-border/70 bg-card/85 shadow-[var(--shadow-card)]">
+      <CardHeader>
+        <CardTitle>{mode === "login" ? "Sign in" : "Create account"}</CardTitle>
+        <CardDescription>
+          {mode === "login"
+            ? "Use your email and password to open the household workspace."
+            : "Create the adult account that will own the household workspace."}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form className="space-y-4" onSubmit={handleSubmit}>
+          {mode === "sign_up" ? (
+            <div className="space-y-1.5">
+              <label htmlFor="full-name" className="text-sm font-medium">
+                Full name
+              </label>
+              <input
+                id="full-name"
+                value={fullName}
+                onChange={(event) => setFullName(event.target.value)}
+                className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                placeholder="Avery Rivera"
+                autoComplete="name"
+              />
+            </div>
+          ) : null}
+
+          <div className="space-y-1.5">
+            <label htmlFor="email" className="text-sm font-medium">
+              Email
+            </label>
+            <input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+              placeholder="parent@example.com"
+              autoComplete="email"
+              required
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label htmlFor="password" className="text-sm font-medium">
+              Password
+            </label>
+            <input
+              id="password"
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+              placeholder="At least 6 characters"
+              autoComplete={mode === "login" ? "current-password" : "new-password"}
+              minLength={6}
+              required
+            />
+          </div>
+
+          {error ? (
+            <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>
+          ) : null}
+
+          {notice ? (
+            <p className="rounded-lg bg-primary/10 px-3 py-2 text-sm text-foreground">{notice}</p>
+          ) : null}
+
+          <Button type="submit" className="w-full" disabled={submitting}>
+            {submitting
+              ? mode === "login"
+                ? "Signing in..."
+                : "Creating account..."
+              : mode === "login"
+                ? "Sign in"
+                : "Create account"}
+          </Button>
+        </form>
+
+        <div className="mt-4 text-sm text-muted-foreground">
+          {mode === "login" ? (
+            <p>
+              Need an account?{" "}
+              <Link href="/auth/sign-up" className="text-foreground underline underline-offset-4">
+                Create one
+              </Link>
+            </p>
+          ) : (
+            <p>
+              Already have an account?{" "}
+              <Link href="/auth/login" className="text-foreground underline underline-offset-4">
+                Sign in
+              </Link>
+            </p>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}

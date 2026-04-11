@@ -1,10 +1,20 @@
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import "@/lib/server-only";
 
-import { getClientEnv } from "@/lib/env/client";
+import { createServerClient } from "@supabase/ssr";
+import { createClient } from "@supabase/supabase-js";
+import { cookies } from "next/headers";
+import type { NextRequest, NextResponse } from "next/server";
+
 import { getServerEnv } from "@/lib/env/server";
 
 type ClientOptions = {
   accessToken?: string;
+};
+
+type CookieMutation = {
+  name: string;
+  value: string;
+  options?: Parameters<NextResponse["cookies"]["set"]>[2];
 };
 
 function buildServerClientOptions({ accessToken }: ClientOptions = {}) {
@@ -24,28 +34,6 @@ function buildServerClientOptions({ accessToken }: ClientOptions = {}) {
   };
 }
 
-let browserClient: SupabaseClient | undefined;
-
-export function createBrowserSupabaseClient() {
-  if (browserClient) {
-    return browserClient;
-  }
-
-  const env = getClientEnv();
-  browserClient = createClient(
-    env.NEXT_PUBLIC_SUPABASE_URL,
-    env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-    {
-      auth: {
-        detectSessionInUrl: true,
-        flowType: "pkce",
-      },
-    },
-  );
-
-  return browserClient;
-}
-
 export function createServerSupabaseClient(options: ClientOptions = {}) {
   const env = getServerEnv();
 
@@ -54,6 +42,59 @@ export function createServerSupabaseClient(options: ClientOptions = {}) {
     env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     buildServerClientOptions(options),
   );
+}
+
+export async function createServerSupabaseSsrClient() {
+  const env = getServerEnv();
+  const cookieStore = await cookies();
+
+  return createServerClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY, {
+    cookies: {
+      getAll() {
+        return cookieStore.getAll();
+      },
+      setAll(cookiesToSet) {
+        try {
+          cookiesToSet.forEach(({ name, value, options }) => {
+            cookieStore.set(name, value, options);
+          });
+        } catch {
+          // Server components cannot write cookies. Middleware handles refresh writes.
+        }
+      },
+    },
+  });
+}
+
+export function createRouteHandlerSupabaseClient(request: NextRequest) {
+  const env = getServerEnv();
+  const pendingCookies: CookieMutation[] = [];
+
+  const client = createServerClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY, {
+    cookies: {
+      getAll() {
+        return request.cookies.getAll();
+      },
+      setAll(cookiesToSet) {
+        cookiesToSet.forEach(({ name, value, options }) => {
+          request.cookies.set(name, value);
+          pendingCookies.push({ name, value, options });
+        });
+      },
+    },
+  });
+
+  function applyCookies<T extends NextResponse>(response: T) {
+    pendingCookies.forEach(({ name, value, options }) => {
+      response.cookies.set(name, value, options);
+    });
+    return response;
+  }
+
+  return {
+    client,
+    applyCookies,
+  };
 }
 
 export function createServiceRoleSupabaseClient() {

@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 import {
-  APP_LEARNER_COOKIE,
-  APP_ORGANIZATION_COOKIE,
   getAppSession,
+  isAppApiSessionError,
+  requireAppApiSession,
+  setWorkspaceCookies,
 } from "@/lib/app-session/server";
 import { getLearnerById } from "@/lib/users/service";
 
@@ -13,42 +14,52 @@ const SetSessionSchema = z.object({
 });
 
 export async function GET() {
-  const session = await getAppSession();
+  try {
+    const session = await getAppSession();
 
-  return NextResponse.json({
-    organization: session.organization,
-    activeLearner: session.activeLearner,
-    learners: session.learners,
-  });
+    return NextResponse.json({
+      organization: session.organization,
+      activeLearner: session.activeLearner,
+      learners: session.learners,
+      memberships: session.memberships,
+    });
+  } catch (error) {
+    if (isAppApiSessionError(error)) {
+      return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });
+    }
+
+    throw error;
+  }
 }
 
 export async function POST(req: NextRequest) {
-  const session = await getAppSession();
-  const body = await req.json().catch(() => null);
-  const parsed = SetSessionSchema.safeParse(body);
+  try {
+    const session = await requireAppApiSession({ requireLearner: false });
+    const body = await req.json().catch(() => null);
+    const parsed = SetSessionSchema.safeParse(body);
 
-  if (!parsed.success) {
-    return NextResponse.json({ error: "Invalid input." }, { status: 400 });
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Invalid input." }, { status: 400 });
+    }
+
+    const learner = await getLearnerById(parsed.data.learnerId, {
+      organizationId: session.organization.id,
+    });
+    if (!learner) {
+      return NextResponse.json({ error: "Learner not found." }, { status: 404 });
+    }
+
+    const response = NextResponse.json({ learner });
+    return setWorkspaceCookies({
+      response,
+      organizationId: learner.organizationId,
+      learnerId: learner.id,
+    });
+  } catch (error) {
+    if (isAppApiSessionError(error)) {
+      return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });
+    }
+
+    return NextResponse.json({ error: "Could not update workspace." }, { status: 500 });
   }
-
-  const learner = await getLearnerById(parsed.data.learnerId, {
-    organizationId: session.organization.id,
-  });
-  if (!learner) {
-    return NextResponse.json({ error: "Learner not found." }, { status: 404 });
-  }
-
-  const response = NextResponse.json({ learner });
-  response.cookies.set(APP_ORGANIZATION_COOKIE, learner.organizationId, {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-  });
-  response.cookies.set(APP_LEARNER_COOKIE, learner.id, {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-  });
-
-  return response;
 }

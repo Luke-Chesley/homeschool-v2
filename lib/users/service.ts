@@ -1,6 +1,6 @@
 import "@/lib/server-only";
 
-import { and, asc, eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 import { ensurePublishedActivitiesForLearner } from "@/lib/activities/assignment-service";
 import { createRepositories } from "@/lib/db";
@@ -39,15 +39,6 @@ export type AppWorkspace = {
   activeLearner: AppLearner | null;
 };
 
-function slugify(value: string) {
-  return value
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 48) || "homeschool";
-}
-
 function splitDisplayName(displayName: string) {
   const parts = displayName.trim().split(/\s+/).filter(Boolean);
   const [firstName = displayName.trim(), ...rest] = parts;
@@ -74,40 +65,6 @@ function mapLearnerRecord(record: {
     lastName: record.lastName,
     status: record.status,
   };
-}
-
-export async function ensureAppOrganization() {
-  await ensureDatabaseReady();
-  const db = getDb();
-  const repos = createRepositories(db);
-  const existing = await db.query.organizations.findFirst({
-    orderBy: (table, { asc: orderAsc }) => [orderAsc(table.createdAt)],
-  });
-
-  if (existing) {
-    await ensureOrganizationPlatformSettings({
-      id: existing.id,
-      type: existing.type,
-    });
-    return existing;
-  }
-
-  const timestamp = Date.now();
-
-  const organization = await repos.organizations.createOrganization({
-    name: "Homeschool",
-    slug: `homeschool-${timestamp}`,
-    type: "household",
-    timezone: "America/Los_Angeles",
-    metadata: {},
-  });
-
-  await ensureOrganizationPlatformSettings({
-    id: organization.id,
-    type: organization.type,
-  });
-
-  return organization;
 }
 
 export async function listLearnersForOrganization(organizationId: string): Promise<AppLearner[]> {
@@ -160,22 +117,17 @@ export async function createLearnerForOrganization(
   return mapLearnerRecord(learner);
 }
 
-export async function getWorkspaceContext(options?: {
-  organizationId?: string | null;
+export async function getWorkspaceContextForOrganization(options: {
+  organizationId: string;
   learnerId?: string | null;
 }): Promise<AppWorkspace> {
   await ensureDatabaseReady();
-  let organization =
-    options?.organizationId != null
-      ? await getDb().query.organizations.findFirst({
-          where: eq(organizations.id, options.organizationId),
-        })
-      : null;
+  const organization = await getDb().query.organizations.findFirst({
+    where: eq(organizations.id, options.organizationId),
+  });
 
-  // Cookies can point at deleted/demo organizations. Recover to a valid workspace instead of
-  // throwing from every parent route.
   if (!organization) {
-    organization = await ensureAppOrganization();
+    throw new Error("Organization not found.");
   }
 
   const platformSettings = await ensureOrganizationPlatformSettings({
@@ -185,7 +137,7 @@ export async function getWorkspaceContext(options?: {
 
   const learners = await listLearnersForOrganization(organization.id);
   const activeLearner =
-    learners.find((learner) => learner.id === options?.learnerId) ?? learners[0] ?? null;
+    learners.find((learner) => learner.id === options.learnerId) ?? learners[0] ?? null;
 
   if (activeLearner) {
     await ensureActivitiesForLearner({
@@ -230,24 +182,4 @@ export async function getLearnerById(
     ),
   });
   return learner ? mapLearnerRecord(learner) : null;
-}
-
-export async function createDefaultOrganizationIfNeeded(name: string) {
-  await ensureDatabaseReady();
-  const db = getDb();
-  const existing = await db.query.organizations.findFirst({
-    where: eq(organizations.slug, slugify(name)),
-  });
-
-  if (existing) {
-    return existing;
-  }
-
-  return createRepositories(db).organizations.createOrganization({
-    name,
-    slug: `${slugify(name)}-${Date.now()}`,
-    type: "household",
-    timezone: "America/Los_Angeles",
-    metadata: {},
-  });
 }

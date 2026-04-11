@@ -1,5 +1,5 @@
-import { createBrowserSupabaseClient, createServerSupabaseClient } from "@/lib/platform/supabase";
-import { createServiceRoleSupabaseClient } from "@/lib/platform/supabase";
+import { createBrowserSupabaseClient } from "@/lib/platform/supabase-browser";
+import { createServerSupabaseClient, createServiceRoleSupabaseClient } from "@/lib/platform/supabase";
 
 export function getBrowserStorageClient() {
   return createBrowserSupabaseClient().storage;

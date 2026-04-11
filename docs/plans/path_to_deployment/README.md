@@ -10,6 +10,7 @@ Use the supporting docs in this folder for deeper planning and handoff detail.
 - [deployment-studio-roadmap.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/deployment-studio-roadmap.md)
 - [phase2_auth_workspace_hardening.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase2_auth_workspace_hardening.md)
 - [phase2_auth_workspace_checklist.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase2_auth_workspace_checklist.md)
+- [phase2_service_role_review.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase2_service_role_review.md)
 - [studio-mode-implementation-checklist.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/studio-mode-implementation-checklist.md)
 - [studio-mode-agent-handoff.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/studio-mode-agent-handoff.md)
 
@@ -40,13 +41,15 @@ Use the supporting docs in this folder for deeper planning and handoff detail.
 
 ### Phase 2: Auth And Workspace Hardening
 
-- [ ] Implement Supabase SSR auth for the App Router.
-- [ ] Add sign-in, sign-up, sign-out, and confirm flows.
-- [ ] Resolve the adult user from authenticated Supabase identity.
-- [ ] Resolve org membership from the database.
-- [ ] Convert learner selection into workspace state instead of identity.
-- [ ] Protect parent and learner routes with real auth checks.
-- [ ] Review and reduce service-role usage.
+- [x] Implement Supabase SSR auth for the App Router.
+- [x] Add sign-in, sign-up, sign-out, and confirm flows.
+- [x] Resolve the adult user from authenticated Supabase identity.
+- [x] Resolve org membership from the database.
+- [x] Convert learner selection into workspace state instead of identity.
+- [x] Protect parent and learner routes with real auth checks.
+- [x] Review and reduce service-role usage.
+- [x] Verify the signed-out, signed-in, and workspace-fallback flows locally.
+- [ ] Merge Phase 2 to `main` after review approval.
 
 ### Phase 3: Authorization And Data Safety
 
@@ -107,6 +110,12 @@ Work this in order:
 4. Hosted setup
 5. UX redesign
 6. Final staging and launch prep
+
+## Current State
+
+- Phase 1 is complete on `main`.
+- Phase 2 implementation is complete in the active worktree and verified locally.
+- The next major build step is Phase 3: authorization, RLS, and storage safety.
 
 ## How To Use This Folder
 
