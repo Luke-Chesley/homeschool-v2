@@ -39,6 +39,7 @@ This is the first-pass table inventory for Phase 3. It groups the current schema
 | `curriculum_assets` | source/storage | `parent_join` | Needs matching storage policy work. |
 | `curriculum_items` | source/learner | `parent_join` | Derive through source or learner. |
 | `curriculum_item_standards` | curriculum item | `parent_join` | Derive through curriculum item. |
+| `curriculum_objectives` | legacy source/objective table | `parent_join` | Legacy table present in some local DBs; Phase 3 secures it conditionally if it exists. |
 
 ## Curriculum Routing Family
 

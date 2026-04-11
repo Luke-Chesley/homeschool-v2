@@ -56,11 +56,11 @@ Use the supporting docs in this folder for deeper planning and handoff detail.
 
 ### Phase 3: Authorization And Data Safety
 
-- [ ] Inventory org-scoped and learner-scoped tables.
-- [ ] Add RLS policies for user-facing tables.
-- [ ] Add storage policies for uploads and evidence assets.
-- [ ] Verify tenancy rules are enforced outside app code.
-- [ ] Document the authorization model.
+- [x] Inventory org-scoped and learner-scoped tables.
+- [x] Add RLS policies for user-facing tables.
+- [x] Add storage policies for uploads and evidence assets.
+- [x] Verify tenancy rules are enforced outside app code.
+- [x] Document the authorization model.
 
 ### Phase 4: Hosted Deployment Setup
 
@@ -118,8 +118,8 @@ Work this in order:
 
 - Phase 1 is complete on `main`.
 - Phase 2 is complete on `main`.
-- Phase 3 planning is documented and ready for implementation.
-- The next major build step is RLS, storage policies, and direct tenancy enforcement.
+- Phase 3 is implemented and verified in the Phase 3 worktree.
+- The next major build step is merging Phase 3 to `main`, then moving to hosted setup.
 
 ## How To Use This Folder
 
