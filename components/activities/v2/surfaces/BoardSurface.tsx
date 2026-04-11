@@ -163,10 +163,10 @@ function buildMoveHint(widget: ChessBoardWidgetPayload) {
   }
 
   if (widget.interaction.submissionMode === "explicit_submit") {
-    return "Choose a piece, choose its destination, then submit the move.";
+    return "Choose a piece and destination, or drag the piece, then submit the move.";
   }
 
-  return "Choose a piece, then choose its destination.";
+  return "Choose a piece and destination, or drag the piece to its destination.";
 }
 
 function buildPersistedResponseValue(response: unknown, canonicalWidget: ChessBoardWidgetPayload) {
@@ -211,12 +211,15 @@ export function BoardSurface({
 
   React.useEffect(() => {
     setRuntimeWidget(initialWidget);
+  }, [initialWidget]);
+
+  React.useEffect(() => {
     setSelectedSquare(null);
     setLegalTargets([]);
     setDraftMove(null);
     setTransitionError(null);
     setTransitionFeedback(null);
-  }, [initialWidget]);
+  }, [spec.id]);
 
   React.useEffect(() => {
     const canonicalWidget = readCanonicalWidgetFromValue(value);
@@ -258,8 +261,7 @@ export function BoardSurface({
   const annotations = widgetForRequest.annotations ?? { arrows: [], highlightSquares: [] };
   const dragEnabled =
     allowInput &&
-    !boardLocked &&
-    widgetForRequest.interaction.selectionMode !== "click_click";
+    !boardLocked;
 
   const surfaceDrag = useSurfaceDrag(
     {
