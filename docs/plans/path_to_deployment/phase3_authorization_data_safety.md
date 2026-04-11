@@ -395,6 +395,17 @@ What must be true locally before Phase 3 is called done:
 - storage operations obey policy rules
 - Supabase Security Advisor warnings are materially reduced or resolved for user-facing tables
 
+## Implementation Notes
+
+Phase 3 implementation in this repo uses:
+
+- a single SQL migration: `drizzle/0008_phase3_authorization_rls.sql`
+- shared authorization helpers in a private schema
+- explicit `authenticated` policies for app-facing tables plus storage buckets
+- a direct verification script: `corepack pnpm verify:phase3:rls`
+
+One legacy edge case exists in some older local databases: `public.curriculum_objectives` may still be present even though it is not created by the current clean migration chain. Phase 3 secures that table conditionally when it exists, without breaking fresh local rebuilds.
+
 ## References
 
 - Supabase: Securing your API

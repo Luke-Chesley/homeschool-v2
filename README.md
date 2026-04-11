@@ -141,4 +141,5 @@ What you should not look for here anymore:
 - Minimum verification in this repo:
   - `corepack pnpm typecheck`
   - `corepack pnpm test:architecture`
+  - `corepack pnpm verify:phase3:rls` when changing RLS or storage policies
 - Before merging to `main`, run `bash ./scripts/verify-before-merge.sh` from the main checkout.
