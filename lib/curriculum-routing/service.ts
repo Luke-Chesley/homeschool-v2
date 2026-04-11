@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, lt, ne } from "drizzle-orm";
 
 import { getDb } from "@/lib/db/server";
 import { getEnabledPlanningDayOffsets } from "./planning-days";
@@ -656,6 +656,7 @@ interface GenerationContext {
   phases: Array<typeof curriculumPhases.$inferSelect>;
   phaseNodes: Array<typeof curriculumPhaseNodes.$inferSelect>;
   skillStateBySkillNodeId: Map<string, SkillStatus>;
+  plannedSkillNodeIdsBeforeWeek: Set<string>;
 }
 
 async function loadGenerationContext(params: { learnerId: string; sourceId: string }): Promise<GenerationContext> {
@@ -707,7 +708,32 @@ async function loadGenerationContext(params: { learnerId: string; sourceId: stri
     skillStateBySkillNodeId: new Map<string, SkillStatus>(
       skillStates.map((state) => [state.skillNodeId, state.status]),
     ),
+    plannedSkillNodeIdsBeforeWeek: new Set<string>(),
   };
+}
+
+async function loadPlannedSkillNodeIdsBeforeWeek(params: {
+  learnerId: string;
+  sourceId: string;
+  weekStartDate: string;
+}) {
+  const rows = await getDb()
+    .select({
+      skillNodeId: weeklyRouteItems.skillNodeId,
+    })
+    .from(weeklyRouteItems)
+    .innerJoin(weeklyRoutes, eq(weeklyRouteItems.weeklyRouteId, weeklyRoutes.id))
+    .where(
+      and(
+        eq(weeklyRoutes.learnerId, params.learnerId),
+        eq(weeklyRoutes.sourceId, params.sourceId),
+        inArray(weeklyRoutes.status, ["draft", "active"]),
+        lt(weeklyRoutes.weekStartDate, params.weekStartDate),
+        ne(weeklyRouteItems.state, "removed"),
+      ),
+    );
+
+  return new Set(rows.map((row) => row.skillNodeId));
 }
 
 function buildRecommendations(params: {
@@ -718,6 +744,7 @@ function buildRecommendations(params: {
   phases: Array<typeof curriculumPhases.$inferSelect>;
   phaseNodes: Array<typeof curriculumPhaseNodes.$inferSelect>;
   skillStateBySkillNodeId: Map<string, SkillStatus>;
+  plannedSkillNodeIdsBeforeWeek: Set<string>;
 }): {
   orderedSkillNodeIds: string[];
   targetItemsPerWeek: number;
@@ -734,6 +761,7 @@ function buildRecommendations(params: {
     phases,
     phaseNodes,
     skillStateBySkillNodeId,
+    plannedSkillNodeIdsBeforeWeek,
   } = params;
   const targetItemsPerWeek = getTargetItemsPerWeek(profile);
   const targetItemsPerDay = Math.max(1, profile?.targetItemsPerDay ?? 1);
@@ -828,6 +856,9 @@ function buildRecommendations(params: {
         if (UNFINISHED_SCHEDULED_STATUSES.has(status)) {
           eligibleUnfinishedScheduled.push(skillNodeId);
         } else {
+          if (plannedSkillNodeIdsBeforeWeek.has(skillNodeId)) {
+            continue;
+          }
           eligibleNew.push(skillNodeId);
         }
       }
@@ -1076,10 +1107,19 @@ export async function generateWeeklyRoute(params: {
   weekStartDate?: string;
 }): Promise<WeeklyRouteBoard> {
   const weekStartDate = toWeekStartDate(params.weekStartDate);
-  const context = await loadGenerationContext({
-    learnerId: params.learnerId,
-    sourceId: params.sourceId,
-  });
+  const [context, plannedSkillNodeIdsBeforeWeek] = await Promise.all([
+    loadGenerationContext({
+      learnerId: params.learnerId,
+      sourceId: params.sourceId,
+    }),
+    loadPlannedSkillNodeIdsBeforeWeek({
+      learnerId: params.learnerId,
+      sourceId: params.sourceId,
+      weekStartDate,
+    }),
+  ]);
+
+  context.plannedSkillNodeIdsBeforeWeek = plannedSkillNodeIdsBeforeWeek;
 
   const recommendation = buildRecommendations(context);
   const route = await persistGeneratedRoute({

@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray, lt, ne } from "drizzle-orm";
 
 import {
   generateWeeklyRoute,
@@ -41,6 +41,45 @@ function addDays(baseDate: string, days: number): string {
 
 function buildWeekdayDates(weekStartDate: string) {
   return Array.from({ length: WEEKDAY_COUNT }, (_, index) => addDays(weekStartDate, index));
+}
+
+async function findPlannedSkillNodeIdsBeforeWeek(route: WeeklyRouteRecord) {
+  const rows = await getDb()
+    .select({
+      skillNodeId: weeklyRouteItems.skillNodeId,
+    })
+    .from(weeklyRouteItems)
+    .innerJoin(weeklyRoutes, eq(weeklyRouteItems.weeklyRouteId, weeklyRoutes.id))
+    .where(
+      and(
+        eq(weeklyRoutes.learnerId, route.learnerId),
+        eq(weeklyRoutes.sourceId, route.sourceId),
+        inArray(weeklyRoutes.status, ["draft", "active"]),
+        lt(weeklyRoutes.weekStartDate, route.weekStartDate),
+        ne(weeklyRouteItems.state, "removed"),
+      ),
+    );
+
+  return new Set(rows.map((row) => row.skillNodeId));
+}
+
+async function shouldRegenerateForPriorWeekOverlap(route: WeeklyRouteRecord, board: WeeklyRouteBoard) {
+  if (board.items.length === 0) {
+    return false;
+  }
+
+  if (board.items.some((item) => item.manualOverrideKind !== "none")) {
+    return false;
+  }
+
+  const priorPlannedSkillNodeIds = await findPlannedSkillNodeIdsBeforeWeek(route);
+  if (priorPlannedSkillNodeIds.size === 0) {
+    return false;
+  }
+
+  return board.items.some(
+    (item) => item.state !== "removed" && priorPlannedSkillNodeIds.has(item.skillNodeId),
+  );
 }
 
 async function ensureSuggestedWeeklyRouteSchedule(route: WeeklyRouteRecord) {
@@ -141,6 +180,13 @@ export async function getOrCreateWeeklyRouteBoardForLearner(params: {
   weekStartDate?: string;
 }): Promise<{ weekStartDate: string; board: WeeklyRouteBoard }> {
   const weekStartDate = toWeekStartDate(params.weekStartDate);
+  const route = await getDb().query.weeklyRoutes.findFirst({
+    where: and(
+      eq(weeklyRoutes.learnerId, params.learnerId),
+      eq(weeklyRoutes.sourceId, params.sourceId),
+      eq(weeklyRoutes.weekStartDate, weekStartDate),
+    ),
+  });
   const existing = await getWeeklyRouteBoard({
     learnerId: params.learnerId,
     sourceId: params.sourceId,
@@ -165,13 +211,6 @@ export async function getOrCreateWeeklyRouteBoardForLearner(params: {
     }
 
     if (existing.items.some((item) => item.state !== "removed" && item.scheduledDate == null)) {
-      const route = await getDb().query.weeklyRoutes.findFirst({
-        where: and(
-          eq(weeklyRoutes.id, existing.summary.weeklyRouteId),
-          eq(weeklyRoutes.learnerId, params.learnerId),
-        ),
-      });
-
       if (route && (await ensureSuggestedWeeklyRouteSchedule(route))) {
         const refreshed = await getWeeklyRouteBoardById({
           learnerId: params.learnerId,
@@ -182,6 +221,16 @@ export async function getOrCreateWeeklyRouteBoardForLearner(params: {
           return { weekStartDate, board: refreshed };
         }
       }
+    }
+
+    if (route && (await shouldRegenerateForPriorWeekOverlap(route, existing))) {
+      const regenerated = await generateWeeklyRoute({
+        learnerId: params.learnerId,
+        sourceId: params.sourceId,
+        weekStartDate,
+      });
+
+      return { weekStartDate, board: regenerated };
     }
 
     return { weekStartDate, board: existing };
