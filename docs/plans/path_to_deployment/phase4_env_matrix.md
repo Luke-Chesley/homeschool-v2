@@ -45,6 +45,7 @@ Expected sources:
 - `.env.local`
 - local Supabase CLI stack
 - local `learning-core`
+- hosted `learning-core` will default to Cloud Run in Phase 4
 
 Known local defaults:
 
@@ -101,7 +102,7 @@ Fill this in during implementation.
 | Public app URLs | TBD | Vercel | TBD |
 | Hosted Supabase public values | TBD | Vercel | TBD |
 | Hosted Supabase server secrets | TBD | Vercel | TBD |
-| Hosted `learning-core` values | TBD | Vercel + Render | TBD |
+| Hosted `learning-core` values | TBD | Vercel + Cloud Run | TBD |
 | Inngest values | TBD | Vercel | TBD |
 
 ## Open Implementation Notes

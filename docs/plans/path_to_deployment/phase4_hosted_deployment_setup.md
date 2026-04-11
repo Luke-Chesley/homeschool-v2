@@ -13,7 +13,7 @@ For this repo, the practical hosted shape is:
 
 - `homeschool-v2` on Vercel
 - Supabase hosted projects for `staging` and `production`
-- `learning-core` as a separate Python service on Render
+- `learning-core` as a separate Python service on Google Cloud Run
 
 That gives us:
 
@@ -23,7 +23,8 @@ That gives us:
 - a separate AI/runtime service boundary that matches the current repo contract
 
 This is the default recommendation for implementation.
-It is an inference from the current codebase plus the current provider docs, not a guarantee that no other provider would work.
+It reflects your preference to optimize for free-tier headroom over minimal setup friction.
+It is still an inference from the current codebase plus the current provider docs, not a guarantee that no other provider would work.
 
 ## Why This Phase Matters
 
@@ -87,19 +88,20 @@ Do not share a hosted Supabase project between staging and production.
 
 ### AI Runtime Environments
 
-Deploy `learning-core` separately on Render with:
+Deploy `learning-core` separately on Google Cloud Run with:
 
 - one staging service
 - one production service
 
 Recommended initial shape:
 
-- Render web service, not private-only service
-- health check path configured
+- one Cloud Run service per environment
+- container-based deploys
 - environment variables managed per service
-- API key enforced between `homeschool-v2` and `learning-core`
+- public HTTPS endpoint protected by an application-level API key
+- request timeout and concurrency configured explicitly
 
-A private Render service is not a good default here because Vercel will not be on Render's private network. Public HTTPS plus an application-level API key is the pragmatic first deployment shape.
+Cloud Run is the default recommendation here because its current free tier is materially more generous than Render's free web-service offering, and you said you do not mind the extra setup. The practical deployment shape is still public HTTPS plus an application-level API key, since Vercel will call the service over the public internet.
 
 ## Environment Topology
 
@@ -177,7 +179,7 @@ Immediately after project creation:
 
 ### Step 2: Create Hosted `learning-core` Services
 
-Create separate Render services for:
+Create separate Cloud Run services for:
 
 - `learning-core-staging`
 - `learning-core-production`
@@ -271,7 +273,7 @@ At minimum, record where to inspect:
 
 - Vercel runtime logs for the app
 - Supabase project logs and Studio
-- Render deploy/runtime logs for `learning-core`
+- Cloud Run revision/runtime logs for `learning-core`
 - health endpoints for app and core
 
 If alerts are not configured in Phase 4, document that explicitly as a deferral instead of leaving it implicit.
@@ -306,14 +308,17 @@ Reason:
 ### Decision 4: `learning-core` Hosting
 
 Recommendation:
-- use Render as the default first hosted target for `learning-core`
+- use Google Cloud Run as the default first hosted target for `learning-core`
 
 Reason:
-- straightforward Python web-service deploy model
-- clean environment variable management
-- simple service URL and health checks
+- materially stronger free-tier economics than Render's free web service
+- straightforward public HTTPS service model once the container is built
+- explicit control over concurrency, request timeout, and revision rollout
 
-This is a recommendation based on the current repo shape and current docs, not a requirement.
+Fallback:
+- Render remains the simpler operational fallback if Cloud Run setup becomes a distraction, but it is no longer the default recommendation.
+
+This is a recommendation based on the current repo shape, your stated preference, and the current provider docs, not a hard requirement.
 
 ### Decision 5: Inngest In Phase 4
 
@@ -358,6 +363,8 @@ These recommendations were checked against current provider docs:
 - Supabase managing environments: https://supabase.com/docs/guides/deployment/managing-environments
 - Supabase backups: https://supabase.com/docs/guides/platform/backups
 - Supabase restore to new project: https://supabase.com/docs/guides/platform/clone-project
-- Render web services: https://render.com/docs/web-services
-- Render environment variables: https://render.com/docs/configure-environment-variables
-- Render multi-service architecture: https://render.com/docs/multi-service-architecture
+- Google Cloud Run pricing: https://cloud.google.com/run/pricing
+- Google Cloud Run free tier: https://cloud.google.com/free/docs/free-cloud-features
+- Google Cloud Run container configuration: https://cloud.google.com/run/docs/configuring/services/containers
+- Google Cloud Run request timeout: https://cloud.google.com/run/docs/configuring/request-timeout
+- Render web services fallback: https://render.com/docs/web-services

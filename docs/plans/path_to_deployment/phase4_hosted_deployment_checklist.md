@@ -13,7 +13,7 @@ This is the execution tracker for the hosted deployment setup pass.
 ## Slice 1: Final Hosting Decisions
 
 - [ ] Confirm Vercel is the app host.
-- [ ] Confirm Render is the first hosted target for `learning-core`.
+- [ ] Confirm Cloud Run is the first hosted target for `learning-core`.
 - [ ] Confirm whether staging uses a Vercel custom environment or a stable staging-branch preview.
 - [ ] Confirm who owns production deploy permissions.
 - [ ] Record any provider-plan assumptions before work starts.
@@ -72,7 +72,7 @@ This is the execution tracker for the hosted deployment setup pass.
 
 - [ ] Record where Vercel runtime logs are viewed.
 - [ ] Record where Supabase logs and backups are viewed.
-- [ ] Record where Render logs are viewed.
+- [ ] Record where Cloud Run logs are viewed.
 - [ ] Document rollback for the app.
 - [ ] Document rollback for `learning-core`.
 - [ ] Document recovery path for Supabase staging and production.
