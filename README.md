@@ -134,6 +134,11 @@ What you should not look for here anymore:
 
 - Start the main app from `/home/luke/Desktop/homeschool-v2` with `corepack pnpm dev` or `make dev`.
 - For local auth flows, start the Supabase stack with `corepack pnpm dev:stack` and copy the publishable/secret keys from `corepack pnpm dev:stack:status` into `.env.local`.
+- Local Supabase port cheat sheet:
+  - `http://127.0.0.1:54321` is the project API URL and should be used for `NEXT_PUBLIC_SUPABASE_URL`
+  - `postgresql://postgres:postgres@127.0.0.1:54322/postgres` is the local Postgres database
+  - `http://127.0.0.1:54323` is Supabase Studio
+  - `http://127.0.0.1:54324` is Mailpit
 - Branch worktrees under `.worktrees/` must run on their own port, not `3000`.
 - Split development is two processes:
   - `homeschool-v2` on `http://localhost:3000`
