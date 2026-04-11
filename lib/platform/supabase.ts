@@ -11,10 +11,18 @@ type ClientOptions = {
   accessToken?: string;
 };
 
+type CookieOptions = Parameters<NextResponse["cookies"]["set"]>[2];
+
 type CookieMutation = {
   name: string;
   value: string;
-  options?: Parameters<NextResponse["cookies"]["set"]>[2];
+  options?: CookieOptions;
+};
+
+type SupabaseCookieMutation = {
+  name: string;
+  value: string;
+  options?: CookieOptions;
 };
 
 function buildServerClientOptions({ accessToken }: ClientOptions = {}) {
@@ -53,7 +61,7 @@ export async function createServerSupabaseSsrClient() {
       getAll() {
         return cookieStore.getAll();
       },
-      setAll(cookiesToSet) {
+      setAll(cookiesToSet: SupabaseCookieMutation[]) {
         try {
           cookiesToSet.forEach(({ name, value, options }) => {
             cookieStore.set(name, value, options);
@@ -75,7 +83,7 @@ export function createRouteHandlerSupabaseClient(request: NextRequest) {
       getAll() {
         return request.cookies.getAll();
       },
-      setAll(cookiesToSet) {
+      setAll(cookiesToSet: SupabaseCookieMutation[]) {
         cookiesToSet.forEach(({ name, value, options }) => {
           request.cookies.set(name, value);
           pendingCookies.push({ name, value, options });

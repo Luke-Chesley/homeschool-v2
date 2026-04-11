@@ -5,7 +5,7 @@ import { getClientEnv } from "@/lib/env/client";
 
 let browserClient: SupabaseClient | undefined;
 
-export function createBrowserSupabaseClient() {
+export function createBrowserSupabaseClient(): SupabaseClient {
   if (browserClient) {
     return browserClient;
   }
