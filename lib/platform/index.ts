@@ -6,8 +6,8 @@ export {
   getTemplateDefaults,
 } from "@/lib/platform/settings";
 export { getInngestDevServerUrl, getInngestServePath } from "@/lib/platform/inngest";
+export { createBrowserSupabaseClient } from "@/lib/platform/supabase-browser";
 export {
-  createBrowserSupabaseClient,
   createServerSupabaseClient,
   createServiceRoleSupabaseClient,
 } from "@/lib/platform/supabase";

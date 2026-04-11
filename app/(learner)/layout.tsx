@@ -1,10 +1,11 @@
 import { ReactNode } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft, BookOpen } from "lucide-react";
+import { ArrowLeft, BookOpen, LogOut } from "lucide-react";
 
 import { StudioProvider } from "@/components/studio/studio-provider";
 import { StudioToggle } from "@/components/studio/StudioToggle";
+import { Button } from "@/components/ui/button";
 import { getAppSession } from "@/lib/app-session/server";
 import { getStudioAccess } from "@/lib/studio/access";
 
@@ -43,6 +44,12 @@ export default async function LearnerLayout({ children }: { children: ReactNode 
                 <ArrowLeft className="size-4" />
                 {session.platformSettings.primaryGuideLabel}
               </Link>
+              <form action="/auth/signout" method="post">
+                <Button type="submit" variant="outline" size="sm" className="gap-2">
+                  <LogOut className="size-4" />
+                  Sign out
+                </Button>
+              </form>
             </div>
           </div>
         </header>

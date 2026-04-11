@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { Menu } from "lucide-react";
+import { LogOut, Menu } from "lucide-react";
 
 import { parentPrimaryNav } from "@/components/navigation/parent-nav-config";
 import { StudioToggle } from "@/components/studio/StudioToggle";
@@ -123,6 +123,13 @@ export function ParentTopbar({ activeLearnerName, learnerLabel, onOpenMenu }: Pa
           ) : null}
 
           <StudioToggle />
+
+          <form action="/auth/signout" method="post">
+            <Button type="submit" variant="outline" size="sm" className="gap-2">
+              <LogOut className="size-4" />
+              Sign out
+            </Button>
+          </form>
 
           <Button
             variant="outline"

@@ -35,6 +35,9 @@ This repo no longer owns extracted prompt templates or a generic AI gateway.
 | `/activity/[sessionId]` | `app/(learner)/activity/[sessionId]/page.tsx`, `components/activities/`, `lib/activities/`, `app/api/activities/attempts/[attemptId]/feedback/route.ts`, `lib/learning-core/activity-feedback.ts` |
 | `/users` | `app/users/page.tsx`, `components/users/`, `lib/users/` |
 | `/onboarding` | `app/onboarding/page.tsx`, `lib/homeschool/onboarding/`, `app/api/homeschool/onboarding/route.ts`, `lib/learning-core/curriculum.ts` |
+| `/auth/login` | `app/auth/login/page.tsx`, `components/auth/AuthCredentialsForm.tsx`, `lib/auth/browser.ts`, `middleware.ts` |
+| `/auth/sign-up` | `app/auth/sign-up/page.tsx`, `components/auth/AuthCredentialsForm.tsx`, `app/auth/confirm/route.ts`, `middleware.ts` |
+| `/auth/setup` | `app/auth/setup/page.tsx`, `components/auth/AuthSetupForm.tsx`, `app/api/auth/setup/route.ts`, `lib/auth/identity.ts` |
 | `/sample-activity` | `app/sample-activity/page.tsx`, `components/activities/`, `lib/activities/` |
 
 ## Where To Start
@@ -48,7 +51,7 @@ This repo no longer owns extracted prompt templates or a generic AI gateway.
 - Copilot:
   `app/(parent)/copilot/page.tsx`, `app/api/ai/chat/route.ts`, `lib/learning-core/copilot.ts`, `lib/ai/copilot-store.ts`
 - App session and auth bootstrap:
-  `app/api/app-session/route.ts`, `lib/app-session/`, `lib/auth/`
+  `app/api/app-session/route.ts`, `lib/app-session/`, `lib/auth/`, `middleware.ts`, `app/auth/`
 - Database shape and repositories:
   `lib/db/schema/`, `lib/db/repositories/`, `lib/db/server.ts`
 
@@ -90,7 +93,7 @@ What you should not look for here anymore:
 - `lib/app-session/`
   Active workspace and learner/session resolution.
 - `lib/auth/`
-  Browser/server/admin auth helpers.
+  Browser/server/admin auth helpers and authenticated identity resolution.
 - `lib/db/`
   Database schema, repositories, and DB helpers.
 - `lib/planning/`
@@ -130,6 +133,7 @@ What you should not look for here anymore:
 ## Development Notes
 
 - Start the main app from `/home/luke/Desktop/homeschool-v2` with `corepack pnpm dev` or `make dev`.
+- For local auth flows, start the Supabase stack with `corepack pnpm dev:stack` and copy the publishable/secret keys from `corepack pnpm dev:stack:status` into `.env.local`.
 - Branch worktrees under `.worktrees/` must run on their own port, not `3000`.
 - Split development is two processes:
   - `homeschool-v2` on `http://localhost:3000`

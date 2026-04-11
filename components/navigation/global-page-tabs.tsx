@@ -32,6 +32,16 @@ function isActive(pathname: string, href: string, matchPrefix: string) {
 export function GlobalPageTabs() {
   const pathname = usePathname();
 
+  if (pathname.startsWith("/auth")) {
+    return (
+      <div className="sticky top-0 z-40 border-b border-border/70 bg-background/95">
+        <div className="mx-auto flex h-[var(--global-tabs-height)] max-w-7xl items-center justify-end px-4 sm:px-6 lg:px-8">
+          <ThemeToggle />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="sticky top-0 z-40 border-b border-border/70 bg-background/95">
       <div className="mx-auto flex h-[var(--global-tabs-height)] max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">

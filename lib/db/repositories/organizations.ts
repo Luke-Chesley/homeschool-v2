@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import type { InferInsertModel } from "drizzle-orm";
 
 import type { HomeschoolDb } from "@/lib/db/client";
@@ -47,9 +47,46 @@ export function createOrganizationRepository(db: HomeschoolDb) {
       return adultUser;
     },
 
+    async upsertAdultUserByAuthUserId(input: NewAdultUser) {
+      const [adultUser] = await db
+        .insert(adultUsers)
+        .values(input)
+        .onConflictDoUpdate({
+          target: adultUsers.authUserId,
+          set: {
+            email: input.email,
+            fullName: input.fullName,
+            avatarUrl: input.avatarUrl,
+            metadata: input.metadata,
+            updatedAt: new Date(),
+          },
+        })
+        .returning();
+
+      return adultUser;
+    },
+
+    async findAdultUserByAuthUserId(authUserId: string) {
+      return db.query.adultUsers.findFirst({
+        where: eq(adultUsers.authUserId, authUserId),
+      });
+    },
+
     async addMembership(input: NewMembership) {
       const [membership] = await db.insert(memberships).values(input).returning();
       return membership;
+    },
+
+    async listMembershipsForAdultUser(adultUserId: string) {
+      return db
+        .select({
+          membership: memberships,
+          organization: organizations,
+        })
+        .from(memberships)
+        .innerJoin(organizations, eq(organizations.id, memberships.organizationId))
+        .where(eq(memberships.adultUserId, adultUserId))
+        .orderBy(desc(memberships.isDefault), organizations.createdAt);
     },
 
     async upsertPlatformSettings(input: NewOrganizationPlatformSettings) {
