@@ -9,6 +9,7 @@ Use the supporting docs in this folder for deeper planning and handoff detail.
 
 - [deployment-studio-roadmap.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/deployment-studio-roadmap.md)
 - [studio-mode-implementation-checklist.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/studio-mode-implementation-checklist.md)
+- [studio-mode-agent-handoff.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/studio-mode-agent-handoff.md)
 
 ## Deployment Progress Checklist
 
@@ -23,16 +24,17 @@ Use the supporting docs in this folder for deeper planning and handoff detail.
 
 ### Phase 1: Studio Mode Foundation
 
-- [ ] Define the local-first studio access rules.
-- [ ] Add server-side studio access resolution.
-- [ ] Add studio client context for UI composition.
-- [ ] Build reusable studio UI primitives.
-- [ ] Add a quiet studio toggle in the existing shell.
-- [ ] Move lesson draft debug info out of the default reading flow.
-- [ ] Add shared trace metadata UI.
-- [ ] Extend the studio pattern to curriculum AI, copilot, and learner runtime diagnostics.
-- [ ] Document how studio mode works and how new studio panels should be added.
-- [ ] Verify the product/studio split locally.
+- [x] Define the local-first studio access rules.
+- [x] Add server-side studio access resolution.
+- [x] Add studio client context for UI composition.
+- [x] Build reusable studio UI primitives.
+- [x] Add a quiet studio toggle in the existing shell.
+- [x] Move lesson draft debug info out of the default reading flow.
+- [x] Add shared trace metadata UI.
+- [x] Extend the studio pattern to curriculum AI, copilot, and learner runtime diagnostics.
+- [x] Document how studio mode works and how new studio panels should be added.
+- [x] Verify the product/studio split locally.
+- [x] Verify studio tooling is available on learner routes as well as parent routes.
 
 ### Phase 2: Auth And Workspace Hardening
 

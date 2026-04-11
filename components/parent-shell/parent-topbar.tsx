@@ -4,9 +4,9 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Menu } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import { parentPrimaryNav } from "@/components/navigation/parent-nav-config";
-import { buttonVariants } from "@/components/ui/button";
+import { StudioToggle } from "@/components/studio/StudioToggle";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 type ParentTopbarProps = {
@@ -121,6 +121,8 @@ export function ParentTopbar({ activeLearnerName, learnerLabel, onOpenMenu }: Pa
               </Link>
             </>
           ) : null}
+
+          <StudioToggle />
 
           <Button
             variant="outline"

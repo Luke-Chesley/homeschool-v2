@@ -5,22 +5,22 @@
  */
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { Button } from "@/components/ui/button";
+
 import { ActivityRenderer } from "@/components/activities/ActivityRenderer";
+import { ActivityStudioPanel } from "@/components/activities/ActivityStudioPanel";
+import { Button } from "@/components/ui/button";
 import { ActivityComponentFeedbackSchema, type ActivityComponentFeedback } from "@/lib/activities/feedback";
+import type { ActivityAttempt, ActivitySession, AttemptAnswer } from "@/lib/activities/types";
 import { WidgetTransitionArtifactSchema, type WidgetLearnerAction } from "@/lib/activities/widget-transition";
 import type { InteractiveWidgetPayload } from "@/lib/activities/widgets";
-import type { ActivitySession, ActivityAttempt, AttemptAnswer } from "@/lib/activities/types";
 
 interface Props {
   params: Promise<{ sessionId: string }>;
 }
 
 export default function ActivitySessionPage({ params }: Props) {
-  const router = useRouter();
   const [sessionId, setSessionId] = React.useState<string>("");
   const [session, setSession] = React.useState<ActivitySession | null>(null);
   const [attempt, setAttempt] = React.useState<ActivityAttempt | null>(null);
@@ -28,6 +28,19 @@ export default function ActivitySessionPage({ params }: Props) {
   const [submitting, setSubmitting] = React.useState(false);
   const [submitted, setSubmitted] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [lastFeedback, setLastFeedback] = React.useState<{
+    componentId: string;
+    componentType: string;
+    learnerResponse: unknown;
+    result: ActivityComponentFeedback | null;
+  } | null>(null);
+  const [lastTransition, setLastTransition] = React.useState<{
+    componentId: string;
+    componentType: string;
+    learnerAction: WidgetLearnerAction;
+    currentResponse: unknown;
+    result: unknown;
+  } | null>(null);
 
   React.useEffect(() => {
     params.then((p) => setSessionId(p.sessionId));
@@ -63,10 +76,7 @@ export default function ActivitySessionPage({ params }: Props) {
     load();
   }, [sessionId]);
 
-  async function handleAnswerChange(
-    answers: AttemptAnswer[],
-    uiState?: Record<string, unknown>
-  ) {
+  async function handleAnswerChange(answers: AttemptAnswer[], uiState?: Record<string, unknown>) {
     if (!attempt) return;
     try {
       const res = await fetch(`/api/activities/attempts/${attempt.id}/autosave`, {
@@ -79,7 +89,7 @@ export default function ActivitySessionPage({ params }: Props) {
         setAttempt(updated);
       }
     } catch {
-      // Autosave failures are non-fatal
+      // Autosave failures are non-fatal.
     }
   }
 
@@ -124,7 +134,14 @@ export default function ActivitySessionPage({ params }: Props) {
     }
 
     const payload = await response.json();
-    return ActivityComponentFeedbackSchema.parse(payload);
+    const result = ActivityComponentFeedbackSchema.parse(payload);
+    setLastFeedback({
+      componentId,
+      componentType,
+      learnerResponse,
+      result,
+    });
+    return result;
   }
 
   async function handleComponentTransition(
@@ -155,7 +172,15 @@ export default function ActivitySessionPage({ params }: Props) {
     }
 
     const payload = await response.json();
-    return WidgetTransitionArtifactSchema.parse(payload);
+    const result = WidgetTransitionArtifactSchema.parse(payload);
+    setLastTransition({
+      componentId,
+      componentType,
+      learnerAction,
+      currentResponse,
+      result,
+    });
+    return result;
   }
 
   if (loading) {
@@ -179,7 +204,7 @@ export default function ActivitySessionPage({ params }: Props) {
 
   return (
     <div className="flex flex-col gap-6">
-      <Link href="/" className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground w-fit">
+      <Link href="/" className="flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="size-4" />
         Back to activities
       </Link>
@@ -194,6 +219,15 @@ export default function ActivitySessionPage({ params }: Props) {
         onSubmit={handleSubmit}
         submitting={submitting}
         submitted={submitted}
+      />
+
+      <ActivityStudioPanel
+        session={session}
+        attempt={attempt}
+        submitted={submitted}
+        error={error}
+        lastFeedback={lastFeedback}
+        lastTransition={lastTransition}
       />
 
       {submitted && (

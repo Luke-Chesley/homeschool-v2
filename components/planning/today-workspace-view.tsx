@@ -21,7 +21,6 @@ import type { DailyWorkspace, DailyWorkspaceLessonDraft } from "@/lib/planning/t
 import { cn } from "@/lib/utils";
 import {
   generateLessonDraftActivityAction,
-  getLessonDraftPromptPreviewAction,
   saveTodayPlanItemEvaluationAction,
   type LessonDraftActivityStatus,
   type TodayPlanItemAction,
@@ -112,80 +111,6 @@ function initialDraftState(lessonDraft: DailyWorkspaceLessonDraft | null): Draft
 // Lesson-draft activity control: generate / regenerate / stale / ready
 // ---------------------------------------------------------------------------
 
-type PromptPreviewState =
-  | { status: "idle" }
-  | { status: "loading" }
-  | { status: "ready"; systemPrompt: string; userPrompt: string }
-  | { status: "error"; message: string };
-
-function LessonDraftPromptPreview({ date }: { date: string }) {
-  const [open, setOpen] = useState(false);
-  const [preview, setPreview] = useState<PromptPreviewState>({ status: "idle" });
-
-  async function handleToggle() {
-    if (open) {
-      setOpen(false);
-      return;
-    }
-    setOpen(true);
-    if (preview.status === "ready") return;
-    setPreview({ status: "loading" });
-    const result = await getLessonDraftPromptPreviewAction(date);
-    if (result.ok && result.systemPrompt && result.userPrompt) {
-      setPreview({ status: "ready", systemPrompt: result.systemPrompt, userPrompt: result.userPrompt });
-    } else {
-      setPreview({ status: "error", message: result.error ?? "Failed to load prompt" });
-    }
-  }
-
-  return (
-    <div>
-      <button
-        type="button"
-        onClick={handleToggle}
-        className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "text-muted-foreground")}
-      >
-        {preview.status === "loading" ? <Loader2 className="size-3.5 animate-spin" /> : null}
-        <span>{open ? "Hide prompt" : "View prompt"}</span>
-        <span className="text-xs opacity-50">debug</span>
-      </button>
-
-      {open && preview.status === "ready" ? (
-        <div className="mt-3 rounded-lg border border-border/70 bg-background p-4">
-          <div className="grid gap-4">
-            <div>
-              <p className="mb-2 text-xs font-medium text-foreground">System</p>
-              <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-lg border border-border/70 bg-muted/35 p-3 text-xs leading-6 text-foreground">
-                {preview.systemPrompt}
-              </pre>
-            </div>
-            <div>
-              <p className="mb-2 text-xs font-medium text-foreground">User</p>
-              <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-lg border border-border/70 bg-muted/35 p-3 text-xs leading-6 text-foreground">
-                {preview.userPrompt}
-              </pre>
-            </div>
-          </div>
-        </div>
-      ) : null}
-      {open && preview.status === "error" ? (
-        <p className="mt-2 text-xs text-destructive">{preview.message}</p>
-      ) : null}
-    </div>
-  );
-}
-
-/**
- * Lesson-draft activity control panel.
- *
- * Displays the current activity state and provides generate / regenerate
- * affordances. Placed in the lesson draft area — not on plan item cards.
- *
- * States:
- *   - no_activity: show generate button
- *   - stale: show warning + regenerate button (draft changed since last gen)
- *   - ready: show open activity link
- */
 function LessonDraftActivityControl({
   date,
   activityStatus,
@@ -265,8 +190,6 @@ function LessonDraftActivityControl({
 
         {error ? <p className="text-xs text-destructive">{error}</p> : null}
       </div>
-
-      <LessonDraftPromptPreview date={date} />
     </div>
   );
 }
