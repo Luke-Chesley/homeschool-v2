@@ -75,3 +75,10 @@ Every worker should:
 ## Integration Note
 
 The intentional tradeoff here is that some feature tasks may temporarily use mock adapters or placeholder service contracts. That is expected. The goal of the split is parallel velocity with low conflict risk, not perfect first-pass integration.
+
+## Cross-Cutting Roadmaps
+
+These are higher-level sequencing documents that cut across the original parallel work packets:
+
+- [path_to_deployment/deployment-studio-roadmap.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/deployment-studio-roadmap.md)
+- [path_to_deployment/studio-mode-implementation-checklist.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/studio-mode-implementation-checklist.md)
