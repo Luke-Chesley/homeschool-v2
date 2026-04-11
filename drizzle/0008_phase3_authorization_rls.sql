@@ -6,6 +6,7 @@ create or replace function private.current_auth_user_id()
 returns text
 language sql
 stable
+set search_path = ''
 as $$
   select auth.uid()::text
 $$;
@@ -124,6 +125,7 @@ create or replace function private.storage_org_id(path text)
 returns text
 language sql
 immutable
+set search_path = ''
 as $$
   select nullif(split_part(coalesce(path, ''), '/', 1), '')
 $$;
@@ -132,6 +134,7 @@ create or replace function private.storage_learner_id(path text)
 returns text
 language sql
 immutable
+set search_path = ''
 as $$
   select case
     when split_part(coalesce(path, ''), '/', 2) = 'learners' then nullif(split_part(path, '/', 3), '')

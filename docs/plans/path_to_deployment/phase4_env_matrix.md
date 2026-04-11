@@ -67,12 +67,15 @@ Recommended placeholder policy:
 
 ### Staging
 
-Required hosted values:
+Current hosted values known from provisioning:
+
+- staging Supabase project ref: `ntlcjsnstxytxnfagyly`
+- staging Supabase project URL: `https://ntlcjsnstxytxnfagyly.supabase.co`
+- staging database host: `db.ntlcjsnstxytxnfagyly.supabase.co`
+
+Still needed:
 
 - staging app URL
-- staging Supabase project ref
-- staging Supabase project URL
-- staging Supabase publishable key
 - staging Supabase service role key
 - staging Supabase database URL
 - staging `learning-core` URL
@@ -81,12 +84,15 @@ Required hosted values:
 
 ### Production
 
-Required hosted values:
+Current hosted values known from provisioning:
+
+- production Supabase project ref: `rqgiopliqeatdbgnbtnh`
+- production Supabase project URL: `https://rqgiopliqeatdbgnbtnh.supabase.co`
+- production database host: `db.rqgiopliqeatdbgnbtnh.supabase.co`
+
+Still needed:
 
 - production app URL
-- production Supabase project ref
-- production Supabase project URL
-- production Supabase publishable key
 - production Supabase service role key
 - production Supabase database URL
 - production `learning-core` URL
@@ -99,11 +105,11 @@ Fill this in during implementation.
 
 | Variable Group | Owner | Where It Is Set | Last Verified |
 | --- | --- | --- | --- |
-| Public app URLs | TBD | Vercel | TBD |
-| Hosted Supabase public values | TBD | Vercel | TBD |
-| Hosted Supabase server secrets | TBD | Vercel | TBD |
-| Hosted `learning-core` values | TBD | Vercel + Cloud Run | TBD |
-| Inngest values | TBD | Vercel | TBD |
+| Public app URLs | TBD | Vercel project `prj_C9V6Mgxl4XhZiOAcsHEZhI7eY7YC` | 2026-04-11 |
+| Hosted Supabase public values | Luke | Supabase projects + Vercel envs | 2026-04-11 |
+| Hosted Supabase server secrets | Luke | Supabase dashboard + Vercel envs | pending |
+| Hosted `learning-core` values | Luke | Cloud Run + Vercel envs | pending |
+| Inngest values | Luke | Vercel | pending |
 
 ## Open Implementation Notes
 

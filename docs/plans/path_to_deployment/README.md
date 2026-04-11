@@ -17,6 +17,7 @@ Use the supporting docs in this folder for deeper planning and handoff detail.
 - [phase4_hosted_deployment_setup.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase4_hosted_deployment_setup.md)
 - [phase4_hosted_deployment_checklist.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase4_hosted_deployment_checklist.md)
 - [phase4_env_matrix.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase4_env_matrix.md)
+- [phase4_provisioned_inventory.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase4_provisioned_inventory.md)
 - [studio-mode-implementation-checklist.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/studio-mode-implementation-checklist.md)
 - [studio-mode-agent-handoff.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/studio-mode-agent-handoff.md)
 
@@ -67,12 +68,12 @@ Use the supporting docs in this folder for deeper planning and handoff detail.
 
 ### Phase 4: Hosted Deployment Setup
 
-- [ ] Create hosted Supabase staging and production projects.
-- [ ] Create the Vercel project and environment setup.
-- [ ] Define the full env var matrix for preview, staging, and production.
-- [ ] Document the migration flow from local to hosted environments.
-- [ ] Define backup and rollback expectations.
-- [ ] Add monitoring and log access paths.
+- [x] Create hosted Supabase staging and production projects.
+- [x] Create the Vercel project and local project link.
+- [x] Define the full env var matrix for preview, staging, and production.
+- [x] Document the migration flow from local to hosted environments.
+- [x] Define backup and rollback expectations.
+- [x] Add monitoring and log access paths.
 
 ### Phase 5: Parent Product Redesign
 
@@ -122,7 +123,7 @@ Work this in order:
 - Phase 1 is complete on `main`.
 - Phase 2 is complete on `main`.
 - Phase 3 is complete on `main`.
-- Phase 4 planning is documented and ready for hosted setup work.
+- Phase 4 provisioning is in progress. Supabase staging/production and the Vercel project exist, but Cloud Run and hosted secret entry are still pending.
 
 ## How To Use This Folder
 
