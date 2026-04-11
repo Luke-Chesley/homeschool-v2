@@ -14,6 +14,9 @@ Use the supporting docs in this folder for deeper planning and handoff detail.
 - [phase3_authorization_data_safety.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase3_authorization_data_safety.md)
 - [phase3_authorization_data_checklist.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase3_authorization_data_checklist.md)
 - [phase3_authorization_inventory.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase3_authorization_inventory.md)
+- [phase4_hosted_deployment_setup.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase4_hosted_deployment_setup.md)
+- [phase4_hosted_deployment_checklist.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase4_hosted_deployment_checklist.md)
+- [phase4_env_matrix.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase4_env_matrix.md)
 - [studio-mode-implementation-checklist.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/studio-mode-implementation-checklist.md)
 - [studio-mode-agent-handoff.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/studio-mode-agent-handoff.md)
 
@@ -118,8 +121,8 @@ Work this in order:
 
 - Phase 1 is complete on `main`.
 - Phase 2 is complete on `main`.
-- Phase 3 is implemented and verified in the Phase 3 worktree.
-- The next major build step is merging Phase 3 to `main`, then moving to hosted setup.
+- Phase 3 is complete on `main`.
+- Phase 4 planning is documented and ready for hosted setup work.
 
 ## How To Use This Folder
 
