@@ -11,6 +11,9 @@ Use the supporting docs in this folder for deeper planning and handoff detail.
 - [phase2_auth_workspace_hardening.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase2_auth_workspace_hardening.md)
 - [phase2_auth_workspace_checklist.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase2_auth_workspace_checklist.md)
 - [phase2_service_role_review.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase2_service_role_review.md)
+- [phase3_authorization_data_safety.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase3_authorization_data_safety.md)
+- [phase3_authorization_data_checklist.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase3_authorization_data_checklist.md)
+- [phase3_authorization_inventory.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase3_authorization_inventory.md)
 - [studio-mode-implementation-checklist.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/studio-mode-implementation-checklist.md)
 - [studio-mode-agent-handoff.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/studio-mode-agent-handoff.md)
 
@@ -49,7 +52,7 @@ Use the supporting docs in this folder for deeper planning and handoff detail.
 - [x] Protect parent and learner routes with real auth checks.
 - [x] Review and reduce service-role usage.
 - [x] Verify the signed-out, signed-in, and workspace-fallback flows locally.
-- [ ] Merge Phase 2 to `main` after review approval.
+- [x] Merge Phase 2 to `main`.
 
 ### Phase 3: Authorization And Data Safety
 
@@ -114,8 +117,9 @@ Work this in order:
 ## Current State
 
 - Phase 1 is complete on `main`.
-- Phase 2 implementation is complete in the active worktree and verified locally.
-- The next major build step is Phase 3: authorization, RLS, and storage safety.
+- Phase 2 is complete on `main`.
+- Phase 3 planning is documented and ready for implementation.
+- The next major build step is RLS, storage policies, and direct tenancy enforcement.
 
 ## How To Use This Folder
 
