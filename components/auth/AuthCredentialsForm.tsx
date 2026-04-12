@@ -76,7 +76,7 @@ export function AuthCredentialsForm({ mode }: AuthCredentialsFormProps) {
   }
 
   return (
-    <Card className="border-border/70 bg-card/85 shadow-[var(--shadow-card)]">
+    <Card className="quiet-panel">
       <CardHeader>
         <CardTitle>{mode === "login" ? "Sign in" : "Create account"}</CardTitle>
         <CardDescription>
@@ -96,7 +96,7 @@ export function AuthCredentialsForm({ mode }: AuthCredentialsFormProps) {
                 id="full-name"
                 value={fullName}
                 onChange={(event) => setFullName(event.target.value)}
-                className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
                 placeholder="Avery Rivera"
                 autoComplete="name"
               />
@@ -112,7 +112,7 @@ export function AuthCredentialsForm({ mode }: AuthCredentialsFormProps) {
               type="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
               placeholder="parent@example.com"
               autoComplete="email"
               required
@@ -128,7 +128,7 @@ export function AuthCredentialsForm({ mode }: AuthCredentialsFormProps) {
               type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
               placeholder="At least 6 characters"
               autoComplete={mode === "login" ? "current-password" : "new-password"}
               minLength={6}
@@ -137,11 +137,11 @@ export function AuthCredentialsForm({ mode }: AuthCredentialsFormProps) {
           </div>
 
           {error ? (
-            <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>
+            <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>
           ) : null}
 
           {notice ? (
-            <p className="rounded-lg bg-primary/10 px-3 py-2 text-sm text-foreground">{notice}</p>
+            <p className="rounded-md bg-primary/10 px-3 py-2 text-sm text-foreground">{notice}</p>
           ) : null}
 
           <Button type="submit" className="w-full" disabled={submitting}>
@@ -155,7 +155,7 @@ export function AuthCredentialsForm({ mode }: AuthCredentialsFormProps) {
           </Button>
         </form>
 
-        <div className="mt-4 text-sm text-muted-foreground">
+        <div className="mt-5 flex items-center justify-between gap-4 text-sm text-muted-foreground">
           {mode === "login" ? (
             <p>
               Need an account?{" "}
@@ -171,6 +171,7 @@ export function AuthCredentialsForm({ mode }: AuthCredentialsFormProps) {
               </Link>
             </p>
           )}
+          {mode === "login" ? <span className="text-xs">Use the same email tied to the household.</span> : null}
         </div>
       </CardContent>
     </Card>

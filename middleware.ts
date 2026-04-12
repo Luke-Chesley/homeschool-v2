@@ -3,10 +3,13 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { getClientEnv } from "@/lib/env/client";
 
-const PUBLIC_PATH_PREFIXES = ["/auth", "/_next", "/favicon.ico"];
+const PUBLIC_PATH_PREFIXES = ["/", "/auth", "/_next", "/favicon.ico"];
 
 function isPublicPath(pathname: string) {
-  if (PUBLIC_PATH_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))) {
+  if (
+    pathname === "/" ||
+    PUBLIC_PATH_PREFIXES.some((prefix) => prefix !== "/" && (pathname === prefix || pathname.startsWith(`${prefix}/`)))
+  ) {
     return true;
   }
 

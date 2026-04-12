@@ -2,23 +2,30 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { LogOut } from "lucide-react";
+import { useEffect, useState } from "react";
 
+import { StudioToggle } from "@/components/studio/StudioToggle";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-const globalPageTabs = [
-  { href: "/", label: "Landing", matchPrefix: "/" },
-  { href: "/today", label: "Today", matchPrefix: "/today" },
-  { href: "/curriculum", label: "Curriculum", matchPrefix: "/curriculum" },
-  { href: "/planning", label: "Planning", matchPrefix: "/planning" },
-  { href: "/tracking", label: "Tracking", matchPrefix: "/tracking" },
-  { href: "/copilot", label: "Copilot", matchPrefix: "/copilot" },
-  { href: "/users", label: "Users", matchPrefix: "/users" },
-  {
-    href: "/sample-activity",
-    label: "Sample Activity",
-    matchPrefix: "/sample-activity",
-  },
+const publicTabs = [
+  { href: "/", label: "Home", matchPrefix: "/" },
+  { href: "/auth/login", label: "Sign in", matchPrefix: "/auth" },
+] as const;
+
+const workspaceLabels: Array<{ match: string; label: string }> = [
+  { match: "/today", label: "Today" },
+  { match: "/planning", label: "Planning" },
+  { match: "/curriculum", label: "Curriculum" },
+  { match: "/tracking", label: "Tracking" },
+  { match: "/copilot", label: "Copilot" },
+  { match: "/account", label: "Account" },
+  { match: "/users", label: "Learners" },
+  { match: "/onboarding", label: "Setup" },
+  { match: "/learner", label: "Learner" },
+  { match: "/activity", label: "Activity" },
 ] as const;
 
 function isActive(pathname: string, href: string, matchPrefix: string) {
@@ -29,47 +36,143 @@ function isActive(pathname: string, href: string, matchPrefix: string) {
   return pathname === href || pathname.startsWith(`${matchPrefix}/`);
 }
 
+function getWorkspaceLabel(pathname: string) {
+  return workspaceLabels.find((entry) => pathname === entry.match || pathname.startsWith(`${entry.match}/`))
+    ?.label;
+}
+
+type WorkspaceSnapshot = {
+  activeLearner?: { displayName?: string | null } | null;
+  organization?: { name?: string | null } | null;
+};
+
 export function GlobalPageTabs() {
   const pathname = usePathname();
+  const inWorkspace =
+    pathname.startsWith("/today") ||
+    pathname.startsWith("/planning") ||
+    pathname.startsWith("/curriculum") ||
+    pathname.startsWith("/tracking") ||
+    pathname.startsWith("/copilot") ||
+    pathname.startsWith("/account") ||
+    pathname.startsWith("/learner") ||
+    pathname.startsWith("/activity") ||
+    pathname.startsWith("/users") ||
+    pathname.startsWith("/onboarding");
+  const workspaceLabel = getWorkspaceLabel(pathname);
+  const [session, setSession] = useState<WorkspaceSnapshot | null>(null);
 
-  if (pathname.startsWith("/auth")) {
-    return (
-      <div className="sticky top-0 z-40 border-b border-border/70 bg-background/95">
-        <div className="mx-auto flex h-[var(--global-tabs-height)] max-w-7xl items-center justify-end px-4 sm:px-6 lg:px-8">
-          <ThemeToggle />
-        </div>
-      </div>
-    );
-  }
+  useEffect(() => {
+    if (!inWorkspace) {
+      setSession(null);
+      return;
+    }
+
+    let cancelled = false;
+    fetch("/api/app-session", { credentials: "same-origin" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload) => {
+        if (!cancelled) {
+          setSession(payload);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSession(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [inWorkspace]);
 
   return (
-    <div className="sticky top-0 z-40 border-b border-border/70 bg-background/95">
-      <div className="mx-auto flex h-[var(--global-tabs-height)] max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
-        <nav className="flex min-w-0 items-center gap-5 overflow-x-auto" aria-label="Global sections">
-          {globalPageTabs.map((tab) => {
-            const active =
-              tab.href === "/sample-activity"
-                ? pathname.startsWith("/activity") || pathname.startsWith("/sample-activity")
-                : isActive(pathname, tab.href, tab.matchPrefix);
-
-            return (
+    <div className="sticky top-0 z-40 border-b border-border/70 bg-background/92 backdrop-blur">
+      <div className="mx-auto grid h-[var(--global-tabs-height)] max-w-7xl grid-cols-[auto_1fr_auto] items-center gap-4 px-4 sm:px-6 lg:px-8">
+        <div className="flex min-w-0 items-center gap-5">
+          <Link href="/" className="shrink-0 text-[15px] font-semibold tracking-tight text-foreground">
+            Homeschool V2
+          </Link>
+        </div>
+        <div className="flex min-w-0 items-center justify-center">
+          {inWorkspace ? (
+            <div className="hidden min-w-0 items-center gap-2 text-sm md:flex">
               <Link
-                key={tab.href}
-                href={tab.href}
-                className={cn(
-                  "inline-flex h-11 shrink-0 items-center border-b-2 px-0 text-sm transition-colors",
-                  active
-                    ? "border-primary text-foreground"
-                    : "border-transparent text-muted-foreground hover:border-border hover:text-foreground",
-                )}
+                href="/today"
+                className="shrink-0 font-medium text-muted-foreground transition-colors hover:text-foreground"
               >
-                {tab.label}
+                Workspace
               </Link>
-            );
-          })}
-        </nav>
+              {workspaceLabel ? (
+                <>
+                  <span className="text-muted-foreground/70">/</span>
+                  <span className="truncate font-medium text-foreground">{workspaceLabel}</span>
+                </>
+              ) : null}
+              {session?.activeLearner?.displayName ? (
+                <>
+                  <span className="text-muted-foreground/70">/</span>
+                  <span className="truncate text-muted-foreground">{session.activeLearner.displayName}</span>
+                </>
+              ) : null}
+            </div>
+          ) : (
+            <nav className="flex min-w-0 items-center gap-6 overflow-x-auto" aria-label="Global sections">
+              {publicTabs.map((tab) => {
+                const active = isActive(pathname, tab.href, tab.matchPrefix);
 
-        <ThemeToggle />
+                return (
+                  <Link
+                    key={tab.href}
+                    href={tab.href}
+                    className={cn(
+                      "inline-flex shrink-0 items-center text-sm transition-colors",
+                      active ? "font-medium text-foreground" : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {tab.label}
+                  </Link>
+                );
+              })}
+            </nav>
+          )}
+        </div>
+        <div className="flex items-center justify-end gap-3 lg:gap-5">
+          {inWorkspace ? (
+            <>
+              <Link
+                href="/today"
+                className="hidden text-sm font-medium text-muted-foreground transition-colors hover:text-foreground lg:inline-flex"
+              >
+                Workspace
+              </Link>
+              <Link
+                href="/users"
+                className="hidden text-sm font-medium text-muted-foreground transition-colors hover:text-foreground lg:inline-flex"
+              >
+                Learners
+              </Link>
+              <Link
+                href="/account"
+                className="hidden text-sm font-medium text-muted-foreground transition-colors hover:text-foreground lg:inline-flex"
+              >
+                Account
+              </Link>
+              <div className="hidden h-4 w-px bg-border/80 lg:block" />
+              <div className="hidden lg:block">
+                <StudioToggle />
+              </div>
+              <form action="/auth/signout" method="post" className="hidden lg:block">
+                <Button type="submit" variant="ghost" size="sm" className="gap-2">
+                  <LogOut className="size-4" />
+                  Sign out
+                </Button>
+              </form>
+            </>
+          ) : null}
+          <ThemeToggle />
+        </div>
       </div>
     </div>
   );

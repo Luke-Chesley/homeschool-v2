@@ -188,7 +188,7 @@ export function LessonPlanPanel({
 
   return (
     <>
-      <Card>
+      <Card className="quiet-panel">
         <div className="space-y-5 p-5">
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-2">
@@ -198,7 +198,7 @@ export function LessonPlanPanel({
             </div>
             <div>
               <h2 className="font-serif text-2xl">Lesson draft</h2>
-              <p className="mt-1 text-sm text-muted-foreground">{sourceTitle}</p>
+              <p className="mt-1 text-sm leading-7 text-muted-foreground">{sourceTitle}</p>
             </div>
           </div>
 
@@ -232,7 +232,7 @@ export function LessonPlanPanel({
             ) : null}
           </div>
 
-          <details className="rounded-lg border border-border/70 bg-background px-4 py-3">
+          <details className="rounded-lg border border-border/70 bg-background/72 px-4 py-3">
             <summary className="cursor-pointer text-sm font-medium text-foreground">
               Context
             </summary>
@@ -255,7 +255,7 @@ export function LessonPlanPanel({
           ) : null}
 
           {showDraftOutput && draftState?.kind === "structured" ? (
-            <div className="rounded-lg border border-border/70 bg-background p-4">
+            <div className="rounded-lg border border-border/70 bg-background/72 p-4">
               <LessonDraftRenderer draft={draftState.draft} mode="compact" />
             </div>
           ) : showDraftOutput && draftState?.kind === "markdown" ? (

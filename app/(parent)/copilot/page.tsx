@@ -59,23 +59,42 @@ export default async function CopilotPage({ searchParams }: Props) {
     feedbackNotes: snapshot?.feedbackNotes ?? [],
     recentOutcomes: [],
   };
-  const promptPreview = await previewCopilotChat({
-    messages: [],
-    context,
-    organizationId: session.organization.id,
-    learnerId: session.activeLearner.id,
-  });
+  let promptPreview:
+    | Awaited<ReturnType<typeof previewCopilotChat>>
+    | null = null;
+  let previewError: string | null = null;
+
+  try {
+    promptPreview = await previewCopilotChat({
+      messages: [],
+      context,
+      organizationId: session.organization.id,
+      learnerId: session.activeLearner.id,
+    });
+  } catch (error) {
+    previewError =
+      error instanceof Error ? error.message : "Copilot preview is unavailable right now.";
+  }
 
   return (
-    <main className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-5 py-6 sm:px-6 lg:px-8">
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_300px]">
-        <Card className="min-h-[42rem] overflow-hidden">
+    <main className="page-shell page-stack">
+      <header className="page-header">
+        <p className="section-meta">Context-aware support</p>
+        <h1 className="page-title">Ask for the next move.</h1>
+        <p className="page-subtitle">
+          Copilot should feel embedded in the planning workflow: quiet, readable, and aware of the
+          learner, week, and current day without turning into a separate AI product.
+        </p>
+      </header>
+
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <Card className="min-h-[42rem] overflow-hidden rounded-xl border-border/80 bg-card/94 shadow-[var(--shadow-card)]">
           <CopilotChat context={context} className="h-full min-w-0 overflow-hidden" />
         </Card>
 
         <div className="space-y-4">
-          <Card>
-            <div className="space-y-3 p-4 text-sm">
+          <Card className="quiet-panel">
+            <div className="space-y-3 p-4 text-sm leading-6">
               <p className="font-medium text-foreground">Current context</p>
               <div className="space-y-2 text-muted-foreground">
                 <p>Learner: {context.learnerName}</p>
@@ -86,8 +105,8 @@ export default async function CopilotPage({ searchParams }: Props) {
             </div>
           </Card>
 
-          <Card>
-            <div className="space-y-3 p-4 text-sm">
+          <Card className="quiet-panel">
+            <div className="space-y-3 p-4 text-sm leading-6">
               <p className="font-medium text-foreground">Start with</p>
               <div className="space-y-2 text-muted-foreground">
                 <p>Draft today&apos;s lesson.</p>
@@ -97,6 +116,19 @@ export default async function CopilotPage({ searchParams }: Props) {
               </div>
             </div>
           </Card>
+
+          {previewError ? (
+            <Card className="quiet-panel">
+              <div className="space-y-2 p-4 text-sm leading-6">
+                <p className="font-medium text-foreground">Copilot preview unavailable</p>
+                <p className="text-muted-foreground">
+                  The app could not reach <code className="font-mono text-[11px]">learning-core</code>.
+                  This is usually a local service issue, not a UI issue.
+                </p>
+                <p className="text-xs text-muted-foreground/80">{previewError}</p>
+              </div>
+            </Card>
+          ) : null}
 
           <CopilotPromptPreview promptPreview={promptPreview} />
 

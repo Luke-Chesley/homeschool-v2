@@ -150,7 +150,7 @@ export function HomeschoolOnboardingForm(props: {
   return (
     <form className="grid gap-6" onSubmit={handleSubmit}>
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
-        <Card>
+        <Card className="quiet-panel border-border/60 bg-card/78 shadow-none">
           <CardHeader>
             <CardTitle>Household setup</CardTitle>
             <CardDescription>
@@ -268,31 +268,31 @@ export function HomeschoolOnboardingForm(props: {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="quiet-panel border-border/60 bg-card/78 shadow-none">
           <CardHeader>
-            <CardTitle>What this sets up</CardTitle>
+            <CardTitle>What happens next</CardTitle>
             <CardDescription>
-              The app will create the household, learners, starter curriculum, first week, and today workspace in one pass.
+              One submission creates the first workable version of the household workspace.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 text-sm text-muted-foreground">
-            <p>1. Save household and planning defaults.</p>
-            <p>2. Create learner profiles.</p>
-            <p>3. Create or import curriculum.</p>
-            <p>4. Generate the first workable week.</p>
-            <p>5. Open today ready to run.</p>
+            <p>1. Save household defaults and pacing preferences.</p>
+            <p>2. Create learner profiles with an initial workload bias.</p>
+            <p>3. Create or import the first curriculum source.</p>
+            <p>4. Build the first workable week.</p>
+            <p>5. Open Today ready to adjust and run.</p>
           </CardContent>
         </Card>
       </div>
 
-      <Card>
+      <Card className="quiet-panel border-border/60 bg-card/78 shadow-none">
         <CardHeader>
           <CardTitle>Learners</CardTitle>
           <CardDescription>Each learner gets a profile, a pace preference, and an initial workload setting.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
           {learners.map((learner, index) => (
-            <div key={index} className="grid gap-4 rounded-[1.4rem] border border-border/70 bg-background/70 p-4 md:grid-cols-5">
+            <div key={index} className="grid gap-4 rounded-xl border border-border/60 bg-background/70 p-4 md:grid-cols-5">
               <label className="grid gap-1.5 text-sm font-medium md:col-span-2">
                 Name
                 <input
@@ -377,11 +377,11 @@ export function HomeschoolOnboardingForm(props: {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="quiet-panel border-border/60 bg-card/78 shadow-none">
         <CardHeader>
           <CardTitle>Curriculum intake</CardTitle>
           <CardDescription>
-            V1 supports manual starter shells, pasted outlines, or AI decomposition from source text.
+            Start from a shell, paste a structured outline, or give the app source material to decompose.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">

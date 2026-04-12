@@ -6,6 +6,8 @@ import Script from "next/script";
 import { ReactNode } from "react";
 
 import { GlobalPageTabs } from "@/components/navigation/global-page-tabs";
+import { StudioProvider } from "@/components/studio/studio-provider";
+import { getStudioAccess } from "@/lib/studio/access";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
 
 const display = Fraunces({
@@ -29,16 +31,20 @@ export const viewport: Viewport = {
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
+  const studioAccess = getStudioAccess();
+
   return (
     <html lang="en" suppressHydrationWarning data-scroll-behavior="smooth">
       <body
-        className={`${display.variable} ${body.variable} min-h-screen overflow-x-hidden bg-background text-foreground [--global-tabs-height:4rem]`}
+        className={`${display.variable} ${body.variable} min-h-screen overflow-x-hidden bg-background text-foreground [--global-tabs-height:3.5rem]`}
       >
         <Script id="theme-init" strategy="beforeInteractive">
           {THEME_INIT_SCRIPT}
         </Script>
-        <GlobalPageTabs />
-        {children}
+        <StudioProvider access={studioAccess}>
+          <GlobalPageTabs />
+          {children}
+        </StudioProvider>
       </body>
     </html>
   );

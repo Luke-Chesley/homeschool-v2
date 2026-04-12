@@ -10,22 +10,24 @@ import { Button } from "@/components/ui/button";
 const COPILOT_PROMPT_PANEL_ID = "copilot-prompt-preview";
 
 interface CopilotPromptPreviewProps {
-  promptPreview: {
-    operation_name: string;
-    skill_name: string;
-    skill_version: string;
-    request_id: string;
-    allowed_tools: string[];
-    system_prompt: string;
-    user_prompt: string;
-    request_envelope: unknown;
-  };
+  promptPreview:
+    | {
+        operation_name: string;
+        skill_name: string;
+        skill_version: string;
+        request_id: string;
+        allowed_tools: string[];
+        system_prompt: string;
+        user_prompt: string;
+        request_envelope: unknown;
+      }
+    | null;
 }
 
 export function CopilotPromptPreview({ promptPreview }: CopilotPromptPreviewProps) {
   const { access, isEnabled, openPanel } = useStudio();
 
-  if (!isEnabled || !access.canViewPrompts) {
+  if (!promptPreview || !isEnabled || !access.canViewPrompts) {
     return null;
   }
 

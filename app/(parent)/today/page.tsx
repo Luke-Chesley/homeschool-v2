@@ -141,12 +141,14 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
 
   return (
     <PlanningShell>
-      <div className="mb-5 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
-        <span className="font-medium text-foreground">Live curriculum: {liveSource.title}</span>
-        <span>{formatLongDate(workspace.date)}</span>
-        <span>{workspace.items.length} lessons in motion</span>
-        <span>{sessionTiming.resolvedTotalMinutes} min</span>
-      </div>
+      <header className="page-header">
+        <p className="section-meta">{formatLongDate(workspace.date)}</p>
+        <h1 className="page-title">Today</h1>
+        <div className="toolbar-row text-sm text-muted-foreground">
+          <span>{workspace.items.length} items</span>
+          <span>{sessionTiming.resolvedTotalMinutes} min</span>
+        </div>
+      </header>
       <TodayWorkspaceView workspace={workspace} sourceId={liveSource.id} />
     </PlanningShell>
   );

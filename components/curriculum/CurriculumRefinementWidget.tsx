@@ -112,7 +112,7 @@ export function CurriculumRefinementWidget({
   return (
     <div className={cn("fixed bottom-5 right-5 z-40 flex flex-col items-end gap-3", className)}>
       {open ? (
-        <Card className="w-[min(24rem,calc(100vw-1.5rem))] overflow-hidden border-border/80 bg-background/95 shadow-[0_18px_60px_-28px_rgba(15,23,42,0.45)] backdrop-blur">
+        <Card className="w-[min(25rem,calc(100vw-1.5rem))] overflow-hidden border-border/80 bg-background/95 shadow-[0_18px_60px_-28px_rgba(15,23,42,0.45)] backdrop-blur">
           <CardContent className="flex flex-col gap-4 p-0">
             <div className="flex items-start justify-between gap-3 border-b border-border/70 px-4 py-4">
               <div className="space-y-1">
@@ -127,9 +127,11 @@ export function CurriculumRefinementWidget({
                     </Badge>
                   ) : null}
                 </div>
-                <p className="text-sm font-medium text-foreground">{sourceTitle}</p>
-                <p className="text-xs text-muted-foreground">
-                  Ask for a new goal group, pacing change, title update, or broader rewrite.
+                <p className="font-serif text-lg font-semibold tracking-tight text-foreground">
+                  {sourceTitle}
+                </p>
+                <p className="text-sm leading-6 text-muted-foreground">
+                  Make one change at a time: pacing, naming, emphasis, scope, or a broader rewrite.
                 </p>
               </div>
               <div className="flex items-center gap-1">
@@ -156,7 +158,7 @@ export function CurriculumRefinementWidget({
               </div>
             </div>
 
-            <div className="border-b border-border/70 px-4 py-4">
+            <div className="border-b border-border/70 bg-muted/20 px-4 py-4">
               <CurriculumRevisionPromptPreview
                 sourceId={sourceId}
                 sourceTitle={sourceTitle}
@@ -178,7 +180,7 @@ export function CurriculumRefinementWidget({
                       "max-w-[88%] rounded-2xl border px-3 py-2 text-sm leading-relaxed",
                       message.role === "user"
                         ? "border-primary/20 bg-primary/10 text-foreground"
-                        : "border-border/70 bg-card text-foreground",
+                        : "border-border/70 bg-card/88 text-foreground",
                     )}
                   >
                     {message.content}
@@ -236,15 +238,21 @@ export function CurriculumRefinementWidget({
         </Card>
       ) : null}
 
-      <Button
-        type="button"
-        size="sm"
-        className="gap-2 rounded-full pl-3 pr-4 shadow-[0_14px_40px_-24px_rgba(15,23,42,0.55)]"
-        onClick={() => setOpen((value) => !value)}
-      >
-        <Wand2 className="size-4" />
-        Customize curriculum
-      </Button>
+      <div className="quiet-panel flex items-center gap-3 rounded-full px-3 py-2 shadow-[0_14px_40px_-24px_rgba(15,23,42,0.55)]">
+        <div className="hidden sm:block">
+          <p className="text-xs font-medium text-foreground">Refine this source</p>
+          <p className="text-[11px] text-muted-foreground">Quiet AI edits without leaving the page</p>
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          className="gap-2 rounded-full pl-3 pr-4"
+          onClick={() => setOpen((value) => !value)}
+        >
+          <Wand2 className="size-4" />
+          Customize
+        </Button>
+      </div>
     </div>
   );
 }

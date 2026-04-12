@@ -46,7 +46,7 @@ export function TrackingOverview({
   return (
     <div className="grid gap-6">
       <section className="grid gap-4 lg:grid-cols-5">
-        <Card className="lg:col-span-2">
+        <Card className="quiet-panel lg:col-span-2">
           <CardHeader>
             <CardDescription>{dashboard.learner.reportingWindow}</CardDescription>
             <CardTitle>{dashboard.learner.name}</CardTitle>
@@ -54,10 +54,8 @@ export function TrackingOverview({
           <CardContent className="space-y-2 text-sm leading-7 text-muted-foreground">
             <p>{dashboard.learner.gradeLabel}</p>
             {dashboard.curriculum ? (
-              <div className="space-y-2 rounded-[1.2rem] border border-border/70 bg-background/70 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                  Live curriculum
-                </p>
+              <div className="space-y-2 rounded-xl border border-border/70 bg-background/70 p-4">
+                <p className="text-sm text-muted-foreground">Live curriculum</p>
                 <p className="font-semibold text-foreground">{dashboard.curriculum.sourceTitle}</p>
                 <p className="text-sm leading-6">
                   {dashboard.curriculum.selectionReason}
@@ -81,7 +79,7 @@ export function TrackingOverview({
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
-        <Card>
+        <Card className="quiet-panel">
           <CardHeader>
             <CardTitle>Progress history</CardTitle>
             <CardDescription>Planned, actual, mastery, and evidence stay in the same row.</CardDescription>
@@ -98,10 +96,7 @@ export function TrackingOverview({
               />
             ) : (
               dashboard.outcomes.map((outcome) => (
-                <div
-                  key={outcome.id}
-                  className="rounded-[1.4rem] border border-border/70 bg-background/70 p-4"
-                >
+                <div key={outcome.id} className="rounded-xl border border-border/70 bg-background/70 p-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
@@ -149,7 +144,7 @@ export function TrackingOverview({
         </Card>
 
         <div className="grid gap-6">
-          <Card>
+          <Card className="quiet-panel">
             <CardHeader>
               <CardTitle>Observation feed</CardTitle>
               <CardDescription>
@@ -164,10 +159,7 @@ export function TrackingOverview({
                 />
               ) : (
                 dashboard.observations.map((observation) => (
-                  <div
-                    key={observation.id}
-                    className="rounded-[1.4rem] border border-border/70 bg-background/70 p-4"
-                  >
+                  <div key={observation.id} className="rounded-xl border border-border/70 bg-background/70 p-4">
                     <div className="flex items-center justify-between gap-3">
                       <p className="font-semibold">{observation.title}</p>
                       <Badge variant="outline">{observation.tone.replace("_", " ")}</Badge>
@@ -182,7 +174,7 @@ export function TrackingOverview({
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="quiet-panel">
             <CardHeader>
               <CardTitle>Lesson evaluations</CardTitle>
               <CardDescription>
@@ -197,10 +189,7 @@ export function TrackingOverview({
                 />
               ) : (
                 dashboard.evaluations.map((evaluation) => (
-                  <div
-                    key={evaluation.id}
-                    className="rounded-[1.4rem] border border-border/70 bg-background/70 p-4"
-                  >
+                  <div key={evaluation.id} className="rounded-xl border border-border/70 bg-background/70 p-4">
                     <div className="flex items-center justify-between gap-3">
                       <p className="font-semibold">{evaluation.title}</p>
                       <Badge variant="outline" className={evaluationTone[evaluation.level]}>
@@ -217,7 +206,7 @@ export function TrackingOverview({
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="quiet-panel">
             <CardHeader>
               <CardTitle>Evidence ledger</CardTitle>
               <CardDescription>
@@ -236,7 +225,7 @@ export function TrackingOverview({
                 />
               ) : (
                 dashboard.evidence.map((item) => (
-                  <div key={item.id} className="rounded-[1.4rem] border border-border/70 bg-background/70 p-4">
+                  <div key={item.id} className="rounded-xl border border-border/70 bg-background/70 p-4">
                     <div className="flex items-center justify-between gap-3">
                       <p className="font-semibold">{item.title}</p>
                       <Badge variant="outline">{item.kind}</Badge>
@@ -251,7 +240,7 @@ export function TrackingOverview({
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="quiet-panel">
             <CardHeader>
               <CardTitle>Review queue</CardTitle>
               <CardDescription>
@@ -266,7 +255,7 @@ export function TrackingOverview({
                 />
               ) : (
                 dashboard.reviewQueue.map((item) => (
-                  <div key={item.id} className="rounded-[1.4rem] border border-border/70 bg-background/70 p-4">
+                  <div key={item.id} className="rounded-xl border border-border/70 bg-background/70 p-4">
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <p className="font-semibold capitalize">{item.subjectType.replace("_", " ")}</p>
@@ -294,7 +283,7 @@ export function TrackingOverview({
 
           <AttendanceCard todayDate={todayDate} records={attendanceRecords} />
 
-          <Card>
+          <Card className="quiet-panel">
             <CardHeader>
               <CardTitle>Recommendations</CardTitle>
               <CardDescription>
@@ -309,10 +298,7 @@ export function TrackingOverview({
                 />
               ) : (
                 dashboard.recommendations.map((recommendation) => (
-                  <div
-                    key={recommendation.id}
-                    className="rounded-[1.4rem] border border-border/70 bg-background/70 p-4"
-                  >
+                  <div key={recommendation.id} className="rounded-xl border border-border/70 bg-background/70 p-4">
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <p className="font-semibold">{recommendation.title}</p>
