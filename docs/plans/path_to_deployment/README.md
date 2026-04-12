@@ -28,6 +28,7 @@ Use the supporting docs in this folder for deeper planning and handoff detail.
 - [phase7_product_polish_and_account_surfaces.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase7_product_polish_and_account_surfaces.md)
 - [phase7_product_polish_checklist.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase7_product_polish_checklist.md)
 - [phase7_surface_inventory.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase7_surface_inventory.md)
+- [phase9_billing_and_stripe.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase9_billing_and_stripe.md)
 - [studio-mode-implementation-checklist.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/studio-mode-implementation-checklist.md)
 - [studio-mode-agent-handoff.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/studio-mode-agent-handoff.md)
 
@@ -125,6 +126,14 @@ Use the supporting docs in this folder for deeper planning and handoff detail.
 - [ ] Verify auth, data safety, and hosted environment configuration.
 - [ ] Prepare the production cutover checklist.
 
+### Phase 9: Billing And Stripe
+
+- [ ] Define pricing and household plan rules.
+- [ ] Choose the Stripe billing shape and customer-management model.
+- [ ] Implement Stripe products, prices, and webhook handling.
+- [ ] Connect `Account` to real billing state.
+- [ ] Verify subscription and billing recovery flows.
+
 ## Current Recommendation
 
 Work this in order:
@@ -137,6 +146,7 @@ Work this in order:
 6. Learner flow redesign
 7. Product polish and account surfaces
 8. Final staging and launch prep
+9. Billing and Stripe
 
 ## Current State
 
@@ -147,6 +157,7 @@ Work this in order:
 - Phase 5 is complete on `main`, and `stage` has been realigned to the same commit.
 - Phase 6 is implemented on `main` and `stage`, but responsive QA and final learner signoff are still open.
 - Phase 7 is the active next phase. It focuses on `Account`, `Tracking`, auth/setup polish, and cross-surface product consistency before launch prep.
+- Stripe is intentionally deferred to Phase 9 so billing work does not get mixed into product-polish or launch-prep scope.
 
 ## How To Use This Folder
 
