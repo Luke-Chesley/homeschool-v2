@@ -195,7 +195,7 @@ export default function ActivitySessionPage({ params }: Props) {
     return (
       <div className="flex flex-col items-center gap-4 py-24">
         <p className="text-sm text-destructive">{error ?? "Activity not found."}</p>
-        <Link href="/">
+        <Link href="/learner">
           <Button variant="outline" size="sm">Back to activities</Button>
         </Link>
       </div>
@@ -204,7 +204,7 @@ export default function ActivitySessionPage({ params }: Props) {
 
   return (
     <div className="flex flex-col gap-6">
-      <Link href="/" className="flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+      <Link href="/learner" className="flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="size-4" />
         Back to activities
       </Link>
@@ -232,7 +232,7 @@ export default function ActivitySessionPage({ params }: Props) {
 
       {submitted && (
         <div className="flex justify-center pt-4">
-          <Link href="/">
+          <Link href="/learner">
             <Button variant="outline">Back to activities</Button>
           </Link>
         </div>
