@@ -604,16 +604,11 @@ export function TodayRouteItemsSection({
       <div className="flex flex-col gap-2 border-b border-border/70 pb-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-sm text-muted-foreground">{formatPlannerDate(workspace.date)}</p>
-          <h2 className="font-serif text-2xl">Daily workspace</h2>
-          <p className="mt-2 max-w-3xl text-sm leading-7 text-muted-foreground">
-            Keep the plan readable enough to scan quickly, but detailed enough to act on without opening a
-            separate management screen.
-          </p>
+          <h2 className="font-serif text-2xl">Queue</h2>
         </div>
         <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
           <span>{workspace.items.length} items</span>
           <span>{totalMinutes} min</span>
-          <span>{workspace.sessionTargets.length} targets</span>
         </div>
       </div>
 
@@ -694,10 +689,6 @@ function TodayLessonDraftArticle({
       <div className="border-b border-border/70 pb-4">
         <p className="text-sm text-muted-foreground">{workspace.leadItem.sourceLabel}</p>
         <h2 className="font-serif text-3xl">Lesson draft</h2>
-        <p className="mt-2 max-w-3xl text-sm leading-7 text-muted-foreground">
-          This is the main reading surface for today&apos;s lesson. Keep the instructional flow central and
-          push supporting metadata or debug detail into secondary panels.
-        </p>
       </div>
 
       <Card className="reading-surface">
@@ -717,9 +708,6 @@ function TodayLessonDraftArticle({
       {draftState.kind === "structured" ? (
         <div className="space-y-2">
           <h3 className="text-sm font-medium text-foreground">Activity</h3>
-          <p className="text-xs text-muted-foreground">
-            Keep AI actions limited: use this to generate or regenerate the one activity tied to today&apos;s lesson draft.
-          </p>
           <LessonDraftActivityControl
             date={workspace.date}
             activityStatus={null}

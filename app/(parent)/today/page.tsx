@@ -143,16 +143,10 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
     <PlanningShell>
       <header className="page-header">
         <p className="section-meta">{formatLongDate(workspace.date)}</p>
-        <h1 className="page-title">Start with the day.</h1>
-        <p className="page-subtitle">
-          The daily workspace keeps lesson sequencing, draft generation, and completion signals in one
-          calmer flow. Curriculum and planning stay close without taking over the page.
-        </p>
+        <h1 className="page-title">Today</h1>
         <div className="toolbar-row text-sm text-muted-foreground">
-          <span className="font-medium text-foreground">{liveSource.title}</span>
           <span>{workspace.items.length} items</span>
           <span>{sessionTiming.resolvedTotalMinutes} min</span>
-          <span>{workspace.sessionTargets.length} targets</span>
         </div>
       </header>
       <TodayWorkspaceView workspace={workspace} sourceId={liveSource.id} />

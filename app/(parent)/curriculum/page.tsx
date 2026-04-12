@@ -66,12 +66,8 @@ export default async function CurriculumPage() {
   return (
     <main className="page-shell page-stack">
       <header className="page-header">
-        <p className="section-meta">Curriculum source and structure</p>
-        <h1 className="page-title">Browse the structure that feeds planning.</h1>
-        <p className="page-subtitle">
-          Keep the active source legible and easy to inspect. Revision tools should stay close by without
-          taking over the main reading flow.
-        </p>
+        <p className="section-meta">Curriculum</p>
+        <h1 className="page-title">Curriculum</h1>
       </header>
       <CurriculumOverview
         sources={sources}

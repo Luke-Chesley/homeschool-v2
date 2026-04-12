@@ -28,7 +28,7 @@ export function ParentShell({
   return (
     <StudioProvider access={studioAccess}>
       <div className="flex min-h-[calc(100dvh-var(--global-tabs-height))] w-full bg-background">
-        <aside className="hidden w-[19rem] shrink-0 border-r border-border/70 bg-background/72 lg:block">
+        <aside className="hidden w-[16rem] shrink-0 border-r border-border/70 bg-background/72 lg:block">
           <div className="sticky top-[var(--global-tabs-height)] h-[calc(100dvh-var(--global-tabs-height))] overflow-y-auto">
             <ParentSidebar
               activeLearnerName={activeLearnerName}
@@ -57,7 +57,7 @@ export function ParentShell({
           <div className="absolute inset-0" onClick={() => setMobileOpen(false)} />
           <div
             className={cn(
-              "absolute inset-y-0 left-0 w-[min(88vw,320px)] border-r border-border/70 bg-background transition-transform",
+              "absolute inset-y-0 left-0 w-[min(82vw,288px)] border-r border-border/70 bg-background transition-transform",
               mobileOpen ? "translate-x-0" : "-translate-x-full",
             )}
           >

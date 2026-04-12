@@ -4,10 +4,8 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { LogOut, Menu } from "lucide-react";
 
-import { parentPrimaryNav } from "@/components/navigation/parent-nav-config";
 import { StudioToggle } from "@/components/studio/StudioToggle";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 
 type ParentTopbarProps = {
   activeLearnerName: string;
@@ -72,10 +70,6 @@ function getPlanningControls(pathname: string, searchParams: URLSearchParams) {
 export function ParentTopbar({ activeLearnerName, learnerLabel, onOpenMenu }: ParentTopbarProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const activeSection =
-    parentPrimaryNav.find(
-      (item) => pathname === item.href || pathname.startsWith(`${item.matchPrefix}/`),
-    ) ?? parentPrimaryNav[0];
   const planningControls =
     pathname.startsWith("/today") || pathname.startsWith("/planning")
       ? getPlanningControls(pathname, new URLSearchParams(searchParams.toString()))
@@ -83,13 +77,12 @@ export function ParentTopbar({ activeLearnerName, learnerLabel, onOpenMenu }: Pa
 
   return (
     <div className="sticky top-[var(--global-tabs-height)] z-30 border-b border-border/70 bg-background/92 backdrop-blur">
-      <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-4 sm:px-6 lg:px-8">
+      <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-3 sm:px-6 lg:px-8">
         <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {learnerLabel} · {activeLearnerName}
             </p>
-            <p className="text-lg font-medium tracking-tight text-foreground">{activeSection.label}</p>
           </div>
 
           <div className="flex min-w-0 flex-wrap items-center gap-2 lg:justify-end">
@@ -131,40 +124,17 @@ export function ParentTopbar({ activeLearnerName, learnerLabel, onOpenMenu }: Pa
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-border/60 pt-3">
-          {parentPrimaryNav.map((item) => {
-            const active =
-              pathname === item.href || pathname.startsWith(`${item.matchPrefix}/`);
-
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "inline-flex items-center border-b border-transparent pb-1 text-sm transition-colors",
-                  active
-                    ? "border-foreground text-foreground"
-                    : "text-muted-foreground hover:border-border hover:text-foreground",
-                )}
-              >
-                {item.label}
-              </Link>
-            );
-          })}
-        </div>
-
         {planningControls.length > 0 ? (
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border/60 pt-3">
             {planningControls.map((control) => (
               <Link
                 key={control.href}
                 href={control.href}
-                className={cn(
-                  "inline-flex items-center border-b border-transparent pb-1 text-sm transition-colors",
+                className={
                   control.active
-                    ? "border-foreground text-foreground"
-                    : "text-muted-foreground hover:border-border hover:text-foreground",
-                )}
+                    ? "text-sm text-foreground"
+                    : "text-sm text-muted-foreground transition-colors hover:text-foreground"
+                }
               >
                 {control.label}
               </Link>

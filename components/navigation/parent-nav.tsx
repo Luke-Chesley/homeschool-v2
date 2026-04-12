@@ -46,10 +46,7 @@ export function ParentNav({ className, onNavigate }: ParentNavProps) {
             >
               <item.icon className="size-4" />
             </div>
-            <div className="min-w-0">
-              <span className="block text-sm font-medium">{item.label}</span>
-              <span className="block truncate text-xs text-muted-foreground">{item.description}</span>
-            </div>
+            <span className="block min-w-0 text-sm font-medium">{item.label}</span>
           </>
         );
 
