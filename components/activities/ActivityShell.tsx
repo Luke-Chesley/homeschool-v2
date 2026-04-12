@@ -39,79 +39,76 @@ export function ActivityShell({
   children,
 }: ActivityShellProps) {
   return (
-    <div className="flex flex-col gap-6">
-      {/* Header */}
-      <div className="flex items-start gap-4">
-        <div className="flex-1 min-w-0">
-          <h2 className="font-serif text-2xl font-semibold tracking-tight">{title}</h2>
-          {instructions && (
-            <p className="mt-1 text-sm text-muted-foreground">{instructions}</p>
-          )}
-        </div>
-        {estimatedMinutes && (
-          <div className="flex items-center gap-1 shrink-0 text-xs text-muted-foreground">
-            <Clock className="size-3.5" />
-            ~{estimatedMinutes} min
+    <div className="learner-reading-surface">
+      <div className="learner-reading-column flex flex-col gap-6">
+        <div className="flex items-start gap-4">
+          <div className="min-w-0 flex-1 space-y-2">
+            <h2 className="font-serif text-[2rem] leading-tight tracking-tight text-foreground">{title}</h2>
+            {instructions ? <p className="max-w-2xl text-sm leading-7 text-muted-foreground">{instructions}</p> : null}
           </div>
-        )}
-      </div>
+          {estimatedMinutes ? (
+            <div className="mt-1 inline-flex shrink-0 items-center gap-1 rounded-full border border-border/80 px-2.5 py-1 text-xs text-muted-foreground">
+              <Clock className="size-3.5" />
+              {estimatedMinutes} min
+            </div>
+          ) : null}
+        </div>
 
-      {/* Progress bar */}
-      {progress !== undefined && (
-        <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+        {progress !== undefined ? (
+          <div className="flex items-center gap-3">
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full rounded-full bg-primary transition-all duration-300"
+                style={{ width: `${Math.round(progress * 100)}%` }}
+              />
+            </div>
+            <span className="text-xs text-muted-foreground">{Math.round(progress * 100)}%</span>
+          </div>
+        ) : null}
+
+        <div>{children}</div>
+
+        {feedback ? (
           <div
-            className="h-full rounded-full bg-primary transition-all duration-300"
-            style={{ width: `${Math.round(progress * 100)}%` }}
-          />
-        </div>
-      )}
+            className={cn(
+              "flex items-start gap-2 rounded-xl border px-4 py-3 text-sm",
+              feedback.correct
+                ? "border-emerald-200 bg-emerald-50/80 text-emerald-900"
+                : "border-red-200 bg-red-50/80 text-red-800",
+            )}
+          >
+            <CheckCircle className="mt-0.5 size-4 shrink-0" />
+            <span>{feedback.message ?? (feedback.correct ? "Correct." : "Not quite yet. Try again.")}</span>
+          </div>
+        ) : null}
 
-      {/* Content */}
-      <div>{children}</div>
+        {submitted ? (
+          <div className="flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/7 px-4 py-3 text-sm text-foreground">
+            <CheckCircle className="size-4 text-primary" />
+            Activity submitted. Great work.
+          </div>
+        ) : null}
 
-      {/* Feedback */}
-      {feedback && (
-        <div
-          className={cn(
-            "flex items-start gap-2 rounded-xl p-4 text-sm",
-            feedback.correct
-              ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
-              : "bg-red-50 text-red-800 border border-red-200"
-          )}
-        >
-          <CheckCircle className="size-4 shrink-0 mt-0.5" />
-          <span>{feedback.message ?? (feedback.correct ? "Correct!" : "Not quite — try again.")}</span>
-        </div>
-      )}
-
-      {/* Submitted state */}
-      {submitted && (
-        <div className="flex items-center gap-2 rounded-xl bg-primary/10 p-4 text-sm text-primary">
-          <CheckCircle className="size-4" />
-          Activity submitted. Great work!
-        </div>
-      )}
-
-      {/* Actions */}
-      {!submitted && (onSubmit || onSkip) && (
-        <div className="flex items-center justify-between gap-3 pt-2">
-          {onSkip && (
-            <Button variant="ghost" size="sm" onClick={onSkip} disabled={submitting}>
-              Skip
-            </Button>
-          )}
-          {onSubmit && (
-            <Button
-              className="ml-auto"
-              size="sm"
-              onClick={onSubmit}
-              disabled={submitting || submitDisabled}
-            >
-              {submitting ? "Submitting…" : "Submit"}
-            </Button>
-          )}
-        </div>
-      )}
+        {!submitted && (onSubmit || onSkip) ? (
+          <div className="flex flex-wrap items-center gap-3 border-t border-border/70 pt-4">
+            {onSkip ? (
+              <Button variant="ghost" size="sm" onClick={onSkip} disabled={submitting}>
+                Skip
+              </Button>
+            ) : null}
+            {onSubmit ? (
+              <Button
+                className="ml-auto"
+                size="sm"
+                onClick={onSubmit}
+                disabled={submitting || submitDisabled}
+              >
+                {submitting ? "Submitting…" : "Submit"}
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }

@@ -194,6 +194,77 @@ function LessonDraftActivityControl({
   );
 }
 
+function TodayLearnerActivityBridge({
+  workspace,
+  draftState,
+}: {
+  workspace: DailyWorkspace;
+  draftState: DraftState;
+}) {
+  const leadSessionId =
+    workspace.leadItem.sessionRecordId ?? workspace.leadItem.workflow?.lessonSessionId ?? undefined;
+  const hasActivity = Boolean(leadSessionId && workspace.leadItem.workflow?.activityCount);
+
+  return (
+    <Card className="quiet-panel">
+      <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-end sm:justify-between">
+        <div className="space-y-2">
+          <p className="section-meta">Learner work</p>
+          <div className="space-y-1">
+            <h2 className="font-serif text-2xl tracking-tight">Move directly from the daily plan into learner work.</h2>
+            <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
+              Keep the day in view here, then open the learner queue or the live activity without switching mental models.
+            </p>
+          </div>
+          <div className="toolbar-row text-sm text-muted-foreground">
+            <span>{workspace.leadItem.title}</span>
+            <span>{formatMinutes(workspace.leadItem.estimatedMinutes)}</span>
+            {workspace.leadItem.workflow?.activityCount ? (
+              <span>{workspace.leadItem.workflow.activityCount} activity ready</span>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+          {hasActivity ? (
+            <Link href={`/activity/${leadSessionId}`} className={buttonVariants({ size: "sm" })}>
+              Open learner activity
+            </Link>
+          ) : (
+            <Link href="/learner" className={buttonVariants({ size: "sm" })}>
+              Open learner queue
+            </Link>
+          )}
+          <Link href="/learner" className={buttonVariants({ variant: "outline", size: "sm" })}>
+            View queue
+          </Link>
+          {draftState?.kind === "structured" ? (
+            <LessonDraftActivityControl date={workspace.date} activityStatus={null} sessionId={leadSessionId} />
+          ) : null}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function TodayItemLearnerLink({ item }: { item: DailyWorkspace["items"][number] }) {
+  const sessionId = item.sessionRecordId ?? item.workflow?.lessonSessionId ?? undefined;
+  const hasActivity = Boolean(sessionId && item.workflow?.activityCount);
+
+  if (!sessionId) {
+    return null;
+  }
+
+  return (
+    <Link
+      href={hasActivity ? `/activity/${sessionId}` : "/learner"}
+      className={buttonVariants({ variant: "outline", size: "sm" })}
+    >
+      {hasActivity ? "Open activity" : "Open queue"}
+    </Link>
+  );
+}
+
 function TodayPlanItemActionButtons({
   item,
   date,
@@ -505,39 +576,45 @@ export function TodayWorkspaceView({ workspace, sourceId }: TodayWorkspaceViewPr
 
   if (draftState) {
     return (
-      <div className="grid gap-6 xl:grid-cols-[18rem_minmax(0,1fr)_20rem] xl:items-start">
-        <TodayRouteItemsSection
-          workspace={workspace}
-          sourceId={sourceId}
-          repeatTomorrowAllowed={repeatTomorrowAllowed}
-          compact
-        />
-        <TodayLessonDraftArticle workspace={workspace} draftState={draftState} />
-        <TodayLessonPlanSection
-          workspace={workspace}
-          sourceId={sourceId}
-          draftState={draftState}
-          onDraftChange={handleDraftChange}
-          showDraftOutput={false}
-          compact
-        />
+      <div className="space-y-6">
+        <TodayLearnerActivityBridge workspace={workspace} draftState={draftState} />
+        <div className="grid gap-6 xl:grid-cols-[18rem_minmax(0,1fr)_20rem] xl:items-start">
+          <TodayRouteItemsSection
+            workspace={workspace}
+            sourceId={sourceId}
+            repeatTomorrowAllowed={repeatTomorrowAllowed}
+            compact
+          />
+          <TodayLessonDraftArticle workspace={workspace} draftState={draftState} />
+          <TodayLessonPlanSection
+            workspace={workspace}
+            sourceId={sourceId}
+            draftState={draftState}
+            onDraftChange={handleDraftChange}
+            showDraftOutput={false}
+            compact
+          />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(340px,0.85fr)] xl:items-start">
-      <TodayRouteItemsSection
-        workspace={workspace}
-        sourceId={sourceId}
-        repeatTomorrowAllowed={repeatTomorrowAllowed}
-      />
-      <TodayLessonPlanSection
-        workspace={workspace}
-        sourceId={sourceId}
-        draftState={null}
-        onDraftChange={handleDraftChange}
-      />
+    <div className="space-y-6">
+      <TodayLearnerActivityBridge workspace={workspace} draftState={draftState} />
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(340px,0.85fr)] xl:items-start">
+        <TodayRouteItemsSection
+          workspace={workspace}
+          sourceId={sourceId}
+          repeatTomorrowAllowed={repeatTomorrowAllowed}
+        />
+        <TodayLessonPlanSection
+          workspace={workspace}
+          sourceId={sourceId}
+          draftState={null}
+          onDraftChange={handleDraftChange}
+        />
+      </div>
     </div>
   );
 }
@@ -580,8 +657,12 @@ export function TodayRouteItemsSection({
                   {item.workflow ? (
                     <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                       <span>{item.workflow.evidenceCount} evidence</span>
+                      {item.workflow.activityCount ? <span>{item.workflow.activityCount} activity</span> : null}
                     </div>
                   ) : null}
+                  <div className="pt-1">
+                    <TodayItemLearnerLink item={item} />
+                  </div>
                   <TodayPlanItemActionButtons
                     item={item}
                     date={workspace.date}
@@ -650,9 +731,11 @@ export function TodayRouteItemsSection({
                     {item.workflow ? (
                       <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                         <span>{item.workflow.evidenceCount} evidence</span>
+                        {item.workflow.activityCount ? <span>{item.workflow.activityCount} activity</span> : null}
                       </div>
                     ) : null}
                     {item.note ? <p className="text-sm text-muted-foreground">{item.note}</p> : null}
+                    <TodayItemLearnerLink item={item} />
                   </div>
 
                   <TodayPlanItemActionButtons
@@ -678,11 +761,6 @@ function TodayLessonDraftArticle({
   workspace: DailyWorkspace;
   draftState: DraftState & { kind: string };
 }) {
-  // Activity state for this lesson draft — server-loaded via props (or refreshed)
-  // We use null as the initial state; the control itself handles the button
-  // for legacy sessions that already have activities.
-  const leadSessionId = workspace.leadItem.sessionRecordId ?? workspace.leadItem.workflow?.lessonSessionId ?? undefined;
-
   return (
     <section className="space-y-4">
       <div className="border-b border-border/70 pb-4">
@@ -702,18 +780,6 @@ function TodayLessonDraftArticle({
           ) : null}
         </div>
       </Card>
-
-      {/* Activity generation — owned by the lesson draft, not by individual items */}
-      {draftState.kind === "structured" ? (
-        <div className="space-y-2">
-          <h3 className="text-sm font-medium text-foreground">Activity</h3>
-          <LessonDraftActivityControl
-            date={workspace.date}
-            activityStatus={null}
-            sessionId={leadSessionId}
-          />
-        </div>
-      ) : null}
     </section>
   );
 }
