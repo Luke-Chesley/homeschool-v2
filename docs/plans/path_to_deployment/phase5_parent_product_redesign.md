@@ -16,6 +16,8 @@ This phase should preserve the current product logic, data model, and studio/deb
 - scanability on laptop and tablet widths
 - confidence that the app is useful without being noisy
 
+Use [phase5_checklist_design_review.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase5_checklist_design_review.md) as the external completeness reference for component and flow coverage during this phase.
+
 ## Source Design Brief
 
 The target feel for this phase is:

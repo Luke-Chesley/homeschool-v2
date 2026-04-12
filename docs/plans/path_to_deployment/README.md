@@ -21,6 +21,7 @@ Use the supporting docs in this folder for deeper planning and handoff detail.
 - [phase5_parent_product_redesign.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase5_parent_product_redesign.md)
 - [phase5_parent_product_checklist.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase5_parent_product_checklist.md)
 - [phase5_surface_inventory.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase5_surface_inventory.md)
+- [phase5_checklist_design_review.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase5_checklist_design_review.md)
 - [studio-mode-implementation-checklist.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/studio-mode-implementation-checklist.md)
 - [studio-mode-agent-handoff.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/studio-mode-agent-handoff.md)
 
@@ -84,6 +85,7 @@ Use the supporting docs in this folder for deeper planning and handoff detail.
 
 - [ ] Redesign the shell into a thin, calm, premium product chrome.
 - [ ] Define the Phase 5 parent design system and reading-surface rules.
+- [ ] Apply the relevant checklist.design component and flow review to the redesign scope.
 - [ ] Remove duplicated navigation layers.
 - [ ] Decide final placement for learner switching and studio access.
 - [ ] Redesign `Today` as the primary operational surface.
