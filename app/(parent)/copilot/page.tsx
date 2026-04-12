@@ -59,12 +59,22 @@ export default async function CopilotPage({ searchParams }: Props) {
     feedbackNotes: snapshot?.feedbackNotes ?? [],
     recentOutcomes: [],
   };
-  const promptPreview = await previewCopilotChat({
-    messages: [],
-    context,
-    organizationId: session.organization.id,
-    learnerId: session.activeLearner.id,
-  });
+  let promptPreview:
+    | Awaited<ReturnType<typeof previewCopilotChat>>
+    | null = null;
+  let previewError: string | null = null;
+
+  try {
+    promptPreview = await previewCopilotChat({
+      messages: [],
+      context,
+      organizationId: session.organization.id,
+      learnerId: session.activeLearner.id,
+    });
+  } catch (error) {
+    previewError =
+      error instanceof Error ? error.message : "Copilot preview is unavailable right now.";
+  }
 
   return (
     <main className="page-shell page-stack">
@@ -106,6 +116,19 @@ export default async function CopilotPage({ searchParams }: Props) {
               </div>
             </div>
           </Card>
+
+          {previewError ? (
+            <Card className="quiet-panel">
+              <div className="space-y-2 p-4 text-sm leading-6">
+                <p className="font-medium text-foreground">Copilot preview unavailable</p>
+                <p className="text-muted-foreground">
+                  The app could not reach <code className="font-mono text-[11px]">learning-core</code>.
+                  This is usually a local service issue, not a UI issue.
+                </p>
+                <p className="text-xs text-muted-foreground/80">{previewError}</p>
+              </div>
+            </Card>
+          ) : null}
 
           <CopilotPromptPreview promptPreview={promptPreview} />
 
