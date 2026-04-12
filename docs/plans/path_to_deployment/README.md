@@ -156,7 +156,7 @@ Work this in order:
 - Phase 4 is complete with explicit deferrals. Supabase staging/production, the Vercel project, staged hosted verification, and the hosted boot fix are in place. Remaining storage verification and rollback runbooks move into launch prep.
 - Phase 5 is complete on `main`, and `stage` has been realigned to the same commit.
 - Phase 6 is implemented on `main` and `stage`, but responsive QA and final learner signoff are still open.
-- Phase 7 is the active next phase. It focuses on `Account`, `Tracking`, auth/setup polish, and cross-surface product consistency before launch prep.
+- Phase 7 is active on a dedicated worktree. Current implementation work covers `Account`, `Tracking`, auth/setup polish, and cross-surface product consistency before launch prep.
 - Stripe is intentionally deferred to Phase 9 so billing work does not get mixed into product-polish or launch-prep scope.
 
 ## How To Use This Folder

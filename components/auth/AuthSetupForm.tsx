@@ -44,11 +44,11 @@ export function AuthSetupForm({ defaultOrganizationName, email }: AuthSetupFormP
   }
 
   return (
-    <Card className="border-border/70 bg-card/85 shadow-[var(--shadow-card)]">
+    <Card className="quiet-panel border-border/70 bg-card/88">
       <CardHeader>
         <CardTitle>Create household workspace</CardTitle>
         <CardDescription>
-          Finish the auth bridge by creating the first organization tied to {email ?? "this account"}.
+          Create the first household workspace tied to {email ?? "this account"}.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -61,7 +61,7 @@ export function AuthSetupForm({ defaultOrganizationName, email }: AuthSetupFormP
               id="organization-name"
               value={organizationName}
               onChange={(event) => setOrganizationName(event.target.value)}
-              className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+              className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
               placeholder="Rivera Homeschool"
               required
             />
@@ -75,6 +75,9 @@ export function AuthSetupForm({ defaultOrganizationName, email }: AuthSetupFormP
             {submitting ? "Creating workspace..." : "Create workspace"}
           </Button>
         </form>
+        <div className="mt-5 border-t border-border/60 pt-4 text-xs leading-6 text-muted-foreground">
+          This creates the household container first. Learners, schedule defaults, and curriculum setup continue immediately after.
+        </div>
       </CardContent>
     </Card>
   );
