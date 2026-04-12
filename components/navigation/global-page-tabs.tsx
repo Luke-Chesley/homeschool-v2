@@ -48,6 +48,7 @@ type WorkspaceSnapshot = {
 
 export function GlobalPageTabs() {
   const pathname = usePathname();
+  const isLearnerRoute = pathname.startsWith("/learner") || pathname.startsWith("/activity");
   const inWorkspace =
     pathname.startsWith("/today") ||
     pathname.startsWith("/planning") ||
@@ -61,6 +62,10 @@ export function GlobalPageTabs() {
     pathname.startsWith("/onboarding");
   const workspaceLabel = getWorkspaceLabel(pathname);
   const [session, setSession] = useState<WorkspaceSnapshot | null>(null);
+
+  if (isLearnerRoute) {
+    return null;
+  }
 
   useEffect(() => {
     if (!inWorkspace) {

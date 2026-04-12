@@ -1,7 +1,7 @@
 import { ReactNode } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft, BookOpen, LogOut } from "lucide-react";
+import { ArrowLeft, BookOpen, Home, LogOut } from "lucide-react";
 
 import { StudioToggle } from "@/components/studio/StudioToggle";
 import { Button } from "@/components/ui/button";
@@ -22,23 +22,39 @@ export default async function LearnerLayout({ children }: { children: ReactNode 
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b border-border/70 bg-background/96">
-        <div className="mx-auto flex h-14 max-w-4xl items-center justify-between gap-4 px-4 sm:px-6">
-          <div className="flex min-w-0 items-center gap-2">
-            <BookOpen className="size-4 shrink-0 text-primary" />
-            <span className="truncate font-serif text-lg">
-              {session.platformSettings.learnerLabel}: {session.activeLearner.displayName}
-            </span>
+    <div className="learner-shell">
+      <header className="learner-topbar">
+        <div className="learner-topbar-inner">
+          <div className="flex min-w-0 items-center gap-3">
+            <Link href="/learner" className="inline-flex shrink-0 items-center gap-2 text-sm font-medium text-foreground">
+              <BookOpen className="size-4 text-primary" />
+              Learner
+            </Link>
+            <div className="hidden h-4 w-px bg-border/80 sm:block" />
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium text-foreground">
+                {session.activeLearner.displayName}
+              </p>
+              <p className="truncate text-xs text-muted-foreground">
+                {session.platformSettings.learnerLabel} workspace
+              </p>
+            </div>
           </div>
           <div className="flex items-center gap-2">
+            <Link
+              href="/learner"
+              className="hidden items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground sm:inline-flex"
+            >
+              <Home className="size-4" />
+              Queue
+            </Link>
             <StudioToggle />
             <Link
               href="/today"
               className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
             >
               <ArrowLeft className="size-4" />
-              {session.platformSettings.primaryGuideLabel}
+              Workspace
             </Link>
             <form action="/auth/signout" method="post">
               <Button type="submit" variant="outline" size="sm" className="gap-2">
@@ -50,8 +66,8 @@ export default async function LearnerLayout({ children }: { children: ReactNode 
         </div>
       </header>
 
-      <main className="flex-1 px-4 py-6 sm:px-6">
-        <div className="mx-auto max-w-4xl">{children}</div>
+      <main className="flex-1">
+        <div className="learner-page">{children}</div>
       </main>
     </div>
   );

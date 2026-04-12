@@ -184,51 +184,47 @@ export function ActivitySpecRenderer({
   const displayMinutes = estimatedMinutes ?? spec.estimatedMinutes;
 
   return (
-    <div className="flex flex-col gap-6">
-      {/* Header */}
-      <div className="flex items-start gap-4">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="rounded-full bg-primary/10 text-primary text-xs font-medium px-2 py-0.5">
-              {ACTIVITY_KIND_LABELS[spec.activityKind] ?? spec.activityKind}
-            </span>
-            {spec.interactionMode !== "digital" && (
-              <span className="rounded-full border border-border text-muted-foreground text-xs px-2 py-0.5 capitalize">
-                {spec.interactionMode}
+    <div className="learner-reading-surface">
+      <div className="learner-reading-column flex flex-col gap-6">
+        <div className="flex items-start gap-4">
+          <div className="min-w-0 flex-1 space-y-2">
+            <div className="learner-toolbar text-xs text-muted-foreground">
+              <span className="rounded-full bg-primary/10 px-2.5 py-1 font-medium text-primary">
+                {ACTIVITY_KIND_LABELS[spec.activityKind] ?? spec.activityKind}
               </span>
-            )}
+              {spec.interactionMode !== "digital" ? (
+                <span className="rounded-full border border-border/80 px-2.5 py-1 capitalize">
+                  {spec.interactionMode}
+                </span>
+              ) : null}
+            </div>
+            <h2 className="font-serif text-[2rem] leading-tight tracking-tight text-foreground">{spec.title}</h2>
+            {spec.purpose ? <p className="max-w-2xl text-sm leading-7 text-muted-foreground">{spec.purpose}</p> : null}
           </div>
-          <h2 className="font-serif text-2xl font-semibold tracking-tight">{spec.title}</h2>
-          {spec.purpose && (
-            <p className="mt-1 text-sm text-muted-foreground">{spec.purpose}</p>
-          )}
+          {displayMinutes ? (
+            <div className="mt-1 inline-flex shrink-0 items-center gap-1 rounded-full border border-border/80 px-2.5 py-1 text-xs text-muted-foreground">
+              <Clock className="size-3.5" />
+              {displayMinutes} min
+            </div>
+          ) : null}
         </div>
-        {displayMinutes && (
-          <div className="flex items-center gap-1 shrink-0 text-xs text-muted-foreground">
-            <Clock className="size-3.5" />
-            ~{displayMinutes} min
-          </div>
-        )}
-      </div>
 
-      {/* Progress bar */}
-      {interactiveComponents.length > 0 && !submitted && (
-        <div className="flex items-center gap-2">
-          <div className="h-1.5 flex-1 rounded-full bg-muted overflow-hidden">
-            <div
-              className="h-full rounded-full bg-primary transition-all duration-300"
-              style={{ width: `${Math.round(progress * 100)}%` }}
-            />
+        {interactiveComponents.length > 0 && !submitted ? (
+          <div className="flex items-center gap-3">
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full rounded-full bg-primary transition-all duration-300"
+                style={{ width: `${Math.round(progress * 100)}%` }}
+              />
+            </div>
+            <span className="shrink-0 text-xs text-muted-foreground">
+              {answeredCount}/{interactiveComponents.length}
+            </span>
           </div>
-          <span className="text-xs text-muted-foreground shrink-0">
-            {answeredCount}/{interactiveComponents.length}
-          </span>
-        </div>
-      )}
+        ) : null}
 
-      {/* Offline mode info */}
-      {spec.interactionMode !== "digital" && spec.offlineMode && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-4">
+        {spec.interactionMode !== "digital" && spec.offlineMode ? (
+          <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-4">
           <div className="flex items-center gap-2 mb-1.5">
             <MapPin className="size-4 text-amber-700" />
             <p className="text-sm font-semibold text-amber-800">Offline activity</p>
@@ -251,79 +247,75 @@ export function ActivitySpecRenderer({
               {spec.offlineMode.evidenceCaptureInstruction}
             </p>
           )}
-        </div>
-      )}
-
-      {/* Components */}
-      <div className="flex flex-col gap-5">
-        {spec.components.map((component) => (
-          <div key={component.id}>
-            {(() => {
-              const resolvedComponent = resolveComponent(component, widgetByComponent[component.id]);
-              return (
-                <>
-                  {renderComponent({
-                    spec: resolvedComponent,
-                    value: evidence[component.id],
-                    onChange: handleComponentChange,
-                    feedback: feedbackByComponent[component.id] ?? null,
-                    onRequestFeedback: handleComponentFeedback,
-                    onRequestTransition: handleComponentTransition,
-                    disabled: submitted,
-                    hintStrategy,
-                  })}
-                  {feedbackByComponent[component.id] && shouldRenderFeedbackBanner(resolvedComponent) && (
-                    <ComponentFeedbackBanner feedback={feedbackByComponent[component.id]} />
-                  )}
-                </>
-              );
-            })()}
           </div>
-        ))}
-      </div>
+        ) : null}
 
-      {/* Teacher support (shown collapsed) */}
-      {spec.teacherSupport && !submitted && (
-        <TeacherSupportPanel support={spec.teacherSupport} />
-      )}
-
-      {/* Submitted state */}
-      {submitted && (
-        <div className="flex items-center gap-2 rounded-xl bg-primary/10 p-4 text-sm text-primary">
-          <CheckCircle className="size-4 shrink-0" />
-          Activity submitted.
+        <div className="flex flex-col gap-5">
+          {spec.components.map((component) => (
+            <div key={component.id}>
+              {(() => {
+                const resolvedComponent = resolveComponent(component, widgetByComponent[component.id]);
+                return (
+                  <>
+                    {renderComponent({
+                      spec: resolvedComponent,
+                      value: evidence[component.id],
+                      onChange: handleComponentChange,
+                      feedback: feedbackByComponent[component.id] ?? null,
+                      onRequestFeedback: handleComponentFeedback,
+                      onRequestTransition: handleComponentTransition,
+                      disabled: submitted,
+                      hintStrategy,
+                    })}
+                    {feedbackByComponent[component.id] && shouldRenderFeedbackBanner(resolvedComponent) ? (
+                      <ComponentFeedbackBanner feedback={feedbackByComponent[component.id]} />
+                    ) : null}
+                  </>
+                );
+              })()}
+            </div>
+          ))}
         </div>
-      )}
 
-      {/* Incomplete message */}
-      {!canSubmit() && !submitted && answeredCount > 0 && (
-        <p className="text-xs text-muted-foreground text-center">
-          {spec.completionRules.incompleteMessage ?? "Answer all questions to submit."}
-        </p>
-      )}
+        {spec.teacherSupport && !submitted ? (
+          <TeacherSupportPanel support={spec.teacherSupport} />
+        ) : null}
 
-      {/* Submit action */}
-      {!submitted && onSubmit && (
-        <div className="flex items-center justify-end gap-3 pt-2">
-          {spec.adaptationRules?.allowSkip && (
+        {submitted ? (
+          <div className="flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/7 px-4 py-3 text-sm text-foreground">
+            <CheckCircle className="size-4 shrink-0 text-primary" />
+            Activity submitted.
+          </div>
+        ) : null}
+
+        {!canSubmit() && !submitted && answeredCount > 0 ? (
+          <p className="text-center text-xs text-muted-foreground">
+            {spec.completionRules.incompleteMessage ?? "Answer all questions to submit."}
+          </p>
+        ) : null}
+
+        {!submitted && onSubmit ? (
+          <div className="flex flex-wrap items-center justify-end gap-3 border-t border-border/70 pt-4">
+            {spec.adaptationRules?.allowSkip ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={submitting}
+                onClick={() => onSubmit(evidence)}
+              >
+                Skip
+              </Button>
+            ) : null}
             <Button
-              variant="ghost"
               size="sm"
-              disabled={submitting}
+              disabled={!canSubmit() || submitting}
               onClick={() => onSubmit(evidence)}
             >
-              Skip
+              {submitting ? "Submitting…" : "Submit"}
             </Button>
-          )}
-          <Button
-            size="sm"
-            disabled={!canSubmit() || submitting}
-            onClick={() => onSubmit(evidence)}
-          >
-            {submitting ? "Submitting…" : "Submit"}
-          </Button>
-        </div>
-      )}
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
