@@ -69,7 +69,7 @@ export function TrackingOverview({
                 </div>
               </div>
             ) : null}
-            <p>Planned versus actual stays visible here so reporting stays grounded in what happened.</p>
+            <p>Use this view to keep recorded work, evidence, and review decisions anchored to actual daily progress.</p>
           </CardContent>
         </Card>
 
@@ -82,7 +82,7 @@ export function TrackingOverview({
         <Card className="quiet-panel">
           <CardHeader>
             <CardTitle>Progress history</CardTitle>
-            <CardDescription>Planned, actual, mastery, and evidence stay in the same row.</CardDescription>
+            <CardDescription>Each outcome keeps time, status, standards, and evidence in one readable row.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {dashboard.outcomes.length === 0 ? (
@@ -147,9 +147,7 @@ export function TrackingOverview({
           <Card className="quiet-panel">
             <CardHeader>
               <CardTitle>Observation feed</CardTitle>
-              <CardDescription>
-                Notes stay lightweight but still anchor to specific progress events.
-              </CardDescription>
+              <CardDescription>Short notes tied to real work and progress events.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               {dashboard.observations.length === 0 ? (
@@ -177,9 +175,7 @@ export function TrackingOverview({
           <Card className="quiet-panel">
             <CardHeader>
               <CardTitle>Lesson evaluations</CardTitle>
-              <CardDescription>
-                Broad completion signals for later curriculum review.
-              </CardDescription>
+              <CardDescription>Quick lesson-level signals for later review and planning decisions.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               {dashboard.evaluations.length === 0 ? (
@@ -209,9 +205,7 @@ export function TrackingOverview({
           <Card className="quiet-panel">
             <CardHeader>
               <CardTitle>Evidence ledger</CardTitle>
-              <CardDescription>
-                Export-friendly records for work samples, notes, and activity outcomes.
-              </CardDescription>
+              <CardDescription>Work samples, notes, and activity outcomes in one record stream.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               {dashboard.evidence.length === 0 ? (
@@ -243,9 +237,7 @@ export function TrackingOverview({
           <Card className="quiet-panel">
             <CardHeader>
               <CardTitle>Review queue</CardTitle>
-              <CardDescription>
-                Items waiting on a guide, reviewer, or manager stay visible here.
-              </CardDescription>
+              <CardDescription>Items waiting on an adult decision stay visible here.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               {dashboard.reviewQueue.length === 0 ? (
@@ -286,9 +278,7 @@ export function TrackingOverview({
           <Card className="quiet-panel">
             <CardHeader>
               <CardTitle>Recommendations</CardTitle>
-              <CardDescription>
-                Proposed changes can be accepted or overridden without losing the audit trail.
-              </CardDescription>
+              <CardDescription>Proposed changes can be accepted or overridden without losing the record.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               {dashboard.recommendations.length === 0 ? (

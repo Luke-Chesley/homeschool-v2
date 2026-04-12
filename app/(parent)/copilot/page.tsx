@@ -79,11 +79,10 @@ export default async function CopilotPage({ searchParams }: Props) {
   return (
     <main className="page-shell page-stack">
       <header className="page-header">
-        <p className="section-meta">Context-aware support</p>
-        <h1 className="page-title">Ask for the next move.</h1>
-        <p className="page-subtitle">
-          Copilot should feel embedded in the planning workflow: quiet, readable, and aware of the
-          learner, week, and current day without turning into a separate AI product.
+        <p className="section-meta">Copilot</p>
+        <h1 className="page-title">Ask for the next move</h1>
+        <p className="page-subtitle max-w-3xl">
+          Use Copilot for the next practical decision in the learner, week, or current day.
         </p>
       </header>
 

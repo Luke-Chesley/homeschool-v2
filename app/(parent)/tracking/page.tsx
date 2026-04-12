@@ -57,8 +57,8 @@ export default async function TrackingPage({ searchParams }: TrackingPageProps) 
   return (
     <TrackingShell
       currentView="overview"
-      title="Keep objectives, evidence, and progress in one place."
-      description="Tracking should stay practical: what was planned, what happened, and what still needs review or adjustment."
+      title="Progress and records"
+      description="Review progress, evidence, attendance, and follow-up items without leaving the working context."
     >
       <TrackingOverview
         dashboard={dashboard}

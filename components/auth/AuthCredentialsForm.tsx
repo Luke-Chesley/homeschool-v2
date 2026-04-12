@@ -76,12 +76,12 @@ export function AuthCredentialsForm({ mode }: AuthCredentialsFormProps) {
   }
 
   return (
-    <Card className="quiet-panel">
+    <Card className="quiet-panel border-border/70 bg-card/88">
       <CardHeader>
         <CardTitle>{mode === "login" ? "Sign in" : "Create account"}</CardTitle>
         <CardDescription>
           {mode === "login"
-            ? "Use your email and password to open the household workspace."
+            ? "Use the adult account that owns the household workspace."
             : "Create the adult account that will own the household workspace."}
         </CardDescription>
       </CardHeader>
@@ -96,7 +96,7 @@ export function AuthCredentialsForm({ mode }: AuthCredentialsFormProps) {
                 id="full-name"
                 value={fullName}
                 onChange={(event) => setFullName(event.target.value)}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
                 placeholder="Avery Rivera"
                 autoComplete="name"
               />
@@ -112,7 +112,7 @@ export function AuthCredentialsForm({ mode }: AuthCredentialsFormProps) {
               type="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+              className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
               placeholder="parent@example.com"
               autoComplete="email"
               required
@@ -128,7 +128,7 @@ export function AuthCredentialsForm({ mode }: AuthCredentialsFormProps) {
               type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+              className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
               placeholder="At least 6 characters"
               autoComplete={mode === "login" ? "current-password" : "new-password"}
               minLength={6}
@@ -155,7 +155,7 @@ export function AuthCredentialsForm({ mode }: AuthCredentialsFormProps) {
           </Button>
         </form>
 
-        <div className="mt-5 flex items-center justify-between gap-4 text-sm text-muted-foreground">
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-4 text-sm text-muted-foreground">
           {mode === "login" ? (
             <p>
               Need an account?{" "}
@@ -171,7 +171,11 @@ export function AuthCredentialsForm({ mode }: AuthCredentialsFormProps) {
               </Link>
             </p>
           )}
-          {mode === "login" ? <span className="text-xs">Use the same email tied to the household.</span> : null}
+          {mode === "login" ? (
+            <span className="text-xs">Use the same email tied to the household.</span>
+          ) : (
+            <span className="text-xs">Setup continues directly into the household workspace.</span>
+          )}
         </div>
       </CardContent>
     </Card>

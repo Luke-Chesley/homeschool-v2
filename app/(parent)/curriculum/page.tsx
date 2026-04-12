@@ -67,7 +67,10 @@ export default async function CurriculumPage() {
     <main className="page-shell page-stack">
       <header className="page-header">
         <p className="section-meta">Curriculum</p>
-        <h1 className="page-title">Curriculum</h1>
+        <h1 className="page-title">Curriculum sources</h1>
+        <p className="page-subtitle max-w-3xl">
+          Keep one live curriculum source in view so planning, today, and tracking all stay aligned.
+        </p>
       </header>
       <CurriculumOverview
         sources={sources}

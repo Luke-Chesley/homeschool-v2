@@ -11,3 +11,5 @@ Keep documents here focused on:
 
 Current guides:
 - [Learner Flow Responsive QA](/home/luke/Desktop/homeschool-v2/docs/qa/learner-flow-responsive-qa.md)
+- [Phase 7 Product Polish QA](/home/luke/Desktop/homeschool-v2/docs/qa/phase7-product-polish-qa.md)
+- [Phase 7 Product Polish Agent Prompt](/home/luke/Desktop/homeschool-v2/docs/qa/phase7-product-polish-agent-prompt.md)
