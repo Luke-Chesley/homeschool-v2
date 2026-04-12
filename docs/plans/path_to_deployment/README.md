@@ -18,6 +18,9 @@ Use the supporting docs in this folder for deeper planning and handoff detail.
 - [phase4_hosted_deployment_checklist.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase4_hosted_deployment_checklist.md)
 - [phase4_env_matrix.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase4_env_matrix.md)
 - [phase4_provisioned_inventory.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase4_provisioned_inventory.md)
+- [phase5_parent_product_redesign.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase5_parent_product_redesign.md)
+- [phase5_parent_product_checklist.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase5_parent_product_checklist.md)
+- [phase5_surface_inventory.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase5_surface_inventory.md)
 - [studio-mode-implementation-checklist.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/studio-mode-implementation-checklist.md)
 - [studio-mode-agent-handoff.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/studio-mode-agent-handoff.md)
 
@@ -80,9 +83,11 @@ Use the supporting docs in this folder for deeper planning and handoff detail.
 ### Phase 5: Parent Product Redesign
 
 - [ ] Redesign the shell into a thin, calm, premium product chrome.
+- [ ] Define the Phase 5 parent design system and reading-surface rules.
 - [ ] Remove duplicated navigation layers.
 - [ ] Decide final placement for learner switching and studio access.
 - [ ] Redesign `Today` as the primary operational surface.
+- [ ] Redesign `Planning`, `Curriculum`, `Tracking`, and `Copilot` into one coherent parent product language.
 - [ ] Keep debug panels accessible without polluting the product UI.
 
 ### Phase 6: Learner Flow Redesign
@@ -126,6 +131,7 @@ Work this in order:
 - Phase 2 is complete on `main`.
 - Phase 3 is complete on `main`.
 - Phase 4 is complete with explicit deferrals. Supabase staging/production, the Vercel project, staged hosted verification, and the hosted boot fix are in place. Remaining storage verification and rollback runbooks move into launch prep.
+- Phase 5 planning is now in place. Implementation should start from the shared shell, reading-surface primitives, and `Today` before touching the remaining parent routes.
 
 ## How To Use This Folder
 
