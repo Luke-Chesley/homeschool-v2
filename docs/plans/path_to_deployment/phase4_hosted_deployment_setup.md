@@ -89,12 +89,18 @@ Do not share a hosted Supabase project between staging and production.
 
 ### AI Runtime Environments
 
-Deploy `learning-core` separately on Google Cloud Run with:
+Long-term target:
 
 - one staging service
 - one production service
 
-Recommended initial shape:
+Current implementation decision for this phase:
+
+- use one shared hosted `learning-core` deployment across preview and production
+- keep the service boundary and shared API key stable
+- defer full staging/production service isolation until later if it becomes operationally necessary
+
+Recommended eventual shape:
 
 - one Cloud Run service per environment
 - container-based deploys
@@ -180,12 +186,18 @@ Immediately after project creation:
 
 ### Step 2: Create Hosted `learning-core` Services
 
-Create separate Cloud Run services for:
+Long-term target:
 
 - `learning-core-staging`
 - `learning-core-production`
 
-For each service, record:
+Current Phase 4 fallback:
+
+- one shared hosted `learning-core` deployment is acceptable
+- record the shared service URL and API key
+- point both preview and production app environments at that shared service for now
+
+For each eventual service, record:
 
 - service URL
 - health check path
@@ -337,7 +349,7 @@ Recommendation:
 At the end of Phase 4, we should have:
 
 - hosted Supabase staging and production projects
-- hosted `learning-core` staging and production services
+- a working hosted `learning-core` integration, even if it remains a single shared deployment for now
 - Vercel project configured with preview and production deploys
 - final env matrix checked into docs
 - documented local-to-staging-to-production migration flow

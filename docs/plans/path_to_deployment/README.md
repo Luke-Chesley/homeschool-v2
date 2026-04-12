@@ -75,6 +75,7 @@ Use the supporting docs in this folder for deeper planning and handoff detail.
 - [x] Remove hosted runtime dependence on local `drizzle/` files.
 - [x] Define backup and rollback expectations.
 - [x] Add monitoring and log access paths.
+- [x] Verify the staging environment end to end for app boot, auth, and core AI flows.
 
 ### Phase 5: Parent Product Redesign
 
@@ -124,7 +125,7 @@ Work this in order:
 - Phase 1 is complete on `main`.
 - Phase 2 is complete on `main`.
 - Phase 3 is complete on `main`.
-- Phase 4 provisioning is in progress. Supabase staging/production and the Vercel project exist, and hosted app boot no longer depends on bundling `drizzle/`. Cloud Run and final hosted verification are still pending.
+- Phase 4 is complete with explicit deferrals. Supabase staging/production, the Vercel project, staged hosted verification, and the hosted boot fix are in place. Remaining storage verification and rollback runbooks move into launch prep.
 
 ## How To Use This Folder
 

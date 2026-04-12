@@ -54,16 +54,12 @@ Known local defaults:
 
 ### Preview
 
-Recommended rule:
+Current working rule:
 
-- keep preview secrets minimal
-- decide explicitly whether preview deploys need live staging Supabase and `learning-core`
-- avoid letting every preview deployment write against production systems
-
-Recommended placeholder policy:
-
-- if preview is UI-only, use safe non-production services or disable deep integration paths where possible
-- if preview must behave like staging, treat it as staging-adjacent and point it only at staging resources
+- `stage` branch preview is the stable staging app URL
+- Preview deploys use the staging Supabase project
+- Preview deploys use the shared `learning-core` deployment for now
+- Preview must never point at production Supabase resources
 
 ### Staging
 
@@ -75,12 +71,8 @@ Current hosted values known from provisioning:
 
 Still needed:
 
-- staging app URL
-- staging Supabase service role key
-- staging Supabase database URL
-- staging `learning-core` URL
-- staging `learning-core` API key
-- staging Inngest values if still required by env validation
+- one explicit hosted storage verification pass
+- finalized rollback notes
 
 ### Production
 
@@ -92,12 +84,8 @@ Current hosted values known from provisioning:
 
 Still needed:
 
-- production app URL
-- production Supabase service role key
-- production Supabase database URL
-- production `learning-core` URL
-- production `learning-core` API key
-- production Inngest values if still required by env validation
+- one final production smoke verification after env changes settle
+- finalized rollback notes
 
 ## Ownership Table
 
@@ -105,11 +93,11 @@ Fill this in during implementation.
 
 | Variable Group | Owner | Where It Is Set | Last Verified |
 | --- | --- | --- | --- |
-| Public app URLs | TBD | Vercel project `prj_C9V6Mgxl4XhZiOAcsHEZhI7eY7YC` | 2026-04-11 |
+| Public app URLs | Luke | Vercel project `prj_C9V6Mgxl4XhZiOAcsHEZhI7eY7YC` | 2026-04-11 |
 | Hosted Supabase public values | Luke | Supabase projects + Vercel envs | 2026-04-11 |
-| Hosted Supabase server secrets | Luke | Supabase dashboard + Vercel envs | pending |
-| Hosted `learning-core` values | Luke | Cloud Run + Vercel envs | pending |
-| Inngest values | Luke | Vercel | pending |
+| Hosted Supabase server secrets | Luke | Supabase dashboard + Vercel envs | 2026-04-11 |
+| Hosted `learning-core` values | Luke | shared hosted deployment + Vercel envs | 2026-04-11 |
+| Inngest values | Luke | Vercel | 2026-04-11 |
 
 ## Open Implementation Notes
 

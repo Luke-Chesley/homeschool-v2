@@ -14,8 +14,10 @@ As of 2026-04-11:
 - both hosted Supabase projects have the repo schema applied
 - both hosted Supabase projects have clean security advisor output after the helper-function fix
 - Vercel project exists and is linked locally
-- Vercel has no deployments yet
-- Cloud Run has not been provisioned from this session
+- Vercel preview and production deployments have both been exercised during Phase 4
+- `stage` is the stable staging preview branch and `main` is the production branch
+- preview and production Supabase wiring are split by Vercel environment
+- `learning-core` is currently treated as one shared hosted service across preview and production
 
 ## Supabase Projects
 
@@ -50,7 +52,8 @@ As of 2026-04-11:
 - project id: `prj_C9V6Mgxl4XhZiOAcsHEZhI7eY7YC`
 - framework: `nextjs`
 - local link file: `.vercel/project.json`
-- latest deployment: none yet
+- stable staging alias: `homeschool-v2-git-stage-lukechesleyfive-2290s-projects.vercel.app`
+- production aliases include: `homeschool-v2.vercel.app`, `homeschool-v2-git-main-lukechesleyfive-2290s-projects.vercel.app`
 - custom domains: none yet
 
 ## Hosted Schema Bootstrap
@@ -70,56 +73,26 @@ The hosted Supabase projects were bootstrapped from the repo's current SQL sourc
 
 The bootstrap also created and populated `public._hsv2_schema_migrations` in both hosted projects.
 
-## Remaining Blockers
+## Remaining Deferrals
 
-These items still require manual setup or external tooling not available through the current MCP surface.
+These items do not block Phase 4 completion, but they should be closed before launch.
 
-### 1. Hosted Supabase Secret Retrieval
-
-Still needed for Vercel env configuration:
-
-- staging `SUPABASE_SERVICE_ROLE_KEY`
-- production `SUPABASE_SERVICE_ROLE_KEY`
-- staging `DATABASE_URL`
-- production `DATABASE_URL`
-
-The current Supabase MCP tools exposed project refs, URLs, project hosts, and publishable keys, but not the hosted service role keys or full database connection strings.
-
-### 2. Cloud Run Provisioning
+### 1. Hosted Storage Verification
 
 Still needed:
 
-- Google Cloud project selection
-- Cloud Run service creation for staging and production `learning-core`
-- container build/deploy path for `learning-core`
-- Cloud Run service URLs
-- Cloud Run env vars and API key setup
+- one explicit end-to-end storage or evidence-upload check against hosted staging
 
-This session does not have Google Cloud provisioning tools.
+### 2. Rollback And Recovery Notes
 
-### 3. Vercel Environment Variables
+Still needed:
 
-Still needed before the first meaningful deployment:
+- app rollback notes for Vercel production
+- `learning-core` rollback notes for the shared hosted service
+- Supabase staging and production recovery notes
 
-- `APP_ENV`
-- `NEXT_PUBLIC_SITE_URL`
-- `SUPABASE_PROJECT_REF`
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY`
-- `DATABASE_URL`
-- `LEARNING_CORE_BASE_URL`
-- `LEARNING_CORE_API_KEY`
-- `INNGEST_BASE_URL`
-- `INNGEST_EVENT_KEY`
-- `INNGEST_SIGNING_KEY`
+### 3. Future Service Isolation
 
-The Vercel project exists, but this session did not have a reliable env-management tool path for setting all hosted secrets end to end.
+Possible later hardening:
 
-## Immediate Next Actions
-
-1. Retrieve the hosted Supabase service role keys and database connection strings from Supabase dashboard for both projects.
-2. Provision `learning-core` on Cloud Run for staging and production.
-3. Set the full Vercel env matrix.
-4. Run the first staging deployment.
-5. Verify staged auth, storage, and `learning-core` connectivity.
+- split the shared `learning-core` deployment into separate staging and production services if operational isolation becomes necessary
