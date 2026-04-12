@@ -55,6 +55,7 @@ git worktree add ./.worktrees/<task-name> -b <branch-name> main
 
 - `main` checkout at `/home/luke/Desktop/homeschool-v2` owns `localhost:3000`
 - Worktree dev servers must use alternate ports (`pnpm dev -- --port 3001`)
+- Merges into `stage` are pre-approved and can be used for staging/preview fixes without asking again
 - Never merge a feature branch to `main` without explicit user approval
 - After merge: `git worktree remove ./.worktrees/<task-name>`
 - Check state with `git worktree list`

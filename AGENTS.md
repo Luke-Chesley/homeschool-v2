@@ -62,6 +62,7 @@
 - Git only allows one worktree to have a branch checked out at a time. If `git switch main` fails because `main` is already checked out at `/home/luke/Desktop/homeschool-v2`, that is expected; use the main checkout directory instead of switching another worktree to `main`.
 - Treat `/home/luke/Desktop/homeschool-v2` as the only checkout allowed to own the default localhost session. Any branch worktree that needs a dev server or browser automation must choose a different port so it does not take over the user's main browser view.
 - Useful checks: `git worktree list` shows which directory owns each branch, and `git branch --show-current` confirms which branch the current directory is on.
+- Merges into `stage` are pre-approved and do not require an extra permission check. Use `stage` as the staging integration branch when you need to push a fix for preview deployment or hosted verification.
 - Do not merge a feature branch back into `main` automatically. Merge only after the user has reviewed the branch build and explicitly approved the merge.
 - Once a merge is explicitly approved and completed, remove the temporary worktree if it is no longer needed, for example `git worktree remove ./.worktrees/<task-name>`.
 - Keep commits focused by feature or plan slice.
