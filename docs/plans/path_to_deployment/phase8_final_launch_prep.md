@@ -83,6 +83,11 @@ Run the real app on the staged hosted environment and verify:
 
 The point is not to exhaustively test every pixel. It is to confirm the product works like one coherent app in the hosted environment the user will actually ship from.
 
+If the staged hosted environment is blocked by preview protection for the reviewing session:
+- run the same launch-critical pass locally first
+- record that hosted rerun is still pending
+- do not silently mark the hosted pass complete
+
 ### 4. Product Mode Vs Studio Mode QA
 
 Repeat the key checks twice:
@@ -169,4 +174,3 @@ Phase 8 is complete when:
 - product mode and studio mode are both verified
 - no launch-critical hosted configuration gaps remain undocumented
 - a real production cutover and rollback checklist exists
-

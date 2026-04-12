@@ -31,6 +31,7 @@ Use the supporting docs in this folder for deeper planning and handoff detail.
 - [phase8_final_launch_prep.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase8_final_launch_prep.md)
 - [phase8_launch_checklist.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase8_launch_checklist.md)
 - [phase8_launch_readiness_inventory.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase8_launch_readiness_inventory.md)
+- [phase8_cutover_and_rollback.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase8_cutover_and_rollback.md)
 - [phase9_billing_and_stripe.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase9_billing_and_stripe.md)
 - [studio-mode-implementation-checklist.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/studio-mode-implementation-checklist.md)
 - [studio-mode-agent-handoff.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/studio-mode-agent-handoff.md)
@@ -123,14 +124,14 @@ Use the supporting docs in this folder for deeper planning and handoff detail.
 
 ### Phase 8: Final Launch Prep
 
-- [ ] Confirm the exact launch scope and deferred items list.
-- [ ] Close the final Phase 6 learner signoff item.
+- [x] Confirm the exact launch scope and deferred items list.
+- [x] Close the final Phase 6 learner signoff item.
 - [ ] Run a full staging QA pass on current hosted preview/stage.
 - [ ] Run a product-mode QA pass on staging.
 - [ ] Run a studio-mode QA pass on staging.
 - [ ] Verify auth, RLS, storage, and hosted environment configuration.
 - [ ] Verify core parent, learner, and AI-assisted flows on staging.
-- [ ] Document production cutover, rollback, and monitoring steps.
+- [x] Document production cutover, rollback, and monitoring steps.
 - [ ] Prepare the launch-day checklist and owner handoff.
 
 ### Phase 9: Billing And Stripe
@@ -162,9 +163,9 @@ Work this in order:
 - Phase 3 is complete on `main`.
 - Phase 4 is complete with explicit deferrals. Supabase staging/production, the Vercel project, staged hosted verification, and the hosted boot fix are in place. Remaining storage verification and rollback runbooks move into launch prep.
 - Phase 5 is complete on `main`, and `stage` has been realigned to the same commit.
-- Phase 6 is implemented on `main` and `stage`. Responsive QA has passed, and the only remaining signoff item is one targeted completed-session verification.
+- Phase 6 is implemented on `main` and `stage`. Responsive QA has passed, and the final learner completion-state signoff is now closed locally.
 - Phase 7 is complete on `main` and `stage`.
-- Phase 8 is now the active phase: launch-prep QA, hosted verification, cutover, and rollback readiness.
+- Phase 8 is active. Local launch-prep QA and the cutover/rollback runbook are in place. Hosted staging rerun, storage verification, and fresh-account sign-up validation remain open.
 - Stripe is intentionally deferred to Phase 9 so billing work does not get mixed into product-polish or launch-prep scope.
 
 ## How To Use This Folder
