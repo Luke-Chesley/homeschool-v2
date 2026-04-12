@@ -21,6 +21,7 @@ const workspaceLabels: Array<{ match: string; label: string }> = [
   { match: "/curriculum", label: "Curriculum" },
   { match: "/tracking", label: "Tracking" },
   { match: "/copilot", label: "Copilot" },
+  { match: "/account", label: "Account" },
   { match: "/users", label: "Learners" },
   { match: "/onboarding", label: "Setup" },
   { match: "/learner", label: "Learner" },
@@ -53,6 +54,7 @@ export function GlobalPageTabs() {
     pathname.startsWith("/curriculum") ||
     pathname.startsWith("/tracking") ||
     pathname.startsWith("/copilot") ||
+    pathname.startsWith("/account") ||
     pathname.startsWith("/learner") ||
     pathname.startsWith("/activity") ||
     pathname.startsWith("/users") ||
@@ -147,6 +149,12 @@ export function GlobalPageTabs() {
                 className="hidden text-sm text-muted-foreground transition-colors hover:text-foreground lg:inline-flex"
               >
                 Learners
+              </Link>
+              <Link
+                href="/account"
+                className="hidden text-sm text-muted-foreground transition-colors hover:text-foreground lg:inline-flex"
+              >
+                Account
               </Link>
               <div className="hidden lg:block">
                 <StudioToggle />

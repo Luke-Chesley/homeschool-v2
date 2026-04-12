@@ -30,7 +30,7 @@ export function ParentNav({ className, onNavigate }: ParentNavProps) {
           "group flex items-center gap-3 rounded-md px-3 py-2.5 text-left transition-colors",
           active
             ? "bg-muted text-foreground"
-            : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+            : "text-foreground/78 hover:bg-muted/60 hover:text-foreground",
           item.disabled && "cursor-not-allowed opacity-70",
         );
 
@@ -41,12 +41,12 @@ export function ParentNav({ className, onNavigate }: ParentNavProps) {
                 "flex size-8 shrink-0 items-center justify-center rounded-md transition-colors",
                 active
                   ? "bg-foreground text-background"
-                  : "bg-muted/70 text-muted-foreground group-hover:text-foreground",
+                  : "bg-muted/70 text-foreground/70 group-hover:text-foreground",
               )}
             >
               <item.icon className="size-4" />
             </div>
-            <span className="block min-w-0 text-[15px] font-medium">{item.label}</span>
+            <span className="block min-w-0 text-base font-medium">{item.label}</span>
           </>
         );
 
