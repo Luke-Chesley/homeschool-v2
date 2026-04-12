@@ -100,14 +100,23 @@ These should stay out of launch-critical scope unless the plan changes:
 - broad post-launch analytics or reporting expansion
 - non-critical queue-state variants not present in the current QA account, if documented and accepted
 
+## Current Phase 8 Reality
+
+Local launch-prep QA has already confirmed:
+
+1. launch-critical existing-account flows are stable locally
+2. one fully completed learner session state is now verified locally
+3. parent and learner product-mode/studio-mode comparisons are acceptable locally
+4. cutover/rollback notes now exist as explicit docs
+
 ## Remaining Risks To Explicitly Resolve
 
-At the start of Phase 8, the known remaining risk items are:
+The current remaining Phase 8 items are:
 
-1. verify one fully completed learner session state
-2. confirm hosted staging flows across the full parent + learner spine
-3. verify a real hosted storage flow
-4. ensure cutover/rollback docs are complete and not implied from old notes
+1. confirm hosted staging flows across the full parent + learner spine
+2. verify a real hosted storage flow
+3. manually validate fresh-account sign-up beyond flaky headless local automation
+4. fill launch-day ownership and cutover responsibility details
 
 ## Launch Signoff Standard
 
@@ -118,4 +127,3 @@ At the start of Phase 8, the known remaining risk items are:
 - no launch-critical hosted env gaps remain unknown
 - production deployment and rollback steps are written down clearly
 - deferred items are explicit rather than accidental
-

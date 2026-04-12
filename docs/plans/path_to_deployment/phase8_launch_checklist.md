@@ -5,24 +5,25 @@ Use this alongside [phase8_final_launch_prep.md](/home/luke/Desktop/homeschool-v
 ## Phase Status
 
 - [x] Phase 8 planning started
-- [ ] Phase 8 implementation started
-- [ ] Launch scope locked
+- [x] Phase 8 implementation started
+- [x] Launch scope locked
 - [ ] Final staging QA completed
-- [ ] Cutover and rollback docs completed
+- [x] Local launch-readiness QA completed
+- [x] Cutover and rollback docs completed
 
 ## Launch Scope Lock
 
-- [ ] Record the exact v1 launch-critical routes and flows.
-- [ ] Record intentionally deferred features and known non-blocking issues.
-- [ ] Confirm that Stripe remains deferred to Phase 9.
-- [ ] Confirm whether any remaining learner queue-state gaps are launch blockers or explicit deferrals.
+- [x] Record the exact v1 launch-critical routes and flows.
+- [x] Record intentionally deferred features and known non-blocking issues.
+- [x] Confirm that Stripe remains deferred to Phase 9.
+- [x] Confirm whether any remaining learner queue-state gaps are launch blockers or explicit deferrals.
 
 ## Final Learner Signoff
 
-- [ ] Verify one live learner session through a fully completed end state.
-- [ ] Confirm the learner sees a clear finished state and next path after completion.
-- [ ] Confirm return-to-queue behavior after completion.
-- [ ] Record whether empty, up-next, and completed queue groupings were live-verified or explicitly deferred.
+- [x] Verify one live learner session through a fully completed end state.
+- [x] Confirm the learner sees a clear finished state and next path after completion.
+- [x] Confirm return-to-queue behavior after completion.
+- [x] Record whether empty, up-next, and completed queue groupings were live-verified or explicitly deferred.
 
 ## Hosted Staging QA
 
@@ -39,14 +40,15 @@ Use this alongside [phase8_final_launch_prep.md](/home/luke/Desktop/homeschool-v
 - [ ] Verify `Tracking` on staging.
 - [ ] Verify `Copilot` on staging.
 - [ ] Verify `Account` on staging.
+- [ ] Re-run these checks on hosted staging once Vercel protection is bypassed for the reviewing agent/session.
 
 ## Product Mode Vs Studio Mode
 
-- [ ] Verify key parent routes in product mode.
-- [ ] Verify key learner routes in product mode.
-- [ ] Verify key parent routes in studio mode.
-- [ ] Verify key learner routes in studio mode.
-- [ ] Confirm studio diagnostics remain secondary and do not pollute product mode.
+- [x] Verify key parent routes in product mode.
+- [x] Verify key learner routes in product mode.
+- [x] Verify key parent routes in studio mode.
+- [x] Verify key learner routes in studio mode.
+- [x] Confirm studio diagnostics remain secondary and do not pollute product mode.
 
 ## Hosted Configuration Checks
 
@@ -56,14 +58,15 @@ Use this alongside [phase8_final_launch_prep.md](/home/luke/Desktop/homeschool-v
 - [ ] Confirm auth redirects and session resolution behave correctly on staging.
 - [ ] Reconfirm storage behavior on a real hosted product flow.
 - [ ] Reconfirm no new hosted runtime errors are showing in the critical flows.
+- [ ] Record the hosted sign-up behavior explicitly once staging is reachable from this session.
 
 ## Monitoring And Recovery
 
-- [ ] Document where to inspect Vercel runtime logs.
-- [ ] Document where to inspect Cloud Run service logs.
-- [ ] Document where to inspect Supabase auth/data/storage issues.
-- [ ] Document the production rollback path for app deploys.
-- [ ] Document the first-response checklist for launch-day issues.
+- [x] Document where to inspect Vercel runtime logs.
+- [x] Document where to inspect Cloud Run service logs.
+- [x] Document where to inspect Supabase auth/data/storage issues.
+- [x] Document the production rollback path for app deploys.
+- [x] Document the first-response checklist for launch-day issues.
 
 ## Launch-Day Checklist
 
@@ -75,7 +78,6 @@ Use this alongside [phase8_final_launch_prep.md](/home/luke/Desktop/homeschool-v
 
 ## Documentation
 
-- [ ] Update [README.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/README.md) as Phase 8 starts and finishes.
-- [ ] Keep [phase8_final_launch_prep.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase8_final_launch_prep.md) current if scope changes.
-- [ ] Keep [phase8_launch_readiness_inventory.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase8_launch_readiness_inventory.md) current as environments and risks are rechecked.
-
+- [x] Update [README.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/README.md) as Phase 8 starts and finishes.
+- [x] Keep [phase8_final_launch_prep.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase8_final_launch_prep.md) current if scope changes.
+- [x] Keep [phase8_launch_readiness_inventory.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase8_launch_readiness_inventory.md) current as environments and risks are rechecked.
