@@ -7,7 +7,7 @@ This is the execution tracker for the learner-facing redesign pass.
 ## Status
 
 - [x] Phase 6 planning started
-- [ ] Phase 6 implementation started
+- [x] Phase 6 implementation started
 - [ ] Phase 6 reviewed on staging
 - [ ] Phase 6 merged to `main`
 

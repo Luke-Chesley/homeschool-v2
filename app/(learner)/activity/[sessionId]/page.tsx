@@ -20,6 +20,15 @@ interface Props {
   params: Promise<{ sessionId: string }>;
 }
 
+function getSessionKindLabel(session: ActivitySession) {
+  const definition = session.definition as unknown as {
+    kind?: string;
+    activityKind?: string;
+  };
+
+  return definition.kind ?? definition.activityKind ?? "activity";
+}
+
 export default function ActivitySessionPage({ params }: Props) {
   const [sessionId, setSessionId] = React.useState<string>("");
   const [session, setSession] = React.useState<ActivitySession | null>(null);
@@ -185,58 +194,76 @@ export default function ActivitySessionPage({ params }: Props) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-24">
-        <p className="text-sm text-muted-foreground">Loading activity…</p>
+      <div className="learner-reading-surface">
+        <div className="learner-reading-column flex items-center justify-center py-12">
+          <p className="text-sm text-muted-foreground">Loading activity…</p>
+        </div>
       </div>
     );
   }
 
   if (error || !session) {
     return (
-      <div className="flex flex-col items-center gap-4 py-24">
-        <p className="text-sm text-destructive">{error ?? "Activity not found."}</p>
-        <Link href="/learner">
-          <Button variant="outline" size="sm">Back to activities</Button>
-        </Link>
+      <div className="learner-reading-surface">
+        <div className="learner-reading-column flex flex-col items-center gap-4 py-10 text-center">
+          <p className="text-sm text-destructive">{error ?? "Activity not found."}</p>
+          <Link href="/learner">
+            <Button variant="outline" size="sm">Back to queue</Button>
+          </Link>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="flex flex-col gap-6">
-      <Link href="/learner" className="flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="size-4" />
-        Back to activities
-      </Link>
+      <div className="space-y-3 border-b border-border/70 pb-4">
+        <Link href="/learner" className="flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+          <ArrowLeft className="size-4" />
+          Back to queue
+        </Link>
+        <p className="section-meta">
+          {getSessionKindLabel(session).replaceAll("_", " ")}
+          {session.estimatedMinutes ? ` · ${session.estimatedMinutes} min` : ""}
+        </p>
+      </div>
 
-      <ActivityRenderer
-        definition={session.definition}
-        attempt={attempt}
-        estimatedMinutes={session.estimatedMinutes}
-        onAnswerChange={handleAnswerChange}
-        onComponentFeedbackRequest={handleComponentFeedback}
-        onComponentTransitionRequest={handleComponentTransition}
-        onSubmit={handleSubmit}
-        submitting={submitting}
-        submitted={submitted}
-      />
+      {/* Activity surface */}
+      <div className="space-y-6">
+        <ActivityRenderer
+          definition={session.definition}
+          attempt={attempt}
+          estimatedMinutes={session.estimatedMinutes}
+          onAnswerChange={handleAnswerChange}
+          onComponentFeedbackRequest={handleComponentFeedback}
+          onComponentTransitionRequest={handleComponentTransition}
+          onSubmit={handleSubmit}
+          submitting={submitting}
+          submitted={submitted}
+        />
 
-      <ActivityStudioPanel
-        session={session}
-        attempt={attempt}
-        submitted={submitted}
-        error={error}
-        lastFeedback={lastFeedback}
-        lastTransition={lastTransition}
-      />
+        <ActivityStudioPanel
+          session={session}
+          attempt={attempt}
+          submitted={submitted}
+          error={error}
+          lastFeedback={lastFeedback}
+          lastTransition={lastTransition}
+        />
 
-      {submitted && (
-        <div className="flex justify-center pt-4">
-          <Link href="/learner">
-            <Button variant="outline">Back to activities</Button>
-          </Link>
-        </div>
-      )}
+        {submitted ? (
+          <div className="learner-reading-surface">
+            <div className="learner-reading-column flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-muted-foreground">
+                This session is finished and saved to today’s work.
+              </p>
+              <Link href="/learner">
+                <Button variant="outline">Back to queue</Button>
+              </Link>
+            </div>
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }

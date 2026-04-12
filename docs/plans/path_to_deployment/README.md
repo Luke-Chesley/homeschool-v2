@@ -141,7 +141,7 @@ Work this in order:
 - Phase 3 is complete on `main`.
 - Phase 4 is complete with explicit deferrals. Supabase staging/production, the Vercel project, staged hosted verification, and the hosted boot fix are in place. Remaining storage verification and rollback runbooks move into launch prep.
 - Phase 5 is complete on `main`, and `stage` has been realigned to the same commit.
-- Phase 6 planning is now in place for learner shell, queue, activity runtime, and responsive ergonomics.
+- Phase 6 implementation is underway on a dedicated worktree. Current work is focused on the learner shell, the parent `Today` to learner handoff, the learner queue, and the activity reading surface.
 
 ## How To Use This Folder
 
