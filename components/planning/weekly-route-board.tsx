@@ -19,7 +19,6 @@ import { Copy, GripVertical } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import type { WeeklyRouteBoard, WeeklyRouteBoardItem } from "@/lib/curriculum-routing";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 type ColumnId = string;
@@ -127,7 +126,7 @@ function SortableRouteItem({
         transition,
       }}
       className={cn(
-        "min-w-0 rounded-lg border border-border/70 bg-card p-3",
+        "min-w-0 rounded-xl border border-border/60 bg-background/88 p-3 shadow-sm",
         isDragging && "opacity-70 shadow-md",
       )}
     >
@@ -157,12 +156,12 @@ function SortableRouteItem({
           </div>
           <div className="flex flex-wrap gap-1">
             {item.manualOverrideKind !== "none" ? (
-              <Badge variant="secondary">
+              <Badge variant="secondary" className="rounded-full">
                 {item.manualOverrideKind.replace("_", " ")}
               </Badge>
             ) : null}
             {conflicted ? (
-              <Badge variant="outline" className="text-destructive">
+              <Badge variant="outline" className="rounded-full text-destructive">
                 Conflict
               </Badge>
             ) : null}
@@ -173,7 +172,7 @@ function SortableRouteItem({
               disabled={isSaving}
               className={cn(
                 buttonVariants({ variant: "outline", size: "sm" }),
-                "mt-1 w-fit gap-2",
+                "mt-1 w-fit gap-2 rounded-full",
               )}
               onClick={() => {
                 if (!item.scheduledDate) {
@@ -222,18 +221,21 @@ function RouteColumn({
   const { setNodeRef, isOver } = useDroppable({ id: columnId });
 
   return (
-    <Card
+    <section
       data-weekly-column={columnId}
-      className={cn("min-h-72 min-w-0", isOver && "border-primary/40 bg-primary/5")}
+      className={cn(
+        "quiet-panel min-h-72 min-w-0 space-y-4 p-4",
+        isOver && "border-primary/40 bg-primary/5",
+      )}
     >
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base">{getColumnLabel(columnId)}</CardTitle>
-        <CardDescription>{items.length} planned items</CardDescription>
-      </CardHeader>
-      <CardContent ref={setNodeRef} className="min-w-0 space-y-2">
+      <div className="space-y-1">
+        <p className="text-sm font-semibold text-foreground">{getColumnLabel(columnId)}</p>
+        <p className="text-xs text-muted-foreground">{items.length} planned items</p>
+      </div>
+      <div ref={setNodeRef} className="min-w-0 space-y-2">
         <SortableContext items={items.map((item) => item.id)} strategy={verticalListSortingStrategy}>
           {items.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-border/70 px-3 py-6 text-center text-xs text-muted-foreground">
+            <div className="rounded-xl border border-dashed border-border/70 px-3 py-6 text-center text-xs text-muted-foreground">
               Drop items here
             </div>
           ) : (
@@ -254,8 +256,8 @@ function RouteColumn({
             ))
           )}
         </SortableContext>
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   );
 }
 
@@ -545,60 +547,105 @@ export function WeeklyRouteBoard({ initialBoard, weekStartDate }: WeeklyRouteBoa
   };
 
   return (
-    <section className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-        <span>Week of {weekStartDate}</span>
-        <span>•</span>
-        <span>{board.items.length} route items</span>
-        {isSaving ? (
-          <>
-            <span>•</span>
-            <span>Saving parent changes...</span>
-          </>
-        ) : null}
+    <section className="space-y-5">
+      <div className="quiet-panel space-y-4 p-4">
+        <div className="space-y-1">
+          <p className="section-meta">Weekly route board</p>
+          <h2 className="font-serif text-2xl font-semibold tracking-tight text-foreground">
+            Shape the week without rebuilding it.
+          </h2>
+          <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
+            Drag work into the right day, pause items that are too much, and leave overflow in a
+            flexible holding area until you are ready to schedule it.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+          <span>Week of {weekStartDate}</span>
+          <span>•</span>
+          <span>{board.items.length} route items</span>
+          {board.conflicts.length > 0 ? (
+            <>
+              <span>•</span>
+              <span>{board.conflicts.length} conflict{board.conflicts.length === 1 ? "" : "s"}</span>
+            </>
+          ) : null}
+          {isSaving ? (
+            <>
+              <span>•</span>
+              <span>Saving changes…</span>
+            </>
+          ) : null}
+        </div>
       </div>
       {error ? (
-        <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {error}
         </p>
       ) : null}
-
-      <DndContext
-        id={`weekly-route-board-${weekStartDate}`}
-        sensors={sensors}
-        collisionDetection={closestCorners}
-        onDragStart={onDragStart}
-        onDragOver={onDragOver}
-        onDragEnd={onDragEnd}
-      >
-        <div
-          data-weekly-board
-          className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]"
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
+        <DndContext
+          id={`weekly-route-board-${weekStartDate}`}
+          sensors={sensors}
+          collisionDetection={closestCorners}
+          onDragStart={onDragStart}
+          onDragOver={onDragOver}
+          onDragEnd={onDragEnd}
         >
-          {columnOrder.map((columnId) => {
-            const items = columns[columnId]
-              .map((itemId) => itemsById.get(itemId))
-              .filter((item): item is WeeklyRouteBoardItem => item != null);
+          <div
+            data-weekly-board
+            className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]"
+          >
+            {columnOrder.map((columnId) => {
+              const items = columns[columnId]
+                .map((itemId) => itemsById.get(itemId))
+                .filter((item): item is WeeklyRouteBoardItem => item != null);
 
-            return (
-              <RouteColumn
-                key={columnId}
-                columnId={columnId}
-                items={items}
-                conflictedItemIds={conflictedItemIds}
-                isSaving={isSaving}
-                weekDates={weekDates}
-                onChangeState={persistState}
-                onDuplicate={persistDuplicate}
-              />
-            );
-          })}
-        </div>
-      </DndContext>
-
-      {activeItemId ? (
-        <p className="text-xs text-muted-foreground">Dragging item {activeItemId}…</p>
-      ) : null}
+              return (
+                <RouteColumn
+                  key={columnId}
+                  columnId={columnId}
+                  items={items}
+                  conflictedItemIds={conflictedItemIds}
+                  isSaving={isSaving}
+                  weekDates={weekDates}
+                  onChangeState={persistState}
+                  onDuplicate={persistDuplicate}
+                />
+              );
+            })}
+          </div>
+        </DndContext>
+        <aside className="quiet-panel space-y-4 p-4">
+          <div className="space-y-1">
+            <p className="text-sm font-semibold text-foreground">How to use this board</p>
+            <p className="text-sm leading-6 text-muted-foreground">
+              Keep the week realistic. Use backlog for overflow, planned for intentional placement,
+              working for active items, and paused when you want to preserve a skill without losing it.
+            </p>
+          </div>
+          <div className="space-y-2">
+            {STATE_OPTIONS.map((option) => (
+              <div key={option.value} className="rounded-xl border border-border/60 bg-background/72 px-3 py-2">
+                <p className="text-sm font-medium text-foreground">{option.label}</p>
+                <p className="text-xs text-muted-foreground">
+                  {option.value === "queued"
+                    ? "Not assigned to a day yet."
+                    : option.value === "scheduled"
+                      ? "Committed to the week but not started."
+                      : option.value === "in_progress"
+                        ? "Already underway."
+                        : option.value === "done"
+                          ? "Completed for now."
+                          : "Temporarily off the board."}
+                </p>
+              </div>
+            ))}
+          </div>
+          {activeItemId ? (
+            <p className="text-xs text-muted-foreground">Dragging item {activeItemId}…</p>
+          ) : null}
+        </aside>
+      </div>
     </section>
   );
 }

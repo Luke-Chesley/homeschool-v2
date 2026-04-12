@@ -67,15 +67,24 @@ export default async function CopilotPage({ searchParams }: Props) {
   });
 
   return (
-    <main className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-5 py-6 sm:px-6 lg:px-8">
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_300px]">
-        <Card className="min-h-[42rem] overflow-hidden">
+    <main className="page-shell page-stack">
+      <header className="page-header">
+        <p className="section-meta">Context-aware support</p>
+        <h1 className="page-title">Ask for the next move.</h1>
+        <p className="page-subtitle">
+          Copilot should feel embedded in the planning workflow: quiet, readable, and aware of the
+          learner, week, and current day without turning into a separate AI product.
+        </p>
+      </header>
+
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <Card className="min-h-[42rem] overflow-hidden rounded-xl border-border/80 bg-card/94 shadow-[var(--shadow-card)]">
           <CopilotChat context={context} className="h-full min-w-0 overflow-hidden" />
         </Card>
 
         <div className="space-y-4">
-          <Card>
-            <div className="space-y-3 p-4 text-sm">
+          <Card className="quiet-panel">
+            <div className="space-y-3 p-4 text-sm leading-6">
               <p className="font-medium text-foreground">Current context</p>
               <div className="space-y-2 text-muted-foreground">
                 <p>Learner: {context.learnerName}</p>
@@ -86,8 +95,8 @@ export default async function CopilotPage({ searchParams }: Props) {
             </div>
           </Card>
 
-          <Card>
-            <div className="space-y-3 p-4 text-sm">
+          <Card className="quiet-panel">
+            <div className="space-y-3 p-4 text-sm leading-6">
               <p className="font-medium text-foreground">Start with</p>
               <div className="space-y-2 text-muted-foreground">
                 <p>Draft today&apos;s lesson.</p>

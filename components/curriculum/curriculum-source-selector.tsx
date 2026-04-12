@@ -17,11 +17,11 @@ export function CurriculumSourceSelector({
   onActivateSource,
 }: CurriculumSourceSelectorProps) {
   return (
-    <Card className="min-w-0">
-      <div className="min-w-0 space-y-3 p-4">
+    <Card className="quiet-panel min-w-0 border-border/60 bg-card/78 shadow-none">
+      <div className="min-w-0 space-y-4 p-4">
         <div className="space-y-1">
-          <p className="text-sm font-medium text-foreground">Live curriculum</p>
-          <p className="text-xs text-muted-foreground">
+          <p className="section-meta">Live curriculum</p>
+          <p className="text-sm text-muted-foreground">
             Planning, today, and tracking all read from the source marked live here.
           </p>
         </div>
@@ -32,15 +32,15 @@ export function CurriculumSourceSelector({
             <div
               key={source.id}
               className={cn(
-                "flex w-full min-w-0 items-center justify-between gap-3 rounded-lg border px-3 py-2.5",
+                "flex w-full min-w-0 items-center justify-between gap-3 rounded-xl border px-3 py-3",
                 selected
                   ? "border-primary/25 bg-primary/8"
-                  : "border-border/70 bg-background",
+                  : "border-border/60 bg-background/80",
               )}
             >
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium text-foreground">{source.title}</p>
-                <p className="text-xs text-muted-foreground">
+                <p className="mt-1 text-xs text-muted-foreground">
                   {source.kind.replace("_", " ")} · v{source.importVersion}
                 </p>
               </div>

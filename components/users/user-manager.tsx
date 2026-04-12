@@ -4,9 +4,8 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Check, Plus } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 
 type UserManagerProps = {
   organization: {
@@ -89,47 +88,46 @@ export function UserManager({
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-6 py-8">
-      <div className="flex flex-col gap-2">
-        <p className="text-sm uppercase tracking-[0.18em] text-muted-foreground">Users</p>
-        <h1 className="font-serif text-4xl font-semibold tracking-tight">Manage learners</h1>
-        <p className="max-w-2xl text-sm text-muted-foreground">
-          Keep users lightweight for now. Each learner is distinct, selectable, and becomes the
-          active context for curriculum, learner activity, and copilot work.
-        </p>
-      </div>
+    <div className="page-shell page-stack">
+      <header className="page-header">
+        <div className="space-y-2">
+          <p className="section-meta">Learners</p>
+          <h1 className="page-title">Set the active learner, then keep moving.</h1>
+          <p className="page-subtitle max-w-2xl">
+            Learners stay lightweight here. Choose who the workspace is acting on, add another
+            profile when you need one, and leave richer profile setup for later.
+          </p>
+        </div>
+      </header>
 
-      <Card className="border-border/70 bg-card/70">
-        <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-start sm:justify-between">
+      <section className="quiet-panel flex flex-col gap-3 p-5 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-1">
+          <p className="section-meta">Active household</p>
+          <p className="font-serif text-2xl font-semibold tracking-tight text-foreground">
+            {organization.name}
+          </p>
+          <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
+            Selecting a learner changes the active child inside this household. Curriculum,
+            activity, and Copilot all follow that selection.
+          </p>
+        </div>
+        <div className="rounded-xl border border-border/60 bg-background/80 px-4 py-3 text-sm text-muted-foreground">
+          <p className="font-medium text-foreground">Workspace ID</p>
+          <p className="font-mono text-xs">{organization.id}</p>
+        </div>
+      </section>
+
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
+        <section className="quiet-panel space-y-4 p-5">
           <div className="space-y-1">
-            <Badge variant="secondary" className="w-fit">
-              Active household
-            </Badge>
-            <p className="font-serif text-2xl font-semibold tracking-tight">{organization.name}</p>
-            <p className="text-sm text-muted-foreground">
-              This is the current household workspace. Selecting a learner changes the active
-              learner inside this household, not the household itself.
+            <p className="text-base font-semibold text-foreground">Learners in {organization.name}</p>
+            <p className="text-sm leading-6 text-muted-foreground">
+              Use a single active learner at a time so the rest of the workspace stays focused.
             </p>
           </div>
-
-          <div className="rounded-2xl border border-border/70 bg-background/80 px-4 py-3 text-sm text-muted-foreground">
-            <p className="font-medium text-foreground">Workspace ID</p>
-            <p className="font-mono text-xs">{organization.id}</p>
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
-        <Card>
-          <CardHeader>
-            <CardTitle>Learners in {organization.name}</CardTitle>
-            <CardDescription>
-              Select who the app is currently acting on inside this active household.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-3">
+          <div className="grid gap-3">
             {learners.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-border/70 px-4 py-12 text-center text-sm text-muted-foreground">
+              <div className="rounded-xl border border-dashed border-border/70 px-4 py-12 text-center text-sm text-muted-foreground">
                 No learners yet. Create one to unlock the rest of the app.
               </div>
             ) : null}
@@ -143,59 +141,73 @@ export function UserManager({
                   type="button"
                   onClick={() => selectLearner(learner.id)}
                   disabled={submitting}
-                  className="flex items-center justify-between rounded-2xl border border-border/70 bg-background/70 px-4 py-4 text-left transition-colors hover:bg-card disabled:cursor-not-allowed disabled:opacity-70"
+                  className={cn(
+                    "flex items-center justify-between rounded-xl border px-4 py-4 text-left transition-colors",
+                    active
+                      ? "border-primary/20 bg-primary/8"
+                      : "border-border/60 bg-background/70 hover:bg-card",
+                    "disabled:cursor-not-allowed disabled:opacity-70",
+                  )}
                 >
-                  <div>
-                    <p className="font-medium">{learner.displayName}</p>
+                  <div className="space-y-1">
+                    <p className="font-medium text-foreground">{learner.displayName}</p>
                     <p className="text-xs capitalize text-muted-foreground">{learner.status}</p>
                   </div>
                   <span
-                    className={`inline-flex size-8 items-center justify-center rounded-full border ${
+                    className={cn(
+                      "inline-flex size-8 items-center justify-center rounded-full border",
                       active
                         ? "border-primary/20 bg-primary/10 text-primary"
-                        : "border-border/70 text-muted-foreground"
-                    }`}
+                        : "border-border/70 text-muted-foreground",
+                    )}
                   >
                     {active ? <Check className="size-4" /> : null}
                   </span>
                 </button>
               );
             })}
-          </CardContent>
-        </Card>
+          </div>
+        </section>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Add learner</CardTitle>
-            <CardDescription>Minimal by design. Name first, details later.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form className="flex flex-col gap-4" onSubmit={createLearner}>
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="display-name" className="text-sm font-medium">
-                  Display name
-                </label>
-                <input
-                  id="display-name"
-                  value={displayName}
-                  onChange={(event) => setDisplayName(event.target.value)}
-                  placeholder="Maya"
-                  className="rounded-lg border border-input bg-card/70 px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
-                />
-              </div>
-              <Button type="submit" disabled={submitting || !displayName.trim()} className="gap-2">
-                <Plus className="size-4" />
-                Create learner
-              </Button>
-            </form>
+        <section className="quiet-panel space-y-4 p-5">
+          <div className="space-y-1">
+            <p className="text-base font-semibold text-foreground">Add learner</p>
+            <p className="text-sm leading-6 text-muted-foreground">
+              Start with a display name. You can enrich the profile later once the household is underway.
+            </p>
+          </div>
+          <form className="flex flex-col gap-4" onSubmit={createLearner}>
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="display-name" className="text-sm font-medium">
+                Display name
+              </label>
+              <input
+                id="display-name"
+                value={displayName}
+                onChange={(event) => setDisplayName(event.target.value)}
+                placeholder="Maya"
+                className="rounded-md border border-input bg-background/90 px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
+              />
+            </div>
+            <Button type="submit" disabled={submitting || !displayName.trim()} className="gap-2 self-start">
+              <Plus className="size-4" />
+              Create learner
+            </Button>
+          </form>
 
-            {error ? (
-              <p className="mt-4 rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                {error}
-              </p>
-            ) : null}
-          </CardContent>
-        </Card>
+          {error ? (
+            <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {error}
+            </p>
+          ) : null}
+
+          <div className="rounded-xl border border-border/60 bg-background/72 px-4 py-3">
+            <p className="text-sm font-medium text-foreground">What changes when you switch</p>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">
+              Today, learner activities, and Copilot context follow the active learner automatically.
+            </p>
+          </div>
+        </section>
       </div>
     </div>
   );

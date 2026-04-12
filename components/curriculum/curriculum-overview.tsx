@@ -24,27 +24,27 @@ export function CurriculumOverview({
   tree,
 }: CurriculumOverviewProps) {
   return (
-    <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
+    <div className="grid gap-6 xl:grid-cols-[300px_minmax(0,1fr)]">
       <div className="space-y-4">
         <CurriculumSourceSelector
           sources={sources}
           activeSourceId={activeSourceId}
           onActivateSource={onActivateSource}
         />
-        <Card>
+        <Card className="quiet-panel">
           <div className="space-y-3 p-4 text-sm">
             <p className="font-medium text-foreground">{tree.source.title}</p>
             <div className="grid grid-cols-2 gap-2">
-              <div className="rounded-lg border border-border/70 px-3 py-2">
+              <div className="rounded-lg border border-border/70 bg-background/70 px-3 py-2">
                 <div className="text-xs text-muted-foreground">Nodes</div>
                 <div className="mt-1 font-medium text-foreground">{tree.nodeCount}</div>
               </div>
-              <div className="rounded-lg border border-border/70 px-3 py-2">
+              <div className="rounded-lg border border-border/70 bg-background/70 px-3 py-2">
                 <div className="text-xs text-muted-foreground">Skills</div>
                 <div className="mt-1 font-medium text-foreground">{tree.skillCount}</div>
               </div>
             </div>
-            <div className="rounded-lg border border-border/70 px-3 py-2">
+            <div className="rounded-lg border border-border/70 bg-background/70 px-3 py-2">
               <div className="text-xs text-muted-foreground">Import</div>
               <div className="mt-1 font-medium text-foreground">v{tree.source.importVersion}</div>
             </div>
@@ -52,14 +52,17 @@ export function CurriculumOverview({
         </Card>
       </div>
 
-      <Card>
+      <Card className="reading-surface">
         <div className="space-y-4 p-5">
           <div className="space-y-3">
             <div>
               <h2 className="font-serif text-2xl">{tree.source.title}</h2>
-              <p className="text-sm text-muted-foreground">Browse the structure that feeds planning.</p>
+              <p className="text-sm leading-7 text-muted-foreground">
+                Browse the normalized structure, then move into the graph workspace when you need to
+                inspect branch relationships more deeply.
+              </p>
             </div>
-            <div className="rounded-2xl border border-border/70 bg-background/70 p-4">
+            <div className="rounded-xl border border-border/70 bg-background/70 p-4">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div className="space-y-1">
                   <p className="text-sm font-semibold text-foreground">Graph workspace</p>

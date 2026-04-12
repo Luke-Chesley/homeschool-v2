@@ -25,16 +25,18 @@
   --border: oklch(0.88 0.02 95.4);
   --input: oklch(0.88 0.02 95.4);
   --ring: oklch(0.61 0.13 44.3);
-  --radius: 0.75rem;
+  --radius: 0.65rem;
   --selection: color-mix(in srgb, var(--primary) 28%, white);
-  --page-gradient: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--background) 92%, white) 0%,
-    color-mix(in srgb, var(--background) 98%, var(--secondary) 2%) 100%
-  );
-  --shadow-card: 0 10px 28px -20px rgba(44, 38, 30, 0.22);
-  --shadow-hero: 0 14px 36px -26px rgba(44, 38, 30, 0.2);
-  --shadow-active: 0 8px 20px -18px rgba(176, 93, 45, 0.45);
+  --page-gradient:
+    radial-gradient(circle at top left, color-mix(in srgb, var(--secondary) 10%, transparent) 0, transparent 28%),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--background) 94%, white) 0%,
+      color-mix(in srgb, var(--background) 98%, var(--secondary) 2%) 100%
+    );
+  --shadow-card: 0 10px 22px -22px rgba(44, 38, 30, 0.2);
+  --shadow-hero: 0 14px 30px -26px rgba(44, 38, 30, 0.18);
+  --shadow-active: 0 8px 18px -18px rgba(176, 93, 45, 0.35);
 }
 
 .dark,
@@ -60,14 +62,15 @@
   --ring: oklch(0.76 0.118 48.5);
   --selection: color-mix(in srgb, var(--primary) 34%, black);
   --page-gradient:
+    radial-gradient(circle at top left, color-mix(in srgb, var(--secondary) 8%, transparent) 0, transparent 24%),
     linear-gradient(
       180deg,
       color-mix(in srgb, var(--background) 94%, white 6%) 0%,
       color-mix(in srgb, var(--background) 88%, black 12%) 100%
     );
-  --shadow-card: 0 12px 30px -22px rgba(2, 8, 23, 0.6);
-  --shadow-hero: 0 16px 40px -28px rgba(2, 8, 23, 0.62);
-  --shadow-active: 0 8px 22px -18px rgba(247, 162, 77, 0.35);
+  --shadow-card: 0 12px 26px -24px rgba(2, 8, 23, 0.58);
+  --shadow-hero: 0 16px 34px -28px rgba(2, 8, 23, 0.6);
+  --shadow-active: 0 8px 18px -18px rgba(247, 162, 77, 0.28);
 }
 
 @theme inline {
@@ -115,5 +118,51 @@
 
   ::selection {
     background: var(--selection);
+  }
+}
+
+@layer components {
+  .page-shell {
+    @apply mx-auto flex w-full max-w-7xl flex-col px-5 py-8 sm:px-6 lg:px-8;
+  }
+
+  .page-stack {
+    @apply flex flex-col gap-8;
+  }
+
+  .page-header {
+    @apply flex flex-col gap-3 border-b border-border/70 pb-5;
+  }
+
+  .page-title {
+    @apply font-serif text-3xl leading-tight tracking-tight sm:text-4xl;
+  }
+
+  .page-subtitle {
+    @apply max-w-3xl text-sm leading-7 text-muted-foreground sm:text-[15px];
+  }
+
+  .quiet-panel {
+    @apply rounded-xl border border-border/80 bg-card/88 text-card-foreground shadow-[var(--shadow-card)];
+  }
+
+  .quiet-panel-muted {
+    @apply rounded-xl border border-border/70 bg-background/72 text-card-foreground;
+  }
+
+  .reading-surface {
+    @apply rounded-xl border border-border/80 bg-card/94 px-6 py-6 shadow-[var(--shadow-card)] sm:px-8 sm:py-7;
+  }
+
+  .reading-column {
+    @apply mx-auto w-full max-w-3xl;
+  }
+
+  .section-meta {
+    @apply text-sm text-muted-foreground;
+  }
+
+  .toolbar-row {
+    @apply flex flex-wrap items-center gap-2;
   }
 }

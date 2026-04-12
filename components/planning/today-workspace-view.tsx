@@ -481,13 +481,16 @@ export function TodayWorkspaceView({ workspace, sourceId }: TodayWorkspaceViewPr
 
   if (workspace.items.length === 0) {
     return (
-      <Card className="border-dashed">
+      <Card className="quiet-panel border-dashed">
         <div className="flex flex-col gap-4 p-6">
           <div>
             <p className="text-sm text-muted-foreground">{formatPlannerDate(workspace.date)}</p>
-            <h2 className="mt-1 font-serif text-2xl">{workspace.learner.name}</h2>
+            <h2 className="mt-1 font-serif text-2xl">Nothing is queued for today.</h2>
           </div>
-          <p className="text-sm text-muted-foreground">No route items are ready for today.</p>
+          <p className="max-w-2xl text-sm leading-7 text-muted-foreground">
+            No route items are ready for {workspace.learner.name} today. Open curriculum or planning to
+            shape the next workable day.
+          </p>
           <div className="flex flex-wrap gap-2">
             <Link href="/curriculum" className={buttonVariants({ variant: "default", size: "sm" })}>
               Open curriculum
@@ -503,7 +506,7 @@ export function TodayWorkspaceView({ workspace, sourceId }: TodayWorkspaceViewPr
 
   if (draftState) {
     return (
-      <div className="grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)_320px] xl:items-start">
+      <div className="grid gap-6 xl:grid-cols-[18rem_minmax(0,1fr)_20rem] xl:items-start">
         <TodayRouteItemsSection
           workspace={workspace}
           sourceId={sourceId}
@@ -524,7 +527,7 @@ export function TodayWorkspaceView({ workspace, sourceId }: TodayWorkspaceViewPr
   }
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,1.3fr)_minmax(340px,0.9fr)] xl:items-start">
+    <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(340px,0.85fr)] xl:items-start">
       <TodayRouteItemsSection
         workspace={workspace}
         sourceId={sourceId}
@@ -550,7 +553,7 @@ export function TodayRouteItemsSection({
 
   if (compact) {
     return (
-      <section className="space-y-4 xl:sticky xl:top-24">
+      <section className="space-y-4 xl:sticky xl:top-32">
         <div className="border-b border-border/70 pb-4">
           <p className="text-sm text-muted-foreground">{formatPlannerDate(workspace.date)}</p>
           <h2 className="font-serif text-2xl">Today</h2>
@@ -564,7 +567,7 @@ export function TodayRouteItemsSection({
             const alternate = workspace.alternatesByPlanItemId[item.id]?.[0];
 
             return (
-              <Card key={item.id}>
+              <Card key={item.id} className="quiet-panel">
                 <div className="space-y-3 p-4">
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <span>{String(index + 1).padStart(2, "0")}</span>
@@ -602,6 +605,10 @@ export function TodayRouteItemsSection({
         <div>
           <p className="text-sm text-muted-foreground">{formatPlannerDate(workspace.date)}</p>
           <h2 className="font-serif text-2xl">Daily workspace</h2>
+          <p className="mt-2 max-w-3xl text-sm leading-7 text-muted-foreground">
+            Keep the plan readable enough to scan quickly, but detailed enough to act on without opening a
+            separate management screen.
+          </p>
         </div>
         <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
           <span>{workspace.items.length} items</span>
@@ -618,6 +625,7 @@ export function TodayRouteItemsSection({
             <Card
               key={item.id}
               className={cn(
+                "quiet-panel",
                 item.status === "completed" || item.completionStatus === "completed_as_planned"
                   ? "border-primary/30 bg-primary/5"
                   : undefined,
@@ -683,13 +691,17 @@ function TodayLessonDraftArticle({
 
   return (
     <section className="space-y-4">
-        <div className="border-b border-border/70 pb-4">
-          <p className="text-sm text-muted-foreground">{workspace.leadItem.sourceLabel}</p>
-          <h2 className="font-serif text-3xl">Lesson draft</h2>
+      <div className="border-b border-border/70 pb-4">
+        <p className="text-sm text-muted-foreground">{workspace.leadItem.sourceLabel}</p>
+        <h2 className="font-serif text-3xl">Lesson draft</h2>
+        <p className="mt-2 max-w-3xl text-sm leading-7 text-muted-foreground">
+          This is the main reading surface for today&apos;s lesson. Keep the instructional flow central and
+          push supporting metadata or debug detail into secondary panels.
+        </p>
       </div>
 
-      <Card>
-        <div className="p-5 sm:p-6">
+      <Card className="reading-surface">
+        <div className="reading-column">
           {draftState.kind === "structured" ? (
             <LessonDraftRenderer draft={draftState.draft} />
           ) : draftState.kind === "markdown" ? (

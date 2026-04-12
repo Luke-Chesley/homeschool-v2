@@ -23,7 +23,7 @@ export default async function CurriculumPage() {
 
   if (sources.length === 0) {
     return (
-      <main className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-5 py-6 sm:px-6 lg:px-8">
+      <main className="page-shell page-stack">
         <CurriculumEmptyState householdId={session.organization.id} />
       </main>
     );
@@ -57,14 +57,22 @@ export default async function CurriculumPage() {
 
   if (!tree) {
     return (
-      <main className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-5 py-6 sm:px-6 lg:px-8">
+      <main className="page-shell page-stack">
         <p className="text-sm text-muted-foreground">The live curriculum source could not be loaded.</p>
       </main>
     );
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-5 py-6 sm:px-6 lg:px-8">
+    <main className="page-shell page-stack">
+      <header className="page-header">
+        <p className="section-meta">Curriculum source and structure</p>
+        <h1 className="page-title">Browse the structure that feeds planning.</h1>
+        <p className="page-subtitle">
+          Keep the active source legible and easy to inspect. Revision tools should stay close by without
+          taking over the main reading flow.
+        </p>
+      </header>
       <CurriculumOverview
         sources={sources}
         activeSourceId={activeSourceId}

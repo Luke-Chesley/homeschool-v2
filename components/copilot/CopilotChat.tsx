@@ -137,11 +137,17 @@ export function CopilotChat({ sessionId: initialSessionId, initialMessages = [],
 
   return (
     <div className={cn("flex min-w-0 flex-col h-full", className)}>
-      <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-4">
+      <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-5 py-5 sm:px-6">
         {messages.length === 0 && (
-          <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
-            <p className="font-serif text-2xl text-foreground/80">Ask for the next move.</p>
-            <div className="mt-1 flex flex-wrap justify-center gap-2">
+          <div className="flex h-full flex-col items-start justify-center gap-5">
+            <div className="max-w-2xl space-y-2">
+              <p className="font-serif text-3xl text-foreground">Ask for the next move.</p>
+              <p className="text-sm leading-7 text-muted-foreground">
+                Keep requests grounded in the learner, today&apos;s plan, or the current week. Copilot works
+                best when the question is specific enough to turn into a real next action.
+              </p>
+            </div>
+            <div className="mt-1 flex flex-wrap gap-2">
               {[
                 "Draft a lesson on fractions for grade 4",
                 "What standards cover place value?",
@@ -152,7 +158,7 @@ export function CopilotChat({ sessionId: initialSessionId, initialMessages = [],
                   key={prompt}
                   type="button"
                   onClick={() => sendMessage(prompt)}
-                  className="rounded-md border border-border/70 bg-background px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted/45"
+                  className="rounded-md border border-border/70 bg-background px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/45 hover:text-foreground"
                 >
                   {prompt}
                 </button>
@@ -167,10 +173,10 @@ export function CopilotChat({ sessionId: initialSessionId, initialMessages = [],
 
         {streamingContent !== null && (
           <div className="flex gap-3">
-            <div className="shrink-0 flex size-8 items-center justify-center rounded-md bg-secondary/25 text-secondary-foreground text-xs font-medium">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-secondary/25 text-xs font-medium text-secondary-foreground">
               AI
             </div>
-            <div className="max-w-[85%] rounded-lg border border-border/60 bg-card px-4 py-3 text-sm leading-relaxed break-words whitespace-pre-wrap">
+            <div className="max-w-[85%] rounded-lg border border-border/60 bg-card px-4 py-3 text-sm leading-7 break-words whitespace-pre-wrap">
               {streamingContent}
               <span className="inline-block w-1.5 h-4 bg-primary/60 ml-0.5 animate-pulse" />
             </div>
@@ -200,7 +206,7 @@ export function CopilotChat({ sessionId: initialSessionId, initialMessages = [],
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="border-t border-border/60 p-4">
+      <div className="border-t border-border/60 p-4 sm:px-6">
         <ChatInput onSend={sendMessage} disabled={loading} />
       </div>
     </div>

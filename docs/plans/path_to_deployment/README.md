@@ -83,14 +83,14 @@ Use the supporting docs in this folder for deeper planning and handoff detail.
 
 ### Phase 5: Parent Product Redesign
 
-- [ ] Redesign the shell into a thin, calm, premium product chrome.
-- [ ] Define the Phase 5 parent design system and reading-surface rules.
-- [ ] Apply the relevant checklist.design component and flow review to the redesign scope.
-- [ ] Remove duplicated navigation layers.
-- [ ] Decide final placement for learner switching and studio access.
-- [ ] Redesign `Today` as the primary operational surface.
-- [ ] Redesign `Planning`, `Curriculum`, `Tracking`, and `Copilot` into one coherent parent product language.
-- [ ] Keep debug panels accessible without polluting the product UI.
+- [x] Redesign the shell into a thin, calm, premium product chrome.
+- [x] Define the Phase 5 parent design system and reading-surface rules.
+- [x] Apply the relevant checklist.design component and flow review to the redesign scope.
+- [x] Remove duplicated navigation layers.
+- [x] Decide final placement for learner switching and studio access.
+- [x] Redesign `Today` as the primary operational surface.
+- [x] Redesign `Planning`, `Curriculum`, `Tracking`, and `Copilot` into one coherent parent product language.
+- [x] Keep debug panels accessible without polluting the product UI.
 
 ### Phase 6: Learner Flow Redesign
 
@@ -133,7 +133,7 @@ Work this in order:
 - Phase 2 is complete on `main`.
 - Phase 3 is complete on `main`.
 - Phase 4 is complete with explicit deferrals. Supabase staging/production, the Vercel project, staged hosted verification, and the hosted boot fix are in place. Remaining storage verification and rollback runbooks move into launch prep.
-- Phase 5 planning is now in place. Implementation should start from the shared shell, reading-surface primitives, and `Today` before touching the remaining parent routes.
+- Phase 5 implementation is in active review on a dedicated branch worktree. The shared shell, parent route surfaces, auth/onboarding tone, and core planning/curriculum/tracking/copilot layouts have been redesigned locally before staging review.
 
 ## How To Use This Folder
 

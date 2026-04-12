@@ -82,65 +82,95 @@ export function ParentTopbar({ activeLearnerName, learnerLabel, onOpenMenu }: Pa
       : [];
 
   return (
-    <div className="border-b border-border/70 bg-background/96 px-4 py-3 sm:px-6">
-      <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
-        <div className="min-w-0">
-          <p className="text-xs text-muted-foreground">
-            {learnerLabel} · {activeLearnerName}
-          </p>
-          <h1 className="font-serif text-2xl leading-tight">{activeSection.label}</h1>
-        </div>
+    <div className="sticky top-[var(--global-tabs-height)] z-30 border-b border-border/70 bg-background/92 backdrop-blur">
+      <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-4 sm:px-6 lg:px-8">
+        <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
+            <p className="text-sm text-muted-foreground">
+              {learnerLabel} · {activeLearnerName}
+            </p>
+            <p className="text-lg font-medium tracking-tight text-foreground">{activeSection.label}</p>
+          </div>
 
-        <div className="flex min-w-0 flex-wrap items-center gap-2 xl:justify-end">
-          {planningControls.map((control) => (
-            <Link
-              key={control.href}
-              href={control.href}
-              className={cn(
-                buttonVariants({ variant: control.active ? "secondary" : "outline", size: "sm" }),
-                "shrink-0",
-              )}
+          <div className="flex min-w-0 flex-wrap items-center gap-2 lg:justify-end">
+            {pathname.startsWith("/curriculum") ? (
+              <>
+                <Link
+                  href="/curriculum/manage"
+                  className={buttonVariants({ variant: "outline", size: "sm" })}
+                >
+                  Manage sources
+                </Link>
+                <Link
+                  href="/curriculum/new"
+                  className={buttonVariants({ variant: "default", size: "sm" })}
+                >
+                  Add curriculum
+                </Link>
+              </>
+            ) : null}
+
+            <StudioToggle />
+
+            <form action="/auth/signout" method="post">
+              <Button type="submit" variant="outline" size="sm" className="gap-2">
+                <LogOut className="size-4" />
+                Sign out
+              </Button>
+            </form>
+
+            <Button
+              variant="outline"
+              size="icon"
+              className="lg:hidden"
+              aria-label="Open navigation"
+              onClick={onOpenMenu}
             >
-              {control.label}
-            </Link>
-          ))}
-
-          {pathname.startsWith("/curriculum") ? (
-            <>
-              <Link
-                href="/curriculum/manage"
-                className={buttonVariants({ variant: "outline", size: "sm" })}
-              >
-                Manage sources
-              </Link>
-              <Link
-                href="/curriculum/new"
-                className={buttonVariants({ variant: "default", size: "sm" })}
-              >
-                Add curriculum
-              </Link>
-            </>
-          ) : null}
-
-          <StudioToggle />
-
-          <form action="/auth/signout" method="post">
-            <Button type="submit" variant="outline" size="sm" className="gap-2">
-              <LogOut className="size-4" />
-              Sign out
+              <Menu className="size-4" />
             </Button>
-          </form>
-
-          <Button
-            variant="outline"
-            size="icon"
-            className="lg:hidden"
-            aria-label="Open navigation"
-            onClick={onOpenMenu}
-          >
-            <Menu className="size-4" />
-          </Button>
+          </div>
         </div>
+
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-border/60 pt-3">
+          {parentPrimaryNav.map((item) => {
+            const active =
+              pathname === item.href || pathname.startsWith(`${item.matchPrefix}/`);
+
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  "inline-flex items-center border-b border-transparent pb-1 text-sm transition-colors",
+                  active
+                    ? "border-foreground text-foreground"
+                    : "text-muted-foreground hover:border-border hover:text-foreground",
+                )}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
+        </div>
+
+        {planningControls.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border/60 pt-3">
+            {planningControls.map((control) => (
+              <Link
+                key={control.href}
+                href={control.href}
+                className={cn(
+                  "inline-flex items-center border-b border-transparent pb-1 text-sm transition-colors",
+                  control.active
+                    ? "border-foreground text-foreground"
+                    : "text-muted-foreground hover:border-border hover:text-foreground",
+                )}
+              >
+                {control.label}
+              </Link>
+            ))}
+          </div>
+        ) : null}
       </div>
     </div>
   );

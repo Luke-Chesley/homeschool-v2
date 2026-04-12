@@ -16,27 +16,36 @@ export function ParentSidebar({
   onNavigate?: () => void;
 }) {
   return (
-    <div className="flex h-full flex-col bg-background">
-      <div className="border-b border-border/70 px-5 py-5">
-        <Link href="/today" className="inline-flex text-sm font-semibold text-foreground">
-          {organizationName}
-        </Link>
-        <div className="mt-3 space-y-1">
-          <p className="text-xs text-muted-foreground">Active {learnerLabel.toLowerCase()}</p>
+    <div className="flex h-full flex-col bg-background/50 px-4 py-5">
+      <div className="rounded-xl border border-border/70 bg-card/88 p-4 shadow-[var(--shadow-card)]">
+        <p className="text-sm font-semibold text-foreground">{organizationName}</p>
+        <div className="mt-4 space-y-1">
+          <p className="text-xs tracking-wide text-muted-foreground">
+            Active {learnerLabel.toLowerCase()}
+          </p>
           <p className="text-sm font-medium text-foreground">{activeLearnerName}</p>
+          <p className="text-sm leading-6 text-muted-foreground">
+            Keep the day light enough to run and detailed enough to trust.
+          </p>
         </div>
       </div>
 
-      <div className="flex-1 px-4 py-4">
+      <div className="mt-4 flex-1">
         <ParentNav onNavigate={onNavigate} />
       </div>
 
-      <div className="border-t border-border/70 px-4 py-4">
+      <div className="mt-4 rounded-xl border border-border/70 bg-card/80 p-4">
+        <div className="space-y-1">
+          <p className="text-sm font-medium text-foreground">Shortcuts</p>
+          <p className="text-sm leading-6 text-muted-foreground">
+            Jump back to the daily workspace or open Copilot without hunting through extra chrome.
+          </p>
+        </div>
         <div className="grid gap-2">
           <Link
             href="/today"
             onClick={onNavigate}
-            className={cn(buttonVariants({ variant: "default", size: "sm" }), "w-full justify-start")}
+            className={cn(buttonVariants({ variant: "default", size: "sm" }), "mt-4 w-full justify-start")}
           >
             Open today
           </Link>
@@ -45,7 +54,7 @@ export function ParentSidebar({
             onClick={onNavigate}
             className={cn(buttonVariants({ variant: "outline", size: "sm" }), "w-full justify-start")}
           >
-            Ask AI
+            Open Copilot
           </Link>
         </div>
       </div>

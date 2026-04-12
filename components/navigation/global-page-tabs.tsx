@@ -6,19 +6,9 @@ import { usePathname } from "next/navigation";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { cn } from "@/lib/utils";
 
-const globalPageTabs = [
-  { href: "/", label: "Landing", matchPrefix: "/" },
-  { href: "/today", label: "Today", matchPrefix: "/today" },
-  { href: "/curriculum", label: "Curriculum", matchPrefix: "/curriculum" },
-  { href: "/planning", label: "Planning", matchPrefix: "/planning" },
-  { href: "/tracking", label: "Tracking", matchPrefix: "/tracking" },
-  { href: "/copilot", label: "Copilot", matchPrefix: "/copilot" },
-  { href: "/users", label: "Users", matchPrefix: "/users" },
-  {
-    href: "/sample-activity",
-    label: "Sample Activity",
-    matchPrefix: "/sample-activity",
-  },
+const publicTabs = [
+  { href: "/", label: "Home", matchPrefix: "/" },
+  { href: "/auth/login", label: "Sign in", matchPrefix: "/auth" },
 ] as const;
 
 function isActive(pathname: string, href: string, matchPrefix: string) {
@@ -31,44 +21,51 @@ function isActive(pathname: string, href: string, matchPrefix: string) {
 
 export function GlobalPageTabs() {
   const pathname = usePathname();
-
-  if (pathname.startsWith("/auth")) {
-    return (
-      <div className="sticky top-0 z-40 border-b border-border/70 bg-background/95">
-        <div className="mx-auto flex h-[var(--global-tabs-height)] max-w-7xl items-center justify-end px-4 sm:px-6 lg:px-8">
-          <ThemeToggle />
-        </div>
-      </div>
-    );
-  }
+  const inWorkspace =
+    pathname.startsWith("/today") ||
+    pathname.startsWith("/planning") ||
+    pathname.startsWith("/curriculum") ||
+    pathname.startsWith("/tracking") ||
+    pathname.startsWith("/copilot") ||
+    pathname.startsWith("/learner") ||
+    pathname.startsWith("/activity") ||
+    pathname.startsWith("/users") ||
+    pathname.startsWith("/onboarding");
 
   return (
-    <div className="sticky top-0 z-40 border-b border-border/70 bg-background/95">
+    <div className="sticky top-0 z-40 border-b border-border/70 bg-background/92 backdrop-blur">
       <div className="mx-auto flex h-[var(--global-tabs-height)] max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
-        <nav className="flex min-w-0 items-center gap-5 overflow-x-auto" aria-label="Global sections">
-          {globalPageTabs.map((tab) => {
-            const active =
-              tab.href === "/sample-activity"
-                ? pathname.startsWith("/activity") || pathname.startsWith("/sample-activity")
-                : isActive(pathname, tab.href, tab.matchPrefix);
+        <div className="flex min-w-0 items-center gap-4">
+          <Link href="/" className="shrink-0 text-sm font-semibold tracking-tight text-foreground">
+            Homeschool V2
+          </Link>
+          {inWorkspace ? (
+            <p className="hidden text-sm text-muted-foreground md:block">
+              Calm planning, curriculum, and teaching support in one workspace.
+            </p>
+          ) : (
+            <nav className="flex min-w-0 items-center gap-4 overflow-x-auto" aria-label="Global sections">
+              {publicTabs.map((tab) => {
+                const active = isActive(pathname, tab.href, tab.matchPrefix);
 
-            return (
-              <Link
-                key={tab.href}
-                href={tab.href}
-                className={cn(
-                  "inline-flex h-11 shrink-0 items-center border-b-2 px-0 text-sm transition-colors",
-                  active
-                    ? "border-primary text-foreground"
-                    : "border-transparent text-muted-foreground hover:border-border hover:text-foreground",
-                )}
-              >
-                {tab.label}
-              </Link>
-            );
-          })}
-        </nav>
-
+                return (
+                  <Link
+                    key={tab.href}
+                    href={tab.href}
+                    className={cn(
+                      "inline-flex shrink-0 items-center border-b border-transparent pb-0.5 text-sm transition-colors",
+                      active
+                        ? "border-foreground text-foreground"
+                        : "text-muted-foreground hover:border-border hover:text-foreground",
+                    )}
+                  >
+                    {tab.label}
+                  </Link>
+                );
+              })}
+            </nav>
+          )}
+        </div>
         <ThemeToggle />
       </div>
     </div>
