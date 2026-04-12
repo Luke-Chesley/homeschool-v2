@@ -29,73 +29,69 @@ export function ReportsView({
   return (
     <div className="grid gap-6">
       <section className="grid gap-4 md:grid-cols-3">
-        <Card>
+        <Card className="quiet-panel shadow-none">
           <CardHeader>
             <CardDescription>Objective rows</CardDescription>
-            <CardTitle className="text-4xl">{objectiveCount}</CardTitle>
+            <CardTitle className="text-3xl">{objectiveCount}</CardTitle>
           </CardHeader>
         </Card>
-        <Card>
+        <Card className="quiet-panel shadow-none">
           <CardHeader>
             <CardDescription>Evidence records</CardDescription>
-            <CardTitle className="text-4xl">{evidenceCount}</CardTitle>
+            <CardTitle className="text-3xl">{evidenceCount}</CardTitle>
           </CardHeader>
         </Card>
-        <Card>
+        <Card className="quiet-panel shadow-none">
           <CardHeader>
             <CardDescription>Open reviews</CardDescription>
-            <CardTitle className="text-4xl">{openReviews}</CardTitle>
+            <CardTitle className="text-3xl">{openReviews}</CardTitle>
           </CardHeader>
         </Card>
       </section>
 
       <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
-        <Card>
+        <Card className="quiet-panel shadow-none">
           <CardHeader>
             <CardTitle>Weekly summary</CardTitle>
-            <CardDescription>
-              A parent-facing recap of what moved forward, what slipped, and whether the week stayed workable.
-            </CardDescription>
+            <CardDescription>What moved, what slipped, and whether the week stayed workable.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="grid gap-3 sm:grid-cols-4">
-              <div className="rounded-2xl bg-card px-4 py-3">
-                <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Completed</p>
+              <div className="rounded-xl border border-border/60 bg-background/80 px-4 py-3">
+                <p className="text-xs text-muted-foreground">Completed</p>
                 <p className="mt-2 text-sm font-semibold">{weeklySummary.completedCount}</p>
               </div>
-              <div className="rounded-2xl bg-card px-4 py-3">
-                <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Partial</p>
+              <div className="rounded-xl border border-border/60 bg-background/80 px-4 py-3">
+                <p className="text-xs text-muted-foreground">Partial</p>
                 <p className="mt-2 text-sm font-semibold">{weeklySummary.partialCount}</p>
               </div>
-              <div className="rounded-2xl bg-card px-4 py-3">
-                <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Skipped</p>
+              <div className="rounded-xl border border-border/60 bg-background/80 px-4 py-3">
+                <p className="text-xs text-muted-foreground">Skipped</p>
                 <p className="mt-2 text-sm font-semibold">{weeklySummary.skippedCount}</p>
               </div>
-              <div className="rounded-2xl bg-card px-4 py-3">
-                <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Attendance days</p>
+              <div className="rounded-xl border border-border/60 bg-background/80 px-4 py-3">
+                <p className="text-xs text-muted-foreground">Attendance days</p>
                 <p className="mt-2 text-sm font-semibold">{weeklySummary.attendanceCount}</p>
               </div>
             </div>
-            <p className="rounded-[1.4rem] border border-border/70 bg-background/70 p-4 text-sm leading-6 text-muted-foreground">
+            <p className="rounded-xl border border-border/70 bg-background/70 p-4 text-sm leading-6 text-muted-foreground">
               {weeklySummary.narrative}
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="quiet-panel shadow-none">
           <CardHeader>
             <CardTitle>Monthly summary</CardTitle>
-            <CardDescription>
-              A compact records view for attendance and completed work across the last month.
-            </CardDescription>
+            <CardDescription>Attendance and completed work across the last month.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="rounded-[1.4rem] border border-border/70 bg-background/70 p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Attendance rate</p>
+            <div className="rounded-xl border border-border/70 bg-background/70 p-4">
+              <p className="text-xs text-muted-foreground">Attendance rate</p>
               <p className="mt-2 text-3xl font-semibold">{monthlySummary.attendanceRate}%</p>
             </div>
-            <div className="rounded-[1.4rem] border border-border/70 bg-background/70 p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Lessons completed</p>
+            <div className="rounded-xl border border-border/70 bg-background/70 p-4">
+              <p className="text-xs text-muted-foreground">Lessons completed</p>
               <p className="mt-2 text-3xl font-semibold">
                 {monthlySummary.completedLessonCount}/{monthlySummary.totalLessonCount}
               </p>
@@ -113,16 +109,14 @@ export function ReportsView({
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        <Card>
+        <Card className="quiet-panel shadow-none">
           <CardHeader>
             <CardTitle>Progress export preview</CardTitle>
-            <CardDescription>
-              Export rows are shaped for CSV or records without forcing feature code to know the table format.
-            </CardDescription>
+            <CardDescription>Preview the rows that records exports will generate.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {exports.lessonRows.map((row) => (
-              <div key={`${row.date}-${row.lesson}`} className="rounded-[1.4rem] border border-border/70 bg-background/70 p-4">
+              <div key={`${row.date}-${row.lesson}`} className="rounded-xl border border-border/70 bg-background/70 p-4">
                 <div className="flex items-center justify-between gap-3">
                   <p className="font-semibold">{row.lesson}</p>
                   <Badge variant="outline">{row.status}</Badge>
@@ -138,21 +132,19 @@ export function ReportsView({
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="quiet-panel shadow-none">
           <CardHeader>
             <CardTitle>Transcript skeleton</CardTitle>
-            <CardDescription>
-              Older learners can start from a legible subject-level skeleton instead of a blank document.
-            </CardDescription>
+            <CardDescription>Start from a legible subject-level record instead of a blank document.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="rounded-[1.4rem] border border-border/70 bg-background/70 p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+            <div className="rounded-xl border border-border/70 bg-background/70 p-4">
+              <p className="text-xs text-muted-foreground">
                 {transcript.learnerName} · {transcript.gradeLabel}
               </p>
             </div>
             {transcript.entries.map((entry) => (
-              <div key={entry.subject} className="rounded-[1.4rem] border border-border/70 bg-background/70 p-4">
+              <div key={entry.subject} className="rounded-xl border border-border/70 bg-background/70 p-4">
                 <div className="flex items-center justify-between gap-3">
                   <p className="font-semibold">{entry.courseTitle}</p>
                   <Badge variant="outline">{entry.status}</Badge>

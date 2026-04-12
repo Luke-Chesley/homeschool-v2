@@ -49,7 +49,7 @@ export function AttendanceCard(props: {
   }
 
   return (
-    <Card>
+    <Card className="quiet-panel shadow-none">
       <CardHeader>
         <CardTitle>Attendance</CardTitle>
         <CardDescription>
@@ -65,10 +65,10 @@ export function AttendanceCard(props: {
                 key={option.value}
                 type="button"
                 onClick={() => setSelectedStatus(option.value)}
-                className={`rounded-full border px-3 py-1.5 text-sm ${
+                className={`rounded-lg border px-3 py-1.5 text-sm ${
                   active
                     ? "border-primary bg-primary/10 text-primary"
-                    : "border-border bg-background text-muted-foreground"
+                    : "border-border bg-background text-muted-foreground hover:border-border/80 hover:text-foreground"
                 }`}
               >
                 {option.label}
@@ -92,7 +92,7 @@ export function AttendanceCard(props: {
             props.records.map((record) => (
               <div
                 key={record.id}
-                className="flex items-center justify-between rounded-xl border border-border/70 bg-background/70 px-3 py-2 text-sm"
+                className="flex items-center justify-between rounded-lg border border-border/70 bg-background/70 px-3 py-2 text-sm"
               >
                 <span>{record.date}</span>
                 <span className="capitalize text-muted-foreground">

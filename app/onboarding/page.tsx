@@ -22,10 +22,9 @@ export default async function OnboardingPage() {
       <section className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
         <div className="space-y-3">
           <p className="section-meta">Homeschool setup</p>
-          <h1 className="page-title">Turn curriculum into a workable week.</h1>
+          <h1 className="page-title">Build the first workable week.</h1>
           <p className="page-subtitle">
-            Set up the household, learners, schedule, and first curriculum path in one pass. When
-            setup finishes, the app generates the first week and opens today ready to use.
+            Set up the household defaults, learners, and first curriculum path in one pass, then open today ready to work.
           </p>
         </div>
 
@@ -35,8 +34,8 @@ export default async function OnboardingPage() {
           </CardHeader>
           <CardContent className="space-y-2 text-sm text-muted-foreground">
             <p>Save household and learner defaults.</p>
-            <p>Create the first curriculum path.</p>
-            <p>Generate the first workable week and open today.</p>
+            <p>Create the first curriculum source.</p>
+            <p>Generate a workable week and open today.</p>
           </CardContent>
         </Card>
       </section>
