@@ -28,6 +28,9 @@ Use the supporting docs in this folder for deeper planning and handoff detail.
 - [phase7_product_polish_and_account_surfaces.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase7_product_polish_and_account_surfaces.md)
 - [phase7_product_polish_checklist.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase7_product_polish_checklist.md)
 - [phase7_surface_inventory.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase7_surface_inventory.md)
+- [phase8_final_launch_prep.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase8_final_launch_prep.md)
+- [phase8_launch_checklist.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase8_launch_checklist.md)
+- [phase8_launch_readiness_inventory.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase8_launch_readiness_inventory.md)
 - [phase9_billing_and_stripe.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase9_billing_and_stripe.md)
 - [studio-mode-implementation-checklist.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/studio-mode-implementation-checklist.md)
 - [studio-mode-agent-handoff.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/studio-mode-agent-handoff.md)
@@ -104,27 +107,31 @@ Use the supporting docs in this folder for deeper planning and handoff detail.
 - [x] Redesign learner activity pages around a reading surface.
 - [x] Redesign learner home around a calmer daily queue.
 - [x] Simplify the learner shell so content starts quickly.
-- [ ] Improve mobile and tablet ergonomics for learner interactions.
+- [x] Improve mobile and tablet ergonomics for learner interactions.
 - [x] Move remaining learner runtime diagnostics into studio mode.
 - [x] Standardize learner loading, error, submit, and completion states.
-- [ ] Verify learner activity works well on phone and tablet widths.
+- [x] Verify learner activity works well on phone and tablet widths.
+- [ ] Verify one fully completed learner session state before final signoff.
 
 ### Phase 7: Product Polish And Account Surfaces
 
-- [ ] Turn `Account` into a real household-management surface.
-- [ ] Polish `Tracking` into the same calm product language as the rest of the parent app.
-- [ ] Refine auth and setup flows so they feel fully productized.
-- [ ] Standardize remaining cross-surface headers, empty states, disclosure patterns, and feedback states.
-- [ ] Run a final consistency pass across `Today`, `Planning`, `Curriculum`, `Tracking`, `Copilot`, and `Account`.
+- [x] Turn `Account` into a real household-management surface.
+- [x] Polish `Tracking` into the same calm product language as the rest of the parent app.
+- [x] Refine auth and setup flows so they feel fully productized.
+- [x] Standardize remaining cross-surface headers, empty states, disclosure patterns, and feedback states.
+- [x] Run a final consistency pass across `Today`, `Planning`, `Curriculum`, `Tracking`, `Copilot`, and `Account`.
 
 ### Phase 8: Final Launch Prep
 
-- [ ] Stand up a working staging environment.
-- [ ] Run a responsive QA pass.
-- [ ] Run a product-mode QA pass.
-- [ ] Run a studio-mode QA pass.
-- [ ] Verify auth, data safety, and hosted environment configuration.
-- [ ] Prepare the production cutover checklist.
+- [ ] Confirm the exact launch scope and deferred items list.
+- [ ] Close the final Phase 6 learner signoff item.
+- [ ] Run a full staging QA pass on current hosted preview/stage.
+- [ ] Run a product-mode QA pass on staging.
+- [ ] Run a studio-mode QA pass on staging.
+- [ ] Verify auth, RLS, storage, and hosted environment configuration.
+- [ ] Verify core parent, learner, and AI-assisted flows on staging.
+- [ ] Document production cutover, rollback, and monitoring steps.
+- [ ] Prepare the launch-day checklist and owner handoff.
 
 ### Phase 9: Billing And Stripe
 
@@ -155,8 +162,9 @@ Work this in order:
 - Phase 3 is complete on `main`.
 - Phase 4 is complete with explicit deferrals. Supabase staging/production, the Vercel project, staged hosted verification, and the hosted boot fix are in place. Remaining storage verification and rollback runbooks move into launch prep.
 - Phase 5 is complete on `main`, and `stage` has been realigned to the same commit.
-- Phase 6 is implemented on `main` and `stage`, but responsive QA and final learner signoff are still open.
-- Phase 7 is active on a dedicated worktree. Current implementation work covers `Account`, `Tracking`, auth/setup polish, and cross-surface product consistency before launch prep.
+- Phase 6 is implemented on `main` and `stage`. Responsive QA has passed, and the only remaining signoff item is one targeted completed-session verification.
+- Phase 7 is complete on `main` and `stage`.
+- Phase 8 is now the active phase: launch-prep QA, hosted verification, cutover, and rollback readiness.
 - Stripe is intentionally deferred to Phase 9 so billing work does not get mixed into product-polish or launch-prep scope.
 
 ## How To Use This Folder
