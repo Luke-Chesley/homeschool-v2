@@ -42,28 +42,26 @@ export default async function HomePage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-[calc(100dvh-var(--global-tabs-height))] w-full max-w-7xl flex-col px-5 py-8 sm:px-6 lg:px-8">
-      <section className="border-b border-border/70 pb-6">
-        <p className="text-sm text-muted-foreground">Homeschool V2</p>
-        <h1 className="mt-1 font-serif text-4xl tracking-tight sm:text-5xl">
-          Start with the day.
-        </h1>
-        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-          Planning, curriculum, and AI stay close to the daily workspace.
+    <main className="page-shell page-stack">
+      <header className="page-header">
+        <p className="section-meta">Workspace</p>
+        <h1 className="page-title">Start with the day.</h1>
+        <p className="page-subtitle max-w-2xl">
+          Open the daily workspace, adjust the week, browse curriculum, or ask Copilot for the next move.
         </p>
-      </section>
+      </header>
 
-      <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {launchItems.map(({ href, label, detail, icon: Icon }) => (
           <Link key={href} href={href}>
-            <Card className="h-full transition-colors hover:bg-muted/30">
+            <Card className="quiet-panel h-full transition-colors hover:bg-muted/30">
               <div className="flex h-full flex-col justify-between gap-8 p-5">
                 <div className="space-y-3">
-                  <div className="flex size-9 items-center justify-center rounded-md bg-muted/60 text-foreground">
+                  <div className="flex size-10 items-center justify-center rounded-md bg-muted/60 text-foreground">
                     <Icon className="size-4" />
                   </div>
                   <div>
-                    <h2 className="font-serif text-2xl">{label}</h2>
+                    <h2 className="font-serif text-[1.9rem] tracking-tight">{label}</h2>
                     <p className="text-sm text-muted-foreground">{detail}</p>
                   </div>
                 </div>
