@@ -2,8 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { LogOut } from "lucide-react";
+import { useEffect, useState } from "react";
 
+import { StudioToggle } from "@/components/studio/StudioToggle";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const publicTabs = [
@@ -36,6 +40,11 @@ function getWorkspaceLabel(pathname: string) {
     ?.label;
 }
 
+type WorkspaceSnapshot = {
+  activeLearner?: { displayName?: string | null } | null;
+  organization?: { name?: string | null } | null;
+};
+
 export function GlobalPageTabs() {
   const pathname = usePathname();
   const inWorkspace =
@@ -49,12 +58,38 @@ export function GlobalPageTabs() {
     pathname.startsWith("/users") ||
     pathname.startsWith("/onboarding");
   const workspaceLabel = getWorkspaceLabel(pathname);
+  const [session, setSession] = useState<WorkspaceSnapshot | null>(null);
+
+  useEffect(() => {
+    if (!inWorkspace) {
+      setSession(null);
+      return;
+    }
+
+    let cancelled = false;
+    fetch("/api/app-session", { credentials: "same-origin" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload) => {
+        if (!cancelled) {
+          setSession(payload);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSession(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [inWorkspace]);
 
   return (
     <div className="sticky top-0 z-40 border-b border-border/70 bg-background/92 backdrop-blur">
       <div className="mx-auto flex h-[var(--global-tabs-height)] max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
-        <div className="flex min-w-0 items-center gap-4">
-          <Link href="/" className="shrink-0 text-sm font-semibold tracking-tight text-foreground">
+        <div className="flex min-w-0 items-center gap-5">
+          <Link href="/" className="shrink-0 text-[15px] font-semibold tracking-tight text-foreground">
             Homeschool V2
           </Link>
           {inWorkspace ? (
@@ -66,6 +101,12 @@ export function GlobalPageTabs() {
                 <>
                   <span className="text-muted-foreground">/</span>
                   <span className="text-foreground">{workspaceLabel}</span>
+                </>
+              ) : null}
+              {session?.activeLearner?.displayName ? (
+                <>
+                  <span className="text-muted-foreground">/</span>
+                  <span className="text-muted-foreground">{session.activeLearner.displayName}</span>
                 </>
               ) : null}
             </div>
@@ -92,21 +133,30 @@ export function GlobalPageTabs() {
             </nav>
           )}
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           {inWorkspace ? (
             <>
               <Link
                 href="/today"
-                className="hidden text-sm text-muted-foreground transition-colors hover:text-foreground sm:inline-flex"
+                className="hidden text-sm text-muted-foreground transition-colors hover:text-foreground lg:inline-flex"
               >
-                Learning workspace
+                Workspace
               </Link>
               <Link
                 href="/users"
-                className="hidden text-sm text-muted-foreground transition-colors hover:text-foreground sm:inline-flex"
+                className="hidden text-sm text-muted-foreground transition-colors hover:text-foreground lg:inline-flex"
               >
                 Learners
               </Link>
+              <div className="hidden lg:block">
+                <StudioToggle />
+              </div>
+              <form action="/auth/signout" method="post" className="hidden lg:block">
+                <Button type="submit" variant="ghost" size="sm" className="gap-2">
+                  <LogOut className="size-4" />
+                  Sign out
+                </Button>
+              </form>
             </>
           ) : null}
           <ThemeToggle />
