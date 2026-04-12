@@ -5,7 +5,11 @@ import { Aperture } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useStudio } from "@/components/studio/studio-provider";
 
-export function StudioToggle() {
+export function StudioToggle({
+  compact = false,
+}: {
+  compact?: boolean;
+}) {
   const { isAvailable, isEnabled, toggleEnabled } = useStudio();
 
   if (!isAvailable) {
@@ -19,10 +23,11 @@ export function StudioToggle() {
       size="sm"
       onClick={toggleEnabled}
       aria-pressed={isEnabled}
+      aria-label="Toggle studio mode"
       className="text-xs"
     >
       <Aperture className="size-3.5" />
-      Studio
+      <span className={compact ? "hidden sm:inline" : undefined}>Studio</span>
     </Button>
   );
 }

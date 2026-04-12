@@ -761,6 +761,16 @@ function TodayLessonDraftArticle({
   workspace: DailyWorkspace;
   draftState: DraftState & { kind: string };
 }) {
+  const draftContent =
+    draftState.kind === "structured" ? (
+      <LessonDraftRenderer draft={draftState.draft} />
+    ) : draftState.kind === "markdown" ? (
+      <div className="space-y-4">
+        <LegacyLessonDraftNotice />
+        <MarkdownContent content={draftState.markdown} />
+      </div>
+    ) : null;
+
   return (
     <section className="space-y-4">
       <div className="border-b border-border/70 pb-4">
@@ -768,17 +778,18 @@ function TodayLessonDraftArticle({
         <h2 className="font-serif text-3xl">Lesson draft</h2>
       </div>
 
-      <Card className="reading-surface">
-        <div className="reading-column">
-          {draftState.kind === "structured" ? (
-            <LessonDraftRenderer draft={draftState.draft} />
-          ) : draftState.kind === "markdown" ? (
-            <div className="space-y-4">
-              <LegacyLessonDraftNotice />
-              <MarkdownContent content={draftState.markdown} />
-            </div>
-          ) : null}
+      <details className="group rounded-[var(--radius)] border border-border/70 bg-card md:hidden">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-foreground">
+          <span>Open full lesson draft</span>
+          <span className="text-xs text-muted-foreground transition group-open:rotate-45">+</span>
+        </summary>
+        <div className="border-t border-border/70 px-4 py-4">
+          <div className="reading-column">{draftContent}</div>
         </div>
+      </details>
+
+      <Card className="reading-surface hidden md:block">
+        <div className="reading-column">{draftContent}</div>
       </Card>
     </section>
   );

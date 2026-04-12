@@ -51,7 +51,7 @@ export function ActivityStudioPanel({
       <div className="flex justify-end">
         <Button type="button" variant="ghost" size="sm" onClick={() => openPanel("learner-runtime-diagnostics")}>
           <Bug className="size-3.5" />
-          Runtime diagnostics
+          <span className="hidden sm:inline">Runtime diagnostics</span>
         </Button>
       </div>
 
