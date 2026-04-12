@@ -22,6 +22,9 @@ Use the supporting docs in this folder for deeper planning and handoff detail.
 - [phase5_parent_product_checklist.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase5_parent_product_checklist.md)
 - [phase5_surface_inventory.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase5_surface_inventory.md)
 - [phase5_checklist_design_review.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase5_checklist_design_review.md)
+- [phase6_learner_flow_redesign.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase6_learner_flow_redesign.md)
+- [phase6_learner_flow_checklist.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase6_learner_flow_checklist.md)
+- [phase6_learner_surface_inventory.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase6_learner_surface_inventory.md)
 - [studio-mode-implementation-checklist.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/studio-mode-implementation-checklist.md)
 - [studio-mode-agent-handoff.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/studio-mode-agent-handoff.md)
 
@@ -95,8 +98,11 @@ Use the supporting docs in this folder for deeper planning and handoff detail.
 ### Phase 6: Learner Flow Redesign
 
 - [ ] Redesign learner activity pages around a reading surface.
+- [ ] Redesign learner home around a calmer daily queue.
+- [ ] Simplify the learner shell so content starts quickly.
 - [ ] Improve mobile and tablet ergonomics for learner interactions.
 - [ ] Move remaining learner runtime diagnostics into studio mode.
+- [ ] Standardize learner loading, error, submit, and completion states.
 - [ ] Verify learner activity works well on phone and tablet widths.
 
 ### Phase 7: Remaining Product Surfaces
@@ -125,7 +131,8 @@ Work this in order:
 3. Authorization and RLS
 4. Hosted setup
 5. UX redesign
-6. Final staging and launch prep
+6. Learner flow redesign
+7. Final staging and launch prep
 
 ## Current State
 
@@ -133,7 +140,8 @@ Work this in order:
 - Phase 2 is complete on `main`.
 - Phase 3 is complete on `main`.
 - Phase 4 is complete with explicit deferrals. Supabase staging/production, the Vercel project, staged hosted verification, and the hosted boot fix are in place. Remaining storage verification and rollback runbooks move into launch prep.
-- Phase 5 implementation is in active review on a dedicated branch worktree. The shared shell, parent route surfaces, auth/onboarding tone, and core planning/curriculum/tracking/copilot layouts have been redesigned locally before staging review.
+- Phase 5 is complete on `main`, and `stage` has been realigned to the same commit.
+- Phase 6 planning is now in place for learner shell, queue, activity runtime, and responsive ergonomics.
 
 ## How To Use This Folder
 
