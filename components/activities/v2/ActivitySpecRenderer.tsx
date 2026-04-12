@@ -75,11 +75,13 @@ export function ActivitySpecRenderer({
   const [widgetByComponent, setWidgetByComponent] = React.useState<Record<string, InteractiveWidgetPayload>>(
     () => buildInitialWidgetState(spec, initialEvidence),
   );
+  const [submitAttempted, setSubmitAttempted] = React.useState(false);
 
   React.useEffect(() => {
     setEvidence(initialEvidence);
     setFeedbackByComponent({});
     setWidgetByComponent(buildInitialWidgetState(spec, initialEvidence));
+    setSubmitAttempted(false);
   }, [spec]);
 
   function handleComponentChange(componentId: string, value: unknown) {
@@ -148,14 +150,12 @@ export function ActivitySpecRenderer({
     return transition;
   }
 
-  // Calculate completion progress
   const interactiveComponents = spec.components.filter((c) => isInteractiveComponentSpec(c));
-  const answeredCount = interactiveComponents.filter((c) => {
-    const v = evidence[c.id];
-    if (v == null || v === "" || (Array.isArray(v) && v.length === 0)) return false;
-    if (typeof v === "object" && !Array.isArray(v) && Object.keys(v).length === 0) return false;
-    return true;
-  }).length;
+  const requiredInteractiveComponents = interactiveComponents.filter((component) => isRequiredComponent(component));
+  const answeredCount = interactiveComponents.filter((component) => isComponentAnswered(component, evidence[component.id])).length;
+  const incompleteRequiredComponents = requiredInteractiveComponents.filter(
+    (component) => !isComponentAnswered(component, evidence[component.id]),
+  );
 
   const progress = interactiveComponents.length > 0
     ? answeredCount / interactiveComponents.length
@@ -168,7 +168,7 @@ export function ActivitySpecRenderer({
 
     switch (rules.strategy) {
       case "all_interactive_components":
-        return answeredCount >= interactiveComponents.length;
+        return incompleteRequiredComponents.length === 0;
       case "minimum_components":
         return answeredCount >= (rules.minimumComponents ?? 1);
       case "any_submission":
@@ -182,6 +182,37 @@ export function ActivitySpecRenderer({
 
   const hintStrategy = spec.adaptationRules?.hintStrategy ?? "on_request";
   const displayMinutes = estimatedMinutes ?? spec.estimatedMinutes;
+  const nextMissingComponent = incompleteRequiredComponents[0] ?? null;
+  const incompleteMessage =
+    spec.completionRules.incompleteMessage ??
+    (incompleteRequiredComponents.length === 1
+      ? "One required step is still missing before you can submit."
+      : `${incompleteRequiredComponents.length} required steps are still missing before you can submit.`);
+
+  function focusMissingComponent(componentId: string) {
+    const element = document.getElementById(`activity-component-${componentId}`);
+    if (!element) return;
+
+    element.scrollIntoView({ behavior: "smooth", block: "center" });
+    const focusTarget = element.querySelector<HTMLElement>("input, textarea, button, [tabindex]");
+    focusTarget?.focus();
+  }
+
+  function handleSubmitAttempt() {
+    if (submitting || submitted || !onSubmit) {
+      return;
+    }
+
+    if (!canSubmit()) {
+      setSubmitAttempted(true);
+      if (nextMissingComponent) {
+        focusMissingComponent(nextMissingComponent.id);
+      }
+      return;
+    }
+
+    onSubmit(evidence);
+  }
 
   return (
     <div className="learner-reading-surface">
@@ -252,7 +283,16 @@ export function ActivitySpecRenderer({
 
         <div className="flex flex-col gap-5">
           {spec.components.map((component) => (
-            <div key={component.id}>
+            <div
+              key={component.id}
+              id={`activity-component-${component.id}`}
+              className={cn(
+                "scroll-mt-24 rounded-xl transition-colors",
+                submitAttempted && incompleteRequiredComponents.some((item) => item.id === component.id)
+                  ? "border border-amber-300/80 bg-amber-50/60 p-3"
+                  : undefined,
+              )}
+            >
               {(() => {
                 const resolvedComponent = resolveComponent(component, widgetByComponent[component.id]);
                 return (
@@ -288,10 +328,43 @@ export function ActivitySpecRenderer({
           </div>
         ) : null}
 
-        {!canSubmit() && !submitted && answeredCount > 0 ? (
-          <p className="text-center text-xs text-muted-foreground">
-            {spec.completionRules.incompleteMessage ?? "Answer all questions to submit."}
-          </p>
+        {!canSubmit() && !submitted ? (
+          <div className="rounded-xl border border-amber-200 bg-amber-50/60 px-4 py-3 text-sm text-amber-900">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="mt-0.5 size-4 shrink-0" />
+              <div className="space-y-2">
+                <p>{incompleteMessage}</p>
+                {incompleteRequiredComponents.length > 0 ? (
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium uppercase tracking-[0.12em] text-amber-800/80">
+                      Still needed
+                    </p>
+                    <ul className="space-y-1 text-sm">
+                      {incompleteRequiredComponents.slice(0, 3).map((component) => (
+                        <li key={component.id}>
+                          {getComponentLabel(component)}
+                        </li>
+                      ))}
+                      {incompleteRequiredComponents.length > 3 ? (
+                        <li className="text-xs text-amber-800/80">
+                          {incompleteRequiredComponents.length - 3} more step(s)
+                        </li>
+                      ) : null}
+                    </ul>
+                  </div>
+                ) : null}
+                {nextMissingComponent ? (
+                  <button
+                    type="button"
+                    onClick={() => focusMissingComponent(nextMissingComponent.id)}
+                    className="inline-flex items-center rounded-md border border-amber-300 bg-white/70 px-2.5 py-1.5 text-xs font-medium text-amber-900 transition-colors hover:bg-white"
+                  >
+                    Go to the next missing step
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          </div>
         ) : null}
 
         {!submitted && onSubmit ? (
@@ -308,10 +381,10 @@ export function ActivitySpecRenderer({
             ) : null}
             <Button
               size="sm"
-              disabled={!canSubmit() || submitting}
-              onClick={() => onSubmit(evidence)}
+              disabled={submitting}
+              onClick={handleSubmitAttempt}
             >
-              {submitting ? "Submitting…" : "Submit"}
+              {submitting ? "Submitting…" : canSubmit() ? "Submit" : "Review missing steps"}
             </Button>
           </div>
         ) : null}
@@ -379,6 +452,71 @@ function shouldRenderFeedbackBanner(component: ComponentSpec) {
   }
 
   return component.widget.feedback.displayMode !== "inline";
+}
+
+function isRequiredComponent(component: ComponentSpec) {
+  return "required" in component ? component.required !== false : true;
+}
+
+function isComponentAnswered(component: ComponentSpec, value: unknown): boolean {
+  if (component.type === "checklist") {
+    if (!Array.isArray(value)) {
+      return false;
+    }
+
+    if (component.allowPartialSubmit) {
+      return value.length > 0;
+    }
+
+    const requiredIds = component.items.filter((item) => item.required !== false).map((item) => item.id);
+    return requiredIds.every((itemId) => value.includes(itemId));
+  }
+
+  if (component.type === "audio_capture") {
+    return value === true || (typeof value === "object" && value !== null && "recorded" in value);
+  }
+
+  if (component.type === "observation_record" || component.type === "teacher_checkoff") {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+      return false;
+    }
+
+    return Object.keys(value).length > 0;
+  }
+
+  if (value == null || value === "") {
+    return false;
+  }
+
+  if (Array.isArray(value)) {
+    return value.length > 0;
+  }
+
+  if (typeof value === "object") {
+    return Object.keys(value).length > 0;
+  }
+
+  return true;
+}
+
+function getComponentLabel(component: ComponentSpec) {
+  if ("prompt" in component && typeof component.prompt === "string" && component.prompt.trim()) {
+    return component.prompt.trim();
+  }
+
+  if (component.type === "checklist") {
+    return component.prompt?.trim() || "Checklist";
+  }
+
+  if (component.type === "interactive_widget") {
+    return "Interactive step";
+  }
+
+  if (component.type === "reflection_prompt") {
+    return component.prompt.trim();
+  }
+
+  return component.type.replaceAll("_", " ");
 }
 
 // ---------------------------------------------------------------------------

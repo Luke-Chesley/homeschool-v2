@@ -112,6 +112,8 @@ What you should not look for here anymore:
   Contracts for generated artifacts. Update these when artifact shape or lifecycle changes.
 - `docs/`
   Architecture notes, product documents, and implementation history.
+- `docs/qa/`
+  Reusable browser QA handoffs and responsive review instructions.
 
 ## Workspace Files And Local Clutter
 
