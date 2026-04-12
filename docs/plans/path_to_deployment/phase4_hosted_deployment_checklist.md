@@ -54,9 +54,10 @@ This is the execution tracker for the hosted deployment setup pass.
 
 - [x] Document the exact staging migration rollout path.
 - [x] Document the exact production migration rollout path.
-- [ ] Verify the hosted app can apply the current migration chain against staging.
+- [x] Remove hosted runtime dependence on `drizzle/` filesystem access.
+- [ ] Verify the staged hosted database already reflects the current migration chain before app boot.
 - [ ] Verify `public._hsv2_schema_migrations` reflects the latest applied SQL files in staging.
-- [x] Record any migration risks that still depend on runtime-boot migration behavior.
+- [x] Record any migration risks that still depend on manual predeploy migration behavior.
 
 ## Slice 7: Staging Verification
 

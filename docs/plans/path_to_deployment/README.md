@@ -72,6 +72,7 @@ Use the supporting docs in this folder for deeper planning and handoff detail.
 - [x] Create the Vercel project and local project link.
 - [x] Define the full env var matrix for preview, staging, and production.
 - [x] Document the migration flow from local to hosted environments.
+- [x] Remove hosted runtime dependence on local `drizzle/` files.
 - [x] Define backup and rollback expectations.
 - [x] Add monitoring and log access paths.
 
@@ -123,7 +124,7 @@ Work this in order:
 - Phase 1 is complete on `main`.
 - Phase 2 is complete on `main`.
 - Phase 3 is complete on `main`.
-- Phase 4 provisioning is in progress. Supabase staging/production and the Vercel project exist, but Cloud Run and hosted secret entry are still pending.
+- Phase 4 provisioning is in progress. Supabase staging/production and the Vercel project exist, and hosted app boot no longer depends on bundling `drizzle/`. Cloud Run and final hosted verification are still pending.
 
 ## How To Use This Folder
 

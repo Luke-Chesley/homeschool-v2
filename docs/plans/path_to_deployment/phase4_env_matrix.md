@@ -23,7 +23,7 @@ Use it to track:
 
 | Variable | Local | Preview | Staging | Production | Secret | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| `APP_ENV` | `local` | `preview` | `staging` | `production` | no | Drives local/studio behavior and platform config. |
+| `APP_ENV` | `local` | `hosted` | `hosted` | `hosted` | no | Current runtime only accepts `local` or `hosted`. Hosted environments should all use `hosted`. |
 | `NEXT_PUBLIC_SITE_URL` | required | required | required | required | no | Must match the real public app URL for that environment. |
 | `SUPABASE_PROJECT_REF` | required | optional | required | required | no | Use hosted project ref for staged and production Supabase projects. |
 | `NEXT_PUBLIC_SUPABASE_URL` | required | required | required | required | no | Browser-safe project URL. |
@@ -114,5 +114,6 @@ Fill this in during implementation.
 ## Open Implementation Notes
 
 - This repo currently validates Inngest env vars in all environments even though no `app/api/inngest` route exists yet.
-- This repo currently runs Drizzle SQL migrations on app boot, so `DATABASE_URL` must be correct in hosted environments before the app can start safely.
+- Local startup still runs Drizzle SQL migrations from `drizzle/*.sql`.
+- Hosted startup does not read `drizzle/` from the filesystem, so staging and production schema changes must be applied before the Vercel app boots.
 - A later deployment hardening pass may reduce the env surface or remove temporary requirements.

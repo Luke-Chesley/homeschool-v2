@@ -57,9 +57,10 @@ The current env surface in this repo is:
 
 Important implementation constraint:
 
-- this repo currently applies SQL migrations from `drizzle/*.sql` at runtime through `lib/db/migrations.ts`
-- it does not currently use Supabase CLI migrations as the primary app-schema source of truth
-- that means Phase 4 must document a careful rollout pattern for hosted migrations until a later migration system change is made
+- local development still applies SQL migrations from `drizzle/*.sql` at runtime through `lib/db/migrations.ts`
+- hosted app startup no longer reads `drizzle/` from the filesystem
+- staging and production databases must be provisioned or migrated before the Vercel app boots
+- the repo still treats `drizzle/*.sql` as the schema source of truth for that manual rollout
 
 ## Recommended Hosted Environment Model
 
@@ -237,17 +238,17 @@ Use [phase4_env_matrix.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_d
 
 ### Step 5: Define Hosted Migration Flow
 
-Because the repo currently runs SQL migrations from `drizzle/*.sql` at app startup, Phase 4 needs an explicit deployment rule.
+Because hosted app startup no longer runs SQL migrations from `drizzle/*.sql`, Phase 4 needs an explicit predeploy migration rule.
 
 Recommended near-term rule:
 
-1. apply the exact same build to staging first
-2. let staging run migrations against the staging database
+1. apply committed SQL migrations to the staging database before or during the staging rollout
+2. deploy the exact same app build to staging after the schema is ready
 3. verify app health, auth, and `public._hsv2_schema_migrations`
-4. promote the same code to production only after staging passes
+4. promote the same schema state and app code to production only after staging passes
 5. keep SQL migrations small and additive where possible
 
-This is workable, but it is not the long-term ideal. A later hardening phase should likely move migration execution to an explicit deploy step instead of implicit app boot.
+This is workable, but it is not the long-term ideal. A later hardening phase should likely add a first-class migration command or CI step instead of relying on manual SQL application.
 
 ### Step 6: Define Backup And Rollback Expectations
 
