@@ -25,6 +25,9 @@ Use the supporting docs in this folder for deeper planning and handoff detail.
 - [phase6_learner_flow_redesign.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase6_learner_flow_redesign.md)
 - [phase6_learner_flow_checklist.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase6_learner_flow_checklist.md)
 - [phase6_learner_surface_inventory.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase6_learner_surface_inventory.md)
+- [phase7_product_polish_and_account_surfaces.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase7_product_polish_and_account_surfaces.md)
+- [phase7_product_polish_checklist.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase7_product_polish_checklist.md)
+- [phase7_surface_inventory.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase7_surface_inventory.md)
 - [studio-mode-implementation-checklist.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/studio-mode-implementation-checklist.md)
 - [studio-mode-agent-handoff.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/studio-mode-agent-handoff.md)
 
@@ -97,21 +100,21 @@ Use the supporting docs in this folder for deeper planning and handoff detail.
 
 ### Phase 6: Learner Flow Redesign
 
-- [ ] Redesign learner activity pages around a reading surface.
-- [ ] Redesign learner home around a calmer daily queue.
-- [ ] Simplify the learner shell so content starts quickly.
+- [x] Redesign learner activity pages around a reading surface.
+- [x] Redesign learner home around a calmer daily queue.
+- [x] Simplify the learner shell so content starts quickly.
 - [ ] Improve mobile and tablet ergonomics for learner interactions.
-- [ ] Move remaining learner runtime diagnostics into studio mode.
-- [ ] Standardize learner loading, error, submit, and completion states.
+- [x] Move remaining learner runtime diagnostics into studio mode.
+- [x] Standardize learner loading, error, submit, and completion states.
 - [ ] Verify learner activity works well on phone and tablet widths.
 
-### Phase 7: Remaining Product Surfaces
+### Phase 7: Product Polish And Account Surfaces
 
-- [ ] Refresh copilot.
-- [ ] Refresh curriculum.
-- [ ] Refresh planning.
-- [ ] Refresh tracking.
-- [ ] Ensure all major surfaces follow the same product/studio split.
+- [ ] Turn `Account` into a real household-management surface.
+- [ ] Polish `Tracking` into the same calm product language as the rest of the parent app.
+- [ ] Refine auth and setup flows so they feel fully productized.
+- [ ] Standardize remaining cross-surface headers, empty states, disclosure patterns, and feedback states.
+- [ ] Run a final consistency pass across `Today`, `Planning`, `Curriculum`, `Tracking`, `Copilot`, and `Account`.
 
 ### Phase 8: Final Launch Prep
 
@@ -132,7 +135,8 @@ Work this in order:
 4. Hosted setup
 5. UX redesign
 6. Learner flow redesign
-7. Final staging and launch prep
+7. Product polish and account surfaces
+8. Final staging and launch prep
 
 ## Current State
 
@@ -141,7 +145,8 @@ Work this in order:
 - Phase 3 is complete on `main`.
 - Phase 4 is complete with explicit deferrals. Supabase staging/production, the Vercel project, staged hosted verification, and the hosted boot fix are in place. Remaining storage verification and rollback runbooks move into launch prep.
 - Phase 5 is complete on `main`, and `stage` has been realigned to the same commit.
-- Phase 6 implementation is underway on a dedicated worktree. Current work is focused on the learner shell, the parent `Today` to learner handoff, the learner queue, and the activity reading surface.
+- Phase 6 is implemented on `main` and `stage`, but responsive QA and final learner signoff are still open.
+- Phase 7 is the active next phase. It focuses on `Account`, `Tracking`, auth/setup polish, and cross-surface product consistency before launch prep.
 
 ## How To Use This Folder
 
