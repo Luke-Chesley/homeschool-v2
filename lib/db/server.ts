@@ -5,6 +5,7 @@ import postgres from "postgres";
 
 import { createRepositories } from "@/lib/db/repositories";
 import { applySqlMigrations } from "@/lib/db/migrations";
+import { appEnvironmentSchema } from "@/lib/env/shared";
 import * as schema from "@/lib/db/schema";
 import { getDatabaseEnv } from "@/lib/env/server";
 
@@ -34,6 +35,12 @@ export async function ensureDatabaseReady() {
   }
 
   readyPromise = (async () => {
+    const appEnv = appEnvironmentSchema.parse(process.env.APP_ENV ?? "local");
+
+    if (appEnv === "hosted") {
+      return;
+    }
+
     const client = getSqlClient();
     await applySqlMigrations(client, { cwd: process.cwd() });
   })().catch((error) => {
