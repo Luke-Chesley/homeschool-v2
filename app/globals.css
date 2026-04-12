@@ -123,15 +123,15 @@
 
 @layer components {
   .page-shell {
-    @apply mx-auto flex w-full max-w-7xl flex-col px-5 py-8 sm:px-6 lg:px-8;
+    @apply mx-auto flex w-full max-w-7xl flex-col px-5 py-6 sm:px-6 lg:px-8;
   }
 
   .page-stack {
-    @apply flex flex-col gap-8;
+    @apply flex flex-col gap-6;
   }
 
   .page-header {
-    @apply flex flex-col gap-3 border-b border-border/70 pb-5;
+    @apply flex flex-col gap-2 border-b border-border/70 pb-4;
   }
 
   .page-title {

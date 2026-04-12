@@ -27,7 +27,7 @@ export function ParentNav({ className, onNavigate }: ParentNavProps) {
       {parentPrimaryNav.map((item) => {
         const active = isActive(pathname, item.href, item.matchPrefix);
         const classes = cn(
-          "group flex items-center gap-3 rounded-md px-3 py-2 text-left transition-colors",
+          "group flex items-center gap-3 rounded-md px-3 py-2.5 text-left transition-colors",
           active
             ? "bg-muted text-foreground"
             : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
@@ -46,7 +46,7 @@ export function ParentNav({ className, onNavigate }: ParentNavProps) {
             >
               <item.icon className="size-4" />
             </div>
-            <span className="block min-w-0 text-sm font-medium">{item.label}</span>
+            <span className="block min-w-0 text-[15px] font-medium">{item.label}</span>
           </>
         );
 

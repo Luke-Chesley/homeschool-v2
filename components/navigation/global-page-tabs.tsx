@@ -11,12 +11,29 @@ const publicTabs = [
   { href: "/auth/login", label: "Sign in", matchPrefix: "/auth" },
 ] as const;
 
+const workspaceLabels: Array<{ match: string; label: string }> = [
+  { match: "/today", label: "Today" },
+  { match: "/planning", label: "Planning" },
+  { match: "/curriculum", label: "Curriculum" },
+  { match: "/tracking", label: "Tracking" },
+  { match: "/copilot", label: "Copilot" },
+  { match: "/users", label: "Learners" },
+  { match: "/onboarding", label: "Setup" },
+  { match: "/learner", label: "Learner" },
+  { match: "/activity", label: "Activity" },
+] as const;
+
 function isActive(pathname: string, href: string, matchPrefix: string) {
   if (href === "/") {
     return pathname === "/";
   }
 
   return pathname === href || pathname.startsWith(`${matchPrefix}/`);
+}
+
+function getWorkspaceLabel(pathname: string) {
+  return workspaceLabels.find((entry) => pathname === entry.match || pathname.startsWith(`${entry.match}/`))
+    ?.label;
 }
 
 export function GlobalPageTabs() {
@@ -31,6 +48,7 @@ export function GlobalPageTabs() {
     pathname.startsWith("/activity") ||
     pathname.startsWith("/users") ||
     pathname.startsWith("/onboarding");
+  const workspaceLabel = getWorkspaceLabel(pathname);
 
   return (
     <div className="sticky top-0 z-40 border-b border-border/70 bg-background/92 backdrop-blur">
@@ -40,9 +58,17 @@ export function GlobalPageTabs() {
             Homeschool V2
           </Link>
           {inWorkspace ? (
-            <p className="hidden text-sm text-muted-foreground md:block">
-              Calm planning, curriculum, and teaching support in one workspace.
-            </p>
+            <div className="hidden items-center gap-2 text-sm md:flex">
+              <Link href="/today" className="text-muted-foreground transition-colors hover:text-foreground">
+                Workspace
+              </Link>
+              {workspaceLabel ? (
+                <>
+                  <span className="text-muted-foreground">/</span>
+                  <span className="text-foreground">{workspaceLabel}</span>
+                </>
+              ) : null}
+            </div>
           ) : (
             <nav className="flex min-w-0 items-center gap-4 overflow-x-auto" aria-label="Global sections">
               {publicTabs.map((tab) => {
@@ -66,7 +92,25 @@ export function GlobalPageTabs() {
             </nav>
           )}
         </div>
-        <ThemeToggle />
+        <div className="flex items-center gap-3">
+          {inWorkspace ? (
+            <>
+              <Link
+                href="/today"
+                className="hidden text-sm text-muted-foreground transition-colors hover:text-foreground sm:inline-flex"
+              >
+                Learning workspace
+              </Link>
+              <Link
+                href="/users"
+                className="hidden text-sm text-muted-foreground transition-colors hover:text-foreground sm:inline-flex"
+              >
+                Learners
+              </Link>
+            </>
+          ) : null}
+          <ThemeToggle />
+        </div>
       </div>
     </div>
   );

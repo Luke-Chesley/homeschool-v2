@@ -32,7 +32,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning data-scroll-behavior="smooth">
       <body
-        className={`${display.variable} ${body.variable} min-h-screen overflow-x-hidden bg-background text-foreground [--global-tabs-height:3.25rem]`}
+        className={`${display.variable} ${body.variable} min-h-screen overflow-x-hidden bg-background text-foreground [--global-tabs-height:3rem]`}
       >
         <Script id="theme-init" strategy="beforeInteractive">
           {THEME_INIT_SCRIPT}

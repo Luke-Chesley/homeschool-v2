@@ -481,10 +481,9 @@ export function TodayWorkspaceView({ workspace, sourceId }: TodayWorkspaceViewPr
 
   if (workspace.items.length === 0) {
     return (
-      <Card className="quiet-panel border-dashed">
+      <Card className="quiet-panel max-w-4xl border-dashed">
         <div className="flex flex-col gap-4 p-6">
           <div>
-            <p className="text-sm text-muted-foreground">{formatPlannerDate(workspace.date)}</p>
             <h2 className="mt-1 font-serif text-2xl">Nothing is queued for today.</h2>
           </div>
           <p className="max-w-2xl text-sm leading-7 text-muted-foreground">
