@@ -89,31 +89,36 @@ export function GlobalPageTabs() {
 
   return (
     <div className="sticky top-0 z-40 border-b border-border/70 bg-background/92 backdrop-blur">
-      <div className="mx-auto flex h-[var(--global-tabs-height)] max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto grid h-[var(--global-tabs-height)] max-w-7xl grid-cols-[auto_1fr_auto] items-center gap-4 px-4 sm:px-6 lg:px-8">
         <div className="flex min-w-0 items-center gap-5">
           <Link href="/" className="shrink-0 text-[15px] font-semibold tracking-tight text-foreground">
             Homeschool V2
           </Link>
+        </div>
+        <div className="flex min-w-0 items-center justify-center">
           {inWorkspace ? (
-            <div className="hidden items-center gap-2 text-sm md:flex">
-              <Link href="/today" className="text-muted-foreground transition-colors hover:text-foreground">
+            <div className="hidden min-w-0 items-center gap-2 text-sm md:flex">
+              <Link
+                href="/today"
+                className="shrink-0 font-medium text-muted-foreground transition-colors hover:text-foreground"
+              >
                 Workspace
               </Link>
               {workspaceLabel ? (
                 <>
-                  <span className="text-muted-foreground">/</span>
-                  <span className="text-foreground">{workspaceLabel}</span>
+                  <span className="text-muted-foreground/70">/</span>
+                  <span className="truncate font-medium text-foreground">{workspaceLabel}</span>
                 </>
               ) : null}
               {session?.activeLearner?.displayName ? (
                 <>
-                  <span className="text-muted-foreground">/</span>
-                  <span className="text-muted-foreground">{session.activeLearner.displayName}</span>
+                  <span className="text-muted-foreground/70">/</span>
+                  <span className="truncate text-muted-foreground">{session.activeLearner.displayName}</span>
                 </>
               ) : null}
             </div>
           ) : (
-            <nav className="flex min-w-0 items-center gap-4 overflow-x-auto" aria-label="Global sections">
+            <nav className="flex min-w-0 items-center gap-6 overflow-x-auto" aria-label="Global sections">
               {publicTabs.map((tab) => {
                 const active = isActive(pathname, tab.href, tab.matchPrefix);
 
@@ -122,10 +127,8 @@ export function GlobalPageTabs() {
                     key={tab.href}
                     href={tab.href}
                     className={cn(
-                      "inline-flex shrink-0 items-center border-b border-transparent pb-0.5 text-sm transition-colors",
-                      active
-                        ? "border-foreground text-foreground"
-                        : "text-muted-foreground hover:border-border hover:text-foreground",
+                      "inline-flex shrink-0 items-center text-sm transition-colors",
+                      active ? "font-medium text-foreground" : "text-muted-foreground hover:text-foreground",
                     )}
                   >
                     {tab.label}
@@ -135,27 +138,28 @@ export function GlobalPageTabs() {
             </nav>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center justify-end gap-3 lg:gap-5">
           {inWorkspace ? (
             <>
               <Link
                 href="/today"
-                className="hidden text-sm text-muted-foreground transition-colors hover:text-foreground lg:inline-flex"
+                className="hidden text-sm font-medium text-muted-foreground transition-colors hover:text-foreground lg:inline-flex"
               >
                 Workspace
               </Link>
               <Link
                 href="/users"
-                className="hidden text-sm text-muted-foreground transition-colors hover:text-foreground lg:inline-flex"
+                className="hidden text-sm font-medium text-muted-foreground transition-colors hover:text-foreground lg:inline-flex"
               >
                 Learners
               </Link>
               <Link
                 href="/account"
-                className="hidden text-sm text-muted-foreground transition-colors hover:text-foreground lg:inline-flex"
+                className="hidden text-sm font-medium text-muted-foreground transition-colors hover:text-foreground lg:inline-flex"
               >
                 Account
               </Link>
+              <div className="hidden h-4 w-px bg-border/80 lg:block" />
               <div className="hidden lg:block">
                 <StudioToggle />
               </div>
