@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getBrowserAuthClient } from "@/lib/auth/browser";
+import { getAuthConfirmRedirectUrl } from "@/lib/auth/redirects";
 
 type AuthCredentialsFormProps = {
   mode: "login" | "sign_up";
@@ -47,7 +48,7 @@ export function AuthCredentialsForm({ mode }: AuthCredentialsFormProps) {
         return;
       }
 
-      const redirectTo = `${window.location.origin}/auth/confirm`;
+      const redirectTo = getAuthConfirmRedirectUrl();
       const { data, error: authError } = await auth.auth.signUp({
         email: email.trim(),
         password,
