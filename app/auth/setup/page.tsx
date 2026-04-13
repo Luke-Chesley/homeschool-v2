@@ -15,7 +15,7 @@ export default async function AuthSetupPage() {
   }
 
   if (state.status === "ready") {
-    redirect("/");
+    redirect("/today");
   }
 
   const displayName = state.authUser.fullName?.trim() || state.authUser.email?.split("@")[0] || "Household";

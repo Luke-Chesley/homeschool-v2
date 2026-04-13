@@ -11,7 +11,7 @@ export default async function SignUpPage() {
   const state = await getAppAuthState();
 
   if (state.status === "ready") {
-    redirect("/");
+    redirect("/today");
   }
 
   if (state.status === "needs_setup") {
