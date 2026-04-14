@@ -17,6 +17,8 @@
     "test:activity:ui": "node scripts/activity-chessboard-smoke.mjs",
     "test:architecture": "node --import ./scripts/path-loader.mjs --test --experimental-strip-types scripts/learning-core-cutover.test.mts",
     "test:today-ui": "node scripts/today-actions-smoke.mjs",
+    "beta:cohort": "node --import ./scripts/path-loader.mjs --experimental-strip-types scripts/beta-cohort.mts",
+    "beta:scorecard": "node --import ./scripts/path-loader.mjs --experimental-strip-types scripts/beta-scorecard.mts",
     "build": "next build && node scripts/fix-missing-nft-files.mjs",
     "start": "next start",
     "typecheck": "tsc --noEmit",

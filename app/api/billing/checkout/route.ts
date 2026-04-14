@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
   const destination = new URL("/account", request.url);
   const config = getBillingConfiguration();
 
-  trackProductEvent({
+  await trackProductEvent({
     name: ACTIVATION_EVENT_NAMES.checkoutStarted,
     organizationId,
     learnerId: session.activeLearner?.id ?? null,
@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
   if (config.localSandboxEnabled) {
     await applyLocalBillingSandboxAction(organizationId, "start_trial");
 
-    trackProductEvent({
+    await trackProductEvent({
       name: ACTIVATION_EVENT_NAMES.trialStarted,
       organizationId,
       learnerId: session.activeLearner?.id ?? null,

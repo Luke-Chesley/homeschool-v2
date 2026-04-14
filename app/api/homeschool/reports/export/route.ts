@@ -99,7 +99,7 @@ export async function GET(req: NextRequest) {
     summary: `Exported ${kind}.`,
     metadata: { kind },
   });
-  trackProductEvent({
+  await trackProductEvent({
     name: "homeschool_report_exported",
     organizationId: session.organization.id,
     learnerId: session.activeLearner.id,

@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
             : null;
 
   if (eventName) {
-    trackProductEvent({
+    await trackProductEvent({
       name: eventName,
       organizationId: session.organization.id,
       learnerId: session.activeLearner?.id ?? null,
