@@ -11,6 +11,8 @@ import {
   updateOrganizationBillingRecord,
 } from "@/lib/billing/service";
 import type { BillingStatus } from "@/lib/billing/types";
+import { ACTIVATION_EVENT_NAMES } from "@/lib/homeschool/onboarding/activation-contracts";
+import { trackProductEvent } from "@/lib/platform/observability";
 
 let cachedStripe: Stripe | null = null;
 
@@ -203,6 +205,13 @@ export async function handleStripeWebhookEvent(event: Stripe.Event) {
         stripeSubscriptionId: typeof session.subscription === "string" ? session.subscription : null,
         status: session.status === "complete" ? "trialing" : "incomplete",
       });
+      await trackProductEvent({
+        name: ACTIVATION_EVENT_NAMES.checkoutCompleted,
+        organizationId,
+        metadata: {
+          source: "stripe_webhook",
+        },
+      });
       return;
     }
 
@@ -216,6 +225,22 @@ export async function handleStripeWebhookEvent(event: Stripe.Event) {
       }
 
       await syncSubscriptionRecord(organizationId, subscription);
+      const eventName =
+        subscription.status === "active" || subscription.status === "trialing"
+          ? ACTIVATION_EVENT_NAMES.subscriptionActivated
+          : subscription.status === "canceled"
+            ? ACTIVATION_EVENT_NAMES.subscriptionCanceled
+            : null;
+      if (eventName) {
+        await trackProductEvent({
+          name: eventName,
+          organizationId,
+          metadata: {
+            source: "stripe_webhook",
+            subscriptionStatus: subscription.status,
+          },
+        });
+      }
       return;
     }
 
@@ -234,6 +259,13 @@ export async function handleStripeWebhookEvent(event: Stripe.Event) {
       await updateOrganizationBillingRecord(organization.id, {
         status: "past_due",
       });
+      await trackProductEvent({
+        name: ACTIVATION_EVENT_NAMES.subscriptionPaymentFailed,
+        organizationId: organization.id,
+        metadata: {
+          source: "stripe_webhook",
+        },
+      });
       return;
     }
 
@@ -251,6 +283,13 @@ export async function handleStripeWebhookEvent(event: Stripe.Event) {
 
       await updateOrganizationBillingRecord(organization.id, {
         status: "active",
+      });
+      await trackProductEvent({
+        name: ACTIVATION_EVENT_NAMES.subscriptionActivated,
+        organizationId: organization.id,
+        metadata: {
+          source: "stripe_webhook",
+        },
       });
       return;
     }

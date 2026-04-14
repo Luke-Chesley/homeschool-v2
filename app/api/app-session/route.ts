@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
       organizationId: session.organization.id,
     });
     if (!learner) {
-      trackProductEvent({
+      await trackProductEvent({
         name: ACTIVATION_EVENT_NAMES.activeLearnerSwitchFailed,
         organizationId: session.organization.id,
         metadata: { learnerId: parsed.data.learnerId, reason: "not_found" },
@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Learner not found." }, { status: 404 });
     }
     if (learner.status === "archived") {
-      trackProductEvent({
+      await trackProductEvent({
         name: ACTIVATION_EVENT_NAMES.activeLearnerSwitchFailed,
         organizationId: session.organization.id,
         learnerId: learner.id,
@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Archived learners cannot be selected." }, { status: 409 });
     }
 
-    trackProductEvent({
+    await trackProductEvent({
       name: ACTIVATION_EVENT_NAMES.activeLearnerSwitched,
       organizationId: session.organization.id,
       learnerId: learner.id,

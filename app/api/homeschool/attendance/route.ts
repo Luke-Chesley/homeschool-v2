@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
       summary: `Marked ${session.activeLearner.displayName} as ${parsed.data.status} on ${parsed.data.date}.`,
       metadata: parsed.data,
     });
-    trackProductEvent({
+    await trackProductEvent({
       name: "homeschool_attendance_updated",
       organizationId: session.organization.id,
       learnerId: session.activeLearner.id,

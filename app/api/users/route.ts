@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
     });
 
     if (session.learners.length >= 1) {
-      trackProductEvent({
+      await trackProductEvent({
         name: ACTIVATION_EVENT_NAMES.secondLearnerCreated,
         organizationId: organization.id,
         learnerId: learner.id,
