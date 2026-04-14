@@ -17,6 +17,17 @@ This folder covers the remaining launch-critical product work:
 The goal is not to create a broader product.
 The goal is to make the current wedge activate quickly enough that real families will pay for it.
 
+
+## Repo Fit Constraints (Current Codebase)
+
+Before executing any activation phase, align to these repo realities:
+
+- Vercel + Supabase environment strategy is already defined in `path_to_deployment`; activation work should build on it, not re-scope it.
+- Auth/workspace hardening and RLS assumptions from deployment phases are prerequisites for activation changes that touch onboarding, learner switching, or data isolation.
+- Stripe implementation ownership must be explicit to avoid split planning between activation Phase 5 and deployment Phase 9.
+
+Detailed phase-by-phase fit review: [repo_fit_phase_review.md](./repo_fit_phase_review.md).
+
 ## Product Promise
 
 Turn messy homeschool inputs into a clear teachable day, adapt when life happens, and keep records automatically.
@@ -57,6 +68,7 @@ Typical launch household:
 - [ ] Define the first-session activation event.
 - [ ] Define the first-week retention events.
 - [ ] Define the beta success thresholds and kill criteria.
+- [ ] Confirm platform prerequisites from `path_to_deployment` and lock Stripe implementation ownership (Activation Phase 5 vs Deployment Phase 9).
 
 ### Phase 1: Fast-Path Onboarding
 
