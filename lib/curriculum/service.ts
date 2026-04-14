@@ -17,9 +17,11 @@ import { ensureOrganizationPlatformSettings } from "@/lib/platform/settings";
 import type { CurriculumAiGeneratedArtifact } from "./ai-draft";
 import { loadLocalCurriculumJson, type ImportedCurriculumDocument } from "./local-json-import";
 import { normalizeCurriculumDocument } from "./normalization";
+import { CurriculumSourceIntakeSchema } from "./types";
 import type {
   CurriculumNode,
   CurriculumSource,
+  CurriculumSourceIntake,
   CurriculumTree,
   CurriculumTreeNode,
   CreateCurriculumLessonInput,
@@ -63,6 +65,11 @@ function extractSourcePacing(
   return { sessionMinutes, sessionsPerWeek, totalWeeks, totalSessions };
 }
 
+function extractSourceIntake(metadata: Record<string, unknown>): CurriculumSourceIntake | undefined {
+  const parsed = CurriculumSourceIntakeSchema.safeParse(metadata.intake);
+  return parsed.success ? parsed.data : undefined;
+}
+
 function mapSource(record: {
   id: string;
   organizationId: string;
@@ -96,6 +103,7 @@ function mapSource(record: {
       "not_applicable",
     importVersion: record.importVersion,
     pacing: extractSourcePacing(record.metadata),
+    intake: extractSourceIntake(record.metadata),
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
   };
@@ -643,6 +651,7 @@ export async function createCurriculumSourceFromAiDraftArtifact(params: {
   artifact: CurriculumAiGeneratedArtifact;
   progressionAttemptCount?: number;
   progressionFailureReason?: string | null;
+  sourceMetadata?: Record<string, unknown>;
 }): Promise<CreatedAiDraftCurriculumResult> {
   const imported = toImportedCurriculumDocumentFromAiArtifact(params.artifact, "ai_draft");
 
@@ -656,12 +665,21 @@ export async function createCurriculumSourceFromAiDraftArtifact(params: {
       subjects: imported.subjects,
       gradeLevels: imported.gradeLevels,
     },
-    { status: "active", metadata: imported.metadata },
+    {
+      status: "active",
+      metadata: {
+        ...(imported.metadata ?? {}),
+        ...(params.sourceMetadata ?? {}),
+      },
+    },
   );
 
   try {
     await importNormalizedTree(source.id, imported, {
-      metadata: imported.metadata,
+      metadata: {
+        ...(imported.metadata ?? {}),
+        ...(params.sourceMetadata ?? {}),
+      },
       progressionProvenance: "initial_generation",
       progressionAttemptCount: params.progressionAttemptCount,
       progressionFailureReason: params.progressionFailureReason,

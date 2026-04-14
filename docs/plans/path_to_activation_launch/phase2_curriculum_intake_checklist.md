@@ -2,40 +2,40 @@
 
 ## Input Routes
 
-- [ ] Support single-lesson / chapter input.
-- [ ] Support weekly assignment list input.
-- [ ] Support pasted outline / TOC input.
-- [ ] Support topic-from-scratch input.
-- [ ] Keep manual starter shell as fallback.
+- [x] Support single-lesson / chapter input.
+- [x] Support weekly assignment list input.
+- [x] Support pasted outline / TOC input.
+- [x] Support topic-from-scratch input.
+- [x] Keep manual starter shell as fallback.
 
 ## Horizon Policy
 
-- [ ] Define default horizon for each route.
-- [ ] Prevent weak input from auto-generating an overconfident week.
-- [ ] Allow user override of horizon when appropriate.
-- [ ] Persist the chosen horizon and whether it was inferred or user-selected.
+- [x] Define default horizon for each route.
+- [x] Prevent weak input from auto-generating an overconfident week.
+- [x] Allow user override of horizon when appropriate.
+- [x] Persist the chosen horizon and whether it was inferred or user-selected.
 
 ## Preview And Correction
 
-- [ ] Show interpreted source summary.
-- [ ] Show target learner.
-- [ ] Show proposed horizon.
-- [ ] Allow quick correction before or right after save.
+- [x] Show interpreted source summary.
+- [x] Show target learner.
+- [x] Show proposed horizon.
+- [x] Allow quick correction before or right after save.
 - [ ] Handle generation failure with retry and source editing.
 
 ## Data And Domain
 
-- [ ] Persist route type.
-- [ ] Persist raw source or file reference.
-- [ ] Persist confidence metadata.
-- [ ] Persist user overrides.
+- [x] Persist route type.
+- [x] Persist raw source or file reference.
+- [x] Persist confidence metadata.
+- [x] Persist user overrides.
 - [ ] Support regeneration without trashing valid progress.
 
 ## UX And Copy
 
-- [ ] Replace internal route names with parent-facing language.
-- [ ] Explain assumptions briefly when confidence is low.
-- [ ] Make "build today" the safest default when input scope is unclear.
+- [x] Replace internal route names with parent-facing language.
+- [x] Explain assumptions briefly when confidence is low.
+- [x] Make "build today" the safest default when input scope is unclear.
 - [ ] Keep the route picker simple on phone widths.
 
 ## QA

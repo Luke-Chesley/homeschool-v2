@@ -24,10 +24,22 @@ import {
 } from "@/lib/homeschool/onboarding/activation-contracts";
 import { trackProductEvent } from "@/lib/platform/observability";
 
+import {
+  CURRICULUM_GENERATION_HORIZONS,
+  CURRICULUM_HORIZON_DECISION_SOURCES,
+  CURRICULUM_INTAKE_CONFIDENCE_LEVELS,
+  FAST_PATH_INTAKE_ROUTES,
+  LEGACY_FAST_PATH_INTAKE_ROUTES,
+} from "@/lib/homeschool/onboarding/types";
 import type {
+  CurriculumGenerationHorizon,
+  CurriculumHorizonDecisionSource,
+  CurriculumIntakeConfidence,
+  FastPathIntakeRoute,
   HomeschoolFastPathOnboardingInput,
   HomeschoolOnboardingInput,
   HomeschoolOnboardingStatus,
+  HomeschoolFastPathPreview,
 } from "@/lib/homeschool/onboarding/types";
 
 const LearnerSchema = z.object({
@@ -54,6 +66,7 @@ export const HomeschoolOnboardingSchema = z.object({
   curriculumTitle: z.string().trim().min(1).max(160),
   curriculumSummary: z.string().trim().max(600).optional(),
   curriculumText: z.string().trim().max(12000).optional(),
+  curriculumSourceMetadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const HomeschoolCurriculumIntakeSchema = z.object({
@@ -73,14 +86,65 @@ export const HomeschoolCurriculumIntakeSchema = z.object({
 
 export type HomeschoolOnboardingPayload = z.infer<typeof HomeschoolOnboardingSchema>;
 export type HomeschoolCurriculumIntakePayload = z.infer<typeof HomeschoolCurriculumIntakeSchema>;
-export const HomeschoolFastPathOnboardingSchema = z.object({
+
+const CanonicalFastPathIntakeRouteSchema = z.enum(FAST_PATH_INTAKE_ROUTES);
+const LegacyFastPathIntakeRouteSchema = z.enum(LEGACY_FAST_PATH_INTAKE_ROUTES);
+const FastPathIntakeRouteInputSchema = z.union([
+  CanonicalFastPathIntakeRouteSchema,
+  LegacyFastPathIntakeRouteSchema,
+]);
+const CurriculumGenerationHorizonSchema = z.enum(CURRICULUM_GENERATION_HORIZONS);
+const CurriculumHorizonDecisionSourceSchema = z.enum(CURRICULUM_HORIZON_DECISION_SOURCES);
+const CurriculumIntakeConfidenceSchema = z.enum(CURRICULUM_INTAKE_CONFIDENCE_LEVELS);
+
+function normalizeFastPathIntakeRoute(route: z.infer<typeof FastPathIntakeRouteInputSchema>): FastPathIntakeRoute {
+  switch (route) {
+    case "book_curriculum":
+      return "single_lesson";
+    case "outline_weekly_plan":
+      return "weekly_plan";
+    default:
+      return route;
+  }
+}
+
+const RawHomeschoolFastPathOnboardingSchema = z.object({
   organizationId: z.string().min(1),
   learnerName: z.string().trim().min(1).max(80),
-  intakeType: z.enum(["book_curriculum", "outline_weekly_plan", "topic"]),
+  intakeRoute: FastPathIntakeRouteInputSchema.optional(),
+  intakeType: FastPathIntakeRouteInputSchema.optional(),
   sourceInput: z.string().trim().min(1).max(12000),
   horizonIntent: z.enum(["today_only", "auto"]).optional(),
   confirmPreview: z.boolean().optional(),
+  previewCorrections: z
+    .object({
+      learnerName: z.string().trim().min(1).max(80).optional(),
+      intakeRoute: CanonicalFastPathIntakeRouteSchema.optional(),
+      title: z.string().trim().min(1).max(160).optional(),
+      chosenHorizon: CurriculumGenerationHorizonSchema.optional(),
+    })
+    .optional(),
 });
+
+export const HomeschoolFastPathOnboardingSchema = RawHomeschoolFastPathOnboardingSchema.superRefine(
+  (input, ctx) => {
+    if (!input.intakeRoute && !input.intakeType) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Intake route is required.",
+        path: ["intakeRoute"],
+      });
+    }
+  },
+).transform((input) => ({
+  organizationId: input.organizationId,
+  learnerName: input.learnerName,
+  intakeRoute: normalizeFastPathIntakeRoute(input.intakeRoute ?? input.intakeType!),
+  sourceInput: input.sourceInput,
+  horizonIntent: input.horizonIntent,
+  confirmPreview: input.confirmPreview,
+  previewCorrections: input.previewCorrections,
+}));
 
 function asRecord(value: unknown): Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -135,6 +199,16 @@ function mergeMilestone(existing: OnboardingMilestone[], milestone: OnboardingMi
   return [...existing, milestone];
 }
 
+function mergeSourceMetadata(
+  base: Record<string, unknown>,
+  extra: Record<string, unknown> | undefined,
+) {
+  return {
+    ...base,
+    ...(extra ?? {}),
+  };
+}
+
 function buildStarterDocument(input: HomeschoolOnboardingInput) {
   const lessonsPerSubject = ["Warm-up", "Core lesson", "Review and evidence"];
 
@@ -182,10 +256,15 @@ function buildStarterDocument(input: HomeschoolOnboardingInput) {
       })),
     })),
     metadata: {
-      lineage: {
-        mode: "manual_shell",
-        createdFromOnboarding: true,
-      },
+      ...mergeSourceMetadata(
+        {
+          lineage: {
+            mode: "manual_shell",
+            createdFromOnboarding: true,
+          },
+        },
+        input.curriculumSourceMetadata,
+      ),
     },
   };
 }
@@ -316,11 +395,16 @@ function buildStructuredDocumentFromOutline(input: HomeschoolOnboardingInput) {
       lessons: buildLessonsFromNode(node.title, node),
     })),
     metadata: {
-      lineage: {
-        mode: "paste_outline",
-        createdFromOnboarding: true,
-        rawTextLength: (input.curriculumText ?? "").length,
-      },
+      ...mergeSourceMetadata(
+        {
+          lineage: {
+            mode: "paste_outline",
+            createdFromOnboarding: true,
+            rawTextLength: (input.curriculumText ?? "").length,
+          },
+        },
+        input.curriculumSourceMetadata,
+      ),
     },
   };
 }
@@ -637,6 +721,7 @@ async function initializeCurriculum(input: HomeschoolOnboardingInput, learner: t
     return createCurriculumSourceFromAiDraftArtifact({
       householdId: input.organizationId,
       artifact: generation.artifact,
+      sourceMetadata: input.curriculumSourceMetadata,
     });
   }
 
@@ -651,39 +736,161 @@ async function initializeCurriculum(input: HomeschoolOnboardingInput, learner: t
   });
 }
 
-function estimateConfidence(input: z.infer<typeof HomeschoolFastPathOnboardingSchema>) {
-  const sourceLength = input.sourceInput.trim().length;
-  if (input.intakeType === "topic") {
-    return sourceLength >= 60 ? "moderate" : "low";
-  }
-  if (input.intakeType === "outline_weekly_plan") {
-    return sourceLength >= 90 ? "high" : "moderate";
-  }
-  return sourceLength >= 120 ? "high" : "moderate";
-}
-
-function buildFastPathPreview(input: z.infer<typeof HomeschoolFastPathOnboardingSchema>) {
-  const trimmedLines = input.sourceInput
+function extractDetectedChunks(sourceInput: string) {
+  const trimmedLines = sourceInput
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean)
     .slice(0, 4);
-  const detectedChunks = trimmedLines.length > 0 ? trimmedLines : [input.sourceInput.trim().slice(0, 80)];
+
+  return trimmedLines.length > 0 ? trimmedLines : [sourceInput.trim().slice(0, 80)];
+}
+
+function inferDefaultHorizon(input: {
+  intakeRoute: FastPathIntakeRoute;
+  sourceInput: string;
+  horizonIntent?: "today_only" | "auto";
+}): {
+  inferredHorizon: CurriculumGenerationHorizon;
+  decisionSource: CurriculumHorizonDecisionSource;
+} {
+  if (input.horizonIntent === "today_only") {
+    return {
+      inferredHorizon: "today",
+      decisionSource: "user_selected",
+    };
+  }
+
+  const sourceLength = input.sourceInput.trim().length;
+  switch (input.intakeRoute) {
+    case "single_lesson":
+      return {
+        inferredHorizon: sourceLength > 180 ? "tomorrow" : "today",
+        decisionSource: "system_default",
+      };
+    case "weekly_plan":
+      return {
+        inferredHorizon: "current_week",
+        decisionSource: "system_default",
+      };
+    case "outline":
+      return {
+        inferredHorizon: sourceLength > 260 ? "current_week" : "next_few_days",
+        decisionSource: "system_default",
+      };
+    case "topic":
+      return {
+        inferredHorizon: "starter_module",
+        decisionSource: "system_default",
+      };
+    case "manual_shell":
+      return {
+        inferredHorizon: "starter_week",
+        decisionSource: "system_default",
+      };
+  }
+}
+
+function estimateConfidence(input: {
+  intakeRoute: FastPathIntakeRoute;
+  sourceInput: string;
+  horizonIntent?: "today_only" | "auto";
+}): CurriculumIntakeConfidence {
+  const sourceLength = input.sourceInput.trim().length;
+  const lines = input.sourceInput.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const numberedMarkers = lines.filter((line) => /^(\d+[.)]|[-*+])\s+/.test(line)).length;
+
+  switch (input.intakeRoute) {
+    case "single_lesson":
+      if (sourceLength >= 160) {
+        return "high";
+      }
+      return sourceLength >= 60 ? "medium" : "low";
+    case "weekly_plan":
+      if (numberedMarkers >= 3 || sourceLength >= 120) {
+        return "high";
+      }
+      return sourceLength >= 60 ? "medium" : "low";
+    case "outline":
+      if (numberedMarkers >= 4 || lines.length >= 4) {
+        return "high";
+      }
+      return sourceLength >= 80 ? "medium" : "low";
+    case "topic":
+      return sourceLength >= 80 ? "medium" : "low";
+    case "manual_shell":
+      return "low";
+  }
+}
+
+function buildAssumptions(params: {
+  intakeRoute: FastPathIntakeRoute;
+  chosenHorizon: CurriculumGenerationHorizon;
+  confidence: CurriculumIntakeConfidence;
+}) {
+  const assumptions = [
+    params.chosenHorizon === "today"
+      ? "We will keep the first plan bounded to today."
+      : params.chosenHorizon === "current_week"
+        ? "We will plan against the current week, not a longer curriculum arc."
+        : `We will start with ${params.chosenHorizon.replaceAll("_", " ")}.`,
+  ];
+
+  if (params.intakeRoute === "outline") {
+    assumptions.push("We are treating this as a sequence outline, not a complete curriculum import.");
+  }
+  if (params.intakeRoute === "topic") {
+    assumptions.push("We are treating this as a starter module, not a full course.");
+  }
+  if (params.confidence === "low") {
+    assumptions.push("Some source details are ambiguous, so the plan will stay conservative until you confirm.");
+  }
+
+  return assumptions;
+}
+
+function buildPreviewTitle(input: {
+  intakeRoute: FastPathIntakeRoute;
+  sourceInput: string;
+}) {
+  const prefix =
+    input.intakeRoute === "topic"
+      ? "Topic starter"
+      : input.intakeRoute === "weekly_plan"
+        ? "Week plan"
+        : input.intakeRoute === "outline"
+          ? "Outline plan"
+          : input.intakeRoute === "manual_shell"
+            ? "Starter shell"
+            : "Lesson plan";
+
+  return `${prefix}: ${input.sourceInput.trim().slice(0, 48)}`;
+}
+
+function buildFastPathPreview(
+  input: Pick<HomeschoolFastPathOnboardingInput, "learnerName" | "intakeRoute" | "sourceInput" | "horizonIntent">,
+  corrections?: HomeschoolFastPathOnboardingInput["previewCorrections"],
+): HomeschoolFastPathPreview {
+  const detectedChunks = extractDetectedChunks(input.sourceInput);
   const confidence = estimateConfidence(input);
-  const plannedHorizon =
-    input.horizonIntent === "today_only" || confidence === "low" ? "today" : "next_few_days";
+  const { inferredHorizon, decisionSource } = inferDefaultHorizon(input);
+  const chosenHorizon = corrections?.chosenHorizon ?? inferredHorizon;
 
   return {
-    learnerTarget: input.learnerName.trim(),
-    intakeType: input.intakeType,
-    title:
-      input.intakeType === "topic"
-        ? `Topic starter: ${input.sourceInput.trim().slice(0, 48)}`
-        : `Plan from source: ${input.sourceInput.trim().slice(0, 48)}`,
+    learnerTarget: corrections?.learnerName?.trim() || input.learnerName.trim(),
+    intakeRoute: corrections?.intakeRoute ?? input.intakeRoute,
+    title: corrections?.title?.trim() || buildPreviewTitle(input),
     detectedChunks,
-    plannedHorizon,
-    confidence: confidence === "high" ? "moderate" : confidence,
-  } as const;
+    assumptions: buildAssumptions({
+      intakeRoute: corrections?.intakeRoute ?? input.intakeRoute,
+      chosenHorizon,
+      confidence,
+    }),
+    inferredHorizon,
+    chosenHorizon,
+    horizonDecisionSource: corrections?.chosenHorizon ? "user_corrected_in_preview" : decisionSource,
+    confidence,
+  };
 }
 
 async function markOnboardingMilestone(params: {
@@ -741,7 +948,7 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
   trackProductEvent({
     name: ACTIVATION_EVENT_NAMES.intakeTypeSelected,
     organizationId: input.organizationId,
-    metadata: { intakeType: input.intakeType, horizonIntent: input.horizonIntent ?? "auto" },
+    metadata: { intakeRoute: input.intakeRoute, horizonIntent: input.horizonIntent ?? "auto" },
   });
   trackProductEvent({
     name: ACTIVATION_EVENT_NAMES.intakeSourceSubmitted,
@@ -749,8 +956,8 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
     metadata: { sourceLength: input.sourceInput.trim().length },
   });
 
-  const preview = buildFastPathPreview(input);
-  if ((preview.confidence === "low" || preview.confidence === "moderate") && !input.confirmPreview) {
+  const preview = buildFastPathPreview(input, input.previewCorrections);
+  if ((preview.confidence === "low" || preview.confidence === "medium") && !input.confirmPreview) {
     return {
       mode: "preview_required" as const,
       preview,
@@ -758,16 +965,17 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
   }
 
   const curriculumMode =
-    input.intakeType === "topic"
+    preview.intakeRoute === "topic" || preview.intakeRoute === "manual_shell"
       ? "manual_shell"
-      : input.intakeType === "outline_weekly_plan"
+      : preview.intakeRoute === "outline"
         ? "paste_outline"
         : "ai_decompose";
   const learnerInput = {
-    displayName: input.learnerName.trim(),
+    displayName: preview.learnerTarget,
     pacePreference: "balanced" as const,
     loadPreference: "balanced" as const,
   };
+  const sourceInput = input.sourceInput.trim();
   const setupInput: HomeschoolOnboardingPayload = {
     organizationId: input.organizationId,
     householdName: "Homeschool Household",
@@ -777,14 +985,30 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
     learners: [learnerInput],
     curriculumMode,
     curriculumTitle: preview.title,
-    curriculumSummary: `Fast-path intake (${input.intakeType.replaceAll("_", " ")})`,
-    curriculumText: input.sourceInput.trim(),
+    curriculumSummary: `Fast-path intake (${preview.intakeRoute.replaceAll("_", " ")})`,
+    curriculumText: sourceInput,
+    curriculumSourceMetadata: {
+      intake: {
+        route: preview.intakeRoute,
+        routeVersion: 1,
+        rawText: sourceInput,
+        assetIds: [],
+        learnerId: null,
+        confidence: preview.confidence,
+        inferredHorizon: preview.inferredHorizon,
+        chosenHorizon: preview.chosenHorizon,
+        horizonDecisionSource: preview.horizonDecisionSource,
+        assumptions: preview.assumptions,
+        detectedChunks: preview.detectedChunks,
+        createdFrom: "onboarding_fast_path",
+      },
+    },
   };
 
   trackProductEvent({
     name: ACTIVATION_EVENT_NAMES.generationStarted,
     organizationId: input.organizationId,
-    metadata: { intakeType: input.intakeType, plannedHorizon: preview.plannedHorizon },
+    metadata: { intakeRoute: preview.intakeRoute, chosenHorizon: preview.chosenHorizon },
   });
 
   const { primaryLearner } = await persistHomeschoolSetupBase(setupInput);
@@ -823,10 +1047,12 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
       completedAt: new Date().toISOString(),
       firstReadyAt: new Date().toISOString(),
       intake: {
-        type: input.intakeType,
-        sourceInput: input.sourceInput.trim(),
+        route: preview.intakeRoute,
+        sourceInput,
         confidence: preview.confidence,
-        plannedHorizon: preview.plannedHorizon,
+        inferredHorizon: preview.inferredHorizon,
+        chosenHorizon: preview.chosenHorizon,
+        horizonDecisionSource: preview.horizonDecisionSource,
       },
     },
   });
@@ -838,9 +1064,9 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
     eventType: "onboarding.fast_path_completed",
     summary: `Completed fast-path onboarding for ${primaryLearner.displayName}.`,
     metadata: {
-      intakeType: input.intakeType,
+      intakeRoute: preview.intakeRoute,
       confidence: preview.confidence,
-      plannedHorizon: preview.plannedHorizon,
+      chosenHorizon: preview.chosenHorizon,
     },
   });
 

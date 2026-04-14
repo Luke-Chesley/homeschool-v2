@@ -5,36 +5,50 @@ import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import type {
+  CurriculumGenerationHorizon,
+  FastPathIntakeRoute,
+  HomeschoolFastPathPreview,
+} from "@/lib/homeschool/onboarding/types";
 
-type IntakeType = "book_curriculum" | "outline_weekly_plan" | "topic";
 type HorizonIntent = "today_only" | "auto";
 
-type PreviewPayload = {
-  learnerTarget: string;
-  intakeType: IntakeType;
-  title: string;
-  detectedChunks: string[];
-  plannedHorizon: "today" | "next_few_days";
-  confidence: "low" | "moderate";
-};
-
-const intakeOptions: Array<{ value: IntakeType; label: string; description: string }> = [
+const intakeOptions: Array<{ value: FastPathIntakeRoute; label: string; description: string }> = [
   {
-    value: "book_curriculum",
-    label: "I have a book or curriculum",
-    description: "Share chapters, pages, or curriculum notes.",
+    value: "single_lesson",
+    label: "I have a chapter, pages, or one lesson",
+    description: "Use one assignment or one day of material without forcing a fake week.",
   },
   {
-    value: "outline_weekly_plan",
-    label: "I have an outline or weekly plan",
-    description: "Paste your weekly outline and we will shape the day.",
+    value: "weekly_plan",
+    label: "I have a weekly plan",
+    description: "Paste your week notes and we will shape a bounded current week.",
+  },
+  {
+    value: "outline",
+    label: "I have an outline or table of contents",
+    description: "Turn a sequence or outline into the next few school days.",
   },
   {
     value: "topic",
     label: "Start from a topic",
-    description: "Give one topic and we will build a bounded starter day.",
+    description: "Build a bounded starter module around one topic.",
+  },
+  {
+    value: "manual_shell",
+    label: "Start with a simple shell",
+    description: "Use a light starter structure when you want to scaffold slowly.",
   },
 ];
+
+const horizonLabels: Record<CurriculumGenerationHorizon, string> = {
+  today: "Today",
+  tomorrow: "Tomorrow",
+  next_few_days: "Next few days",
+  current_week: "Current week",
+  starter_module: "Starter module",
+  starter_week: "Starter week",
+};
 
 export function HomeschoolOnboardingForm(props: {
   organizationName: string;
@@ -43,10 +57,14 @@ export function HomeschoolOnboardingForm(props: {
   const router = useRouter();
   const [step, setStep] = React.useState(1);
   const [learnerName, setLearnerName] = React.useState(props.defaultLearnerName ?? "");
-  const [intakeType, setIntakeType] = React.useState<IntakeType>("book_curriculum");
+  const [intakeRoute, setIntakeRoute] = React.useState<FastPathIntakeRoute>("single_lesson");
   const [sourceInput, setSourceInput] = React.useState("");
   const [horizonIntent, setHorizonIntent] = React.useState<HorizonIntent>("today_only");
-  const [preview, setPreview] = React.useState<PreviewPayload | null>(null);
+  const [preview, setPreview] = React.useState<HomeschoolFastPathPreview | null>(null);
+  const [previewLearnerName, setPreviewLearnerName] = React.useState("");
+  const [previewRoute, setPreviewRoute] = React.useState<FastPathIntakeRoute>("single_lesson");
+  const [previewTitle, setPreviewTitle] = React.useState("");
+  const [previewHorizon, setPreviewHorizon] = React.useState<CurriculumGenerationHorizon>("today");
   const [submitting, setSubmitting] = React.useState(false);
   const [jobStatus, setJobStatus] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -64,10 +82,18 @@ export function HomeschoolOnboardingForm(props: {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         learnerName,
-        intakeType,
+        intakeRoute,
         sourceInput,
         horizonIntent,
         confirmPreview,
+        previewCorrections: confirmPreview
+          ? {
+              learnerName: previewLearnerName,
+              intakeRoute: previewRoute,
+              title: previewTitle,
+              chosenHorizon: previewHorizon,
+            }
+          : undefined,
       }),
     });
 
@@ -81,6 +107,10 @@ export function HomeschoolOnboardingForm(props: {
 
     if (payload?.mode === "preview_required") {
       setPreview(payload.preview);
+      setPreviewLearnerName(payload.preview.learnerTarget);
+      setPreviewRoute(payload.preview.intakeRoute);
+      setPreviewTitle(payload.preview.title);
+      setPreviewHorizon(payload.preview.chosenHorizon);
       setStep(4);
       setSubmitting(false);
       setJobStatus(null);
@@ -139,9 +169,9 @@ export function HomeschoolOnboardingForm(props: {
               <button
                 key={option.value}
                 type="button"
-                onClick={() => setIntakeType(option.value)}
+                onClick={() => setIntakeRoute(option.value)}
                 className={`rounded-xl border p-3 text-left transition-colors ${
-                  intakeType === option.value
+                  intakeRoute === option.value
                     ? "border-primary bg-primary/10"
                     : "border-border bg-background hover:bg-muted/40"
                 }`}
@@ -175,8 +205,14 @@ export function HomeschoolOnboardingForm(props: {
                 onChange={(event) => setSourceInput(event.target.value)}
                 rows={8}
                 placeholder={
-                  intakeType === "topic"
+                  intakeRoute === "topic"
                     ? "Fractions with food examples"
+                    : intakeRoute === "weekly_plan"
+                      ? "Monday: read chapter 4, workbook page 42. Wednesday: quiz review. Friday: lab notes."
+                      : intakeRoute === "outline"
+                        ? "Unit 1\n- Fractions\n- Decimals\n- Percents"
+                        : intakeRoute === "manual_shell"
+                          ? "Math, reading, science"
                     : "Chapter 4 pages 88-95, workbook pg 42, quiz Friday"
                 }
                 className="rounded-xl border border-input bg-background px-3 py-2 font-normal"
@@ -222,18 +258,74 @@ export function HomeschoolOnboardingForm(props: {
           <CardHeader>
             <CardTitle>Quick preview before save</CardTitle>
             <CardDescription>
-              Confidence is {preview.confidence}. Confirm this looks right, then we&apos;ll save and open Today.
+              Confidence is {preview.confidence}. Correct anything obvious before we save and open
+              Today.
             </CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-3 text-sm">
-            <p><span className="font-medium">Learner:</span> {preview.learnerTarget}</p>
-            <p><span className="font-medium">Title:</span> {preview.title}</p>
-            <p><span className="font-medium">Planned horizon:</span> {preview.plannedHorizon === "today" ? "Today" : "Next few days"}</p>
+          <CardContent className="grid gap-4 text-sm">
+            <label className="grid gap-1.5 font-medium">
+              Learner
+              <input
+                value={previewLearnerName}
+                onChange={(event) => setPreviewLearnerName(event.target.value)}
+                className="rounded-xl border border-input bg-background px-3 py-2 font-normal"
+              />
+            </label>
+            <label className="grid gap-1.5 font-medium">
+              Intake route
+              <select
+                value={previewRoute}
+                onChange={(event) => setPreviewRoute(event.target.value as FastPathIntakeRoute)}
+                className="rounded-xl border border-input bg-background px-3 py-2 font-normal"
+              >
+                {intakeOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="grid gap-1.5 font-medium">
+              Title
+              <input
+                value={previewTitle}
+                onChange={(event) => setPreviewTitle(event.target.value)}
+                className="rounded-xl border border-input bg-background px-3 py-2 font-normal"
+              />
+            </label>
+            <label className="grid gap-1.5 font-medium">
+              Planning horizon
+              <select
+                value={previewHorizon}
+                onChange={(event) =>
+                  setPreviewHorizon(event.target.value as CurriculumGenerationHorizon)
+                }
+                className="rounded-xl border border-input bg-background px-3 py-2 font-normal"
+              >
+                {Object.entries(horizonLabels).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p>
+              <span className="font-medium">Suggested horizon:</span>{" "}
+              {horizonLabels[preview.inferredHorizon]}
+            </p>
             <div>
               <p className="font-medium">Detected chunks</p>
               <ul className="list-disc pl-5 text-muted-foreground">
                 {preview.detectedChunks.map((chunk) => (
                   <li key={chunk}>{chunk}</li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <p className="font-medium">Assumptions</p>
+              <ul className="list-disc pl-5 text-muted-foreground">
+                {preview.assumptions.map((assumption) => (
+                  <li key={assumption}>{assumption}</li>
                 ))}
               </ul>
             </div>
