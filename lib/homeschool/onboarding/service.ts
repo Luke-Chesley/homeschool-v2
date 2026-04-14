@@ -17,9 +17,30 @@ import { learnerProfiles, learners, organizationPlatformSettings, organizations 
 import { getTodayWorkspace } from "@/lib/planning/today-service";
 import { getOrCreateWeeklyRouteBoardForLearner } from "@/lib/planning/weekly-route-service";
 import { recordHomeschoolAuditEvent } from "@/lib/homeschool/reporting/service";
+import {
+  ACTIVATION_EVENT_NAMES,
+  ONBOARDING_MILESTONES,
+  type OnboardingMilestone,
+} from "@/lib/homeschool/onboarding/activation-contracts";
 import { trackProductEvent } from "@/lib/platform/observability";
 
-import type { HomeschoolOnboardingInput } from "@/lib/homeschool/onboarding/types";
+import {
+  CURRICULUM_GENERATION_HORIZONS,
+  CURRICULUM_HORIZON_DECISION_SOURCES,
+  CURRICULUM_INTAKE_CONFIDENCE_LEVELS,
+  FAST_PATH_INTAKE_ROUTES,
+  LEGACY_FAST_PATH_INTAKE_ROUTES,
+} from "@/lib/homeschool/onboarding/types";
+import type {
+  CurriculumGenerationHorizon,
+  CurriculumHorizonDecisionSource,
+  CurriculumIntakeConfidence,
+  FastPathIntakeRoute,
+  HomeschoolFastPathOnboardingInput,
+  HomeschoolOnboardingInput,
+  HomeschoolOnboardingStatus,
+  HomeschoolFastPathPreview,
+} from "@/lib/homeschool/onboarding/types";
 
 const LearnerSchema = z.object({
   displayName: z.string().trim().min(1).max(80),
@@ -45,6 +66,7 @@ export const HomeschoolOnboardingSchema = z.object({
   curriculumTitle: z.string().trim().min(1).max(160),
   curriculumSummary: z.string().trim().max(600).optional(),
   curriculumText: z.string().trim().max(12000).optional(),
+  curriculumSourceMetadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const HomeschoolCurriculumIntakeSchema = z.object({
@@ -64,6 +86,65 @@ export const HomeschoolCurriculumIntakeSchema = z.object({
 
 export type HomeschoolOnboardingPayload = z.infer<typeof HomeschoolOnboardingSchema>;
 export type HomeschoolCurriculumIntakePayload = z.infer<typeof HomeschoolCurriculumIntakeSchema>;
+
+const CanonicalFastPathIntakeRouteSchema = z.enum(FAST_PATH_INTAKE_ROUTES);
+const LegacyFastPathIntakeRouteSchema = z.enum(LEGACY_FAST_PATH_INTAKE_ROUTES);
+const FastPathIntakeRouteInputSchema = z.union([
+  CanonicalFastPathIntakeRouteSchema,
+  LegacyFastPathIntakeRouteSchema,
+]);
+const CurriculumGenerationHorizonSchema = z.enum(CURRICULUM_GENERATION_HORIZONS);
+const CurriculumHorizonDecisionSourceSchema = z.enum(CURRICULUM_HORIZON_DECISION_SOURCES);
+const CurriculumIntakeConfidenceSchema = z.enum(CURRICULUM_INTAKE_CONFIDENCE_LEVELS);
+
+function normalizeFastPathIntakeRoute(route: z.infer<typeof FastPathIntakeRouteInputSchema>): FastPathIntakeRoute {
+  switch (route) {
+    case "book_curriculum":
+      return "single_lesson";
+    case "outline_weekly_plan":
+      return "weekly_plan";
+    default:
+      return route;
+  }
+}
+
+const RawHomeschoolFastPathOnboardingSchema = z.object({
+  organizationId: z.string().min(1),
+  learnerName: z.string().trim().min(1).max(80),
+  intakeRoute: FastPathIntakeRouteInputSchema.optional(),
+  intakeType: FastPathIntakeRouteInputSchema.optional(),
+  sourceInput: z.string().trim().min(1).max(12000),
+  horizonIntent: z.enum(["today_only", "auto"]).optional(),
+  confirmPreview: z.boolean().optional(),
+  previewCorrections: z
+    .object({
+      learnerName: z.string().trim().min(1).max(80).optional(),
+      intakeRoute: CanonicalFastPathIntakeRouteSchema.optional(),
+      title: z.string().trim().min(1).max(160).optional(),
+      chosenHorizon: CurriculumGenerationHorizonSchema.optional(),
+    })
+    .optional(),
+});
+
+export const HomeschoolFastPathOnboardingSchema = RawHomeschoolFastPathOnboardingSchema.superRefine(
+  (input, ctx) => {
+    if (!input.intakeRoute && !input.intakeType) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Intake route is required.",
+        path: ["intakeRoute"],
+      });
+    }
+  },
+).transform((input) => ({
+  organizationId: input.organizationId,
+  learnerName: input.learnerName,
+  intakeRoute: normalizeFastPathIntakeRoute(input.intakeRoute ?? input.intakeType!),
+  sourceInput: input.sourceInput,
+  horizonIntent: input.horizonIntent,
+  confirmPreview: input.confirmPreview,
+  previewCorrections: input.previewCorrections,
+}));
 
 function asRecord(value: unknown): Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -98,6 +179,34 @@ function uniqueStrings(values: string[]) {
 
 function normalizeSubjects(subjects: string[]) {
   return uniqueStrings(subjects).slice(0, 12);
+}
+
+function toMilestoneList(value: unknown): OnboardingMilestone[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter((entry): entry is OnboardingMilestone =>
+    ONBOARDING_MILESTONES.includes(entry as OnboardingMilestone),
+  );
+}
+
+function mergeMilestone(existing: OnboardingMilestone[], milestone: OnboardingMilestone) {
+  if (existing.includes(milestone)) {
+    return existing;
+  }
+
+  return [...existing, milestone];
+}
+
+function mergeSourceMetadata(
+  base: Record<string, unknown>,
+  extra: Record<string, unknown> | undefined,
+) {
+  return {
+    ...base,
+    ...(extra ?? {}),
+  };
 }
 
 function buildStarterDocument(input: HomeschoolOnboardingInput) {
@@ -147,10 +256,15 @@ function buildStarterDocument(input: HomeschoolOnboardingInput) {
       })),
     })),
     metadata: {
-      lineage: {
-        mode: "manual_shell",
-        createdFromOnboarding: true,
-      },
+      ...mergeSourceMetadata(
+        {
+          lineage: {
+            mode: "manual_shell",
+            createdFromOnboarding: true,
+          },
+        },
+        input.curriculumSourceMetadata,
+      ),
     },
   };
 }
@@ -281,11 +395,16 @@ function buildStructuredDocumentFromOutline(input: HomeschoolOnboardingInput) {
       lessons: buildLessonsFromNode(node.title, node),
     })),
     metadata: {
-      lineage: {
-        mode: "paste_outline",
-        createdFromOnboarding: true,
-        rawTextLength: (input.curriculumText ?? "").length,
-      },
+      ...mergeSourceMetadata(
+        {
+          lineage: {
+            mode: "paste_outline",
+            createdFromOnboarding: true,
+            rawTextLength: (input.curriculumText ?? "").length,
+          },
+        },
+        input.curriculumSourceMetadata,
+      ),
     },
   };
 }
@@ -323,11 +442,15 @@ export async function getHomeschoolOnboardingStatus(organizationId: string) {
   const metadata = asRecord(organization?.metadata);
   const homeschool = asRecord(metadata.homeschool);
   const onboarding = asRecord(homeschool.onboarding);
+  const milestones = toMilestoneList(onboarding.milestones);
+  const currentMilestone = milestones[milestones.length - 1] ?? null;
+  const completedAt = typeof onboarding.completedAt === "string" ? onboarding.completedAt : null;
+  const isComplete =
+    completedAt !== null ||
+    milestones.includes("first_day_ready") ||
+    milestones.includes("week_ready");
 
-  return {
-    isComplete: typeof onboarding.completedAt === "string",
-    completedAt: typeof onboarding.completedAt === "string" ? onboarding.completedAt : null,
-  };
+  return { isComplete, completedAt, milestones, currentMilestone } satisfies HomeschoolOnboardingStatus;
 }
 
 export async function createHomeschoolCurriculumFromIntake(
@@ -430,6 +553,8 @@ async function persistHomeschoolSetupBase(input: HomeschoolOnboardingPayload) {
             ...(asRecord(homeschoolMetadata.onboarding)),
             status: "pending",
             completedAt: null,
+            milestones: ["fast_path_started", "household_defaults_completed"],
+            currentMilestone: "household_defaults_completed",
             schoolYearLabel: input.schoolYearLabel ?? null,
             termStartDate: input.termStartDate ?? null,
             termEndDate: input.termEndDate ?? null,
@@ -596,6 +721,7 @@ async function initializeCurriculum(input: HomeschoolOnboardingInput, learner: t
     return createCurriculumSourceFromAiDraftArtifact({
       householdId: input.organizationId,
       artifact: generation.artifact,
+      sourceMetadata: input.curriculumSourceMetadata,
     });
   }
 
@@ -608,6 +734,350 @@ async function initializeCurriculum(input: HomeschoolOnboardingInput, learner: t
     householdId: input.organizationId,
     imported,
   });
+}
+
+function extractDetectedChunks(sourceInput: string) {
+  const trimmedLines = sourceInput
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 4);
+
+  return trimmedLines.length > 0 ? trimmedLines : [sourceInput.trim().slice(0, 80)];
+}
+
+function inferDefaultHorizon(input: {
+  intakeRoute: FastPathIntakeRoute;
+  sourceInput: string;
+  horizonIntent?: "today_only" | "auto";
+}): {
+  inferredHorizon: CurriculumGenerationHorizon;
+  decisionSource: CurriculumHorizonDecisionSource;
+} {
+  if (input.horizonIntent === "today_only") {
+    return {
+      inferredHorizon: "today",
+      decisionSource: "user_selected",
+    };
+  }
+
+  const sourceLength = input.sourceInput.trim().length;
+  switch (input.intakeRoute) {
+    case "single_lesson":
+      return {
+        inferredHorizon: sourceLength > 180 ? "tomorrow" : "today",
+        decisionSource: "system_default",
+      };
+    case "weekly_plan":
+      return {
+        inferredHorizon: "current_week",
+        decisionSource: "system_default",
+      };
+    case "outline":
+      return {
+        inferredHorizon: sourceLength > 260 ? "current_week" : "next_few_days",
+        decisionSource: "system_default",
+      };
+    case "topic":
+      return {
+        inferredHorizon: "starter_module",
+        decisionSource: "system_default",
+      };
+    case "manual_shell":
+      return {
+        inferredHorizon: "starter_week",
+        decisionSource: "system_default",
+      };
+  }
+}
+
+function estimateConfidence(input: {
+  intakeRoute: FastPathIntakeRoute;
+  sourceInput: string;
+  horizonIntent?: "today_only" | "auto";
+}): CurriculumIntakeConfidence {
+  const sourceLength = input.sourceInput.trim().length;
+  const lines = input.sourceInput.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const numberedMarkers = lines.filter((line) => /^(\d+[.)]|[-*+])\s+/.test(line)).length;
+
+  switch (input.intakeRoute) {
+    case "single_lesson":
+      if (sourceLength >= 160) {
+        return "high";
+      }
+      return sourceLength >= 60 ? "medium" : "low";
+    case "weekly_plan":
+      if (numberedMarkers >= 3 || sourceLength >= 120) {
+        return "high";
+      }
+      return sourceLength >= 60 ? "medium" : "low";
+    case "outline":
+      if (numberedMarkers >= 4 || lines.length >= 4) {
+        return "high";
+      }
+      return sourceLength >= 80 ? "medium" : "low";
+    case "topic":
+      return sourceLength >= 80 ? "medium" : "low";
+    case "manual_shell":
+      return "low";
+  }
+}
+
+function buildAssumptions(params: {
+  intakeRoute: FastPathIntakeRoute;
+  chosenHorizon: CurriculumGenerationHorizon;
+  confidence: CurriculumIntakeConfidence;
+}) {
+  const assumptions = [
+    params.chosenHorizon === "today"
+      ? "We will keep the first plan bounded to today."
+      : params.chosenHorizon === "current_week"
+        ? "We will plan against the current week, not a longer curriculum arc."
+        : `We will start with ${params.chosenHorizon.replaceAll("_", " ")}.`,
+  ];
+
+  if (params.intakeRoute === "outline") {
+    assumptions.push("We are treating this as a sequence outline, not a complete curriculum import.");
+  }
+  if (params.intakeRoute === "topic") {
+    assumptions.push("We are treating this as a starter module, not a full course.");
+  }
+  if (params.confidence === "low") {
+    assumptions.push("Some source details are ambiguous, so the plan will stay conservative until you confirm.");
+  }
+
+  return assumptions;
+}
+
+function buildPreviewTitle(input: {
+  intakeRoute: FastPathIntakeRoute;
+  sourceInput: string;
+}) {
+  const prefix =
+    input.intakeRoute === "topic"
+      ? "Topic starter"
+      : input.intakeRoute === "weekly_plan"
+        ? "Week plan"
+        : input.intakeRoute === "outline"
+          ? "Outline plan"
+          : input.intakeRoute === "manual_shell"
+            ? "Starter shell"
+            : "Lesson plan";
+
+  return `${prefix}: ${input.sourceInput.trim().slice(0, 48)}`;
+}
+
+function buildFastPathPreview(
+  input: Pick<HomeschoolFastPathOnboardingInput, "learnerName" | "intakeRoute" | "sourceInput" | "horizonIntent">,
+  corrections?: HomeschoolFastPathOnboardingInput["previewCorrections"],
+): HomeschoolFastPathPreview {
+  const detectedChunks = extractDetectedChunks(input.sourceInput);
+  const confidence = estimateConfidence(input);
+  const { inferredHorizon, decisionSource } = inferDefaultHorizon(input);
+  const chosenHorizon = corrections?.chosenHorizon ?? inferredHorizon;
+
+  return {
+    learnerTarget: corrections?.learnerName?.trim() || input.learnerName.trim(),
+    intakeRoute: corrections?.intakeRoute ?? input.intakeRoute,
+    title: corrections?.title?.trim() || buildPreviewTitle(input),
+    detectedChunks,
+    assumptions: buildAssumptions({
+      intakeRoute: corrections?.intakeRoute ?? input.intakeRoute,
+      chosenHorizon,
+      confidence,
+    }),
+    inferredHorizon,
+    chosenHorizon,
+    horizonDecisionSource: corrections?.chosenHorizon ? "user_corrected_in_preview" : decisionSource,
+    confidence,
+  };
+}
+
+async function markOnboardingMilestone(params: {
+  organizationId: string;
+  milestone: OnboardingMilestone;
+  patch?: Record<string, unknown>;
+}) {
+  const organization = await getDb().query.organizations.findFirst({
+    where: eq(organizations.id, params.organizationId),
+  });
+  if (!organization) {
+    return;
+  }
+  const metadata = asRecord(organization.metadata);
+  const homeschool = asRecord(metadata.homeschool);
+  const onboarding = asRecord(homeschool.onboarding);
+  const milestones = mergeMilestone(toMilestoneList(onboarding.milestones), params.milestone);
+
+  await getDb()
+    .update(organizations)
+    .set({
+      metadata: {
+        ...metadata,
+        homeschool: {
+          ...homeschool,
+          onboarding: {
+            ...onboarding,
+            ...params.patch,
+            milestones,
+            currentMilestone: params.milestone,
+          },
+        },
+      },
+      updatedAt: new Date(),
+    })
+    .where(eq(organizations.id, params.organizationId));
+}
+
+export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPathOnboardingInput) {
+  const input = HomeschoolFastPathOnboardingSchema.parse(rawInput);
+  await markOnboardingMilestone({
+    organizationId: input.organizationId,
+    milestone: "fast_path_started",
+    patch: { status: "in_progress", completedAt: null },
+  });
+  trackProductEvent({
+    name: ACTIVATION_EVENT_NAMES.onboardingStarted,
+    organizationId: input.organizationId,
+  });
+  trackProductEvent({
+    name: ACTIVATION_EVENT_NAMES.learnerNameSubmitted,
+    organizationId: input.organizationId,
+    metadata: { learnerNameLength: input.learnerName.length },
+  });
+  trackProductEvent({
+    name: ACTIVATION_EVENT_NAMES.intakeTypeSelected,
+    organizationId: input.organizationId,
+    metadata: { intakeRoute: input.intakeRoute, horizonIntent: input.horizonIntent ?? "auto" },
+  });
+  trackProductEvent({
+    name: ACTIVATION_EVENT_NAMES.intakeSourceSubmitted,
+    organizationId: input.organizationId,
+    metadata: { sourceLength: input.sourceInput.trim().length },
+  });
+
+  const preview = buildFastPathPreview(input, input.previewCorrections);
+  if ((preview.confidence === "low" || preview.confidence === "medium") && !input.confirmPreview) {
+    return {
+      mode: "preview_required" as const,
+      preview,
+    };
+  }
+
+  const curriculumMode =
+    preview.intakeRoute === "topic" || preview.intakeRoute === "manual_shell"
+      ? "manual_shell"
+      : preview.intakeRoute === "outline"
+        ? "paste_outline"
+        : "ai_decompose";
+  const learnerInput = {
+    displayName: preview.learnerTarget,
+    pacePreference: "balanced" as const,
+    loadPreference: "balanced" as const,
+  };
+  const sourceInput = input.sourceInput.trim();
+  const setupInput: HomeschoolOnboardingPayload = {
+    organizationId: input.organizationId,
+    householdName: "Homeschool Household",
+    preferredSchoolDays: [...homeschoolTemplate.defaults.schoolDays],
+    dailyTimeBudgetMinutes: homeschoolTemplate.defaults.dailyTimeBudgetMinutes,
+    subjects: ["Integrated Studies"],
+    learners: [learnerInput],
+    curriculumMode,
+    curriculumTitle: preview.title,
+    curriculumSummary: `Fast-path intake (${preview.intakeRoute.replaceAll("_", " ")})`,
+    curriculumText: sourceInput,
+    curriculumSourceMetadata: {
+      intake: {
+        route: preview.intakeRoute,
+        routeVersion: 1,
+        rawText: sourceInput,
+        assetIds: [],
+        learnerId: null,
+        confidence: preview.confidence,
+        inferredHorizon: preview.inferredHorizon,
+        chosenHorizon: preview.chosenHorizon,
+        horizonDecisionSource: preview.horizonDecisionSource,
+        assumptions: preview.assumptions,
+        detectedChunks: preview.detectedChunks,
+        createdFrom: "onboarding_fast_path",
+      },
+    },
+  };
+
+  trackProductEvent({
+    name: ACTIVATION_EVENT_NAMES.generationStarted,
+    organizationId: input.organizationId,
+    metadata: { intakeRoute: preview.intakeRoute, chosenHorizon: preview.chosenHorizon },
+  });
+
+  const { primaryLearner } = await persistHomeschoolSetupBase(setupInput);
+  const curriculum = await initializeCurriculum(setupInput, primaryLearner);
+  const sourceId = "sourceId" in curriculum ? curriculum.sourceId : curriculum.id;
+  await setLiveCurriculumSource(input.organizationId, sourceId);
+
+  const { weekStartDate } = await getOrCreateWeeklyRouteBoardForLearner({
+    learnerId: primaryLearner.id,
+    sourceId,
+  });
+  await getTodayWorkspace({
+    organizationId: input.organizationId,
+    learnerId: primaryLearner.id,
+    learnerName: primaryLearner.displayName,
+    date: new Date().toISOString().slice(0, 10),
+  });
+
+  trackProductEvent({
+    name: ACTIVATION_EVENT_NAMES.generationCompleted,
+    organizationId: input.organizationId,
+    learnerId: primaryLearner.id,
+    metadata: { sourceId, weekStartDate },
+  });
+  trackProductEvent({
+    name: ACTIVATION_EVENT_NAMES.firstTodayOpened,
+    organizationId: input.organizationId,
+    learnerId: primaryLearner.id,
+  });
+
+  await markOnboardingMilestone({
+    organizationId: input.organizationId,
+    milestone: "first_day_ready",
+    patch: {
+      status: "complete",
+      completedAt: new Date().toISOString(),
+      firstReadyAt: new Date().toISOString(),
+      intake: {
+        route: preview.intakeRoute,
+        sourceInput,
+        confidence: preview.confidence,
+        inferredHorizon: preview.inferredHorizon,
+        chosenHorizon: preview.chosenHorizon,
+        horizonDecisionSource: preview.horizonDecisionSource,
+      },
+    },
+  });
+
+  await recordHomeschoolAuditEvent({
+    organizationId: input.organizationId,
+    learnerId: primaryLearner.id,
+    entityType: "onboarding",
+    eventType: "onboarding.fast_path_completed",
+    summary: `Completed fast-path onboarding for ${primaryLearner.displayName}.`,
+    metadata: {
+      intakeRoute: preview.intakeRoute,
+      confidence: preview.confidence,
+      chosenHorizon: preview.chosenHorizon,
+    },
+  });
+
+  return {
+    mode: "completed" as const,
+    learnerId: primaryLearner.id,
+    sourceId,
+    weekStartDate,
+    redirectTo: "/today",
+    preview,
+  };
 }
 
 export async function completeHomeschoolOnboarding(rawInput: unknown) {
@@ -652,6 +1122,8 @@ export async function completeHomeschoolOnboarding(rawInput: unknown) {
               ...onboarding,
               status: "complete",
               completedAt: new Date().toISOString(),
+              milestones: ["fast_path_started", "first_day_ready", "household_defaults_completed", "week_ready"],
+              currentMilestone: "week_ready",
             },
           },
         },

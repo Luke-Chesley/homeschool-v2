@@ -5,21 +5,49 @@ import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import type {
+  CurriculumGenerationHorizon,
+  FastPathIntakeRoute,
+  HomeschoolFastPathPreview,
+} from "@/lib/homeschool/onboarding/types";
 
-const schoolDays = [
-  { label: "Mon", value: 1 },
-  { label: "Tue", value: 2 },
-  { label: "Wed", value: 3 },
-  { label: "Thu", value: 4 },
-  { label: "Fri", value: 5 },
+type HorizonIntent = "today_only" | "auto";
+
+const intakeOptions: Array<{ value: FastPathIntakeRoute; label: string; description: string }> = [
+  {
+    value: "single_lesson",
+    label: "I have a chapter, pages, or one lesson",
+    description: "Use one assignment or one day of material without forcing a fake week.",
+  },
+  {
+    value: "weekly_plan",
+    label: "I have a weekly plan",
+    description: "Paste your week notes and we will shape a bounded current week.",
+  },
+  {
+    value: "outline",
+    label: "I have an outline or table of contents",
+    description: "Turn a sequence or outline into the next few school days.",
+  },
+  {
+    value: "topic",
+    label: "Start from a topic",
+    description: "Build a bounded starter module around one topic.",
+  },
+  {
+    value: "manual_shell",
+    label: "Start with a simple shell",
+    description: "Use a light starter structure when you want to scaffold slowly.",
+  },
 ];
 
-type LearnerDraft = {
-  displayName: string;
-  gradeLevel: string;
-  ageBand: string;
-  pacePreference: "gentle" | "balanced" | "accelerated";
-  loadPreference: "light" | "balanced" | "ambitious";
+const horizonLabels: Record<CurriculumGenerationHorizon, string> = {
+  today: "Today",
+  tomorrow: "Tomorrow",
+  next_few_days: "Next few days",
+  current_week: "Current week",
+  starter_module: "Starter module",
+  starter_week: "Starter week",
 };
 
 export function HomeschoolOnboardingForm(props: {
@@ -27,454 +55,293 @@ export function HomeschoolOnboardingForm(props: {
   defaultLearnerName?: string | null;
 }) {
   const router = useRouter();
-  const [householdName, setHouseholdName] = React.useState(props.organizationName);
-  const [schoolYearLabel, setSchoolYearLabel] = React.useState("");
-  const [termStartDate, setTermStartDate] = React.useState("");
-  const [termEndDate, setTermEndDate] = React.useState("");
-  const [preferredSchoolDays, setPreferredSchoolDays] = React.useState<number[]>([1, 2, 3, 4, 5]);
-  const [dailyTimeBudgetMinutes, setDailyTimeBudgetMinutes] = React.useState(180);
-  const [subjects, setSubjects] = React.useState("Math, Language Arts, Science, History");
-  const [standardsPreference, setStandardsPreference] = React.useState("");
-  const [teachingStyle, setTeachingStyle] = React.useState("");
-  const [curriculumMode, setCurriculumMode] = React.useState<"manual_shell" | "paste_outline" | "ai_decompose">("manual_shell");
-  const [curriculumTitle, setCurriculumTitle] = React.useState("Family Learning Plan");
-  const [curriculumSummary, setCurriculumSummary] = React.useState("");
-  const [curriculumText, setCurriculumText] = React.useState("");
-  const [learners, setLearners] = React.useState<LearnerDraft[]>([
-    {
-      displayName: props.defaultLearnerName ?? "",
-      gradeLevel: "",
-      ageBand: "",
-      pacePreference: "balanced",
-      loadPreference: "balanced",
-    },
-  ]);
+  const [step, setStep] = React.useState(1);
+  const [learnerName, setLearnerName] = React.useState(props.defaultLearnerName ?? "");
+  const [intakeRoute, setIntakeRoute] = React.useState<FastPathIntakeRoute>("single_lesson");
+  const [sourceInput, setSourceInput] = React.useState("");
+  const [horizonIntent, setHorizonIntent] = React.useState<HorizonIntent>("today_only");
+  const [preview, setPreview] = React.useState<HomeschoolFastPathPreview | null>(null);
+  const [previewLearnerName, setPreviewLearnerName] = React.useState("");
+  const [previewRoute, setPreviewRoute] = React.useState<FastPathIntakeRoute>("single_lesson");
+  const [previewTitle, setPreviewTitle] = React.useState("");
+  const [previewHorizon, setPreviewHorizon] = React.useState<CurriculumGenerationHorizon>("today");
   const [submitting, setSubmitting] = React.useState(false);
   const [jobStatus, setJobStatus] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
-  async function waitForJob(jobId: string) {
-    setJobStatus("Generating curriculum...");
+  const canContinueStep1 = learnerName.trim().length > 0;
+  const canContinueStep3 = sourceInput.trim().length > 0;
 
-    for (let attempt = 0; attempt < 60; attempt += 1) {
-      const response = await fetch(`/api/ai/jobs/${jobId}`, { cache: "no-store" });
-      const payload = await response.json().catch(() => null);
-
-      if (!response.ok) {
-        throw new Error(payload?.error ?? "Could not load job status.");
-      }
-
-      if (payload?.status === "completed") {
-        return payload;
-      }
-
-      if (payload?.status === "failed") {
-        throw new Error(payload?.errorMessage ?? "Curriculum generation failed.");
-      }
-
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-    }
-
-    throw new Error("Curriculum generation timed out.");
-  }
-
-  function toggleSchoolDay(day: number) {
-    setPreferredSchoolDays((current) =>
-      current.includes(day) ? current.filter((value) => value !== day) : [...current, day].sort(),
-    );
-  }
-
-  function updateLearner(index: number, patch: Partial<LearnerDraft>) {
-    setLearners((current) =>
-      current.map((learner, learnerIndex) =>
-        learnerIndex === index ? { ...learner, ...patch } : learner,
-      ),
-    );
-  }
-
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function submitFastPath(confirmPreview = false) {
     setSubmitting(true);
     setError(null);
+    setJobStatus("Preparing your first day...");
 
     const response = await fetch("/api/homeschool/onboarding", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        householdName,
-        schoolYearLabel,
-        termStartDate,
-        termEndDate,
-        preferredSchoolDays,
-        dailyTimeBudgetMinutes,
-        subjects: subjects
-          .split(",")
-          .map((value) => value.trim())
-          .filter(Boolean),
-        standardsPreference,
-        teachingStyle,
-        learners: learners.filter((learner) => learner.displayName.trim()),
-        curriculumMode,
-        curriculumTitle,
-        curriculumSummary,
-        curriculumText,
+        learnerName,
+        intakeRoute,
+        sourceInput,
+        horizonIntent,
+        confirmPreview,
+        previewCorrections: confirmPreview
+          ? {
+              learnerName: previewLearnerName,
+              intakeRoute: previewRoute,
+              title: previewTitle,
+              chosenHorizon: previewHorizon,
+            }
+          : undefined,
       }),
     });
 
     const payload = await response.json().catch(() => null);
-
     if (!response.ok) {
       setError(payload?.error ?? "Could not finish onboarding.");
       setSubmitting(false);
+      setJobStatus(null);
       return;
     }
 
-    if (payload?.mode === "queued" && payload?.jobId) {
-      try {
-        const result = await waitForJob(payload.jobId);
-        router.push(result?.output?.redirectTo ?? "/today");
-      } catch (jobError) {
-        setError(jobError instanceof Error ? jobError.message : "Curriculum generation failed.");
-        setSubmitting(false);
-        setJobStatus(null);
-        return;
-      }
-    } else {
-      router.push(payload?.redirectTo ?? "/today");
+    if (payload?.mode === "preview_required") {
+      setPreview(payload.preview);
+      setPreviewLearnerName(payload.preview.learnerTarget);
+      setPreviewRoute(payload.preview.intakeRoute);
+      setPreviewTitle(payload.preview.title);
+      setPreviewHorizon(payload.preview.chosenHorizon);
+      setStep(4);
+      setSubmitting(false);
+      setJobStatus(null);
+      return;
     }
+
+    router.push(payload?.redirectTo ?? "/today");
     router.refresh();
-    setJobStatus(null);
-    setSubmitting(false);
   }
 
   return (
-    <form className="grid gap-6" onSubmit={handleSubmit}>
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
+    <div className="grid gap-4">
+      <Card className="quiet-panel border-border/60 bg-card/85 shadow-none">
+        <CardHeader className="pb-3">
+          <CardTitle>Fast path to Today</CardTitle>
+          <CardDescription>
+            Step {step} of 4 · Add one learner, one source, and open Today fast.
+          </CardDescription>
+          <p className="text-xs text-muted-foreground">{props.organizationName}</p>
+        </CardHeader>
+      </Card>
+
+      {step === 1 ? (
         <Card className="quiet-panel border-border/60 bg-card/78 shadow-none">
           <CardHeader>
-            <CardTitle>Household setup</CardTitle>
-            <CardDescription>
-              Save the planning defaults that shape weekly generation and today&apos;s workload.
-            </CardDescription>
+            <CardTitle>Who are we planning for first?</CardTitle>
+            <CardDescription>Start with one learner. You can add another learner later.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
             <label className="grid gap-1.5 text-sm font-medium">
-              Household name
+              Learner name
               <input
-                value={householdName}
-                onChange={(event) => setHouseholdName(event.target.value)}
+                value={learnerName}
+                onChange={(event) => setLearnerName(event.target.value)}
+                placeholder="Ava"
                 className="rounded-xl border border-input bg-background px-3 py-2 font-normal"
               />
             </label>
-
-            <div className="grid gap-4 sm:grid-cols-3">
-              <label className="grid gap-1.5 text-sm font-medium">
-                School year
-                <input
-                  value={schoolYearLabel}
-                  onChange={(event) => setSchoolYearLabel(event.target.value)}
-                  placeholder="2026-2027"
-                  className="rounded-xl border border-input bg-background px-3 py-2 font-normal"
-                />
-              </label>
-              <label className="grid gap-1.5 text-sm font-medium">
-                Term start
-                <input
-                  type="date"
-                  value={termStartDate}
-                  onChange={(event) => setTermStartDate(event.target.value)}
-                  className="rounded-xl border border-input bg-background px-3 py-2 font-normal"
-                />
-              </label>
-              <label className="grid gap-1.5 text-sm font-medium">
-                Term end
-                <input
-                  type="date"
-                  value={termEndDate}
-                  onChange={(event) => setTermEndDate(event.target.value)}
-                  className="rounded-xl border border-input bg-background px-3 py-2 font-normal"
-                />
-              </label>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_180px]">
-              <div className="grid gap-1.5 text-sm font-medium">
-                Preferred school days
-                <div className="flex flex-wrap gap-2">
-                  {schoolDays.map((day) => {
-                    const active = preferredSchoolDays.includes(day.value);
-                    return (
-                      <button
-                        key={day.value}
-                        type="button"
-                        onClick={() => toggleSchoolDay(day.value)}
-                        className={`rounded-full border px-3 py-1.5 text-sm ${
-                          active
-                            ? "border-primary bg-primary/10 text-primary"
-                            : "border-border bg-background text-muted-foreground"
-                        }`}
-                      >
-                        {day.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <label className="grid gap-1.5 text-sm font-medium">
-                Daily time budget
-                <input
-                  type="number"
-                  min={30}
-                  max={480}
-                  step={15}
-                  value={dailyTimeBudgetMinutes}
-                  onChange={(event) => setDailyTimeBudgetMinutes(Number(event.target.value))}
-                  className="rounded-xl border border-input bg-background px-3 py-2 font-normal"
-                />
-              </label>
-            </div>
-
-            <label className="grid gap-1.5 text-sm font-medium">
-              Subjects
-              <input
-                value={subjects}
-                onChange={(event) => setSubjects(event.target.value)}
-                placeholder="Math, Language Arts, Science"
-                className="rounded-xl border border-input bg-background px-3 py-2 font-normal"
-              />
-            </label>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <label className="grid gap-1.5 text-sm font-medium">
-                Standards or state preference
-                <input
-                  value={standardsPreference}
-                  onChange={(event) => setStandardsPreference(event.target.value)}
-                  placeholder="Optional"
-                  className="rounded-xl border border-input bg-background px-3 py-2 font-normal"
-                />
-              </label>
-              <label className="grid gap-1.5 text-sm font-medium">
-                Teaching style
-                <input
-                  value={teachingStyle}
-                  onChange={(event) => setTeachingStyle(event.target.value)}
-                  placeholder="Structured, project-based, gentle..."
-                  className="rounded-xl border border-input bg-background px-3 py-2 font-normal"
-                />
-              </label>
+            <div className="flex justify-end">
+              <Button type="button" onClick={() => setStep(2)} disabled={!canContinueStep1}>
+                Continue
+              </Button>
             </div>
           </CardContent>
         </Card>
+      ) : null}
 
+      {step === 2 ? (
         <Card className="quiet-panel border-border/60 bg-card/78 shadow-none">
           <CardHeader>
-            <CardTitle>What happens next</CardTitle>
-            <CardDescription>
-              One submission creates the first workable version of the household workspace.
-            </CardDescription>
+            <CardTitle>What do you have right now?</CardTitle>
+            <CardDescription>Pick the closest option. Keep it simple.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3 text-sm text-muted-foreground">
-            <p>1. Save household defaults and pacing preferences.</p>
-            <p>2. Create learner profiles with an initial workload bias.</p>
-            <p>3. Create or import the first curriculum source.</p>
-            <p>4. Build the first workable week.</p>
-            <p>5. Open Today ready to adjust and run.</p>
+          <CardContent className="grid gap-3">
+            {intakeOptions.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setIntakeRoute(option.value)}
+                className={`rounded-xl border p-3 text-left transition-colors ${
+                  intakeRoute === option.value
+                    ? "border-primary bg-primary/10"
+                    : "border-border bg-background hover:bg-muted/40"
+                }`}
+              >
+                <p className="text-sm font-medium">{option.label}</p>
+                <p className="text-xs text-muted-foreground">{option.description}</p>
+              </button>
+            ))}
+            <p className="text-xs text-muted-foreground">Add another learner later.</p>
+            <div className="flex justify-between">
+              <Button type="button" variant="outline" onClick={() => setStep(1)}>
+                Back
+              </Button>
+              <Button type="button" onClick={() => setStep(3)}>Continue</Button>
+            </div>
           </CardContent>
         </Card>
-      </div>
+      ) : null}
 
-      <Card className="quiet-panel border-border/60 bg-card/78 shadow-none">
-        <CardHeader>
-          <CardTitle>Learners</CardTitle>
-          <CardDescription>Each learner gets a profile, a pace preference, and an initial workload setting.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4">
-          {learners.map((learner, index) => (
-            <div key={index} className="grid gap-4 rounded-xl border border-border/60 bg-background/70 p-4 md:grid-cols-5">
-              <label className="grid gap-1.5 text-sm font-medium md:col-span-2">
-                Name
-                <input
-                  value={learner.displayName}
-                  onChange={(event) => updateLearner(index, { displayName: event.target.value })}
-                  className="rounded-xl border border-input bg-background px-3 py-2 font-normal"
-                />
-              </label>
-              <label className="grid gap-1.5 text-sm font-medium">
-                Grade
-                <input
-                  value={learner.gradeLevel}
-                  onChange={(event) => updateLearner(index, { gradeLevel: event.target.value })}
-                  placeholder="3rd grade"
-                  className="rounded-xl border border-input bg-background px-3 py-2 font-normal"
-                />
-              </label>
-              <label className="grid gap-1.5 text-sm font-medium">
-                Age range
-                <input
-                  value={learner.ageBand}
-                  onChange={(event) => updateLearner(index, { ageBand: event.target.value })}
-                  placeholder="8-9"
-                  className="rounded-xl border border-input bg-background px-3 py-2 font-normal"
-                />
-              </label>
-              <div className="grid gap-2 md:col-span-5 md:grid-cols-2">
-                <label className="grid gap-1.5 text-sm font-medium">
-                  Pace
-                  <select
-                    value={learner.pacePreference}
-                    onChange={(event) =>
-                      updateLearner(index, {
-                        pacePreference: event.target.value as LearnerDraft["pacePreference"],
-                      })
-                    }
-                    className="rounded-xl border border-input bg-background px-3 py-2 font-normal"
-                  >
-                    <option value="gentle">Gentle</option>
-                    <option value="balanced">Balanced</option>
-                    <option value="accelerated">Accelerated</option>
-                  </select>
-                </label>
-                <label className="grid gap-1.5 text-sm font-medium">
-                  Load
-                  <select
-                    value={learner.loadPreference}
-                    onChange={(event) =>
-                      updateLearner(index, {
-                        loadPreference: event.target.value as LearnerDraft["loadPreference"],
-                      })
-                    }
-                    className="rounded-xl border border-input bg-background px-3 py-2 font-normal"
-                  >
-                    <option value="light">Light</option>
-                    <option value="balanced">Balanced</option>
-                    <option value="ambitious">Ambitious</option>
-                  </select>
-                </label>
-              </div>
-            </div>
-          ))}
-
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() =>
-              setLearners((current) => [
-                ...current,
-                {
-                  displayName: "",
-                  gradeLevel: "",
-                  ageBand: "",
-                  pacePreference: "balanced",
-                  loadPreference: "balanced",
-                },
-              ])
-            }
-          >
-            Add learner
-          </Button>
-        </CardContent>
-      </Card>
-
-      <Card className="quiet-panel border-border/60 bg-card/78 shadow-none">
-        <CardHeader>
-          <CardTitle>Curriculum intake</CardTitle>
-          <CardDescription>
-            Start from a shell, paste a structured outline, or give the app source material to decompose.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4">
-          <fieldset className="grid gap-2">
-            <legend className="text-sm font-medium">Curriculum mode</legend>
-            <div className="flex flex-wrap gap-2">
-              {[
-                { value: "manual_shell", label: "Starter shell" },
-                { value: "paste_outline", label: "Paste outline" },
-                { value: "ai_decompose", label: "AI decompose" },
-              ].map((option) => {
-                const active = curriculumMode === option.value;
-                const inputId = `onboarding-curriculum-mode-${option.value}`;
-                return (
-                  <label
-                    key={option.value}
-                    htmlFor={inputId}
-                    onClick={() => setCurriculumMode(option.value as typeof curriculumMode)}
-                    className={`cursor-pointer rounded-full border px-3 py-1.5 text-sm transition-colors ${
-                      active
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "border-border bg-background text-muted-foreground"
-                    }`}
-                  >
-                    <input
-                      id={inputId}
-                      type="radio"
-                      name="curriculumMode"
-                      value={option.value}
-                      checked={active}
-                      onChange={() => setCurriculumMode(option.value as typeof curriculumMode)}
-                      className="sr-only"
-                    />
-                    {option.label}
-                  </label>
-                );
-              })}
-            </div>
-          </fieldset>
-
-          <div className="grid gap-4 sm:grid-cols-2">
+      {step === 3 ? (
+        <Card className="quiet-panel border-border/60 bg-card/78 shadow-none">
+          <CardHeader>
+            <CardTitle>Share one source</CardTitle>
+            <CardDescription>Paste what you have. We&apos;ll shape a usable Today.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4">
             <label className="grid gap-1.5 text-sm font-medium">
-              Curriculum title
-              <input
-                value={curriculumTitle}
-                onChange={(event) => setCurriculumTitle(event.target.value)}
-                className="rounded-xl border border-input bg-background px-3 py-2 font-normal"
-              />
-            </label>
-            <label className="grid gap-1.5 text-sm font-medium">
-              Summary
-              <input
-                value={curriculumSummary}
-                onChange={(event) => setCurriculumSummary(event.target.value)}
-                placeholder="Optional parent-facing summary"
-                className="rounded-xl border border-input bg-background px-3 py-2 font-normal"
-              />
-            </label>
-          </div>
-
-          {curriculumMode !== "manual_shell" ? (
-            <label className="grid gap-1.5 text-sm font-medium">
-              {curriculumMode === "ai_decompose" ? "Source material" : "Structured outline"}
+              Source input
               <textarea
-                value={curriculumText}
-                onChange={(event) => setCurriculumText(event.target.value)}
-                rows={10}
+                value={sourceInput}
+                onChange={(event) => setSourceInput(event.target.value)}
+                rows={8}
                 placeholder={
-                  curriculumMode === "ai_decompose"
-                    ? "Paste a syllabus, table of contents, curriculum notes, or rough plan."
-                    : "# Unit 1\n- Lesson 1\n- Lesson 2"
+                  intakeRoute === "topic"
+                    ? "Fractions with food examples"
+                    : intakeRoute === "weekly_plan"
+                      ? "Monday: read chapter 4, workbook page 42. Wednesday: quiz review. Friday: lab notes."
+                      : intakeRoute === "outline"
+                        ? "Unit 1\n- Fractions\n- Decimals\n- Percents"
+                        : intakeRoute === "manual_shell"
+                          ? "Math, reading, science"
+                    : "Chapter 4 pages 88-95, workbook pg 42, quiz Friday"
                 }
-                className="rounded-2xl border border-input bg-background px-3 py-3 font-normal"
+                className="rounded-xl border border-input bg-background px-3 py-2 font-normal"
               />
             </label>
-          ) : null}
-        </CardContent>
-      </Card>
 
-      {error ? (
-        <p className="rounded-xl bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          {error}
-        </p>
-      ) : null}
-      {jobStatus ? (
-        <p className="rounded-xl bg-muted px-4 py-3 text-sm text-muted-foreground">{jobStatus}</p>
+            <fieldset className="grid gap-2">
+              <legend className="text-sm font-medium">Planning horizon</legend>
+              <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                <input
+                  type="radio"
+                  name="horizon"
+                  checked={horizonIntent === "today_only"}
+                  onChange={() => setHorizonIntent("today_only")}
+                />
+                Use this for just today
+              </label>
+              <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                <input
+                  type="radio"
+                  name="horizon"
+                  checked={horizonIntent === "auto"}
+                  onChange={() => setHorizonIntent("auto")}
+                />
+                Auto-expand to next few days when confidence is high
+              </label>
+            </fieldset>
+
+            <div className="flex justify-between">
+              <Button type="button" variant="outline" onClick={() => setStep(2)}>
+                Back
+              </Button>
+              <Button type="button" disabled={!canContinueStep3 || submitting} onClick={() => void submitFastPath(false)}>
+                Generate Today
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       ) : null}
 
-      <div className="flex justify-end">
-        <Button type="submit" disabled={submitting}>
-          {submitting ? "Finishing setup..." : "Finish setup"}
-        </Button>
-      </div>
-    </form>
+      {step === 4 && preview ? (
+        <Card className="quiet-panel border-border/60 bg-card/78 shadow-none">
+          <CardHeader>
+            <CardTitle>Quick preview before save</CardTitle>
+            <CardDescription>
+              Confidence is {preview.confidence}. Correct anything obvious before we save and open
+              Today.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 text-sm">
+            <label className="grid gap-1.5 font-medium">
+              Learner
+              <input
+                value={previewLearnerName}
+                onChange={(event) => setPreviewLearnerName(event.target.value)}
+                className="rounded-xl border border-input bg-background px-3 py-2 font-normal"
+              />
+            </label>
+            <label className="grid gap-1.5 font-medium">
+              Intake route
+              <select
+                value={previewRoute}
+                onChange={(event) => setPreviewRoute(event.target.value as FastPathIntakeRoute)}
+                className="rounded-xl border border-input bg-background px-3 py-2 font-normal"
+              >
+                {intakeOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="grid gap-1.5 font-medium">
+              Title
+              <input
+                value={previewTitle}
+                onChange={(event) => setPreviewTitle(event.target.value)}
+                className="rounded-xl border border-input bg-background px-3 py-2 font-normal"
+              />
+            </label>
+            <label className="grid gap-1.5 font-medium">
+              Planning horizon
+              <select
+                value={previewHorizon}
+                onChange={(event) =>
+                  setPreviewHorizon(event.target.value as CurriculumGenerationHorizon)
+                }
+                className="rounded-xl border border-input bg-background px-3 py-2 font-normal"
+              >
+                {Object.entries(horizonLabels).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p>
+              <span className="font-medium">Suggested horizon:</span>{" "}
+              {horizonLabels[preview.inferredHorizon]}
+            </p>
+            <div>
+              <p className="font-medium">Detected chunks</p>
+              <ul className="list-disc pl-5 text-muted-foreground">
+                {preview.detectedChunks.map((chunk) => (
+                  <li key={chunk}>{chunk}</li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <p className="font-medium">Assumptions</p>
+              <ul className="list-disc pl-5 text-muted-foreground">
+                {preview.assumptions.map((assumption) => (
+                  <li key={assumption}>{assumption}</li>
+                ))}
+              </ul>
+            </div>
+            <div className="flex justify-between">
+              <Button type="button" variant="outline" onClick={() => setStep(3)}>Edit source</Button>
+              <Button type="button" disabled={submitting} onClick={() => void submitFastPath(true)}>
+                Save and open Today
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {error ? <p className="rounded-xl bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p> : null}
+      {jobStatus ? <p className="rounded-xl bg-muted px-4 py-3 text-sm text-muted-foreground">{jobStatus}</p> : null}
+
+    </div>
   );
 }
