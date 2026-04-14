@@ -3,6 +3,7 @@ import "@/lib/server-only";
 import { and, eq } from "drizzle-orm";
 
 import { ensurePublishedActivitiesForLearner } from "@/lib/activities/assignment-service";
+import { assertLearnerCreationAllowed } from "@/lib/billing/service";
 import { createRepositories } from "@/lib/db";
 import { ensureDatabaseReady, getDb } from "@/lib/db/server";
 import { learners, organizations } from "@/lib/db/schema";
@@ -115,6 +116,7 @@ export async function createLearnerForOrganization(
   }
 
   const repos = createRepositories(getDb());
+  await assertLearnerCreationAllowed(organizationId);
   const { firstName, lastName } = splitDisplayName(normalizedDisplayName);
   const learner = await repos.learners.createLearner({
     organizationId,

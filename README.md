@@ -137,6 +137,7 @@ What you should not look for here anymore:
 - Start the main app from `/home/luke/Desktop/homeschool-v2` with `corepack pnpm dev` or `make dev`.
 - For local auth flows, start the Supabase stack with `corepack pnpm dev:stack` and copy the publishable/secret keys from `corepack pnpm dev:stack:status` into `.env.local`.
 - Local app startup still applies repo SQL files from `drizzle/*.sql` automatically. Hosted startup does not. Staging and production databases must be provisioned or migrated before the Vercel app boots.
+- Stripe billing is optional in local development. If you want real hosted checkout and webhook flows, add `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and `STRIPE_FOUNDING_HOUSEHOLD_ANNUAL_PRICE_ID` to `.env.local`.
 - Local Supabase port cheat sheet:
   - `http://127.0.0.1:54321` is the project API URL and should be used for `NEXT_PUBLIC_SUPABASE_URL`
   - `postgresql://postgres:postgres@127.0.0.1:54322/postgres` is the local Postgres database
