@@ -55,6 +55,51 @@ export const CurriculumSourcePacingSchema = z.object({
 
 export type CurriculumSourcePacing = z.infer<typeof CurriculumSourcePacingSchema>;
 
+export const CurriculumSourceIntakeRouteSchema = z.enum([
+  "single_lesson",
+  "weekly_plan",
+  "outline",
+  "topic",
+  "manual_shell",
+]);
+
+export const CurriculumSourceGenerationHorizonSchema = z.enum([
+  "today",
+  "tomorrow",
+  "next_few_days",
+  "current_week",
+  "starter_module",
+  "starter_week",
+]);
+
+export const CurriculumSourceHorizonDecisionSourceSchema = z.enum([
+  "system_default",
+  "confidence_limited",
+  "user_selected",
+  "user_corrected_in_preview",
+  "manual_regeneration",
+]);
+
+export const CurriculumSourceIntakeConfidenceSchema = z.enum(["low", "medium", "high"]);
+
+export const CurriculumSourceIntakeSchema = z.object({
+  route: CurriculumSourceIntakeRouteSchema,
+  routeVersion: z.literal(1),
+  rawText: z.string().nullable().optional(),
+  assetIds: z.array(z.string()).default([]),
+  learnerId: z.string().nullable().optional(),
+  confidence: CurriculumSourceIntakeConfidenceSchema,
+  inferredHorizon: CurriculumSourceGenerationHorizonSchema,
+  chosenHorizon: CurriculumSourceGenerationHorizonSchema,
+  horizonDecisionSource: CurriculumSourceHorizonDecisionSourceSchema,
+  assumptions: z.array(z.string()).default([]),
+  detectedChunks: z.array(z.string()).default([]),
+  sourceFingerprint: z.string().optional(),
+  createdFrom: z.enum(["onboarding_fast_path", "curriculum_add_flow", "curriculum_regeneration"]),
+});
+
+export type CurriculumSourceIntake = z.infer<typeof CurriculumSourceIntakeSchema>;
+
 export const CurriculumSourceSchema = z.object({
   id: z.string(),
   householdId: z.string(),
@@ -70,6 +115,7 @@ export const CurriculumSourceSchema = z.object({
   importVersion: z.number().int().positive().default(1),
   /** Pacing contract from curriculum generation. Use this as the session budget source. */
   pacing: CurriculumSourcePacingSchema.optional(),
+  intake: CurriculumSourceIntakeSchema.optional(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });

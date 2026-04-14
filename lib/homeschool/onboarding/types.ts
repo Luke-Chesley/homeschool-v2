@@ -1,5 +1,37 @@
 import type { OnboardingMilestone } from "@/lib/homeschool/onboarding/activation-contracts";
 
+export const FAST_PATH_INTAKE_ROUTES = [
+  "single_lesson",
+  "weekly_plan",
+  "outline",
+  "topic",
+  "manual_shell",
+] as const;
+
+export const LEGACY_FAST_PATH_INTAKE_ROUTES = [
+  "book_curriculum",
+  "outline_weekly_plan",
+] as const;
+
+export const CURRICULUM_GENERATION_HORIZONS = [
+  "today",
+  "tomorrow",
+  "next_few_days",
+  "current_week",
+  "starter_module",
+  "starter_week",
+] as const;
+
+export const CURRICULUM_HORIZON_DECISION_SOURCES = [
+  "system_default",
+  "confidence_limited",
+  "user_selected",
+  "user_corrected_in_preview",
+  "manual_regeneration",
+] as const;
+
+export const CURRICULUM_INTAKE_CONFIDENCE_LEVELS = ["low", "medium", "high"] as const;
+
 export type HomeschoolOnboardingInput = {
   organizationId: string;
   householdName: string;
@@ -22,28 +54,49 @@ export type HomeschoolOnboardingInput = {
   curriculumTitle: string;
   curriculumSummary?: string;
   curriculumText?: string;
+  curriculumSourceMetadata?: Record<string, unknown>;
 };
 
-export type FastPathIntakeType = "book_curriculum" | "outline_weekly_plan" | "topic";
+export type FastPathIntakeRoute = (typeof FAST_PATH_INTAKE_ROUTES)[number];
+
+export type LegacyFastPathIntakeRoute = (typeof LEGACY_FAST_PATH_INTAKE_ROUTES)[number];
+
+export type FastPathIntakeType = FastPathIntakeRoute | LegacyFastPathIntakeRoute;
 
 export type FastPathHorizonIntent = "today_only" | "auto";
+
+export type CurriculumGenerationHorizon = (typeof CURRICULUM_GENERATION_HORIZONS)[number];
+
+export type CurriculumHorizonDecisionSource =
+  (typeof CURRICULUM_HORIZON_DECISION_SOURCES)[number];
+
+export type CurriculumIntakeConfidence = (typeof CURRICULUM_INTAKE_CONFIDENCE_LEVELS)[number];
 
 export type HomeschoolFastPathOnboardingInput = {
   organizationId: string;
   learnerName: string;
-  intakeType: FastPathIntakeType;
+  intakeRoute: FastPathIntakeRoute;
   sourceInput: string;
   horizonIntent?: FastPathHorizonIntent;
   confirmPreview?: boolean;
+  previewCorrections?: {
+    learnerName?: string;
+    intakeRoute?: FastPathIntakeRoute;
+    title?: string;
+    chosenHorizon?: CurriculumGenerationHorizon;
+  };
 };
 
 export type HomeschoolFastPathPreview = {
   learnerTarget: string;
-  intakeType: FastPathIntakeType;
+  intakeRoute: FastPathIntakeRoute;
   title: string;
   detectedChunks: string[];
-  plannedHorizon: "today" | "next_few_days";
-  confidence: "low" | "moderate";
+  assumptions: string[];
+  inferredHorizon: CurriculumGenerationHorizon;
+  chosenHorizon: CurriculumGenerationHorizon;
+  horizonDecisionSource: CurriculumHorizonDecisionSource;
+  confidence: CurriculumIntakeConfidence;
 };
 
 export type HomeschoolOnboardingStatus = {
