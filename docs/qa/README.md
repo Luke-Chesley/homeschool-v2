@@ -13,6 +13,8 @@ Current guides:
 - [Local QA Pipeline](/home/luke/Desktop/homeschool-v2/docs/qa/local-qa-pipeline.md)
 - [QA Flow Inventory](/home/luke/Desktop/homeschool-v2/docs/qa/qa-flow-inventory.md)
 - [QA Report Template](/home/luke/Desktop/homeschool-v2/docs/qa/qa-report-template.md)
+- [Persona Test Matrix](/home/luke/Desktop/homeschool-v2/docs/qa/persona-test-matrix.md)
+- [Subagent Activation Prompts](/home/luke/Desktop/homeschool-v2/docs/qa/subagent-activation-prompts.md)
 - [Learner Flow Responsive QA](/home/luke/Desktop/homeschool-v2/docs/qa/learner-flow-responsive-qa.md)
 - [Phase 7 Product Polish QA](/home/luke/Desktop/homeschool-v2/docs/qa/phase7-product-polish-qa.md)
 - [Phase 7 Product Polish Agent Prompt](/home/luke/Desktop/homeschool-v2/docs/qa/phase7-product-polish-agent-prompt.md)
@@ -27,3 +29,9 @@ Reusable prompt set:
 - [Tracking And Account Agent Prompt](/home/luke/Desktop/homeschool-v2/docs/qa/prompts/tracking-account-agent-prompt.md)
 - [Copilot Agent Prompt](/home/luke/Desktop/homeschool-v2/docs/qa/prompts/copilot-agent-prompt.md)
 - [Full Product Smoke Agent Prompt](/home/luke/Desktop/homeschool-v2/docs/qa/prompts/full-product-smoke-agent-prompt.md)
+
+Project subagents:
+- [.codex/agents/qa-runner.toml](/home/luke/Desktop/homeschool-v2/.codex/agents/qa-runner.toml)
+- [.codex/agents/data-setup-runner.toml](/home/luke/Desktop/homeschool-v2/.codex/agents/data-setup-runner.toml)
+- [.codex/agents/persona-qa-runner.toml](/home/luke/Desktop/homeschool-v2/.codex/agents/persona-qa-runner.toml)
+- [.codex/agents/launch-smoke-runner.toml](/home/luke/Desktop/homeschool-v2/.codex/agents/launch-smoke-runner.toml)

@@ -17,6 +17,7 @@ This is not for:
 
 Turn QA into a repeatable local process with:
 - a stable route inventory
+- stable local personas and seeded states
 - dedicated prompts per workflow area
 - explicit execution logs
 - clear signoff language
@@ -69,6 +70,23 @@ Core prompts:
 Reference docs:
 - [QA Flow Inventory](/home/luke/Desktop/homeschool-v2/docs/qa/qa-flow-inventory.md)
 - [QA Report Template](/home/luke/Desktop/homeschool-v2/docs/qa/qa-report-template.md)
+- [Persona Test Matrix](/home/luke/Desktop/homeschool-v2/docs/qa/persona-test-matrix.md)
+- [Subagent Activation Prompts](/home/luke/Desktop/homeschool-v2/docs/qa/subagent-activation-prompts.md)
+
+## Subagent Pattern
+
+Recommended local QA pattern:
+
+1. `data_setup_runner`
+   - prepares realistic local states
+2. `persona_qa_runner`
+   - tests whether the app makes sense for a specific user type
+3. `qa_runner`
+   - executes route-and-flow QA with responsive coverage
+4. `launch_smoke_runner`
+   - returns a strict release-style pass/fail recommendation
+
+Use this pattern when you want QA that is both product-aware and operationally repeatable.
 
 ## Suggested Usage By Situation
 
