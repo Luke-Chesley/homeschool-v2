@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { StudioToggle } from "@/components/studio/StudioToggle";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { Button } from "@/components/ui/button";
+import { ActiveLearnerSwitcher } from "@/components/users/active-learner-switcher";
 import { cn } from "@/lib/utils";
 
 const publicTabs = [
@@ -42,7 +43,8 @@ function getWorkspaceLabel(pathname: string) {
 }
 
 type WorkspaceSnapshot = {
-  activeLearner?: { displayName?: string | null } | null;
+  activeLearner?: { id?: string | null; displayName?: string | null } | null;
+  learners?: Array<{ id: string; displayName: string; status: string }>;
   organization?: { name?: string | null } | null;
 };
 
@@ -102,24 +104,35 @@ export function GlobalPageTabs() {
         </div>
         <div className="flex min-w-0 items-center justify-center">
           {inWorkspace ? (
-            <div className="hidden min-w-0 items-center gap-2 text-sm md:flex">
-              <Link
-                href="/today"
-                className="shrink-0 font-medium text-muted-foreground transition-colors hover:text-foreground"
-              >
-                Workspace
-              </Link>
-              {workspaceLabel ? (
-                <>
-                  <span className="text-muted-foreground/70">/</span>
-                  <span className="truncate font-medium text-foreground">{workspaceLabel}</span>
-                </>
-              ) : null}
-              {session?.activeLearner?.displayName ? (
-                <>
-                  <span className="text-muted-foreground/70">/</span>
-                  <span className="truncate text-muted-foreground">{session.activeLearner.displayName}</span>
-                </>
+            <div className="hidden min-w-0 items-center gap-3 md:flex">
+              <div className="min-w-0 items-center gap-2 text-sm lg:flex">
+                <Link
+                  href="/today"
+                  className="shrink-0 font-medium text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  Workspace
+                </Link>
+                {workspaceLabel ? (
+                  <>
+                    <span className="text-muted-foreground/70">/</span>
+                    <span className="truncate font-medium text-foreground">{workspaceLabel}</span>
+                  </>
+                ) : null}
+                {session?.activeLearner?.displayName ? (
+                  <>
+                    <span className="text-muted-foreground/70">/</span>
+                    <span className="truncate text-muted-foreground">{session.activeLearner.displayName}</span>
+                  </>
+                ) : null}
+              </div>
+              {session?.learners && session.learners.length > 1 ? (
+                <ActiveLearnerSwitcher
+                  learners={session.learners}
+                  activeLearnerId={session.activeLearner?.id ?? null}
+                  label="Switch learner"
+                  className="min-w-[12rem]"
+                  selectClassName="h-9"
+                />
               ) : null}
             </div>
           ) : (

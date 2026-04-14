@@ -7,6 +7,8 @@ import {
   requireAppApiSession,
   setWorkspaceCookies,
 } from "@/lib/app-session/server";
+import { ACTIVATION_EVENT_NAMES } from "@/lib/homeschool/onboarding/activation-contracts";
+import { trackProductEvent } from "@/lib/platform/observability";
 import { createLearnerForOrganization } from "@/lib/users/service";
 
 const CreateLearnerSchema = z.object({
@@ -40,6 +42,17 @@ export async function POST(req: NextRequest) {
     const learner = await createLearnerForOrganization(organization.id, {
       displayName: parsed.data.displayName,
     });
+
+    if (session.learners.length >= 1) {
+      trackProductEvent({
+        name: ACTIVATION_EVENT_NAMES.secondLearnerCreated,
+        organizationId: organization.id,
+        learnerId: learner.id,
+        metadata: {
+          previousLearnerCount: session.learners.length,
+        },
+      });
+    }
 
     const response = NextResponse.json({ learner }, { status: 201 });
     return setWorkspaceCookies({

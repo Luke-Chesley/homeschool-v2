@@ -16,6 +16,9 @@ export const ACTIVATION_EVENT_NAMES = {
   refinementPromptOpened: "refinement_prompt_opened",
   refinementCompleted: "refinement_completed",
   onboardingAbandonedBeforeToday: "onboarding_abandoned_before_today",
+  activeLearnerSwitched: "active_learner_switched",
+  activeLearnerSwitchFailed: "active_learner_switch_failed",
+  secondLearnerCreated: "second_learner_created",
   returnedDay2: "returned_day_2",
   returnedDay7: "returned_day_7",
 } as const;
