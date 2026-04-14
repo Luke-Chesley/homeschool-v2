@@ -47,6 +47,7 @@
 - For new UI work, check the existing `Today`, `Planning`, `Curriculum`, learner, and `Copilot` pages first and extend those patterns before inventing new layout languages.
 
 ## Testing Guidelines
+- For every new or updated user flow, update the QA documentation in the same task with robust click-through coverage: include step-by-step navigation instructions agents can execute, expected outcomes on each page, and explicit reporting notes for what passed, failed, or looked suspicious.
 - There is no formal test suite yet; the minimum gate is `corepack pnpm typecheck`, and UI changes should also run `bash ./scripts/verify-before-merge.sh` before merge completion.
 - Before opening browser tools or running UI checks, confirm whether the shared main server on `localhost:3000` is already available and reuse it when possible.
 - When changing UI flows, verify the affected route in the browser and note the route tested, for example `/curriculum` or `/copilot`.
