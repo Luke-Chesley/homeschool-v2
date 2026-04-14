@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
       returnOrigin: new URL(request.url).origin,
     });
 
-    trackProductEvent({
+    await trackProductEvent({
       name: ACTIVATION_EVENT_NAMES.billingPortalOpened,
       organizationId: session.organization.id,
       learnerId: session.activeLearner?.id ?? null,

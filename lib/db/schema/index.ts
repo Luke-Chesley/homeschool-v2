@@ -4,6 +4,7 @@ export * from "@/lib/db/schema/curriculum";
 export * from "@/lib/db/schema/curriculumRouting";
 export * from "@/lib/db/schema/homeschool";
 export * from "@/lib/db/schema/learners";
+export * from "@/lib/db/schema/observability";
 export * from "@/lib/db/schema/organizations";
 export * from "@/lib/db/schema/planning";
 export * from "@/lib/db/schema/shared";

@@ -14,6 +14,8 @@ import {
   importCurriculumSourceFromLocalJson,
   listCurriculumSources,
 } from "@/lib/curriculum/service";
+import { ACTIVATION_EVENT_NAMES } from "@/lib/homeschool/onboarding/activation-contracts";
+import { trackProductEvent } from "@/lib/platform/observability";
 import { CreateCurriculumSourceInputSchema } from "@/lib/curriculum/types";
 
 const ImportLocalCurriculumRequestSchema = z.object({
@@ -57,6 +59,17 @@ export async function POST(req: NextRequest) {
             ...parsed.data,
             householdId: session.organization.id,
           });
+
+    await trackProductEvent({
+      name: ACTIVATION_EVENT_NAMES.curriculumSourceAdded,
+      organizationId: session.organization.id,
+      learnerId: session.activeLearner.id,
+      metadata: {
+        sourceId: source.id,
+        kind: source.kind,
+        intakeMode: "importPreset" in parsed.data ? parsed.data.importPreset : parsed.data.kind,
+      },
+    });
 
     return NextResponse.json(source, { status: 201 });
   } catch (err) {

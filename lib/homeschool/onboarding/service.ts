@@ -936,21 +936,21 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
     milestone: "fast_path_started",
     patch: { status: "in_progress", completedAt: null },
   });
-  trackProductEvent({
+  await trackProductEvent({
     name: ACTIVATION_EVENT_NAMES.onboardingStarted,
     organizationId: input.organizationId,
   });
-  trackProductEvent({
+  await trackProductEvent({
     name: ACTIVATION_EVENT_NAMES.learnerNameSubmitted,
     organizationId: input.organizationId,
     metadata: { learnerNameLength: input.learnerName.length },
   });
-  trackProductEvent({
+  await trackProductEvent({
     name: ACTIVATION_EVENT_NAMES.intakeTypeSelected,
     organizationId: input.organizationId,
     metadata: { intakeRoute: input.intakeRoute, horizonIntent: input.horizonIntent ?? "auto" },
   });
-  trackProductEvent({
+  await trackProductEvent({
     name: ACTIVATION_EVENT_NAMES.intakeSourceSubmitted,
     organizationId: input.organizationId,
     metadata: { sourceLength: input.sourceInput.trim().length },
@@ -1005,7 +1005,7 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
     },
   };
 
-  trackProductEvent({
+  await trackProductEvent({
     name: ACTIVATION_EVENT_NAMES.generationStarted,
     organizationId: input.organizationId,
     metadata: { intakeRoute: preview.intakeRoute, chosenHorizon: preview.chosenHorizon },
@@ -1027,13 +1027,13 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
     date: new Date().toISOString().slice(0, 10),
   });
 
-  trackProductEvent({
+  await trackProductEvent({
     name: ACTIVATION_EVENT_NAMES.generationCompleted,
     organizationId: input.organizationId,
     learnerId: primaryLearner.id,
     metadata: { sourceId, weekStartDate },
   });
-  trackProductEvent({
+  await trackProductEvent({
     name: ACTIVATION_EVENT_NAMES.firstTodayOpened,
     organizationId: input.organizationId,
     learnerId: primaryLearner.id,
@@ -1144,7 +1144,7 @@ export async function completeHomeschoolOnboarding(rawInput: unknown) {
       subjects: normalizeSubjects(input.subjects),
     },
   });
-  trackProductEvent({
+  await trackProductEvent({
     name: "homeschool_onboarding_completed",
     organizationId: input.organizationId,
     learnerId: primaryLearner.id,

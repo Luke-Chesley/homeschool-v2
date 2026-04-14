@@ -59,6 +59,7 @@ Typical launch household:
 - [phase5_pricing_billing_and_value_proof.md](./phase5_pricing_billing_and_value_proof.md)
 - [phase5_pricing_billing_and_value_proof_implementation.md](./phase5_pricing_billing_and_value_proof_implementation.md)
 - [phase6_beta_metrics_and_go_no_go.md](./phase6_beta_metrics_and_go_no_go.md)
+- [phase6_beta_metrics_and_go_no_go_implementation.md](./phase6_beta_metrics_and_go_no_go_implementation.md)
 
 ## Activation Progress Checklist
 

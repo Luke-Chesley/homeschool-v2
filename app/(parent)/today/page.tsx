@@ -2,10 +2,12 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { PlanningShell } from "@/components/planning/planning-shell";
+import { TodayOpenTracker } from "@/components/planning/TodayOpenTracker";
 import { TodayWorkspaceView } from "@/components/planning/today-workspace-view";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireAppSession } from "@/lib/app-session/server";
+import { getOrganizationTodayTrackerBaseline } from "@/lib/beta/service";
 import { getLiveCurriculumSource } from "@/lib/curriculum/service";
 import {
   completeTodayPlanItem,
@@ -37,6 +39,7 @@ function formatLongDate(date: string) {
 
 export default async function TodayPage({ searchParams }: TodayPageProps) {
   const session = await requireAppSession();
+  const trackerBaseline = await getOrganizationTodayTrackerBaseline(session.organization.id);
   const resolvedSearchParams = await searchParams;
   const date =
     typeof resolvedSearchParams.date === "string" ? resolvedSearchParams.date : undefined;
@@ -141,6 +144,12 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
 
   return (
     <PlanningShell>
+      <TodayOpenTracker
+        organizationId={session.organization.id}
+        learnerId={session.activeLearner.id}
+        date={workspace.date}
+        onboardingStartedAt={trackerBaseline.onboardingStartedAt}
+      />
       <header className="page-header">
         <p className="section-meta">{formatLongDate(workspace.date)}</p>
         <h1 className="page-title">Today</h1>

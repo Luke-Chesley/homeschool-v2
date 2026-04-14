@@ -111,7 +111,7 @@ What you should not look for here anymore:
 - `contracts/`
   Contracts for generated artifacts. Update these when artifact shape or lifecycle changes.
 - `docs/`
-  Architecture notes, product documents, and implementation history.
+  Architecture notes, beta scorecards, product documents, and implementation history.
 - `docs/qa/`
   Reusable browser QA handoffs and responsive review instructions.
 
@@ -151,4 +151,7 @@ What you should not look for here anymore:
   - `corepack pnpm typecheck`
   - `corepack pnpm test:architecture`
   - `corepack pnpm verify:phase3:rls` when changing RLS or storage policies
+- Beta operations helpers:
+  - `corepack pnpm beta:cohort -- --org <organizationId> ...`
+  - `corepack pnpm beta:scorecard -- --org <organizationId>`
 - Before merging to `main`, run `bash ./scripts/verify-before-merge.sh` from the main checkout.
