@@ -7,6 +7,8 @@ import {
   requireAppApiSession,
   setWorkspaceCookies,
 } from "@/lib/app-session/server";
+import { ACTIVATION_EVENT_NAMES } from "@/lib/homeschool/onboarding/activation-contracts";
+import { trackProductEvent } from "@/lib/platform/observability";
 import { getLearnerById } from "@/lib/users/service";
 
 const SetSessionSchema = z.object({
@@ -46,8 +48,32 @@ export async function POST(req: NextRequest) {
       organizationId: session.organization.id,
     });
     if (!learner) {
+      trackProductEvent({
+        name: ACTIVATION_EVENT_NAMES.activeLearnerSwitchFailed,
+        organizationId: session.organization.id,
+        metadata: { learnerId: parsed.data.learnerId, reason: "not_found" },
+      });
       return NextResponse.json({ error: "Learner not found." }, { status: 404 });
     }
+    if (learner.status === "archived") {
+      trackProductEvent({
+        name: ACTIVATION_EVENT_NAMES.activeLearnerSwitchFailed,
+        organizationId: session.organization.id,
+        learnerId: learner.id,
+        metadata: { reason: "archived" },
+      });
+      return NextResponse.json({ error: "Archived learners cannot be selected." }, { status: 409 });
+    }
+
+    trackProductEvent({
+      name: ACTIVATION_EVENT_NAMES.activeLearnerSwitched,
+      organizationId: session.organization.id,
+      learnerId: learner.id,
+      metadata: {
+        fromLearnerId: session.activeLearner?.id ?? null,
+        toLearnerId: learner.id,
+      },
+    });
 
     const response = NextResponse.json({ learner });
     return setWorkspaceCookies({

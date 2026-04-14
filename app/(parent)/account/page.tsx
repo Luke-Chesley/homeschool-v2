@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { ActiveLearnerSwitcher } from "@/components/users/active-learner-switcher";
 import { requireAppSession } from "@/lib/app-session/server";
 
 export const metadata = {
@@ -57,6 +58,67 @@ export default async function AccountPage() {
               <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Workspace defaults</p>
               <p className="mt-2 text-sm leading-6 text-muted-foreground">
                 Household-wide planning defaults and preferences will live here as those controls are added.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1.15fr)_minmax(260px,0.85fr)]">
+            <div className="rounded-xl border border-border/60 bg-background/75 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium text-foreground">Learner roster</p>
+                  <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                    Keep one active learner at a time. Add another learner only when the household needs it.
+                  </p>
+                </div>
+                <span className="rounded-full border border-border/70 bg-background px-3 py-1 text-xs text-muted-foreground">
+                  {session.learners.length} learner{session.learners.length === 1 ? "" : "s"}
+                </span>
+              </div>
+
+              <div className="mt-4 grid gap-2">
+                {session.learners.map((learner) => {
+                  const active = learner.id === session.activeLearner?.id;
+
+                  return (
+                    <div
+                      key={learner.id}
+                      className={`rounded-xl border px-4 py-3 ${
+                        active
+                          ? "border-primary/20 bg-primary/8"
+                          : "border-border/60 bg-background/70"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="font-medium text-foreground">{learner.displayName}</p>
+                          <p className="mt-1 text-xs capitalize text-muted-foreground">{learner.status}</p>
+                        </div>
+                        {active ? (
+                          <span className="rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+                            Active
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-border/60 bg-background/75 p-4">
+              <p className="text-sm font-medium text-foreground">Workspace context</p>
+              <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                Today, Planning, Curriculum, Tracking, and Copilot follow the selected learner.
+              </p>
+              <div className="mt-4">
+                <ActiveLearnerSwitcher
+                  learners={session.learners}
+                  activeLearnerId={session.activeLearner?.id ?? null}
+                />
+              </div>
+              <p className="mt-3 text-xs leading-5 text-muted-foreground">
+                Archived learners are not selectable in the main workspace.
               </p>
             </div>
           </div>
