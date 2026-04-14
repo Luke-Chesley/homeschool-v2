@@ -7,6 +7,7 @@ import {
   requireAppApiSession,
   setWorkspaceCookies,
 } from "@/lib/app-session/server";
+import { isBillingEntitlementError } from "@/lib/billing/service";
 import { ACTIVATION_EVENT_NAMES } from "@/lib/homeschool/onboarding/activation-contracts";
 import { trackProductEvent } from "@/lib/platform/observability";
 import { createLearnerForOrganization } from "@/lib/users/service";
@@ -62,6 +63,10 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     if (isAppApiSessionError(error)) {
+      return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });
+    }
+
+    if (isBillingEntitlementError(error)) {
       return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });
     }
 

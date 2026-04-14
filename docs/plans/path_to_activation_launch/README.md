@@ -55,7 +55,9 @@ Typical launch household:
 - [phase3_multi_learner_household_launch.md](./phase3_multi_learner_household_launch.md)
 - [phase3_multi_learner_household_implementation.md](./phase3_multi_learner_household_implementation.md)
 - [phase4_mobile_first_parent_runtime.md](./phase4_mobile_first_parent_runtime.md)
+- [phase4_mobile_first_parent_runtime_implementation.md](./phase4_mobile_first_parent_runtime_implementation.md)
 - [phase5_pricing_billing_and_value_proof.md](./phase5_pricing_billing_and_value_proof.md)
+- [phase5_pricing_billing_and_value_proof_implementation.md](./phase5_pricing_billing_and_value_proof_implementation.md)
 - [phase6_beta_metrics_and_go_no_go.md](./phase6_beta_metrics_and_go_no_go.md)
 
 ## Activation Progress Checklist

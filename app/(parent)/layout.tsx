@@ -19,7 +19,9 @@ export default async function ParentLayout({ children }: { children: ReactNode }
 
   return (
     <ParentShell
+      activeLearnerId={session.activeLearner.id}
       activeLearnerName={session.activeLearner.displayName}
+      learners={session.learners}
       organizationName={session.organization.name}
       learnerLabel={session.platformSettings.learnerLabel}
     >
