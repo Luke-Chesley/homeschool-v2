@@ -39,6 +39,23 @@ export type AppWorkspace = {
   activeLearner: AppLearner | null;
 };
 
+function canUseLearnerInWorkspace(learner: AppLearner) {
+  return learner.status !== "archived";
+}
+
+function resolveActiveLearner(learners: AppLearner[], preferredLearnerId?: string | null) {
+  const selectableLearners = learners.filter(canUseLearnerInWorkspace);
+  if (selectableLearners.length === 0) {
+    return null;
+  }
+
+  return (
+    selectableLearners.find((learner) => learner.id === preferredLearnerId) ??
+    selectableLearners.find((learner) => learner.status === "active") ??
+    selectableLearners[0]
+  );
+}
+
 function splitDisplayName(displayName: string) {
   const parts = displayName.trim().split(/\s+/).filter(Boolean);
   const [firstName = displayName.trim(), ...rest] = parts;
@@ -136,8 +153,7 @@ export async function getWorkspaceContextForOrganization(options: {
   });
 
   const learners = await listLearnersForOrganization(organization.id);
-  const activeLearner =
-    learners.find((learner) => learner.id === options.learnerId) ?? learners[0] ?? null;
+  const activeLearner = resolveActiveLearner(learners, options.learnerId);
 
   if (activeLearner) {
     await ensureActivitiesForLearner({
