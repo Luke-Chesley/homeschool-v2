@@ -7,7 +7,9 @@ import {
 } from "@/lib/app-session/server";
 import {
   completeHomeschoolOnboarding,
+  HomeschoolFastPathOnboardingSchema,
   HomeschoolOnboardingSchema,
+  runHomeschoolFastPathOnboarding,
 } from "@/lib/homeschool/onboarding/service";
 import { trackOperationalError } from "@/lib/platform/observability";
 
@@ -16,10 +18,26 @@ export async function POST(req: NextRequest) {
 
   try {
     const session = await requireAppApiSession({ requireLearner: false });
-    const parsed = HomeschoolOnboardingSchema.safeParse({
+    const withOrgId = {
       ...body,
       organizationId: session.organization.id,
-    });
+    };
+    const fastPathParsed = HomeschoolFastPathOnboardingSchema.safeParse(withOrgId);
+
+    if (fastPathParsed.success) {
+      const result = await runHomeschoolFastPathOnboarding(fastPathParsed.data);
+      const response = NextResponse.json(result, { status: 200 });
+      if (result.mode === "completed") {
+        return setWorkspaceCookies({
+          response,
+          organizationId: session.organization.id,
+          learnerId: result.learnerId,
+        });
+      }
+      return response;
+    }
+
+    const parsed = HomeschoolOnboardingSchema.safeParse(withOrgId);
 
     if (!parsed.success) {
       return NextResponse.json(

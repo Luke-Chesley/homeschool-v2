@@ -30,6 +30,40 @@ Core expectations:
 - learner creation/setup is understandable
 - completion routes the user into the app without confusion
 
+### Initial setup click-through (Phase 0 + 1 fast path)
+
+Run this exact sequence for each QA pass that touches onboarding:
+
+1. Open `/auth/setup` and submit household creation.
+   - Expected: setup completes and routes to `/onboarding`.
+   - Report notes: capture whether routing was immediate and whether any auth/session errors appeared.
+2. On `/onboarding` Step 1, enter one learner name and continue.
+   - Expected: learner name is required; continue stays disabled when empty.
+   - Report notes: include the exact learner name used for reproducibility.
+3. Step 2, choose one intake route:
+   - `I have a book or curriculum`
+   - `I have an outline or weekly plan`
+   - `Start from a topic`
+   - Expected: one option can be selected clearly; “add another learner later” is visible.
+   - Report notes: record which route was tested.
+4. Step 3, enter source input and choose horizon intent.
+   - Expected: `Use this for just today` and auto horizon options are both visible.
+   - Report notes: capture source text length/scope (short topic, weekly outline, etc.).
+5. Submit generation.
+   - Expected: generation/loading state is visible and no blocking runtime errors occur.
+   - Report notes: include request latency estimate and any retries required.
+6. If preview appears, validate preview details and continue.
+   - Expected: learner target, proposed title, detected chunks, and horizon are visible.
+   - Report notes: record whether preview was triggered by low/moderate confidence.
+7. Verify redirect to `/today`.
+   - Expected: active learner context is set, Today contains at least one actionable item, and the route is stable after refresh.
+   - Report notes: confirm if refresh preserved learner context and whether any API requests failed.
+
+For each run, explicitly report:
+- ✅ what passed
+- ❌ what failed
+- ⚠️ what looked suspicious but non-blocking
+
 ## Parent Workspace
 
 Routes:

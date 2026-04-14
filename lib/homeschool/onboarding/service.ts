@@ -17,9 +17,18 @@ import { learnerProfiles, learners, organizationPlatformSettings, organizations 
 import { getTodayWorkspace } from "@/lib/planning/today-service";
 import { getOrCreateWeeklyRouteBoardForLearner } from "@/lib/planning/weekly-route-service";
 import { recordHomeschoolAuditEvent } from "@/lib/homeschool/reporting/service";
+import {
+  ACTIVATION_EVENT_NAMES,
+  ONBOARDING_MILESTONES,
+  type OnboardingMilestone,
+} from "@/lib/homeschool/onboarding/activation-contracts";
 import { trackProductEvent } from "@/lib/platform/observability";
 
-import type { HomeschoolOnboardingInput } from "@/lib/homeschool/onboarding/types";
+import type {
+  HomeschoolFastPathOnboardingInput,
+  HomeschoolOnboardingInput,
+  HomeschoolOnboardingStatus,
+} from "@/lib/homeschool/onboarding/types";
 
 const LearnerSchema = z.object({
   displayName: z.string().trim().min(1).max(80),
@@ -64,6 +73,14 @@ export const HomeschoolCurriculumIntakeSchema = z.object({
 
 export type HomeschoolOnboardingPayload = z.infer<typeof HomeschoolOnboardingSchema>;
 export type HomeschoolCurriculumIntakePayload = z.infer<typeof HomeschoolCurriculumIntakeSchema>;
+export const HomeschoolFastPathOnboardingSchema = z.object({
+  organizationId: z.string().min(1),
+  learnerName: z.string().trim().min(1).max(80),
+  intakeType: z.enum(["book_curriculum", "outline_weekly_plan", "topic"]),
+  sourceInput: z.string().trim().min(1).max(12000),
+  horizonIntent: z.enum(["today_only", "auto"]).optional(),
+  confirmPreview: z.boolean().optional(),
+});
 
 function asRecord(value: unknown): Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -98,6 +115,24 @@ function uniqueStrings(values: string[]) {
 
 function normalizeSubjects(subjects: string[]) {
   return uniqueStrings(subjects).slice(0, 12);
+}
+
+function toMilestoneList(value: unknown): OnboardingMilestone[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter((entry): entry is OnboardingMilestone =>
+    ONBOARDING_MILESTONES.includes(entry as OnboardingMilestone),
+  );
+}
+
+function mergeMilestone(existing: OnboardingMilestone[], milestone: OnboardingMilestone) {
+  if (existing.includes(milestone)) {
+    return existing;
+  }
+
+  return [...existing, milestone];
 }
 
 function buildStarterDocument(input: HomeschoolOnboardingInput) {
@@ -323,11 +358,15 @@ export async function getHomeschoolOnboardingStatus(organizationId: string) {
   const metadata = asRecord(organization?.metadata);
   const homeschool = asRecord(metadata.homeschool);
   const onboarding = asRecord(homeschool.onboarding);
+  const milestones = toMilestoneList(onboarding.milestones);
+  const currentMilestone = milestones[milestones.length - 1] ?? null;
+  const completedAt = typeof onboarding.completedAt === "string" ? onboarding.completedAt : null;
+  const isComplete =
+    completedAt !== null ||
+    milestones.includes("first_day_ready") ||
+    milestones.includes("week_ready");
 
-  return {
-    isComplete: typeof onboarding.completedAt === "string",
-    completedAt: typeof onboarding.completedAt === "string" ? onboarding.completedAt : null,
-  };
+  return { isComplete, completedAt, milestones, currentMilestone } satisfies HomeschoolOnboardingStatus;
 }
 
 export async function createHomeschoolCurriculumFromIntake(
@@ -430,6 +469,8 @@ async function persistHomeschoolSetupBase(input: HomeschoolOnboardingPayload) {
             ...(asRecord(homeschoolMetadata.onboarding)),
             status: "pending",
             completedAt: null,
+            milestones: ["fast_path_started", "household_defaults_completed"],
+            currentMilestone: "household_defaults_completed",
             schoolYearLabel: input.schoolYearLabel ?? null,
             termStartDate: input.termStartDate ?? null,
             termEndDate: input.termEndDate ?? null,
@@ -610,6 +651,209 @@ async function initializeCurriculum(input: HomeschoolOnboardingInput, learner: t
   });
 }
 
+function estimateConfidence(input: z.infer<typeof HomeschoolFastPathOnboardingSchema>) {
+  const sourceLength = input.sourceInput.trim().length;
+  if (input.intakeType === "topic") {
+    return sourceLength >= 60 ? "moderate" : "low";
+  }
+  if (input.intakeType === "outline_weekly_plan") {
+    return sourceLength >= 90 ? "high" : "moderate";
+  }
+  return sourceLength >= 120 ? "high" : "moderate";
+}
+
+function buildFastPathPreview(input: z.infer<typeof HomeschoolFastPathOnboardingSchema>) {
+  const trimmedLines = input.sourceInput
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 4);
+  const detectedChunks = trimmedLines.length > 0 ? trimmedLines : [input.sourceInput.trim().slice(0, 80)];
+  const confidence = estimateConfidence(input);
+  const plannedHorizon =
+    input.horizonIntent === "today_only" || confidence === "low" ? "today" : "next_few_days";
+
+  return {
+    learnerTarget: input.learnerName.trim(),
+    intakeType: input.intakeType,
+    title:
+      input.intakeType === "topic"
+        ? `Topic starter: ${input.sourceInput.trim().slice(0, 48)}`
+        : `Plan from source: ${input.sourceInput.trim().slice(0, 48)}`,
+    detectedChunks,
+    plannedHorizon,
+    confidence: confidence === "high" ? "moderate" : confidence,
+  } as const;
+}
+
+async function markOnboardingMilestone(params: {
+  organizationId: string;
+  milestone: OnboardingMilestone;
+  patch?: Record<string, unknown>;
+}) {
+  const organization = await getDb().query.organizations.findFirst({
+    where: eq(organizations.id, params.organizationId),
+  });
+  if (!organization) {
+    return;
+  }
+  const metadata = asRecord(organization.metadata);
+  const homeschool = asRecord(metadata.homeschool);
+  const onboarding = asRecord(homeschool.onboarding);
+  const milestones = mergeMilestone(toMilestoneList(onboarding.milestones), params.milestone);
+
+  await getDb()
+    .update(organizations)
+    .set({
+      metadata: {
+        ...metadata,
+        homeschool: {
+          ...homeschool,
+          onboarding: {
+            ...onboarding,
+            ...params.patch,
+            milestones,
+            currentMilestone: params.milestone,
+          },
+        },
+      },
+      updatedAt: new Date(),
+    })
+    .where(eq(organizations.id, params.organizationId));
+}
+
+export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPathOnboardingInput) {
+  const input = HomeschoolFastPathOnboardingSchema.parse(rawInput);
+  await markOnboardingMilestone({
+    organizationId: input.organizationId,
+    milestone: "fast_path_started",
+    patch: { status: "in_progress", completedAt: null },
+  });
+  trackProductEvent({
+    name: ACTIVATION_EVENT_NAMES.onboardingStarted,
+    organizationId: input.organizationId,
+  });
+  trackProductEvent({
+    name: ACTIVATION_EVENT_NAMES.learnerNameSubmitted,
+    organizationId: input.organizationId,
+    metadata: { learnerNameLength: input.learnerName.length },
+  });
+  trackProductEvent({
+    name: ACTIVATION_EVENT_NAMES.intakeTypeSelected,
+    organizationId: input.organizationId,
+    metadata: { intakeType: input.intakeType, horizonIntent: input.horizonIntent ?? "auto" },
+  });
+  trackProductEvent({
+    name: ACTIVATION_EVENT_NAMES.intakeSourceSubmitted,
+    organizationId: input.organizationId,
+    metadata: { sourceLength: input.sourceInput.trim().length },
+  });
+
+  const preview = buildFastPathPreview(input);
+  if ((preview.confidence === "low" || preview.confidence === "moderate") && !input.confirmPreview) {
+    return {
+      mode: "preview_required" as const,
+      preview,
+    };
+  }
+
+  const curriculumMode =
+    input.intakeType === "topic"
+      ? "manual_shell"
+      : input.intakeType === "outline_weekly_plan"
+        ? "paste_outline"
+        : "ai_decompose";
+  const learnerInput = {
+    displayName: input.learnerName.trim(),
+    pacePreference: "balanced" as const,
+    loadPreference: "balanced" as const,
+  };
+  const setupInput: HomeschoolOnboardingPayload = {
+    organizationId: input.organizationId,
+    householdName: "Homeschool Household",
+    preferredSchoolDays: [...homeschoolTemplate.defaults.schoolDays],
+    dailyTimeBudgetMinutes: homeschoolTemplate.defaults.dailyTimeBudgetMinutes,
+    subjects: ["Integrated Studies"],
+    learners: [learnerInput],
+    curriculumMode,
+    curriculumTitle: preview.title,
+    curriculumSummary: `Fast-path intake (${input.intakeType.replaceAll("_", " ")})`,
+    curriculumText: input.sourceInput.trim(),
+  };
+
+  trackProductEvent({
+    name: ACTIVATION_EVENT_NAMES.generationStarted,
+    organizationId: input.organizationId,
+    metadata: { intakeType: input.intakeType, plannedHorizon: preview.plannedHorizon },
+  });
+
+  const { primaryLearner } = await persistHomeschoolSetupBase(setupInput);
+  const curriculum = await initializeCurriculum(setupInput, primaryLearner);
+  const sourceId = "sourceId" in curriculum ? curriculum.sourceId : curriculum.id;
+  await setLiveCurriculumSource(input.organizationId, sourceId);
+
+  const { weekStartDate } = await getOrCreateWeeklyRouteBoardForLearner({
+    learnerId: primaryLearner.id,
+    sourceId,
+  });
+  await getTodayWorkspace({
+    organizationId: input.organizationId,
+    learnerId: primaryLearner.id,
+    learnerName: primaryLearner.displayName,
+    date: new Date().toISOString().slice(0, 10),
+  });
+
+  trackProductEvent({
+    name: ACTIVATION_EVENT_NAMES.generationCompleted,
+    organizationId: input.organizationId,
+    learnerId: primaryLearner.id,
+    metadata: { sourceId, weekStartDate },
+  });
+  trackProductEvent({
+    name: ACTIVATION_EVENT_NAMES.firstTodayOpened,
+    organizationId: input.organizationId,
+    learnerId: primaryLearner.id,
+  });
+
+  await markOnboardingMilestone({
+    organizationId: input.organizationId,
+    milestone: "first_day_ready",
+    patch: {
+      status: "complete",
+      completedAt: new Date().toISOString(),
+      firstReadyAt: new Date().toISOString(),
+      intake: {
+        type: input.intakeType,
+        sourceInput: input.sourceInput.trim(),
+        confidence: preview.confidence,
+        plannedHorizon: preview.plannedHorizon,
+      },
+    },
+  });
+
+  await recordHomeschoolAuditEvent({
+    organizationId: input.organizationId,
+    learnerId: primaryLearner.id,
+    entityType: "onboarding",
+    eventType: "onboarding.fast_path_completed",
+    summary: `Completed fast-path onboarding for ${primaryLearner.displayName}.`,
+    metadata: {
+      intakeType: input.intakeType,
+      confidence: preview.confidence,
+      plannedHorizon: preview.plannedHorizon,
+    },
+  });
+
+  return {
+    mode: "completed" as const,
+    learnerId: primaryLearner.id,
+    sourceId,
+    weekStartDate,
+    redirectTo: "/today",
+    preview,
+  };
+}
+
 export async function completeHomeschoolOnboarding(rawInput: unknown) {
   const { input, primaryLearner } = await prepareHomeschoolOnboarding(rawInput);
 
@@ -652,6 +896,8 @@ export async function completeHomeschoolOnboarding(rawInput: unknown) {
               ...onboarding,
               status: "complete",
               completedAt: new Date().toISOString(),
+              milestones: ["fast_path_started", "first_day_ready", "household_defaults_completed", "week_ready"],
+              currentMilestone: "week_ready",
             },
           },
         },

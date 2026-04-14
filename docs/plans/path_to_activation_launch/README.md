@@ -60,25 +60,25 @@ Typical launch household:
 
 ### Phase 0: Launch Scope And Activation Model
 
-- [ ] Lock the launch wedge around mixed-curriculum homeschool households.
-- [ ] Lock the v1 promise around Today + Week + automatic records.
-- [ ] Explicitly defer full curriculum integrations, marketplace, and broad standards logic.
-- [ ] Explicitly defer native iOS / Android apps.
-- [ ] Commit to phone-first responsive web and optional PWA polish instead.
-- [ ] Define the first-session activation event.
-- [ ] Define the first-week retention events.
-- [ ] Define the beta success thresholds and kill criteria.
-- [ ] Confirm platform prerequisites from `path_to_deployment` and lock Stripe implementation ownership (Activation Phase 5 vs Deployment Phase 9).
+- [x] Lock the launch wedge around mixed-curriculum homeschool households.
+- [x] Lock the v1 promise around Today + Week + automatic records.
+- [x] Explicitly defer full curriculum integrations, marketplace, and broad standards logic.
+- [x] Explicitly defer native iOS / Android apps.
+- [x] Commit to phone-first responsive web and optional PWA polish instead.
+- [x] Define the first-session activation event.
+- [x] Define the first-week retention events.
+- [x] Define the beta success thresholds and kill criteria.
+- [x] Confirm platform prerequisites from `path_to_deployment` and lock Stripe implementation ownership (Activation Phase 5 vs Deployment Phase 9).
 
 ### Phase 1: Fast-Path Onboarding
 
-- [ ] Replace the one-pass household setup with a fast path that reaches Today first.
-- [ ] Reduce required fields to the minimum needed for a teachable first day.
-- [ ] Let users add household defaults after first value, not before.
-- [ ] Support multiple learners without forcing full setup for all learners up front.
-- [ ] Add a visible "what do you have today?" intake choice.
-- [ ] Add a preview generation step before full commit where possible.
-- [ ] Add analytics for onboarding drop-off and activation.
+- [x] Replace the one-pass household setup with a fast path that reaches Today first.
+- [x] Reduce required fields to the minimum needed for a teachable first day.
+- [x] Let users add household defaults after first value, not before.
+- [x] Support multiple learners without forcing full setup for all learners up front.
+- [x] Add a visible "what do you have today?" intake choice.
+- [x] Add a preview generation step before full commit where possible.
+- [x] Add analytics for onboarding drop-off and activation.
 
 ### Phase 2: Curriculum Intake And Horizon Policy
 
