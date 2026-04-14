@@ -10,12 +10,20 @@ import { cn } from "@/lib/utils";
 
 export function ParentShell({
   children,
+  activeLearnerId,
   activeLearnerName,
+  learners,
   organizationName,
   learnerLabel,
 }: {
   children: ReactNode;
+  activeLearnerId: string;
   activeLearnerName: string;
+  learners: Array<{
+    id: string;
+    displayName: string;
+    status: string;
+  }>;
   organizationName: string;
   learnerLabel: string;
 }) {
@@ -35,8 +43,10 @@ export function ParentShell({
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <ParentTopbar
+          activeLearnerId={activeLearnerId}
           activeLearnerName={activeLearnerName}
           learnerLabel={learnerLabel}
+          learners={learners}
           onOpenMenu={() => setMobileOpen(true)}
         />
 

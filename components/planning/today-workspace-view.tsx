@@ -319,14 +319,16 @@ function TodayPlanItemActionButtons({
   }
 
   const confirmationText = getCompletionDisplay(item, successMessage);
+  const primaryButtonClassName = compact ? "w-full justify-center sm:w-auto" : "w-full sm:w-auto";
 
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap gap-2 sm:justify-end">
+      <div className={cn("grid gap-2", compact ? "grid-cols-1" : "grid-cols-1 sm:grid-cols-2 lg:flex lg:flex-wrap lg:justify-end")}>
         <Button
           size="sm"
           disabled={isPending || isDone}
           onClick={() => runAction("complete")}
+          className={primaryButtonClassName}
         >
           {pendingAction === "complete" ? (
             <Loader2 className="size-3.5 animate-spin" />
@@ -337,13 +339,14 @@ function TodayPlanItemActionButtons({
         </Button>
         {hasSavedCompletion ? (
           <Button
-            variant="secondary"
-            size="sm"
-            disabled={isPending}
-            onClick={() => runAction("reset")}
-          >
-            {pendingAction === "reset" ? (
-              <Loader2 className="size-3.5 animate-spin" />
+          variant="secondary"
+          size="sm"
+          disabled={isPending}
+          onClick={() => runAction("reset")}
+          className={primaryButtonClassName}
+        >
+          {pendingAction === "reset" ? (
+            <Loader2 className="size-3.5 animate-spin" />
             ) : null}
             Undo
           </Button>
@@ -353,64 +356,136 @@ function TodayPlanItemActionButtons({
           size="sm"
           disabled={isPending || hasSavedCompletion}
           onClick={() => runAction("partial")}
+          className={primaryButtonClassName}
         >
           {pendingAction === "partial" ? <Loader2 className="size-3.5 animate-spin" /> : null}
           Mark partial
         </Button>
-        {!compact ? (
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={isPending || hasSavedCompletion}
-            onClick={() => runAction("push_to_tomorrow")}
-          >
-            {pendingAction === "push_to_tomorrow" ? (
-              <Loader2 className="size-3.5 animate-spin" />
-            ) : null}
-            Push forward
-          </Button>
-        ) : null}
-        {!compact ? (
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={isPending || hasSavedCompletion}
-            onClick={() => runAction("skip_today")}
-          >
-            {pendingAction === "skip_today" ? (
-              <Loader2 className="size-3.5 animate-spin" />
-            ) : null}
-            Skip today
-          </Button>
-        ) : null}
-        {repeatTomorrowAllowed ? (
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={isPending || hasSavedCompletion}
-            onClick={() => runAction("repeat_tomorrow")}
-          >
-            {pendingAction === "repeat_tomorrow" ? (
-              <Loader2 className="size-3.5 animate-spin" />
-            ) : null}
-            Repeat tomorrow
-          </Button>
-        ) : null}
-        {alternateWeeklyRouteItemId ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={isPending || hasSavedCompletion}
-            onClick={() => runAction("swap_with_alternate")}
-            className="text-muted-foreground"
-          >
-            {pendingAction === "swap_with_alternate" ? (
-              <Loader2 className="size-3.5 animate-spin" />
-            ) : null}
-            {compact ? "Lighter option" : "Use lighter option"}
-          </Button>
-        ) : null}
       </div>
+
+      {(!compact || repeatTomorrowAllowed || alternateWeeklyRouteItemId) ? (
+        <>
+          <div className="hidden flex-wrap gap-2 sm:justify-end lg:flex">
+            {!compact ? (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isPending || hasSavedCompletion}
+                onClick={() => runAction("push_to_tomorrow")}
+              >
+                {pendingAction === "push_to_tomorrow" ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : null}
+                Push forward
+              </Button>
+            ) : null}
+            {!compact ? (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isPending || hasSavedCompletion}
+                onClick={() => runAction("skip_today")}
+              >
+                {pendingAction === "skip_today" ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : null}
+                Skip today
+              </Button>
+            ) : null}
+            {repeatTomorrowAllowed ? (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isPending || hasSavedCompletion}
+                onClick={() => runAction("repeat_tomorrow")}
+              >
+                {pendingAction === "repeat_tomorrow" ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : null}
+                Repeat tomorrow
+              </Button>
+            ) : null}
+            {alternateWeeklyRouteItemId ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={isPending || hasSavedCompletion}
+                onClick={() => runAction("swap_with_alternate")}
+                className="text-muted-foreground"
+              >
+                {pendingAction === "swap_with_alternate" ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : null}
+                {compact ? "Lighter option" : "Use lighter option"}
+              </Button>
+            ) : null}
+          </div>
+
+          <details className="rounded-xl border border-border/60 bg-background/75 lg:hidden">
+            <summary className="cursor-pointer list-none px-3 py-2 text-sm font-medium text-foreground">
+              More actions
+            </summary>
+            <div className="grid gap-2 border-t border-border/60 px-3 py-3">
+              {!compact ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={isPending || hasSavedCompletion}
+                  onClick={() => runAction("push_to_tomorrow")}
+                  className="w-full justify-center"
+                >
+                  {pendingAction === "push_to_tomorrow" ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : null}
+                  Push forward
+                </Button>
+              ) : null}
+              {!compact ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={isPending || hasSavedCompletion}
+                  onClick={() => runAction("skip_today")}
+                  className="w-full justify-center"
+                >
+                  {pendingAction === "skip_today" ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : null}
+                  Skip today
+                </Button>
+              ) : null}
+              {repeatTomorrowAllowed ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={isPending || hasSavedCompletion}
+                  onClick={() => runAction("repeat_tomorrow")}
+                  className="w-full justify-center"
+                >
+                  {pendingAction === "repeat_tomorrow" ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : null}
+                  Repeat tomorrow
+                </Button>
+              ) : null}
+              {alternateWeeklyRouteItemId ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={isPending || hasSavedCompletion}
+                  onClick={() => runAction("swap_with_alternate")}
+                  className="w-full justify-center text-muted-foreground"
+                >
+                  {pendingAction === "swap_with_alternate" ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : null}
+                  {compact ? "Lighter option" : "Use lighter option"}
+                </Button>
+              ) : null}
+            </div>
+          </details>
+        </>
+      ) : null}
 
       <TodayPlanItemEvaluationControl item={item} date={date} />
 

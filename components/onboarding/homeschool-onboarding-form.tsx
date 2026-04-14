@@ -150,7 +150,12 @@ export function HomeschoolOnboardingForm(props: {
               />
             </label>
             <div className="flex justify-end">
-              <Button type="button" onClick={() => setStep(2)} disabled={!canContinueStep1}>
+              <Button
+                type="button"
+                onClick={() => setStep(2)}
+                disabled={!canContinueStep1}
+                className="w-full sm:w-auto"
+              >
                 Continue
               </Button>
             </div>
@@ -170,22 +175,22 @@ export function HomeschoolOnboardingForm(props: {
                 key={option.value}
                 type="button"
                 onClick={() => setIntakeRoute(option.value)}
-                className={`rounded-xl border p-3 text-left transition-colors ${
+                className={`rounded-xl border p-4 text-left transition-colors ${
                   intakeRoute === option.value
                     ? "border-primary bg-primary/10"
                     : "border-border bg-background hover:bg-muted/40"
                 }`}
               >
-                <p className="text-sm font-medium">{option.label}</p>
-                <p className="text-xs text-muted-foreground">{option.description}</p>
+                <p className="text-sm font-medium leading-5">{option.label}</p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">{option.description}</p>
               </button>
             ))}
             <p className="text-xs text-muted-foreground">Add another learner later.</p>
-            <div className="flex justify-between">
-              <Button type="button" variant="outline" onClick={() => setStep(1)}>
+            <div className="grid gap-2 sm:flex sm:justify-between">
+              <Button type="button" variant="outline" onClick={() => setStep(1)} className="w-full sm:w-auto">
                 Back
               </Button>
-              <Button type="button" onClick={() => setStep(3)}>Continue</Button>
+              <Button type="button" onClick={() => setStep(3)} className="w-full sm:w-auto">Continue</Button>
             </div>
           </CardContent>
         </Card>
@@ -215,37 +220,44 @@ export function HomeschoolOnboardingForm(props: {
                           ? "Math, reading, science"
                     : "Chapter 4 pages 88-95, workbook pg 42, quiz Friday"
                 }
-                className="rounded-xl border border-input bg-background px-3 py-2 font-normal"
+                className="min-h-44 rounded-xl border border-input bg-background px-3 py-2 font-normal"
               />
             </label>
 
             <fieldset className="grid gap-2">
               <legend className="text-sm font-medium">Planning horizon</legend>
-              <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              <label className="flex items-start gap-2 rounded-xl border border-border/60 bg-background/70 px-3 py-3 text-sm text-muted-foreground">
                 <input
                   type="radio"
                   name="horizon"
                   checked={horizonIntent === "today_only"}
                   onChange={() => setHorizonIntent("today_only")}
+                  className="mt-1"
                 />
-                Use this for just today
+                <span>Use this for just today</span>
               </label>
-              <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              <label className="flex items-start gap-2 rounded-xl border border-border/60 bg-background/70 px-3 py-3 text-sm text-muted-foreground">
                 <input
                   type="radio"
                   name="horizon"
                   checked={horizonIntent === "auto"}
                   onChange={() => setHorizonIntent("auto")}
+                  className="mt-1"
                 />
-                Auto-expand to next few days when confidence is high
+                <span>Auto-expand when the source clearly supports more than today</span>
               </label>
             </fieldset>
 
-            <div className="flex justify-between">
-              <Button type="button" variant="outline" onClick={() => setStep(2)}>
+            <div className="grid gap-2 sm:flex sm:justify-between">
+              <Button type="button" variant="outline" onClick={() => setStep(2)} className="w-full sm:w-auto">
                 Back
               </Button>
-              <Button type="button" disabled={!canContinueStep3 || submitting} onClick={() => void submitFastPath(false)}>
+              <Button
+                type="button"
+                disabled={!canContinueStep3 || submitting}
+                onClick={() => void submitFastPath(false)}
+                className="w-full sm:w-auto"
+              >
                 Generate Today
               </Button>
             </div>
@@ -329,9 +341,9 @@ export function HomeschoolOnboardingForm(props: {
                 ))}
               </ul>
             </div>
-            <div className="flex justify-between">
-              <Button type="button" variant="outline" onClick={() => setStep(3)}>Edit source</Button>
-              <Button type="button" disabled={submitting} onClick={() => void submitFastPath(true)}>
+            <div className="grid gap-2 sm:flex sm:justify-between">
+              <Button type="button" variant="outline" onClick={() => setStep(3)} className="w-full sm:w-auto">Edit source</Button>
+              <Button type="button" disabled={submitting} onClick={() => void submitFastPath(true)} className="w-full sm:w-auto">
                 Save and open Today
               </Button>
             </div>

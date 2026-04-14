@@ -17,12 +17,14 @@ export function ActiveLearnerSwitcher({
   label = "Active learner",
   className,
   selectClassName,
+  labelClassName,
 }: {
   learners: LearnerOption[];
   activeLearnerId: string | null;
   label?: string;
   className?: string;
   selectClassName?: string;
+  labelClassName?: string;
 }) {
   const router = useRouter();
   const [selectedLearnerId, setSelectedLearnerId] = React.useState(activeLearnerId ?? "");
@@ -63,7 +65,7 @@ export function ActiveLearnerSwitcher({
 
   return (
     <div className={cn("grid gap-1.5", className)}>
-      <label className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+      <label className={cn("text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground", labelClassName)}>
         {label}
       </label>
       <select
