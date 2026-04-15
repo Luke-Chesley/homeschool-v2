@@ -361,13 +361,16 @@ export function LessonPlanPanel({
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-2">
+          <div className="grid gap-2 sm:flex sm:flex-wrap">
             {!showAutoBuildState ? (
               <button
                 type="button"
                 onClick={() => handleGenerate(showFailedBuildState ? "today_resume" : "manual")}
                 disabled={state.status === "loading" || routeItemCount === 0}
-                className={cn(buttonVariants({ variant: "default", size: "sm" }))}
+                className={cn(
+                  buttonVariants({ variant: "default", size: "sm" }),
+                  "min-h-11 w-full justify-center sm:min-h-8 sm:w-auto",
+                )}
               >
                 {state.status === "loading" ? (
                   <Loader2 className="size-4 animate-spin" />
@@ -387,7 +390,10 @@ export function LessonPlanPanel({
                 type="button"
                 onClick={handlePromptPreview}
                 disabled={routeItemCount === 0 || promptDebugState.status === "loading"}
-                className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+                className={cn(
+                  buttonVariants({ variant: "outline", size: "sm" }),
+                  "min-h-11 w-full justify-center sm:min-h-8 sm:w-auto",
+                )}
               >
                 {promptDebugState.status === "loading" ? (
                   <Loader2 className="size-4 animate-spin" />
@@ -475,12 +481,15 @@ export function LessonPlanPanel({
                 placeholder="Example: make this more hands-on and keep transitions short."
                 className="min-h-24 w-full rounded-lg border border-border/70 bg-background px-3 py-2 text-sm outline-none ring-0 placeholder:text-muted-foreground/80"
               />
-              <div className="flex flex-wrap gap-2">
+              <div className="grid gap-2 sm:flex sm:flex-wrap">
                 <button
                   type="button"
                   onClick={handleContextRegenerate}
                   disabled={state.status === "loading"}
-                  className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+                  className={cn(
+                    buttonVariants({ variant: "outline", size: "sm" }),
+                    "min-h-11 w-full justify-center sm:min-h-8 sm:w-auto",
+                  )}
                 >
                   {state.status === "loading" ? (
                     <Loader2 className="size-4 animate-spin" />
@@ -499,7 +508,7 @@ export function LessonPlanPanel({
                 this result later.
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="grid gap-2 sm:flex sm:flex-wrap">
               <button
                 type="button"
                 onClick={() => handleExpansionIntent("keep_today")}
@@ -509,6 +518,7 @@ export function LessonPlanPanel({
                     variant: expansionIntent === "keep_today" ? "default" : "outline",
                     size: "sm",
                   }),
+                  "min-h-11 w-full justify-center sm:min-h-8 sm:w-auto",
                 )}
               >
                 {savingIntent === "keep_today" ? (
@@ -525,6 +535,7 @@ export function LessonPlanPanel({
                     variant: expansionIntent === "expand_from_here" ? "default" : "outline",
                     size: "sm",
                   }),
+                  "min-h-11 w-full justify-center sm:min-h-8 sm:w-auto",
                 )}
               >
                 {savingIntent === "expand_from_here" ? (
@@ -544,14 +555,17 @@ export function LessonPlanPanel({
                   lesson.
                 </p>
               </div>
-              <div className="flex flex-wrap gap-2">
+              <div className="grid gap-2 sm:flex sm:flex-wrap">
                 {(["tomorrow", "next_few_days", "current_week"] as const).map((scope) => (
                   <button
                     key={scope}
                     type="button"
                     onClick={() => handleRouteExpansion(scope)}
                     disabled={!sourceId || expandingScope !== null}
-                    className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+                    className={cn(
+                      buttonVariants({ variant: "outline", size: "sm" }),
+                      "min-h-11 w-full justify-center sm:min-h-8 sm:w-auto",
+                    )}
                   >
                     {expandingScope === scope ? (
                       <Loader2 className="size-4 animate-spin" />

@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,6 +17,20 @@ import type {
 } from "@/lib/homeschool/intake/types";
 
 type HorizonIntent = "today_only" | "auto";
+type OnboardingJobStage =
+  | "idle"
+  | "preparing_source"
+  | "uploading_source"
+  | "source_ready"
+  | "preview_ready"
+  | "generating_first_day"
+  | "failed";
+
+type OnboardingJobState = {
+  stage: OnboardingJobStage;
+  title?: string;
+  detail?: string;
+};
 
 const intakeOptions: Array<{ value: FastPathIntakeRoute; label: string; description: string }> = [
   {
@@ -172,6 +187,18 @@ function summarizePackageStatus(pkg: NormalizedIntakeSourcePackage) {
   return "Text source is normalized and ready for preview.";
 }
 
+function formatFileSize(bytes: number) {
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+
+  if (bytes < 1024 * 1024) {
+    return `${Math.round(bytes / 102.4) / 10} KB`;
+  }
+
+  return `${Math.round(bytes / 1024 / 102.4) / 10} MB`;
+}
+
 export function HomeschoolOnboardingForm(props: {
   organizationName: string;
   defaultLearnerName?: string | null;
@@ -192,7 +219,7 @@ export function HomeschoolOnboardingForm(props: {
   const [previewTitle, setPreviewTitle] = React.useState("");
   const [previewHorizon, setPreviewHorizon] = React.useState<CurriculumGenerationHorizon>("today");
   const [submitting, setSubmitting] = React.useState(false);
-  const [jobStatus, setJobStatus] = React.useState<string | null>(null);
+  const [jobState, setJobState] = React.useState<OnboardingJobState>({ stage: "idle" });
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
@@ -215,12 +242,24 @@ export function HomeschoolOnboardingForm(props: {
 
   function markPackageStale() {
     setSourcePackage(null);
+    setJobState({ stage: "idle" });
+  }
+
+  function setWorkingState(
+    stage: Exclude<OnboardingJobStage, "idle" | "failed">,
+    title: string,
+    detail: string,
+  ) {
+    setJobState({ stage, title, detail });
   }
 
   async function createSourcePackage() {
-    setJobStatus("Preparing your source...");
-
     if (usesTextInput) {
+      setWorkingState(
+        "preparing_source",
+        "Preparing your source",
+        "Normalizing the pasted material before we build Today.",
+      );
       const response = await fetch("/api/homeschool/intake-package", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -236,13 +275,25 @@ export function HomeschoolOnboardingForm(props: {
         throw new Error(payload?.error ?? "Could not prepare that source.");
       }
 
-      setSourcePackage(payload);
-      return payload as NormalizedIntakeSourcePackage;
+      const preparedPackage = payload as NormalizedIntakeSourcePackage;
+      setSourcePackage(preparedPackage);
+      setWorkingState(
+        "source_ready",
+        "Source package ready",
+        summarizePackageStatus(preparedPackage),
+      );
+      return preparedPackage;
     }
 
     if (!uploadedFile) {
       throw new Error("Choose a file before continuing.");
     }
+
+    setWorkingState(
+      "uploading_source",
+      "Uploading your source",
+      "Keeping the selected file in place while we prepare the intake package.",
+    );
 
     const formData = new FormData();
     formData.set("modality", sourceMode);
@@ -260,8 +311,14 @@ export function HomeschoolOnboardingForm(props: {
       throw new Error(payload?.error ?? "Could not upload that source.");
     }
 
-    setSourcePackage(payload);
-    return payload as NormalizedIntakeSourcePackage;
+    const preparedPackage = payload as NormalizedIntakeSourcePackage;
+    setSourcePackage(preparedPackage);
+    setWorkingState(
+      "source_ready",
+      "Source package ready",
+      summarizePackageStatus(preparedPackage),
+    );
+    return preparedPackage;
   }
 
   async function submitFastPath(confirmPreview = false) {
@@ -270,7 +327,11 @@ export function HomeschoolOnboardingForm(props: {
 
     try {
       const preparedPackage = sourcePackage ?? (await createSourcePackage());
-      setJobStatus("Preparing your first day...");
+      setWorkingState(
+        "generating_first_day",
+        "Preparing your first day",
+        "Building Today now, then chaining lesson and activity generation automatically.",
+      );
 
       const response = await fetch("/api/homeschool/onboarding", {
         method: "POST",
@@ -305,18 +366,56 @@ export function HomeschoolOnboardingForm(props: {
         setPreviewHorizon(payload.preview.chosenHorizon);
         setStep(4);
         setSubmitting(false);
-        setJobStatus(null);
+        setWorkingState(
+          "preview_ready",
+          "Quick preview ready",
+          "Confirm the interpretation before we save the route and open Today.",
+        );
         return;
       }
 
       router.push(payload?.redirectTo ?? "/today");
       router.refresh();
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Could not finish onboarding.");
+      const message =
+        nextError instanceof Error ? nextError.message : "Could not finish onboarding.";
+      setError(message);
+      setJobState({
+        stage: "failed",
+        title: "Could not finish this step",
+        detail: message,
+      });
       setSubmitting(false);
-      setJobStatus(null);
       return;
     }
+  }
+
+  function renderJobIcon() {
+    if (jobState.stage === "failed") {
+      return <AlertCircle className="mt-0.5 size-4 shrink-0 text-destructive" />;
+    }
+
+    if (
+      jobState.stage === "preparing_source" ||
+      jobState.stage === "uploading_source" ||
+      jobState.stage === "generating_first_day"
+    ) {
+      return <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-primary" />;
+    }
+
+    return <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-primary" />;
+  }
+
+  function getRetryLabel() {
+    if (step === 4 && preview) {
+      return "Retry save and open Today";
+    }
+
+    if (!usesTextInput && uploadedFile) {
+      return "Retry with this file";
+    }
+
+    return sourcePackage ? "Retry generate" : "Retry this step";
   }
 
   return (
@@ -344,7 +443,7 @@ export function HomeschoolOnboardingForm(props: {
                 value={learnerName}
                 onChange={(event) => setLearnerName(event.target.value)}
                 placeholder="Ava"
-                className="rounded-xl border border-input bg-background px-3 py-2 font-normal"
+                className="min-h-11 rounded-xl border border-input bg-background px-3 py-2.5 font-normal"
               />
             </label>
             <div className="flex justify-end">
@@ -376,7 +475,7 @@ export function HomeschoolOnboardingForm(props: {
                   setIntakeRoute(option.value);
                   markPackageStale();
                 }}
-                className={`rounded-xl border p-4 text-left transition-colors ${
+                className={`min-h-24 rounded-xl border p-4 text-left transition-colors ${
                   intakeRoute === option.value
                     ? "border-primary bg-primary/10"
                     : "border-border bg-background hover:bg-muted/40"
@@ -455,7 +554,7 @@ export function HomeschoolOnboardingForm(props: {
                     setUploadedFile(event.target.files?.[0] ?? null);
                     markPackageStale();
                   }}
-                  className="rounded-xl border border-dashed border-input bg-background px-3 py-3 font-normal"
+                  className="min-h-11 rounded-xl border border-dashed border-input bg-background px-3 py-3 font-normal"
                 />
                 <span className="text-xs font-normal text-muted-foreground">
                   {uploadedFile
@@ -467,6 +566,18 @@ export function HomeschoolOnboardingForm(props: {
               </label>
             )}
 
+            {!usesTextInput && uploadedFile ? (
+              <div className="rounded-xl border border-border/60 bg-background/72 p-4 text-sm">
+                <p className="font-medium text-foreground">{uploadedFile.name}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {uploadedFile.type || "Selected file"} · {formatFileSize(uploadedFile.size)}
+                </p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  This stays selected if upload or preparation fails, so you can retry directly.
+                </p>
+              </div>
+            ) : null}
+
             <label className="grid gap-1.5 text-sm font-medium">
               {noteLabelForSourceMode(sourceMode)}
               <textarea
@@ -477,7 +588,7 @@ export function HomeschoolOnboardingForm(props: {
                 }}
                 rows={3}
                 placeholder={notePlaceholderForSourceMode(sourceMode)}
-                className="rounded-xl border border-input bg-background px-3 py-2 font-normal"
+                className="min-h-28 rounded-xl border border-input bg-background px-3 py-2 font-normal"
               />
             </label>
 
@@ -497,7 +608,7 @@ export function HomeschoolOnboardingForm(props: {
                   name="horizon"
                   checked={horizonIntent === "today_only"}
                   onChange={() => setHorizonIntent("today_only")}
-                  className="mt-1"
+                  className="mt-1 size-4"
                 />
                 <span>Use this for just today</span>
               </label>
@@ -507,7 +618,7 @@ export function HomeschoolOnboardingForm(props: {
                   name="horizon"
                   checked={horizonIntent === "auto"}
                   onChange={() => setHorizonIntent("auto")}
-                  className="mt-1"
+                  className="mt-1 size-4"
                 />
                 <span>Auto-expand when the source clearly supports more than today</span>
               </label>
@@ -521,7 +632,7 @@ export function HomeschoolOnboardingForm(props: {
                 type="button"
                 disabled={!canContinueStep3 || submitting}
                 onClick={() => void submitFastPath(false)}
-                className="w-full sm:w-auto"
+                className="min-h-11 w-full sm:min-h-10 sm:w-auto"
               >
                 Review source and generate
               </Button>
@@ -561,7 +672,7 @@ export function HomeschoolOnboardingForm(props: {
               <input
                 value={previewLearnerName}
                 onChange={(event) => setPreviewLearnerName(event.target.value)}
-                className="rounded-xl border border-input bg-background px-3 py-2 font-normal"
+                className="min-h-11 rounded-xl border border-input bg-background px-3 py-2.5 font-normal"
               />
             </label>
             <label className="grid gap-1.5 font-medium">
@@ -569,7 +680,7 @@ export function HomeschoolOnboardingForm(props: {
               <select
                 value={previewRoute}
                 onChange={(event) => setPreviewRoute(event.target.value as FastPathIntakeRoute)}
-                className="rounded-xl border border-input bg-background px-3 py-2 font-normal"
+                className="min-h-11 rounded-xl border border-input bg-background px-3 py-2.5 font-normal"
               >
                 {intakeOptions.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -583,7 +694,7 @@ export function HomeschoolOnboardingForm(props: {
               <input
                 value={previewTitle}
                 onChange={(event) => setPreviewTitle(event.target.value)}
-                className="rounded-xl border border-input bg-background px-3 py-2 font-normal"
+                className="min-h-11 rounded-xl border border-input bg-background px-3 py-2.5 font-normal"
               />
             </label>
             <label className="grid gap-1.5 font-medium">
@@ -593,7 +704,7 @@ export function HomeschoolOnboardingForm(props: {
                 onChange={(event) =>
                   setPreviewHorizon(event.target.value as CurriculumGenerationHorizon)
                 }
-                className="rounded-xl border border-input bg-background px-3 py-2 font-normal"
+                className="min-h-11 rounded-xl border border-input bg-background px-3 py-2.5 font-normal"
               >
                 {Object.entries(horizonLabels).map(([value, label]) => (
                   <option key={value} value={value}>
@@ -640,7 +751,7 @@ export function HomeschoolOnboardingForm(props: {
             </div>
             <div className="grid gap-2 sm:flex sm:justify-between">
               <Button type="button" variant="outline" onClick={() => setStep(3)} className="w-full sm:w-auto">Edit source</Button>
-              <Button type="button" disabled={submitting} onClick={() => void submitFastPath(true)} className="w-full sm:w-auto">
+              <Button type="button" disabled={submitting} onClick={() => void submitFastPath(true)} className="min-h-11 w-full sm:min-h-10 sm:w-auto">
                 Save and open Today
               </Button>
             </div>
@@ -649,7 +760,63 @@ export function HomeschoolOnboardingForm(props: {
       ) : null}
 
       {error ? <p className="rounded-xl bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p> : null}
-      {jobStatus ? <p className="rounded-xl bg-muted px-4 py-3 text-sm text-muted-foreground">{jobStatus}</p> : null}
+      {jobState.stage !== "idle" ? (
+        <div
+          className={`rounded-xl border px-4 py-3 text-sm ${
+            jobState.stage === "failed"
+              ? "border-destructive/20 bg-destructive/10"
+              : "border-border/60 bg-muted/60"
+          }`}
+        >
+          <div className="flex items-start gap-3">
+            {renderJobIcon()}
+            <div className="min-w-0 flex-1 space-y-3">
+              <div className="space-y-1">
+                <p className="font-medium text-foreground">{jobState.title}</p>
+                {jobState.detail ? (
+                  <p className="text-muted-foreground">{jobState.detail}</p>
+                ) : null}
+              </div>
+              <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-3">
+                <div className="rounded-lg border border-border/60 bg-background/70 px-3 py-2">
+                  <p className="font-medium text-foreground">Source</p>
+                  <p>
+                    {jobState.stage === "uploading_source"
+                      ? "Uploading file"
+                      : jobState.stage === "preparing_source"
+                        ? "Preparing text"
+                        : sourcePackage ||
+                            jobState.stage === "source_ready" ||
+                            jobState.stage === "preview_ready" ||
+                            jobState.stage === "generating_first_day"
+                          ? "Ready"
+                          : "Waiting"}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-border/60 bg-background/70 px-3 py-2">
+                  <p className="font-medium text-foreground">Preview</p>
+                  <p>{jobState.stage === "preview_ready" ? "Needs review" : step === 4 ? "Reviewing" : "Auto when needed"}</p>
+                </div>
+                <div className="rounded-lg border border-border/60 bg-background/70 px-3 py-2">
+                  <p className="font-medium text-foreground">Today build</p>
+                  <p>{jobState.stage === "generating_first_day" ? "In progress" : "Pending"}</p>
+                </div>
+              </div>
+              {jobState.stage === "failed" ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void submitFastPath(step === 4 && preview !== null)}
+                  disabled={submitting}
+                  className="min-h-11 w-full sm:min-h-10 sm:w-auto"
+                >
+                  {getRetryLabel()}
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

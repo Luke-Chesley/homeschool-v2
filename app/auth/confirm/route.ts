@@ -1,6 +1,7 @@
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 
+import { buildPathWithNext, sanitizeNextPath } from "@/lib/auth/next";
 import { createRouteHandlerSupabaseClient } from "@/lib/platform/supabase";
 
 export async function GET(request: NextRequest) {
@@ -8,7 +9,7 @@ export async function GET(request: NextRequest) {
   const code = url.searchParams.get("code");
   const tokenHash = url.searchParams.get("token_hash");
   const type = url.searchParams.get("type") as EmailOtpType | null;
-  const next = url.searchParams.get("next") || "/";
+  const next = sanitizeNextPath(url.searchParams.get("next"), "/today");
   const { client, applyCookies } = createRouteHandlerSupabaseClient(request);
 
   let error: Error | null = null;
@@ -28,6 +29,6 @@ export async function GET(request: NextRequest) {
     return applyCookies(NextResponse.redirect(errorUrl));
   }
 
-  const destination = new URL(next, request.url);
+  const destination = new URL(buildPathWithNext("/auth/setup", next), request.url);
   return applyCookies(NextResponse.redirect(destination));
 }

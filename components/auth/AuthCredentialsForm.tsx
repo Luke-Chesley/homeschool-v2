@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { buildPathWithNext, sanitizeNextPath } from "@/lib/auth/next";
 import { getBrowserAuthClient } from "@/lib/auth/browser";
 import { getAuthConfirmRedirectUrl } from "@/lib/auth/redirects";
 
@@ -16,6 +17,12 @@ type AuthCredentialsFormProps = {
 export function AuthCredentialsForm({ mode }: AuthCredentialsFormProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const nextPath = sanitizeNextPath(searchParams.get("next"), "/today");
+  const setupPath = buildPathWithNext("/auth/setup", nextPath);
+  const alternateAuthPath =
+    mode === "login"
+      ? buildPathWithNext("/auth/sign-up", nextPath)
+      : buildPathWithNext("/auth/login", nextPath);
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [fullName, setFullName] = React.useState("");
@@ -42,13 +49,12 @@ export function AuthCredentialsForm({ mode }: AuthCredentialsFormProps) {
           throw authError;
         }
 
-        const next = searchParams.get("next") || "/";
-        router.replace(next);
+        router.replace(nextPath);
         router.refresh();
         return;
       }
 
-      const redirectTo = getAuthConfirmRedirectUrl();
+      const redirectTo = getAuthConfirmRedirectUrl(nextPath);
       const { data, error: authError } = await auth.auth.signUp({
         email: email.trim(),
         password,
@@ -63,12 +69,12 @@ export function AuthCredentialsForm({ mode }: AuthCredentialsFormProps) {
       }
 
       if (data.session) {
-        router.replace("/auth/setup");
+        router.replace(setupPath);
         router.refresh();
         return;
       }
 
-      setNotice("Check your email to finish account setup.");
+      setNotice("Check your email to finish account setup and resume where you left off.");
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Authentication failed.");
     } finally {
@@ -160,14 +166,14 @@ export function AuthCredentialsForm({ mode }: AuthCredentialsFormProps) {
           {mode === "login" ? (
             <p>
               Need an account?{" "}
-              <Link href="/auth/sign-up" className="text-foreground underline underline-offset-4">
+              <Link href={alternateAuthPath} className="text-foreground underline underline-offset-4">
                 Create one
               </Link>
             </p>
           ) : (
             <p>
               Already have an account?{" "}
-              <Link href="/auth/login" className="text-foreground underline underline-offset-4">
+              <Link href={alternateAuthPath} className="text-foreground underline underline-offset-4">
                 Sign in
               </Link>
             </p>

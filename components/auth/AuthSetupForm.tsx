@@ -1,10 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { sanitizeNextPath } from "@/lib/auth/next";
 
 type AuthSetupFormProps = {
   defaultOrganizationName: string;
@@ -13,6 +14,8 @@ type AuthSetupFormProps = {
 
 export function AuthSetupForm({ defaultOrganizationName, email }: AuthSetupFormProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const nextPath = sanitizeNextPath(searchParams.get("next"), "/onboarding");
   const [organizationName, setOrganizationName] = React.useState(defaultOrganizationName);
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -34,7 +37,7 @@ export function AuthSetupForm({ defaultOrganizationName, email }: AuthSetupFormP
         throw new Error(payload?.error ?? "Could not finish account setup.");
       }
 
-      router.replace("/onboarding");
+      router.replace(nextPath);
       router.refresh();
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Could not finish account setup.");

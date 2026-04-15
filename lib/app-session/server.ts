@@ -3,6 +3,7 @@ import "@/lib/server-only";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
+import { AUTH_NEXT_COOKIE, buildPathWithNext, sanitizeNextPath } from "@/lib/auth/next";
 import { getRequestAuthSession } from "@/lib/auth/server";
 import { resolveAuthorizedOrganizations } from "@/lib/auth/identity";
 import type { AppLearner, AppWorkspace } from "@/lib/users/service";
@@ -136,25 +137,42 @@ export async function getAppAuthState(): Promise<AppAuthState> {
   };
 }
 
-export async function getAppSession(): Promise<AuthenticatedAppSession> {
+function resolveResumePath(cookieStore: Awaited<ReturnType<typeof cookies>>, nextPath?: string | null) {
+  const explicitNext = sanitizeNextPath(nextPath, "");
+  if (explicitNext) {
+    return explicitNext;
+  }
+
+  return sanitizeNextPath(cookieStore.get(AUTH_NEXT_COOKIE)?.value, "");
+}
+
+export async function getAppSession(options?: {
+  nextPath?: string | null;
+}): Promise<AuthenticatedAppSession> {
   const state = await getAppAuthState();
+  const cookieStore = await cookies();
+  const resumePath = resolveResumePath(cookieStore, options?.nextPath);
 
   if (state.status === "signed_out") {
-    redirect("/auth/login");
+    redirect(buildPathWithNext("/auth/login", resumePath));
   }
 
   if (state.status === "needs_setup") {
-    redirect("/auth/setup");
+    redirect(buildPathWithNext("/auth/setup", resumePath));
   }
 
   return state.session;
 }
 
-export async function requireAppSession(): Promise<AuthenticatedAppSession & { activeLearner: AppLearner }> {
-  const session = await getAppSession();
+export async function requireAppSession(options?: {
+  nextPath?: string | null;
+}): Promise<AuthenticatedAppSession & { activeLearner: AppLearner }> {
+  const session = await getAppSession({ nextPath: options?.nextPath });
+  const cookieStore = await cookies();
+  const resumePath = resolveResumePath(cookieStore, options?.nextPath);
 
   if (!session.activeLearner) {
-    redirect("/users");
+    redirect(buildPathWithNext("/users", resumePath));
   }
 
   return session as AuthenticatedAppSession & { activeLearner: AppLearner };
@@ -199,15 +217,18 @@ export function setWorkspaceCookies(params: {
       sameSite: "lax",
       path: "/",
     });
+    params.response.cookies.delete(AUTH_NEXT_COOKIE);
     return params.response;
   }
 
   params.response.cookies.delete(APP_LEARNER_COOKIE);
+  params.response.cookies.delete(AUTH_NEXT_COOKIE);
   return params.response;
 }
 
 export function clearWorkspaceCookies(response: import("next/server").NextResponse) {
   response.cookies.delete(APP_ORGANIZATION_COOKIE);
   response.cookies.delete(APP_LEARNER_COOKIE);
+  response.cookies.delete(AUTH_NEXT_COOKIE);
   return response;
 }

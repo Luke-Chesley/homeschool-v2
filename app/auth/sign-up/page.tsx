@@ -1,21 +1,27 @@
 import { redirect } from "next/navigation";
 
 import { AuthCredentialsForm } from "@/components/auth/AuthCredentialsForm";
+import { buildPathWithNext, sanitizeNextPath } from "@/lib/auth/next";
 import { getAppAuthState } from "@/lib/app-session/server";
 
 export const metadata = {
   title: "Create account",
 };
 
-export default async function SignUpPage() {
+export default async function SignUpPage(props: {
+  searchParams: Promise<{ next?: string | string[] }>;
+}) {
+  const searchParams = await props.searchParams;
+  const nextParam = typeof searchParams.next === "string" ? searchParams.next : undefined;
+  const nextPath = sanitizeNextPath(nextParam, "/today");
   const state = await getAppAuthState();
 
   if (state.status === "ready") {
-    redirect("/today");
+    redirect(nextPath);
   }
 
   if (state.status === "needs_setup") {
-    redirect("/auth/setup");
+    redirect(buildPathWithNext("/auth/setup", nextPath));
   }
 
   return <AuthCredentialsForm mode="sign_up" />;

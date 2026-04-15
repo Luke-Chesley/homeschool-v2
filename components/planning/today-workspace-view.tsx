@@ -262,11 +262,14 @@ function LessonDraftActivityControl({
         </div>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="grid gap-2 sm:flex sm:flex-wrap sm:items-center">
         {openSessionId && hasActivity ? (
           <Link
             href={`/activity/${openSessionId}`}
-            className={buttonVariants({ variant: "outline", size: "sm" })}
+            className={cn(
+              buttonVariants({ variant: "outline", size: "sm" }),
+              "min-h-11 w-full justify-center sm:min-h-8 sm:w-auto",
+            )}
           >
             {isStale ? "Open (stale)" : "Open activity"}
           </Link>
@@ -278,6 +281,7 @@ function LessonDraftActivityControl({
             size="sm"
             onClick={() => handleGenerate(buildFailed ? "today_resume" : "manual")}
             disabled={isPending}
+            className="min-h-11 w-full justify-center sm:min-h-8 sm:w-auto"
           >
             {isPending ? (
               <Loader2 className="size-3.5 animate-spin" />
@@ -338,17 +342,29 @@ function TodayLearnerActivityBridge({
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+        <div className="grid w-full gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:justify-end">
           {hasActivity && activitySessionId ? (
-            <Link href={`/activity/${activitySessionId}`} className={buttonVariants({ size: "sm" })}>
+            <Link
+              href={`/activity/${activitySessionId}`}
+              className={cn(buttonVariants({ size: "sm" }), "min-h-11 w-full justify-center sm:min-h-8 sm:w-auto")}
+            >
               Open learner activity
             </Link>
           ) : (
-            <Link href="/learner" className={buttonVariants({ size: "sm" })}>
+            <Link
+              href="/learner"
+              className={cn(buttonVariants({ size: "sm" }), "min-h-11 w-full justify-center sm:min-h-8 sm:w-auto")}
+            >
               Open learner queue
             </Link>
           )}
-          <Link href="/learner" className={buttonVariants({ variant: "outline", size: "sm" })}>
+          <Link
+            href="/learner"
+            className={cn(
+              buttonVariants({ variant: "outline", size: "sm" }),
+              "min-h-11 w-full justify-center sm:min-h-8 sm:w-auto",
+            )}
+          >
             View queue
           </Link>
           {draftState?.kind === "structured" ? (
@@ -376,7 +392,10 @@ function TodayItemLearnerLink({ item }: { item: DailyWorkspace["items"][number] 
   return (
     <Link
       href={hasActivity ? `/activity/${sessionId}` : "/learner"}
-      className={buttonVariants({ variant: "outline", size: "sm" })}
+      className={cn(
+        buttonVariants({ variant: "outline", size: "sm" }),
+        "min-h-11 w-full justify-center sm:min-h-8 sm:w-auto",
+      )}
     >
       {hasActivity ? "Open activity" : "Open queue"}
     </Link>
