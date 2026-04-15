@@ -217,6 +217,9 @@ export function MatchingPairsComponent({
     const next = { ...matches };
     delete next[leftId];
     onChange(spec.id, next);
+    if (selected?.side === "left" && selected.id === leftId) {
+      setSelected(null);
+    }
   }
 
   return (
@@ -232,30 +235,42 @@ export function MatchingPairsComponent({
             const matchedRight = matches[pair.id];
             const isSelected = selected?.side === "left" && selected.id === pair.id;
             return (
-              <button
+              <div
                 key={pair.id}
-                type="button"
-                onClick={() => handleSelect("left", pair.id)}
                 className={cn(
-                  "rounded-lg border px-3 py-2.5 text-left text-sm transition-colors",
+                  "flex items-center gap-2 rounded-lg border px-2 py-2 transition-colors",
                   matchedRight
-                    ? "border-primary/40 bg-primary/5 text-primary"
+                    ? "border-primary/40 bg-primary/5"
                     : isSelected
                       ? "border-primary bg-primary/10"
-                      : "border-border bg-card/60 hover:bg-muted/60",
+                      : "border-border bg-card/60",
                 )}
               >
-                {pair.left}
-                {matchedRight && (
+                <button
+                  type="button"
+                  onClick={() => handleSelect("left", pair.id)}
+                  disabled={disabled}
+                  className={cn(
+                    "min-w-0 flex-1 text-left text-sm",
+                    !disabled && "hover:text-foreground",
+                    matchedRight ? "text-primary" : "text-foreground",
+                  )}
+                  aria-pressed={isSelected}
+                >
+                  <span className="block truncate">{pair.left}</span>
+                </button>
+                {matchedRight ? (
                   <button
                     type="button"
-                    onClick={(e) => { e.stopPropagation(); clearMatch(pair.id); }}
-                    className="ml-2 text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() => clearMatch(pair.id)}
+                    disabled={disabled}
+                    className="shrink-0 rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground"
+                    aria-label={`Clear match for ${pair.left}`}
                   >
-                    ✕
+                    Clear
                   </button>
-                )}
-              </button>
+                ) : null}
+              </div>
             );
           })}
         </div>
