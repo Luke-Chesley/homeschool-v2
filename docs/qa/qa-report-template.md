@@ -36,6 +36,22 @@ Include:
 
 List what was actually exercised.
 
+## Activity Or Component Coverage
+
+Call out:
+- which generated activity was opened
+- which component or widget was exercised
+- what learner interactions were attempted
+- which alternate branches were tried
+- where the interaction loop failed or completed
+
+## Screenshot Artifacts
+
+List screenshots captured for:
+- visible failures
+- broken components or widgets
+- suspicious runtime states
+
 ## Open Questions Or Residual Risks
 
 Call out:

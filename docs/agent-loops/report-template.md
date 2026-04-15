@@ -29,6 +29,10 @@
 - curriculum summary:
 - today lesson summary:
 - activity summary:
+- activity opened:
+- activity interaction summary:
+- component / widget summary:
+- screenshot artifacts:
 - screenshots / artifact paths:
 
 ## Rubric scores

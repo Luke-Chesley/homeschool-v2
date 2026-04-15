@@ -20,15 +20,20 @@ Primary references:
 - docs/qa/qa-report-template.md
 
 Rules:
-1. Prefer app-level execution first when the scenario is about activation or UX.
+1. Use the `playwright` skill for real browser execution first when the scenario is about activation, UX, Today readiness, or activity runtime.
 2. Use core-level execution when you need to isolate learning-core behavior from UI behavior.
-3. Record exact steps, exact inputs, and exact outputs.
-4. Distinguish clearly between:
+3. If the app generates a lesson or activity, open the activity and try to use it as a learner instead of stopping at Today.
+4. Exercise the main interaction loop of the generated activity, including component rendering, interaction handling, submission, feedback, retry, and completion when those surfaces exist.
+5. Do not stop at the easiest happy path; try at least one additional realistic interaction branch when the activity allows it.
+6. Capture screenshots for visible failures, broken components, and suspicious states whenever a browser surface renders.
+7. Record exact steps, exact inputs, exact outputs, and artifact paths.
+8. Distinguish clearly between:
    - product activation failure
    - operation routing failure
    - generation quality failure
-5. Do not change application code.
-6. Do not invent missing outputs; if something did not generate, say so clearly.
+   - activity UI or component failure
+9. Do not change application code.
+10. Do not invent missing outputs; if something did not generate, say so clearly.
 
 Reporting:
 - Follow docs/agent-loops/report-template.md.

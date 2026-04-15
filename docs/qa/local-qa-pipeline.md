@@ -113,4 +113,6 @@ Before merge to `main` or before a staging push:
 
 - Agents should treat these as execution instructions, not documents to critique.
 - Agents should not stop at route discovery or code inspection.
+- Agents should use the `playwright` skill for real browser execution in Codex.
+- Agents should capture screenshots for visible failures, broken components, and suspicious runtime states.
 - Agents should use the report template structure so results stay comparable across runs.
