@@ -9,12 +9,14 @@ import { trackProductEvent } from "@/lib/platform/observability";
 import type { DailyWorkspaceLessonBuildTrigger } from "@/lib/planning/types";
 import {
   buildTodayLessonDraftFingerprint,
+  getSavedTodayLessonRegenerationNote,
   getTodayWorkspace,
   markTodayLessonBuildFailed,
   markTodayLessonBuildGenerating,
   markTodayLessonBuildReady,
   saveTodayLessonDraft,
 } from "@/lib/planning/today-service";
+import { queueTodayActivityAfterLesson } from "@/lib/planning/today-activity-generation";
 
 type TodayLessonGenerationTrigger = DailyWorkspaceLessonBuildTrigger;
 type TodayWorkspaceResult = NonNullable<Awaited<ReturnType<typeof getTodayWorkspace>>>;
@@ -59,6 +61,13 @@ async function buildTodayLessonGenerationContext(params: {
   const { workspace, planningContext, sessionTiming, sourceId, sourceTitle } = workspaceResult;
   const routeFingerprint = buildTodayLessonDraftFingerprint(workspace.items.map((item) => item.id));
   const intake = source?.intake;
+  const regenerationNote = await getSavedTodayLessonRegenerationNote({
+    organizationId: params.organizationId,
+    learnerId: params.learnerId,
+    date: params.date,
+    sourceId,
+    routeFingerprint,
+  });
 
   const input = {
     title: sourceTitle,
@@ -103,6 +112,10 @@ async function buildTodayLessonGenerationContext(params: {
             followUpQuestion: intake.followUpQuestion ?? null,
           }
         : null,
+      parentRegenerationNote:
+        typeof regenerationNote === "string" && regenerationNote.trim().length > 0
+          ? regenerationNote
+          : null,
       dailyWorkspaceSnapshot: {
         date: workspace.date,
         headline: workspace.headline,
@@ -298,6 +311,14 @@ export async function generateTodayLessonDraft(params: {
         promptVersion: result.lineage.skill_version,
         requestId: result.trace.request_id,
       },
+    });
+
+    await queueTodayActivityAfterLesson({
+      organizationId: params.organizationId,
+      learnerId: params.learnerId,
+      learnerName: params.learnerName,
+      date: params.date,
+      trigger: "after_lesson_auto",
     });
 
     return {

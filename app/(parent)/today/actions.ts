@@ -5,12 +5,15 @@ import { revalidatePath } from "next/cache";
 import { requireAppSession } from "@/lib/app-session/server";
 import { createRepositories } from "@/lib/db";
 import { getDb } from "@/lib/db/server";
-import { getTodayWorkspace } from "@/lib/planning/today-service";
-import { publishActivityForLessonDraft } from "@/lib/activities/assignment-service";
-import { computeLessonDraftFingerprint } from "@/lib/lesson-draft/fingerprint";
+import {
+  getTodayWorkspace,
+  saveTodayExpansionIntent,
+  saveTodayLessonRegenerationNote,
+} from "@/lib/planning/today-service";
 import { previewLessonDraftActivityPrompt } from "@/lib/learning-core/activity";
 import { getLessonEvaluationLabel, type LessonEvaluationLevel } from "@/lib/session-workspace/evaluation";
 import { recordSessionEvaluation } from "@/lib/session-workspace/service";
+import { generateTodayActivity } from "@/lib/planning/today-activity-generation";
 import {
   completeTodayPlanItem,
   partiallyCompleteTodayPlanItem,
@@ -68,6 +71,12 @@ export interface TodayPlanItemEvaluationResult {
   error?: string;
 }
 
+export interface TodayLessonSupportResult {
+  ok: boolean;
+  message?: string;
+  error?: string;
+}
+
 /**
  * Get the current activity state for today's lesson draft.
  * Drives the UI: no_draft / no_activity / ready / stale.
@@ -77,7 +86,6 @@ export async function getLessonDraftActivityStatusAction(
 ): Promise<LessonDraftActivityState> {
   try {
     const session = await requireAppSession();
-    const repos = createRepositories(getDb());
 
     const workspaceResult = await getTodayWorkspace({
       organizationId: session.organization.id,
@@ -88,24 +96,12 @@ export async function getLessonDraftActivityStatusAction(
 
     if (!workspaceResult) return { ok: false, error: "Workspace not found" };
 
-    const lessonDraft = workspaceResult.workspace.lessonDraft?.structured;
-    if (!lessonDraft) return { ok: true, status: "no_draft" };
-
-    const leadItem = workspaceResult.workspace.leadItem;
-    const leadSessionId = leadItem.sessionRecordId ?? leadItem.workflow?.lessonSessionId;
-    if (!leadSessionId) return { ok: true, status: "no_activity" };
-
-    const currentFingerprint = computeLessonDraftFingerprint(lessonDraft);
-    const existingActivity = await repos.activities.findPublishedActivityForSession(leadSessionId);
-
-    if (!existingActivity) return { ok: true, status: "no_activity", sessionId: leadSessionId };
-
-    const isStale = existingActivity.lessonDraftFingerprint !== currentFingerprint;
+    const activityState = workspaceResult.workspace.activityState;
     return {
       ok: true,
-      status: isStale ? "stale" : "ready",
-      sessionId: leadSessionId,
-      activityId: existingActivity.id,
+      status: activityState?.status ?? "no_draft",
+      sessionId: activityState?.sessionId,
+      activityId: activityState?.activityId,
     };
   } catch (err) {
     console.error("[getLessonDraftActivityStatusAction]", err);
@@ -294,49 +290,19 @@ export async function saveTodayPlanItemEvaluationAction(input: {
  * Archives and replaces the activity when the draft changed.
  */
 export async function generateLessonDraftActivityAction(
-  date: string,
+  input: {
+    date: string;
+    trigger?: "after_lesson_auto" | "today_resume" | "manual";
+  },
 ): Promise<{ ok: boolean; error?: string }> {
   try {
     const session = await requireAppSession();
-    const repos = createRepositories(getDb());
-
-    const platformSettings = await repos.organizations.findPlatformSettings(
-      session.organization.id,
-    );
-    const workflowMode = platformSettings?.workflowMode ?? "family_guided";
-
-    const workspaceResult = await getTodayWorkspace({
+    await generateTodayActivity({
       organizationId: session.organization.id,
       learnerId: session.activeLearner.id,
       learnerName: session.activeLearner.displayName,
-      date,
-    });
-
-    if (!workspaceResult) return { ok: false, error: "Workspace not found" };
-
-    const lessonDraft = workspaceResult.workspace.lessonDraft?.structured;
-    if (!lessonDraft) {
-      return { ok: false, error: "No lesson draft — generate a lesson plan first." };
-    }
-
-    const leadItem = workspaceResult.workspace.leadItem;
-    const leadSessionId = leadItem.sessionRecordId ?? leadItem.workflow?.lessonSessionId;
-    const leadPlanItemId = leadItem.planRecordId ?? leadItem.workflow?.planItemId;
-
-    if (!leadSessionId) {
-      return { ok: false, error: "Session record not found — try refreshing the page." };
-    }
-
-    await publishActivityForLessonDraft({
-      organizationId: session.organization.id,
-      learnerId: session.activeLearner.id,
-      lessonSessionId: leadSessionId,
-      lessonDraft,
-      lessonDraftFingerprint: computeLessonDraftFingerprint(lessonDraft),
-      learnerName: session.activeLearner.displayName,
-      workflowMode,
-      planItems: workspaceResult.workspace.items,
-      leadPlanItemId: leadPlanItemId ?? undefined,
+      date: input.date,
+      trigger: input.trigger ?? "manual",
     });
 
     return { ok: true };
@@ -389,5 +355,88 @@ export async function getLessonDraftPromptPreviewAction(
   } catch (err) {
     console.error("[getLessonDraftPromptPreviewAction]", err);
     return { ok: false, error: err instanceof Error ? err.message : "Failed to build prompt" };
+  }
+}
+
+export async function saveLessonRegenerationNoteAction(input: {
+  date: string;
+  note: string;
+}): Promise<TodayLessonSupportResult> {
+  try {
+    const session = await requireAppSession();
+    const workspaceResult = await getTodayWorkspace({
+      organizationId: session.organization.id,
+      learnerId: session.activeLearner.id,
+      learnerName: session.activeLearner.displayName,
+      date: input.date,
+    });
+
+    if (!workspaceResult) {
+      return { ok: false, error: "Workspace not found." };
+    }
+
+    await saveTodayLessonRegenerationNote({
+      organizationId: session.organization.id,
+      learnerId: session.activeLearner.id,
+      date: input.date,
+      sourceId: workspaceResult.sourceId,
+      routeFingerprint: workspaceResult.workspace.items.map((item) => item.id).join("::"),
+      note: input.note.trim().length > 0 ? input.note.trim() : null,
+    });
+
+    revalidatePath("/today");
+
+    return { ok: true, message: "Saved note for the next regenerate." };
+  } catch (error) {
+    console.error("[saveLessonRegenerationNoteAction]", error);
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Could not save the regeneration note.",
+    };
+  }
+}
+
+export async function saveExpansionIntentAction(input: {
+  date: string;
+  intent: "keep_today" | "expand_from_here";
+}): Promise<TodayLessonSupportResult> {
+  try {
+    const session = await requireAppSession();
+    const workspaceResult = await getTodayWorkspace({
+      organizationId: session.organization.id,
+      learnerId: session.activeLearner.id,
+      learnerName: session.activeLearner.displayName,
+      date: input.date,
+    });
+
+    if (!workspaceResult) {
+      return { ok: false, error: "Workspace not found." };
+    }
+
+    await saveTodayExpansionIntent({
+      organizationId: session.organization.id,
+      learnerId: session.activeLearner.id,
+      date: input.date,
+      sourceId: workspaceResult.sourceId,
+      routeFingerprint: workspaceResult.workspace.items.map((item) => item.id).join("::"),
+      intent: input.intent,
+    });
+
+    revalidatePath("/today");
+    revalidatePath("/planning");
+
+    return {
+      ok: true,
+      message:
+        input.intent === "keep_today"
+          ? "Saved: keep this launch flow bounded to today."
+          : "Saved: expand from here when larger route controls are available.",
+    };
+  } catch (error) {
+    console.error("[saveExpansionIntentAction]", error);
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Could not save the expansion preference.",
+    };
   }
 }

@@ -19,9 +19,12 @@ import type { StructuredLessonDraft } from "@/lib/lesson-draft/types";
 import { type LessonEvaluationLevel } from "@/lib/session-workspace/evaluation";
 import type {
   DailyWorkspace,
+  DailyWorkspaceActivityBuildTrigger,
+  DailyWorkspaceActivityState,
   DailyWorkspaceLessonBuild,
   DailyWorkspaceLessonDraft,
 } from "@/lib/planning/types";
+import { acquireAutoBuildLock, releaseAutoBuildLock } from "@/lib/planning/client-auto-build";
 import { cn } from "@/lib/utils";
 import {
   generateLessonDraftActivityAction,
@@ -117,41 +120,135 @@ function initialDraftState(lessonDraft: DailyWorkspaceLessonDraft | null): Draft
 
 function LessonDraftActivityControl({
   date,
-  activityStatus,
+  activityState,
   sessionId,
+  buildState,
 }: {
   date: string;
-  activityStatus: LessonDraftActivityStatus | null;
+  activityState: DailyWorkspaceActivityState | null;
   sessionId?: string;
+  buildState?: DailyWorkspace["activityBuild"];
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [localStatus, setLocalStatus] = useState<LessonDraftActivityStatus | null>(activityStatus);
+  const [localStatus, setLocalStatus] = useState<LessonDraftActivityStatus | null>(
+    activityState?.status ?? null,
+  );
+  const [localSessionId, setLocalSessionId] = useState<string | undefined>(
+    activityState?.sessionId ?? sessionId,
+  );
+  const [pendingTrigger, setPendingTrigger] = useState<DailyWorkspaceActivityBuildTrigger | null>(
+    null,
+  );
 
   useEffect(() => {
-    setLocalStatus(activityStatus);
-  }, [activityStatus]);
+    setLocalStatus(activityState?.status ?? null);
+    setLocalSessionId(activityState?.sessionId ?? sessionId);
+  }, [activityState?.sessionId, activityState?.status, sessionId]);
 
-  function handleGenerate() {
+  const autoBuildKey =
+    buildState?.status === "queued"
+      ? `${buildState.routeFingerprint}:${buildState.queuedAt ?? buildState.updatedAt}`
+      : null;
+
+  function handleGenerate(
+    trigger: DailyWorkspaceActivityBuildTrigger = "manual",
+    autoBuildLockKey?: string | null,
+  ) {
     setError(null);
+    setPendingTrigger(trigger);
     startTransition(async () => {
-      const result = await generateLessonDraftActivityAction(date);
+      const result = await generateLessonDraftActivityAction({ date, trigger });
+      setPendingTrigger(null);
+
       if (result.ok) {
         setLocalStatus("ready");
+        setLocalSessionId(activityState?.sessionId ?? sessionId);
         router.refresh();
       } else {
+        if (autoBuildLockKey) {
+          releaseAutoBuildLock("today-activity-auto", autoBuildLockKey);
+        }
         setError(result.error ?? "Generation failed");
+        router.refresh();
       }
     });
   }
 
-  const isStale = localStatus === "stale";
+  useEffect(() => {
+    if (!autoBuildKey) {
+      return;
+    }
+
+    if (!acquireAutoBuildLock("today-activity-auto", autoBuildKey)) {
+      return;
+    }
+
+    handleGenerate("after_lesson_auto", autoBuildKey);
+  }, [autoBuildKey]);
+
+  useEffect(() => {
+    if (buildState?.status === "generating") {
+      const timeout = window.setTimeout(() => {
+        router.refresh();
+      }, 2000);
+
+      return () => window.clearTimeout(timeout);
+    }
+
+    return undefined;
+  }, [buildState?.status, buildState?.updatedAt, router]);
+
+  const isPendingAutoBuild = pendingTrigger === "after_lesson_auto";
+  const isBuildingActivity =
+    buildState?.status === "queued" || buildState?.status === "generating" || isPendingAutoBuild;
+  const buildFailed = buildState?.status === "failed";
+  const isStale = localStatus === "stale" && !isBuildingActivity;
+  const isReady = localStatus === "ready" && !isBuildingActivity && !buildFailed;
   const hasActivity = localStatus === "ready" || localStatus === "stale";
-  const canGenerate = localStatus === null || localStatus === "no_activity" || localStatus === "stale";
+  const canGenerate =
+    !isBuildingActivity &&
+    (buildFailed || localStatus === null || localStatus === "no_activity" || localStatus === "stale");
+  const openSessionId = localSessionId ?? activityState?.sessionId ?? sessionId;
+  const actionLabel = isPending
+    ? buildFailed
+      ? "Retrying…"
+      : isStale
+        ? "Regenerating…"
+        : "Generating…"
+    : buildFailed
+      ? "Retry build"
+      : isStale
+        ? "Regenerate activity"
+        : "Generate activity";
 
   return (
     <div className="space-y-3">
+      {isBuildingActivity ? (
+        <div className="flex items-start gap-2 rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm">
+          <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-primary" />
+          <div className="space-y-1">
+            <p className="font-medium text-foreground">Building activity…</p>
+            <p className="text-xs text-muted-foreground">
+              We&apos;re turning the lesson draft into a runnable activity automatically.
+            </p>
+          </div>
+        </div>
+      ) : null}
+
+      {isReady ? (
+        <div className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm dark:border-emerald-900 dark:bg-emerald-950/30">
+          <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-300" />
+          <div className="space-y-1">
+            <p className="font-medium text-emerald-800 dark:text-emerald-100">Activity ready</p>
+            <p className="text-xs text-emerald-700 dark:text-emerald-200">
+              The learner-facing activity is ready to open from today.
+            </p>
+          </div>
+        </div>
+      ) : null}
+
       {isStale ? (
         <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-800 dark:bg-amber-950/30">
           <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
@@ -166,32 +263,36 @@ function LessonDraftActivityControl({
       ) : null}
 
       <div className="flex flex-wrap items-center gap-2">
-        {sessionId && hasActivity ? (
+        {openSessionId && hasActivity ? (
           <Link
-            href={`/activity/${sessionId}`}
+            href={`/activity/${openSessionId}`}
             className={buttonVariants({ variant: "outline", size: "sm" })}
           >
             {isStale ? "Open (stale)" : "Open activity"}
           </Link>
         ) : null}
 
-        {canGenerate ? (
-          <Button variant="outline" size="sm" onClick={handleGenerate} disabled={isPending}>
+        {canGenerate && !isBuildingActivity ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleGenerate(buildFailed ? "today_resume" : "manual")}
+            disabled={isPending}
+          >
             {isPending ? (
               <Loader2 className="size-3.5 animate-spin" />
             ) : (
               <Sparkles className="size-3.5" />
             )}
-            {isPending
-              ? isStale
-                ? "Regenerating…"
-                : "Generating…"
-              : isStale
-                ? "Regenerate activity"
-                : "Generate activity"}
+            {actionLabel}
           </Button>
         ) : null}
 
+        {buildFailed && !error ? (
+          <p className="text-xs text-destructive">
+            {buildState?.error ?? "Activity generation did not finish. Retry to build it again."}
+          </p>
+        ) : null}
         {error ? <p className="text-xs text-destructive">{error}</p> : null}
       </div>
     </div>
@@ -207,7 +308,17 @@ function TodayLearnerActivityBridge({
 }) {
   const leadSessionId =
     workspace.leadItem.sessionRecordId ?? workspace.leadItem.workflow?.lessonSessionId ?? undefined;
-  const hasActivity = Boolean(leadSessionId && workspace.leadItem.workflow?.activityCount);
+  const activitySessionId = workspace.activityState?.sessionId ?? leadSessionId;
+  const hasActivity =
+    workspace.activityState?.status === "ready" || workspace.activityState?.status === "stale";
+  const activitySummary =
+    workspace.activityBuild?.status === "queued" || workspace.activityBuild?.status === "generating"
+      ? "activity building"
+      : workspace.activityState?.status === "stale"
+        ? "activity stale"
+        : hasActivity
+          ? "activity ready"
+          : null;
 
   return (
     <Card className="quiet-panel">
@@ -223,15 +334,13 @@ function TodayLearnerActivityBridge({
           <div className="toolbar-row text-sm text-muted-foreground">
             <span>{workspace.leadItem.title}</span>
             <span>{formatMinutes(workspace.leadItem.estimatedMinutes)}</span>
-            {workspace.leadItem.workflow?.activityCount ? (
-              <span>{workspace.leadItem.workflow.activityCount} activity ready</span>
-            ) : null}
+            {activitySummary ? <span>{activitySummary}</span> : null}
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-          {hasActivity ? (
-            <Link href={`/activity/${leadSessionId}`} className={buttonVariants({ size: "sm" })}>
+          {hasActivity && activitySessionId ? (
+            <Link href={`/activity/${activitySessionId}`} className={buttonVariants({ size: "sm" })}>
               Open learner activity
             </Link>
           ) : (
@@ -243,7 +352,12 @@ function TodayLearnerActivityBridge({
             View queue
           </Link>
           {draftState?.kind === "structured" ? (
-            <LessonDraftActivityControl date={workspace.date} activityStatus={null} sessionId={leadSessionId} />
+            <LessonDraftActivityControl
+              date={workspace.date}
+              activityState={workspace.activityState}
+              sessionId={workspace.activityState?.sessionId ?? leadSessionId}
+              buildState={workspace.activityBuild}
+            />
           ) : null}
         </div>
       </div>
@@ -919,6 +1033,8 @@ export function TodayLessonPlanSection({
         routeItemTitles={workspace.items.map((item) => item.title)}
         draftState={draftState ?? null}
         buildState={buildState ?? null}
+        regenerationNote={workspace.lessonRegenerationNote}
+        expansionIntent={workspace.expansionIntent}
         onDraftChange={onDraftChange}
         showDraftOutput={showDraftOutput}
       />

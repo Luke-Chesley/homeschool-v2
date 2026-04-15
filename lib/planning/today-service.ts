@@ -2,6 +2,7 @@ import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 
 import type { StructuredLessonDraft } from "@/lib/lesson-draft/types";
 import { isStructuredLessonDraft } from "@/lib/lesson-draft/types";
+import { computeLessonDraftFingerprint } from "@/lib/lesson-draft/fingerprint";
 
 import {
   getCurriculumTree,
@@ -9,6 +10,7 @@ import {
   listCurriculumNodes,
   listCurriculumSources,
 } from "@/lib/curriculum/service";
+import { createRepositories } from "@/lib/db";
 import { getDb } from "@/lib/db/server";
 import {
   evidenceRecordObjectives,
@@ -28,6 +30,11 @@ import {
   weeklyRoutes,
 } from "@/lib/db/schema";
 import type {
+  DailyWorkspaceActivityBuild,
+  DailyWorkspaceActivityState,
+  DailyWorkspaceActivityBuildStatus,
+  DailyWorkspaceActivityBuildTrigger,
+  DailyWorkspaceExpansionIntent,
   DailyWorkspace,
   DailyWorkspaceLessonBuild,
   DailyWorkspaceLessonDraft,
@@ -58,6 +65,9 @@ const DEFAULT_UNSCHEDULED_ITEM_COUNT = 4;
 const TODAY_WORKSPACE_PLAN_PURPOSE = "today_workspace";
 const TODAY_LESSON_DRAFTS_KEY = "todayLessonDrafts";
 const TODAY_LESSON_BUILDS_KEY = "todayLessonBuilds";
+const TODAY_ACTIVITY_BUILDS_KEY = "todayActivityBuilds";
+const TODAY_LESSON_REGEN_NOTES_KEY = "todayLessonRegenerationNotes";
+const TODAY_EXPANSION_INTENTS_KEY = "todayExpansionIntents";
 
 function addDays(baseDate: string, days: number) {
   const date = new Date(`${baseDate}T12:00:00.000Z`);
@@ -96,6 +106,48 @@ function isLessonBuildStatus(value: unknown): value is DailyWorkspaceLessonBuild
 
 function isLessonBuildTrigger(value: unknown): value is DailyWorkspaceLessonBuildTrigger {
   return value === "onboarding_auto" || value === "today_resume" || value === "manual";
+}
+
+function isActivityBuildStatus(value: unknown): value is DailyWorkspaceActivityBuildStatus {
+  return value === "queued" || value === "generating" || value === "failed" || value === "ready";
+}
+
+function isActivityBuildTrigger(value: unknown): value is DailyWorkspaceActivityBuildTrigger {
+  return value === "after_lesson_auto" || value === "today_resume" || value === "manual";
+}
+
+function isExpansionIntent(value: unknown): value is DailyWorkspaceExpansionIntent {
+  return value === "keep_today" || value === "expand_from_here";
+}
+
+async function buildTodayActivityState(
+  workspace: Pick<DailyWorkspace, "leadItem" | "lessonDraft">,
+): Promise<DailyWorkspaceActivityState> {
+  const lessonDraft = workspace.lessonDraft?.structured;
+  if (!lessonDraft) {
+    return { status: "no_draft" };
+  }
+
+  const leadSessionId =
+    workspace.leadItem.sessionRecordId ?? workspace.leadItem.workflow?.lessonSessionId ?? null;
+  if (!leadSessionId) {
+    return { status: "no_activity" };
+  }
+
+  const repos = createRepositories(getDb());
+  const currentFingerprint = computeLessonDraftFingerprint(lessonDraft);
+  const existingActivity = await repos.activities.findPublishedActivityForSession(leadSessionId);
+
+  if (!existingActivity) {
+    return { status: "no_activity", sessionId: leadSessionId };
+  }
+
+  return {
+    status:
+      existingActivity.lessonDraftFingerprint === currentFingerprint ? "ready" : "stale",
+    sessionId: leadSessionId,
+    activityId: existingActivity.id,
+  };
 }
 
 function readLessonDraftFromMetadata(
@@ -201,6 +253,104 @@ function readLessonBuildFromMetadata(
           ? null
           : undefined,
   };
+}
+
+function readActivityBuildFromMetadata(
+  metadata: Record<string, unknown> | null | undefined,
+  sourceId: string,
+  routeFingerprint: string,
+): DailyWorkspaceActivityBuild | null {
+  if (!isRecord(metadata)) {
+    return null;
+  }
+
+  const buildSources = metadata[TODAY_ACTIVITY_BUILDS_KEY];
+  if (!isRecord(buildSources)) {
+    return null;
+  }
+
+  const sourceBuilds = buildSources[sourceId];
+  if (!isRecord(sourceBuilds)) {
+    return null;
+  }
+
+  const candidate = sourceBuilds[routeFingerprint];
+  if (!isRecord(candidate) || !isActivityBuildStatus(candidate.status)) {
+    return null;
+  }
+
+  const updatedAt =
+    typeof candidate.updatedAt === "string" ? candidate.updatedAt : new Date().toISOString();
+
+  return {
+    status: candidate.status,
+    trigger: isActivityBuildTrigger(candidate.trigger) ? candidate.trigger : undefined,
+    sourceId: typeof candidate.sourceId === "string" ? candidate.sourceId : sourceId,
+    routeFingerprint:
+      typeof candidate.routeFingerprint === "string"
+        ? candidate.routeFingerprint
+        : routeFingerprint,
+    lessonSessionId:
+      typeof candidate.lessonSessionId === "string" ? candidate.lessonSessionId : null,
+    activityId: typeof candidate.activityId === "string" ? candidate.activityId : null,
+    queuedAt: typeof candidate.queuedAt === "string" ? candidate.queuedAt : undefined,
+    startedAt: typeof candidate.startedAt === "string" ? candidate.startedAt : undefined,
+    completedAt: typeof candidate.completedAt === "string" ? candidate.completedAt : undefined,
+    failedAt: typeof candidate.failedAt === "string" ? candidate.failedAt : undefined,
+    updatedAt,
+    error:
+      typeof candidate.error === "string"
+        ? candidate.error
+        : candidate.error == null
+          ? null
+          : undefined,
+  };
+}
+
+function readLessonRegenerationNoteFromMetadata(
+  metadata: Record<string, unknown> | null | undefined,
+  sourceId: string,
+  routeFingerprint: string,
+) {
+  if (!isRecord(metadata)) {
+    return null;
+  }
+
+  const noteSources = metadata[TODAY_LESSON_REGEN_NOTES_KEY];
+  if (!isRecord(noteSources)) {
+    return null;
+  }
+
+  const sourceNotes = noteSources[sourceId];
+  if (!isRecord(sourceNotes)) {
+    return null;
+  }
+
+  const candidate = sourceNotes[routeFingerprint];
+  return typeof candidate === "string" ? candidate : null;
+}
+
+function readExpansionIntentFromMetadata(
+  metadata: Record<string, unknown> | null | undefined,
+  sourceId: string,
+  routeFingerprint: string,
+) {
+  if (!isRecord(metadata)) {
+    return null;
+  }
+
+  const intentSources = metadata[TODAY_EXPANSION_INTENTS_KEY];
+  if (!isRecord(intentSources)) {
+    return null;
+  }
+
+  const sourceIntents = intentSources[sourceId];
+  if (!isRecord(sourceIntents)) {
+    return null;
+  }
+
+  const candidate = sourceIntents[routeFingerprint];
+  return isExpansionIntent(candidate) ? candidate : null;
 }
 
 async function getTodayWorkspacePlan(organizationId: string, learnerId: string) {
@@ -481,7 +631,10 @@ async function syncTodayPlanItems(params: {
 
   const activityRows = planItemIds.length
     ? await db.query.interactiveActivities.findMany({
-        where: inArray(interactiveActivities.planItemId, planItemIds),
+        where: and(
+          inArray(interactiveActivities.planItemId, planItemIds),
+          eq(interactiveActivities.status, "published"),
+        ),
       })
     : [];
   const activityCountByPlanItemId = new Map<string, number>();
@@ -569,6 +722,63 @@ export async function getSavedTodayLessonBuild(params: {
   }
 
   return readLessonBuildFromMetadata(day.metadata, params.sourceId, params.routeFingerprint);
+}
+
+export async function getSavedTodayActivityBuild(params: {
+  organizationId: string;
+  learnerId: string;
+  date: string;
+  sourceId: string;
+  routeFingerprint: string;
+}) {
+  if (!params.routeFingerprint) {
+    return null;
+  }
+
+  const day = await getTodayWorkspaceDay(params);
+  if (!day) {
+    return null;
+  }
+
+  return readActivityBuildFromMetadata(day.metadata, params.sourceId, params.routeFingerprint);
+}
+
+export async function getSavedTodayLessonRegenerationNote(params: {
+  organizationId: string;
+  learnerId: string;
+  date: string;
+  sourceId: string;
+  routeFingerprint: string;
+}) {
+  if (!params.routeFingerprint) {
+    return null;
+  }
+
+  const day = await getTodayWorkspaceDay(params);
+  if (!day) {
+    return null;
+  }
+
+  return readLessonRegenerationNoteFromMetadata(day.metadata, params.sourceId, params.routeFingerprint);
+}
+
+export async function getSavedTodayExpansionIntent(params: {
+  organizationId: string;
+  learnerId: string;
+  date: string;
+  sourceId: string;
+  routeFingerprint: string;
+}) {
+  if (!params.routeFingerprint) {
+    return null;
+  }
+
+  const day = await getTodayWorkspaceDay(params);
+  if (!day) {
+    return null;
+  }
+
+  return readExpansionIntentFromMetadata(day.metadata, params.sourceId, params.routeFingerprint);
 }
 
 async function writeTodayLessonBuild(params: {
@@ -720,6 +930,242 @@ export async function markTodayLessonBuildReady(params: {
       error: null,
     }),
   });
+}
+
+async function writeTodayActivityBuild(params: {
+  organizationId: string;
+  learnerId: string;
+  date: string;
+  sourceId: string;
+  routeFingerprint: string;
+  patch: (
+    current: DailyWorkspaceActivityBuild | null,
+    now: string,
+  ) => DailyWorkspaceActivityBuild;
+}) {
+  const day = await getOrCreateTodayWorkspaceDay(params);
+  const db = getDb();
+  const metadata = isRecord(day.metadata) ? day.metadata : {};
+  const buildSources = isRecord(metadata[TODAY_ACTIVITY_BUILDS_KEY])
+    ? (metadata[TODAY_ACTIVITY_BUILDS_KEY] as Record<string, unknown>)
+    : {};
+  const sourceBuilds = isRecord(buildSources[params.sourceId])
+    ? (buildSources[params.sourceId] as Record<string, unknown>)
+    : {};
+  const current = readActivityBuildFromMetadata(metadata, params.sourceId, params.routeFingerprint);
+  const now = new Date().toISOString();
+  const next = params.patch(current, now);
+
+  await db
+    .update(planDays)
+    .set({
+      metadata: {
+        ...metadata,
+        [TODAY_ACTIVITY_BUILDS_KEY]: {
+          ...buildSources,
+          [params.sourceId]: {
+            ...sourceBuilds,
+            [params.routeFingerprint]: next,
+          },
+        },
+      },
+      updatedAt: new Date(now),
+    })
+    .where(eq(planDays.id, day.id));
+
+  return next;
+}
+
+export async function queueTodayActivityBuild(params: {
+  organizationId: string;
+  learnerId: string;
+  date: string;
+  sourceId: string;
+  routeFingerprint: string;
+  lessonSessionId?: string | null;
+  trigger: DailyWorkspaceActivityBuildTrigger;
+}) {
+  return writeTodayActivityBuild({
+    ...params,
+    patch: (current, now) => ({
+      status: "queued",
+      trigger: params.trigger,
+      sourceId: params.sourceId,
+      routeFingerprint: params.routeFingerprint,
+      lessonSessionId: params.lessonSessionId ?? current?.lessonSessionId ?? null,
+      activityId: null,
+      queuedAt: current?.queuedAt ?? now,
+      startedAt: undefined,
+      completedAt: undefined,
+      failedAt: undefined,
+      updatedAt: now,
+      error: null,
+    }),
+  });
+}
+
+export async function markTodayActivityBuildGenerating(params: {
+  organizationId: string;
+  learnerId: string;
+  date: string;
+  sourceId: string;
+  routeFingerprint: string;
+  lessonSessionId?: string | null;
+  trigger: DailyWorkspaceActivityBuildTrigger;
+}) {
+  return writeTodayActivityBuild({
+    ...params,
+    patch: (current, now) => ({
+      status: "generating",
+      trigger: params.trigger,
+      sourceId: params.sourceId,
+      routeFingerprint: params.routeFingerprint,
+      lessonSessionId: params.lessonSessionId ?? current?.lessonSessionId ?? null,
+      activityId: current?.activityId ?? null,
+      queuedAt: current?.queuedAt ?? now,
+      startedAt: now,
+      completedAt: undefined,
+      failedAt: undefined,
+      updatedAt: now,
+      error: null,
+    }),
+  });
+}
+
+export async function markTodayActivityBuildFailed(params: {
+  organizationId: string;
+  learnerId: string;
+  date: string;
+  sourceId: string;
+  routeFingerprint: string;
+  lessonSessionId?: string | null;
+  trigger: DailyWorkspaceActivityBuildTrigger;
+  error: string;
+}) {
+  return writeTodayActivityBuild({
+    ...params,
+    patch: (current, now) => ({
+      status: "failed",
+      trigger: params.trigger,
+      sourceId: params.sourceId,
+      routeFingerprint: params.routeFingerprint,
+      lessonSessionId: params.lessonSessionId ?? current?.lessonSessionId ?? null,
+      activityId: null,
+      queuedAt: current?.queuedAt ?? now,
+      startedAt: current?.startedAt,
+      completedAt: undefined,
+      failedAt: now,
+      updatedAt: now,
+      error: params.error,
+    }),
+  });
+}
+
+export async function markTodayActivityBuildReady(params: {
+  organizationId: string;
+  learnerId: string;
+  date: string;
+  sourceId: string;
+  routeFingerprint: string;
+  lessonSessionId?: string | null;
+  activityId?: string | null;
+  trigger: DailyWorkspaceActivityBuildTrigger;
+}) {
+  return writeTodayActivityBuild({
+    ...params,
+    patch: (current, now) => ({
+      status: "ready",
+      trigger: params.trigger,
+      sourceId: params.sourceId,
+      routeFingerprint: params.routeFingerprint,
+      lessonSessionId: params.lessonSessionId ?? current?.lessonSessionId ?? null,
+      activityId: params.activityId ?? current?.activityId ?? null,
+      queuedAt: current?.queuedAt ?? now,
+      startedAt: current?.startedAt,
+      completedAt: now,
+      failedAt: undefined,
+      updatedAt: now,
+      error: null,
+    }),
+  });
+}
+
+export async function saveTodayLessonRegenerationNote(params: {
+  organizationId: string;
+  learnerId: string;
+  date: string;
+  sourceId: string;
+  routeFingerprint: string;
+  note: string | null;
+}) {
+  const day = await getOrCreateTodayWorkspaceDay(params);
+  const db = getDb();
+  const metadata = isRecord(day.metadata) ? day.metadata : {};
+  const noteSources = isRecord(metadata[TODAY_LESSON_REGEN_NOTES_KEY])
+    ? (metadata[TODAY_LESSON_REGEN_NOTES_KEY] as Record<string, unknown>)
+    : {};
+  const sourceNotes = isRecord(noteSources[params.sourceId])
+    ? (noteSources[params.sourceId] as Record<string, unknown>)
+    : {};
+  const now = new Date().toISOString();
+
+  await db
+    .update(planDays)
+    .set({
+      metadata: {
+        ...metadata,
+        [TODAY_LESSON_REGEN_NOTES_KEY]: {
+          ...noteSources,
+          [params.sourceId]: {
+            ...sourceNotes,
+            [params.routeFingerprint]: params.note,
+          },
+        },
+      },
+      updatedAt: new Date(now),
+    })
+    .where(eq(planDays.id, day.id));
+
+  return params.note;
+}
+
+export async function saveTodayExpansionIntent(params: {
+  organizationId: string;
+  learnerId: string;
+  date: string;
+  sourceId: string;
+  routeFingerprint: string;
+  intent: DailyWorkspaceExpansionIntent | null;
+}) {
+  const day = await getOrCreateTodayWorkspaceDay(params);
+  const db = getDb();
+  const metadata = isRecord(day.metadata) ? day.metadata : {};
+  const intentSources = isRecord(metadata[TODAY_EXPANSION_INTENTS_KEY])
+    ? (metadata[TODAY_EXPANSION_INTENTS_KEY] as Record<string, unknown>)
+    : {};
+  const sourceIntents = isRecord(intentSources[params.sourceId])
+    ? (intentSources[params.sourceId] as Record<string, unknown>)
+    : {};
+  const now = new Date().toISOString();
+
+  await db
+    .update(planDays)
+    .set({
+      metadata: {
+        ...metadata,
+        [TODAY_EXPANSION_INTENTS_KEY]: {
+          ...intentSources,
+          [params.sourceId]: {
+            ...sourceIntents,
+            [params.routeFingerprint]: params.intent,
+          },
+        },
+      },
+      updatedAt: new Date(now),
+    })
+    .where(eq(planDays.id, day.id));
+
+  return params.intent;
 }
 
 export async function saveTodayLessonDraft(params: {
@@ -1068,6 +1514,10 @@ export async function getTodayWorkspace(params: {
         alternatesByPlanItemId: {},
         lessonDraft: null,
         lessonBuild: null,
+        activityBuild: null,
+        activityState: { status: "no_draft" },
+        lessonRegenerationNote: null,
+        expansionIntent: null,
       },
     };
   }
@@ -1116,6 +1566,10 @@ export async function getTodayWorkspace(params: {
         alternatesByPlanItemId: {},
         lessonDraft: null,
         lessonBuild: null,
+        activityBuild: null,
+        activityState: { status: "no_draft" },
+        lessonRegenerationNote: null,
+        expansionIntent: null,
       },
     };
   }
@@ -1149,6 +1603,27 @@ export async function getTodayWorkspace(params: {
     routeFingerprint,
   });
   const savedLessonBuild = await getSavedTodayLessonBuild({
+    organizationId: params.organizationId,
+    learnerId: params.learnerId,
+    date: params.date,
+    sourceId: selectedSource.id,
+    routeFingerprint,
+  });
+  const savedActivityBuild = await getSavedTodayActivityBuild({
+    organizationId: params.organizationId,
+    learnerId: params.learnerId,
+    date: params.date,
+    sourceId: selectedSource.id,
+    routeFingerprint,
+  });
+  const savedLessonRegenerationNote = await getSavedTodayLessonRegenerationNote({
+    organizationId: params.organizationId,
+    learnerId: params.learnerId,
+    date: params.date,
+    sourceId: selectedSource.id,
+    routeFingerprint,
+  });
+  const savedExpansionIntent = await getSavedTodayExpansionIntent({
     organizationId: params.organizationId,
     learnerId: params.learnerId,
     date: params.date,
@@ -1193,6 +1668,10 @@ export async function getTodayWorkspace(params: {
     alternatesByPlanItemId,
     lessonDraft: savedLessonDraft,
     lessonBuild: savedLessonBuild,
+    activityBuild: savedActivityBuild,
+    activityState: null,
+    lessonRegenerationNote: savedLessonRegenerationNote,
+    expansionIntent: savedExpansionIntent,
   };
   const syncedRecords = await syncDailyWorkspaceSessionRecords({
     organizationId: params.organizationId,
@@ -1281,6 +1760,8 @@ export async function getTodayWorkspace(params: {
     });
     workspace.leadItem = workspace.items[0] ?? workspace.leadItem;
   }
+
+  workspace.activityState = await buildTodayActivityState(workspace);
 
   return {
     workspace,

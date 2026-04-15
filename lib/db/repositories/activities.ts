@@ -131,7 +131,7 @@ export function createActivitiesRepository(db: HomeschoolDb) {
           eq(interactiveActivities.lessonSessionId, lessonSessionId),
           eq(interactiveActivities.lessonDraftFingerprint, lessonDraftFingerprint),
         ),
-        orderBy: [asc(interactiveActivities.createdAt)],
+        orderBy: [desc(interactiveActivities.createdAt)],
       });
     },
 

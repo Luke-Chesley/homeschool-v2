@@ -16,8 +16,16 @@ import { buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { MarkdownContent } from "@/components/ui/markdown-content";
 import type { StructuredLessonDraft } from "@/lib/lesson-draft/types";
-import type { DailyWorkspaceLessonBuild } from "@/lib/planning/types";
+import type {
+  DailyWorkspaceExpansionIntent,
+  DailyWorkspaceLessonBuild,
+} from "@/lib/planning/types";
+import { acquireAutoBuildLock, releaseAutoBuildLock } from "@/lib/planning/client-auto-build";
 import { cn } from "@/lib/utils";
+import {
+  saveExpansionIntentAction,
+  saveLessonRegenerationNoteAction,
+} from "@/app/(parent)/today/actions";
 
 const LESSON_PLAN_PROMPT_PANEL_ID = "lesson-plan-prompt-preview";
 
@@ -38,6 +46,8 @@ interface LessonPlanPanelProps {
   routeItemTitles: string[];
   draftState?: DraftState;
   buildState?: DailyWorkspaceLessonBuild | null;
+  regenerationNote?: string | null;
+  expansionIntent?: DailyWorkspaceExpansionIntent | null;
   onDraftChange?: (draft: StructuredLessonDraft | string | null) => void;
   showDraftOutput?: boolean;
 }
@@ -76,6 +86,8 @@ export function LessonPlanPanel({
   routeItemTitles,
   draftState,
   buildState,
+  regenerationNote,
+  expansionIntent,
   onDraftChange,
   showDraftOutput = true,
 }: LessonPlanPanelProps) {
@@ -85,7 +97,10 @@ export function LessonPlanPanel({
   const [activeTrigger, setActiveTrigger] = useState<
     "onboarding_auto" | "today_resume" | "manual" | null
   >(null);
-  const [autoBuildStarted, setAutoBuildStarted] = useState(false);
+  const [noteInput, setNoteInput] = useState(regenerationNote ?? "");
+  const [supportMessage, setSupportMessage] = useState<string | null>(null);
+  const [supportError, setSupportError] = useState<string | null>(null);
+  const [savingIntent, setSavingIntent] = useState<DailyWorkspaceExpansionIntent | null>(null);
   const { access, isEnabled: studioEnabled, openPanel } = useStudio();
   const contextKey = useMemo(
     () =>
@@ -115,8 +130,11 @@ export function LessonPlanPanel({
     setState({ status: "idle" });
     setPromptDebugState({ status: "idle" });
     setActiveTrigger(null);
-    setAutoBuildStarted(false);
-  }, [contextKey]);
+    setNoteInput(regenerationNote ?? "");
+    setSupportMessage(null);
+    setSupportError(null);
+    setSavingIntent(null);
+  }, [contextKey, regenerationNote]);
 
   const hasDraft = draftState !== null && draftState !== undefined;
   const canViewPromptPreview = studioEnabled && access.canViewPrompts;
@@ -133,8 +151,15 @@ export function LessonPlanPanel({
       : showFailedBuildState
         ? buildState?.error ?? "The lesson draft build did not finish."
         : null;
+  const lessonAutoBuildKey =
+    buildState?.status === "queued"
+      ? `${date}:${sourceId ?? "live"}:${buildState.routeFingerprint}:${buildState.queuedAt ?? buildState.updatedAt}`
+      : null;
 
-  async function requestDraft(trigger: "onboarding_auto" | "today_resume" | "manual") {
+  async function requestDraft(
+    trigger: "onboarding_auto" | "today_resume" | "manual",
+    autoBuildKey?: string | null,
+  ) {
     setActiveTrigger(trigger);
     setState({ status: "loading" });
 
@@ -161,6 +186,10 @@ export function LessonPlanPanel({
       onDraftChange?.(data.structured);
       router.refresh();
     } catch (error) {
+      if (autoBuildKey) {
+        releaseAutoBuildLock("today-lesson-auto", autoBuildKey);
+      }
+
       setState({
         status: "error",
         message: error instanceof Error ? error.message : "Lesson plan generation failed.",
@@ -174,13 +203,16 @@ export function LessonPlanPanel({
   }
 
   useEffect(() => {
-    if (!isQueuedBuild || autoBuildStarted) {
+    if (!lessonAutoBuildKey || !isQueuedBuild) {
       return;
     }
 
-    setAutoBuildStarted(true);
-    void requestDraft("onboarding_auto");
-  }, [autoBuildStarted, isQueuedBuild]);
+    if (!acquireAutoBuildLock("today-lesson-auto", lessonAutoBuildKey)) {
+      return;
+    }
+
+    void requestDraft("onboarding_auto", lessonAutoBuildKey);
+  }, [isQueuedBuild, lessonAutoBuildKey]);
 
   useEffect(() => {
     if (!hasDraft && buildState?.status === "generating" && state.status !== "loading") {
@@ -236,6 +268,45 @@ export function LessonPlanPanel({
         message: error instanceof Error ? error.message : "Prompt preview failed.",
       });
     }
+  }
+
+  async function handleContextRegenerate() {
+    setSupportError(null);
+    setSupportMessage(null);
+
+    const saved = await saveLessonRegenerationNoteAction({
+      date,
+      note: noteInput,
+    });
+
+    if (!saved.ok) {
+      setSupportError(saved.error ?? "Could not save the context note.");
+      return;
+    }
+
+    setSupportMessage(saved.message ?? "Saved note for regenerate.");
+    void requestDraft("manual");
+  }
+
+  async function handleExpansionIntent(intent: DailyWorkspaceExpansionIntent) {
+    setSupportError(null);
+    setSupportMessage(null);
+    setSavingIntent(intent);
+
+    const saved = await saveExpansionIntentAction({
+      date,
+      intent,
+    });
+
+    setSavingIntent(null);
+
+    if (!saved.ok) {
+      setSupportError(saved.error ?? "Could not save the expansion preference.");
+      return;
+    }
+
+    setSupportMessage(saved.message ?? "Saved.");
+    router.refresh();
   }
 
   return (
@@ -350,6 +421,93 @@ export function LessonPlanPanel({
           ) : showDraftOutput && !hasDraft ? (
             <div className="rounded-lg border border-dashed border-border/70 bg-background p-4 text-sm text-muted-foreground">
               Generate a draft when today’s route is set.
+            </div>
+          ) : null}
+
+          {hasDraft ? (
+            <div className="space-y-3 rounded-lg border border-border/70 bg-background/72 p-4">
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-foreground">Add context and regenerate</p>
+                <p className="text-sm text-muted-foreground">
+                  Save one short note for the next regenerate when you want the draft to feel more
+                  hands-on, shorter, calmer, or more explicit.
+                </p>
+              </div>
+              <textarea
+                value={noteInput}
+                onChange={(event) => setNoteInput(event.target.value)}
+                placeholder="Example: make this more hands-on and keep transitions short."
+                className="min-h-24 w-full rounded-lg border border-border/70 bg-background px-3 py-2 text-sm outline-none ring-0 placeholder:text-muted-foreground/80"
+              />
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={handleContextRegenerate}
+                  disabled={state.status === "loading"}
+                  className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+                >
+                  {state.status === "loading" ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : null}
+                  Add context and regenerate
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="space-y-3 rounded-lg border border-border/70 bg-background/72 p-4">
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-foreground">Scope intent</p>
+              <p className="text-sm text-muted-foreground">
+                Record whether you want to keep this launch flow bounded to today or expand from
+                this result later.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => handleExpansionIntent("keep_today")}
+                disabled={savingIntent !== null}
+                className={cn(
+                  buttonVariants({
+                    variant: expansionIntent === "keep_today" ? "default" : "outline",
+                    size: "sm",
+                  }),
+                )}
+              >
+                {savingIntent === "keep_today" ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : null}
+                Keep this to today
+              </button>
+              <button
+                type="button"
+                onClick={() => handleExpansionIntent("expand_from_here")}
+                disabled={savingIntent !== null}
+                className={cn(
+                  buttonVariants({
+                    variant: expansionIntent === "expand_from_here" ? "default" : "outline",
+                    size: "sm",
+                  }),
+                )}
+              >
+                {savingIntent === "expand_from_here" ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : null}
+                Expand from here
+              </button>
+            </div>
+          </div>
+
+          {supportMessage ? (
+            <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm text-foreground">
+              {supportMessage}
+            </div>
+          ) : null}
+
+          {supportError ? (
+            <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">
+              {supportError}
             </div>
           ) : null}
         </div>

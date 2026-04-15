@@ -260,6 +260,48 @@ export interface DailyWorkspaceLessonBuild {
   error?: string | null;
 }
 
+export type DailyWorkspaceActivityBuildStatus =
+  | "queued"
+  | "generating"
+  | "failed"
+  | "ready";
+
+export type DailyWorkspaceActivityBuildTrigger =
+  | "after_lesson_auto"
+  | "today_resume"
+  | "manual";
+
+export interface DailyWorkspaceActivityBuild {
+  status: DailyWorkspaceActivityBuildStatus;
+  trigger?: DailyWorkspaceActivityBuildTrigger;
+  sourceId: string;
+  routeFingerprint: string;
+  lessonSessionId?: string | null;
+  activityId?: string | null;
+  queuedAt?: string;
+  startedAt?: string;
+  completedAt?: string;
+  failedAt?: string;
+  updatedAt: string;
+  error?: string | null;
+}
+
+export type DailyWorkspaceActivityStatus =
+  | "no_draft"
+  | "no_activity"
+  | "ready"
+  | "stale";
+
+export interface DailyWorkspaceActivityState {
+  status: DailyWorkspaceActivityStatus;
+  sessionId?: string;
+  activityId?: string;
+}
+
+export type DailyWorkspaceExpansionIntent =
+  | "keep_today"
+  | "expand_from_here";
+
 export interface DailyWorkspace {
   date: string;
   headline: string;
@@ -276,4 +318,8 @@ export interface DailyWorkspace {
   alternatesByPlanItemId: Record<string, WeeklyRouteItem[]>;
   lessonDraft: DailyWorkspaceLessonDraft | null;
   lessonBuild: DailyWorkspaceLessonBuild | null;
+  activityBuild: DailyWorkspaceActivityBuild | null;
+  activityState: DailyWorkspaceActivityState | null;
+  lessonRegenerationNote: string | null;
+  expansionIntent: DailyWorkspaceExpansionIntent | null;
 }
