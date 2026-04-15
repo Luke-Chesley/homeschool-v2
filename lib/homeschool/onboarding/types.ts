@@ -86,7 +86,8 @@ export type SourceInterpretSourceKind = (typeof SOURCE_INTERPRET_SOURCE_KINDS)[n
 export type HomeschoolFastPathOnboardingInput = {
   organizationId: string;
   learnerName: string;
-  intakeRoute: FastPathIntakeRoute;
+  intakeRoute?: FastPathIntakeRoute;
+  intakeRouteExplicit?: boolean;
   sourceInput?: string;
   sourcePackageId?: string;
   horizonIntent?: FastPathHorizonIntent;
@@ -102,6 +103,7 @@ export type HomeschoolFastPathOnboardingInput = {
 export type HomeschoolFastPathPreview = {
   learnerTarget: string;
   requestedRoute: FastPathIntakeRoute;
+  requestedRouteWasExplicit: boolean;
   intakeRoute: FastPathIntakeRoute;
   sourceKind: SourceInterpretSourceKind;
   title: string;

@@ -24,7 +24,7 @@ export default async function OnboardingPage() {
           <p className="section-meta">Fast onboarding</p>
           <h1 className="page-title">Reach Today first.</h1>
           <p className="page-subtitle">
-            Add one learner and one source input. Build a teachable day now, then refine household defaults later.
+            Add one learner and paste or upload anything you have. Build a teachable day now, then refine household defaults later.
           </p>
         </div>
 
@@ -34,7 +34,7 @@ export default async function OnboardingPage() {
           </CardHeader>
           <CardContent className="space-y-2 text-sm text-muted-foreground">
             <p>Add one learner name.</p>
-            <p>Choose your intake route and source.</p>
+            <p>Paste text or upload one source.</p>
             <p>Generate and open Today.</p>
           </CardContent>
         </Card>

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
+import { AlertCircle, Camera, CheckCircle2, Loader2, Type, Upload, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,70 +32,32 @@ type OnboardingJobState = {
   detail?: string;
 };
 
-const intakeOptions: Array<{ value: FastPathIntakeRoute; label: string; description: string }> = [
+const intakeOptions: Array<{ value: FastPathIntakeRoute; label: string }> = [
   {
     value: "single_lesson",
     label: "I have a chapter, pages, or one lesson",
-    description: "Use one assignment or one day of material without forcing a fake week.",
   },
   {
     value: "weekly_plan",
     label: "I have a weekly plan",
-    description: "Paste your week notes and we will shape a bounded current week.",
   },
   {
     value: "outline",
     label: "I have an outline or table of contents",
-    description: "Turn a sequence or outline into the next few school days.",
   },
   {
     value: "topic",
     label: "Start from a topic",
-    description: "Build a bounded starter module around one topic.",
   },
   {
     value: "manual_shell",
     label: "Start with a simple shell",
-    description: "Use a light starter structure when you want to scaffold slowly.",
   },
 ];
 
-const sourceModeOptions: Array<{
-  value: IntakeSourcePackageModality;
-  label: string;
-  description: string;
-}> = [
-  {
-    value: "text",
-    label: "Paste text",
-    description: "Use typed instructions, copied pages, or a plain description.",
-  },
-  {
-    value: "outline",
-    label: "Paste outline",
-    description: "Use a table of contents or a sequenced outline.",
-  },
-  {
-    value: "photo",
-    label: "Take photo",
-    description: "Capture a worksheet or assignment page from your phone.",
-  },
-  {
-    value: "image",
-    label: "Upload image",
-    description: "Use an existing photo or screenshot.",
-  },
-  {
-    value: "pdf",
-    label: "Upload PDF",
-    description: "Use a PDF assignment sheet or curriculum page.",
-  },
-  {
-    value: "file",
-    label: "Upload file",
-    description: "Use a text, markdown, CSV, or other document file.",
-  },
-];
+const DEFAULT_INTAKE_ROUTE: FastPathIntakeRoute = "single_lesson";
+const UPLOAD_ACCEPT =
+  "image/*,application/pdf,.pdf,.txt,.md,.csv,.json,.html,.htm,application/json,text/plain,text/csv,text/markdown";
 
 const horizonLabels: Record<CurriculumGenerationHorizon, string> = {
   today: "Today",
@@ -119,61 +81,48 @@ function routeLabel(value: FastPathIntakeRoute) {
   return intakeOptions.find((option) => option.value === value)?.label ?? value;
 }
 
-function placeholderForRoute(route: FastPathIntakeRoute) {
-  switch (route) {
-    case "topic":
-      return "Fractions with food examples";
-    case "weekly_plan":
-      return "Monday: read chapter 4, workbook page 42. Wednesday: quiz review. Friday: lab notes.";
-    case "outline":
-      return "Unit 1\n- Fractions\n- Decimals\n- Percents";
-    case "manual_shell":
-      return "Math, reading, science";
-    default:
-      return "Chapter 4 pages 88-95, workbook pg 42, quiz Friday";
-  }
+function sourceInputPlaceholder() {
+  return "Paste a lesson, weekly plan, outline, chapter pages, topic idea, or anything else you already have.";
 }
 
-function acceptForSourceMode(mode: IntakeSourcePackageModality) {
-  switch (mode) {
-    case "photo":
-    case "image":
-      return "image/*";
-    case "pdf":
-      return "application/pdf,.pdf";
-    case "file":
-      return ".txt,.md,.csv,.json,.html,.htm,application/json,text/plain,text/csv,text/markdown";
-    default:
-      return undefined;
+function resolveUploadModality(
+  file: File,
+  source: "camera" | "upload",
+): Exclude<IntakeSourcePackageModality, "text" | "outline"> {
+  const fileName = file.name.toLowerCase();
+  const mimeType = file.type.toLowerCase();
+
+  if (source === "camera") {
+    return "photo";
   }
+
+  if (mimeType.startsWith("image/")) {
+    return "image";
+  }
+
+  if (mimeType === "application/pdf" || fileName.endsWith(".pdf")) {
+    return "pdf";
+  }
+
+  return "file";
 }
 
-function noteLabelForSourceMode(mode: IntakeSourcePackageModality) {
-  switch (mode) {
-    case "photo":
-      return "Photo note";
-    case "image":
-      return "Image note";
-    case "pdf":
-      return "PDF note";
-    case "file":
-      return "File note";
-    default:
-      return "Note";
+function selectedSourceLabel(mode: IntakeSourcePackageModality, inputMode: "text" | "upload") {
+  if (inputMode === "text") {
+    return "Pasted text";
   }
-}
 
-function notePlaceholderForSourceMode(mode: IntakeSourcePackageModality) {
   switch (mode) {
     case "photo":
+      return "Photo";
     case "image":
-      return "Summarize what is on this page so we have usable launch context.";
+      return "Image";
     case "pdf":
-      return "Optional: add a short note if the PDF needs extra context.";
+      return "PDF";
     case "file":
-      return "Optional: add a short note if the file needs extra context.";
+      return "File";
     default:
-      return "";
+      return "Upload";
   }
 }
 
@@ -204,10 +153,12 @@ export function HomeschoolOnboardingForm(props: {
   defaultLearnerName?: string | null;
 }) {
   const router = useRouter();
+  const uploadInputRef = React.useRef<HTMLInputElement | null>(null);
+  const cameraInputRef = React.useRef<HTMLInputElement | null>(null);
   const [step, setStep] = React.useState(1);
   const [learnerName, setLearnerName] = React.useState(props.defaultLearnerName ?? "");
-  const [intakeRoute, setIntakeRoute] = React.useState<FastPathIntakeRoute>("single_lesson");
   const [sourceMode, setSourceMode] = React.useState<IntakeSourcePackageModality>("text");
+  const [sourceInputMode, setSourceInputMode] = React.useState<"text" | "upload">("text");
   const [sourceInput, setSourceInput] = React.useState("");
   const [sourceNote, setSourceNote] = React.useState("");
   const [uploadedFile, setUploadedFile] = React.useState<File | null>(null);
@@ -215,33 +166,25 @@ export function HomeschoolOnboardingForm(props: {
   const [horizonIntent, setHorizonIntent] = React.useState<HorizonIntent>("today_only");
   const [preview, setPreview] = React.useState<HomeschoolFastPathPreview | null>(null);
   const [previewLearnerName, setPreviewLearnerName] = React.useState("");
-  const [previewRoute, setPreviewRoute] = React.useState<FastPathIntakeRoute>("single_lesson");
+  const [previewRoute, setPreviewRoute] = React.useState<FastPathIntakeRoute>(
+    DEFAULT_INTAKE_ROUTE,
+  );
   const [previewTitle, setPreviewTitle] = React.useState("");
   const [previewHorizon, setPreviewHorizon] = React.useState<CurriculumGenerationHorizon>("today");
   const [submitting, setSubmitting] = React.useState(false);
   const [jobState, setJobState] = React.useState<OnboardingJobState>({ stage: "idle" });
   const [error, setError] = React.useState<string | null>(null);
 
-  React.useEffect(() => {
-    if (intakeRoute === "outline" && sourceMode === "text") {
-      setSourceMode("outline");
-      return;
-    }
-
-    if (intakeRoute !== "outline" && sourceMode === "outline") {
-      setSourceMode("text");
-    }
-  }, [intakeRoute, sourceMode]);
-
   const canContinueStep1 = learnerName.trim().length > 0;
-  const noteRequired = sourceMode === "photo" || sourceMode === "image";
-  const usesTextInput = sourceMode === "text" || sourceMode === "outline";
-  const canContinueStep3 = usesTextInput
+  const usesTextInput = sourceInputMode === "text";
+  const canContinueSourceStep = usesTextInput
     ? sourceInput.trim().length > 0
-    : Boolean(uploadedFile) && (!noteRequired || sourceNote.trim().length > 0);
+    : Boolean(uploadedFile);
 
   function markPackageStale() {
     setSourcePackage(null);
+    setPreview(null);
+    setError(null);
     setJobState({ stage: "idle" });
   }
 
@@ -251,6 +194,33 @@ export function HomeschoolOnboardingForm(props: {
     detail: string,
   ) {
     setJobState({ stage, title, detail });
+  }
+
+  function handleTextInputChange(value: string) {
+    setSourceInput(value);
+    if (value.trim().length > 0) {
+      setSourceInputMode("text");
+      setSourceMode("text");
+    }
+    markPackageStale();
+  }
+
+  function handleUploadSelection(file: File | null, source: "camera" | "upload") {
+    setUploadedFile(file);
+    if (file) {
+      setSourceMode(resolveUploadModality(file, source));
+      setSourceInputMode("upload");
+    }
+    markPackageStale();
+  }
+
+  function clearUploadedFile() {
+    setUploadedFile(null);
+    setSourceInputMode(sourceInput.trim().length > 0 ? "text" : "upload");
+    if (sourceInput.trim().length > 0) {
+      setSourceMode("text");
+    }
+    markPackageStale();
   }
 
   async function createSourcePackage() {
@@ -264,7 +234,7 @@ export function HomeschoolOnboardingForm(props: {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          modality: sourceMode,
+          modality: "text",
           text: sourceInput,
           note: sourceNote.trim() || undefined,
         }),
@@ -338,7 +308,6 @@ export function HomeschoolOnboardingForm(props: {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           learnerName,
-          intakeRoute,
           sourcePackageId: preparedPackage.id,
           horizonIntent,
           confirmPreview,
@@ -364,7 +333,7 @@ export function HomeschoolOnboardingForm(props: {
         setPreviewRoute(payload.preview.intakeRoute);
         setPreviewTitle(payload.preview.title);
         setPreviewHorizon(payload.preview.chosenHorizon);
-        setStep(4);
+        setStep(3);
         setSubmitting(false);
         setWorkingState(
           "preview_ready",
@@ -407,7 +376,7 @@ export function HomeschoolOnboardingForm(props: {
   }
 
   function getRetryLabel() {
-    if (step === 4 && preview) {
+    if (step === 3 && preview) {
       return "Retry save and open Today";
     }
 
@@ -424,7 +393,7 @@ export function HomeschoolOnboardingForm(props: {
         <CardHeader className="pb-3">
           <CardTitle>Fast path to Today</CardTitle>
           <CardDescription>
-            Step {step} of 4 · Add one learner, one source, and open Today fast.
+            Step {step} of 3 · Add one learner, one source, and open Today fast.
           </CardDescription>
           <p className="text-xs text-muted-foreground">{props.organizationName}</p>
         </CardHeader>
@@ -463,123 +432,125 @@ export function HomeschoolOnboardingForm(props: {
       {step === 2 ? (
         <Card className="quiet-panel border-border/60 bg-card/78 shadow-none">
           <CardHeader>
-            <CardTitle>What do you have right now?</CardTitle>
-            <CardDescription>Pick the closest option. Keep it simple.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-3">
-            {intakeOptions.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => {
-                  setIntakeRoute(option.value);
-                  markPackageStale();
-                }}
-                className={`min-h-24 rounded-xl border p-4 text-left transition-colors ${
-                  intakeRoute === option.value
-                    ? "border-primary bg-primary/10"
-                    : "border-border bg-background hover:bg-muted/40"
-                }`}
-              >
-                <p className="text-sm font-medium leading-5">{option.label}</p>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">{option.description}</p>
-              </button>
-            ))}
-            <p className="text-xs text-muted-foreground">Add another learner later.</p>
-            <div className="grid gap-2 sm:flex sm:justify-between">
-              <Button type="button" variant="outline" onClick={() => setStep(1)} className="w-full sm:w-auto">
-                Back
-              </Button>
-              <Button type="button" onClick={() => setStep(3)} className="w-full sm:w-auto">Continue</Button>
-            </div>
-          </CardContent>
-        </Card>
-      ) : null}
-
-      {step === 3 ? (
-        <Card className="quiet-panel border-border/60 bg-card/78 shadow-none">
-          <CardHeader>
-            <CardTitle>Share one source</CardTitle>
+            <CardTitle>Paste or upload anything you have</CardTitle>
             <CardDescription>
-              Build a source package first. We&apos;ll show you the normalized input before we save
-              and open Today.
+              Skip the route choice. Share the quickest source and we&apos;ll interpret it from
+              there.
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
-            <div className="grid gap-3 sm:grid-cols-2">
-              {sourceModeOptions.map((option) => (
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(280px,0.75fr)]">
+              <div className="grid gap-3">
+                <div className="inline-flex w-fit items-center gap-2 rounded-full border border-border/60 bg-background/80 px-3 py-1 text-xs text-muted-foreground">
+                  <Type className="size-3.5" />
+                  Use whichever source is fastest.
+                </div>
+
+                <label className="grid gap-1.5 text-sm font-medium">
+                  Paste anything you already have
+                  <textarea
+                    value={sourceInput}
+                    onChange={(event) => handleTextInputChange(event.target.value)}
+                    rows={10}
+                    placeholder={sourceInputPlaceholder()}
+                    className="min-h-52 rounded-xl border border-input bg-background px-3 py-3 font-normal"
+                  />
+                  <span className="text-xs font-normal text-muted-foreground">
+                    A lesson, weekly plan, outline, topic, copied page, or rough notes all work.
+                  </span>
+                </label>
+              </div>
+
+              <div className="grid gap-3">
+                <input
+                  ref={uploadInputRef}
+                  type="file"
+                  accept={UPLOAD_ACCEPT}
+                  onChange={(event) =>
+                    handleUploadSelection(event.target.files?.[0] ?? null, "upload")
+                  }
+                  className="hidden"
+                />
+                <input
+                  ref={cameraInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={(event) =>
+                    handleUploadSelection(event.target.files?.[0] ?? null, "camera")
+                  }
+                  className="hidden"
+                />
+
                 <button
-                  key={option.value}
                   type="button"
-                  onClick={() => {
-                    setSourceMode(option.value);
-                    setUploadedFile(null);
-                    markPackageStale();
-                  }}
-                  className={`rounded-xl border p-4 text-left transition-colors ${
-                    sourceMode === option.value
-                      ? "border-primary bg-primary/10"
-                      : "border-border bg-background hover:bg-muted/40"
-                  }`}
+                  onClick={() => uploadInputRef.current?.click()}
+                  className="grid gap-2 rounded-xl border border-border bg-background px-4 py-4 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
-                  <p className="text-sm font-medium leading-5">{option.label}</p>
-                  <p className="mt-1 text-xs leading-5 text-muted-foreground">{option.description}</p>
+                  <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+                    <Upload className="size-4" />
+                    Upload curriculum
+                  </span>
+                  <span className="text-sm text-muted-foreground">Files, images, or PDFs</span>
                 </button>
-              ))}
+
+                <button
+                  type="button"
+                  onClick={() => cameraInputRef.current?.click()}
+                  className="grid gap-2 rounded-xl border border-border bg-background px-4 py-4 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+                    <Camera className="size-4" />
+                    Take photo
+                  </span>
+                  <span className="text-sm text-muted-foreground">
+                    Open the camera for a worksheet or page
+                  </span>
+                </button>
+
+                {uploadedFile ? (
+                  <div className="rounded-xl border border-border/60 bg-background/72 p-4 text-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-medium text-foreground">{uploadedFile.name}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {selectedSourceLabel(sourceMode, "upload")} ·{" "}
+                          {uploadedFile.type || "Selected file"} · {formatFileSize(uploadedFile.size)}
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={clearUploadedFile}
+                        className="size-8 shrink-0"
+                        aria-label="Remove selected file"
+                      >
+                        <X className="size-4" />
+                      </Button>
+                    </div>
+                    <p className="mt-3 text-xs text-muted-foreground">
+                      This upload stays ready if preparation fails, so you can retry directly.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-dashed border-border/70 bg-background/60 px-4 py-5 text-sm text-muted-foreground">
+                    No file selected yet.
+                  </div>
+                )}
+
+                <div className="rounded-xl border border-border/60 bg-muted/35 px-4 py-3 text-xs text-muted-foreground">
+                  {usesTextInput && sourceInput.trim().length > 0
+                    ? "Using pasted text right now."
+                    : uploadedFile
+                      ? `Using the selected ${selectedSourceLabel(sourceMode, "upload").toLowerCase()} right now.`
+                      : "Paste text or choose one upload to continue."}
+                </div>
+              </div>
             </div>
 
-            {usesTextInput ? (
-              <label className="grid gap-1.5 text-sm font-medium">
-                {sourceMode === "outline" ? "Outline input" : "Source input"}
-                <textarea
-                  value={sourceInput}
-                  onChange={(event) => {
-                    setSourceInput(event.target.value);
-                    markPackageStale();
-                  }}
-                  rows={8}
-                  placeholder={placeholderForRoute(intakeRoute)}
-                  className="min-h-44 rounded-xl border border-input bg-background px-3 py-2 font-normal"
-                />
-              </label>
-            ) : (
-              <label className="grid gap-1.5 text-sm font-medium">
-                Upload
-                <input
-                  key={sourceMode}
-                  type="file"
-                  accept={acceptForSourceMode(sourceMode)}
-                  capture={sourceMode === "photo" ? "environment" : undefined}
-                  onChange={(event) => {
-                    setUploadedFile(event.target.files?.[0] ?? null);
-                    markPackageStale();
-                  }}
-                  className="min-h-11 rounded-xl border border-dashed border-input bg-background px-3 py-3 font-normal"
-                />
-                <span className="text-xs font-normal text-muted-foreground">
-                  {uploadedFile
-                    ? `Selected: ${uploadedFile.name}`
-                    : sourceMode === "photo"
-                      ? "Use the camera or choose a photo."
-                      : "Choose one file to normalize before preview."}
-                </span>
-              </label>
-            )}
-
-            {!usesTextInput && uploadedFile ? (
-              <div className="rounded-xl border border-border/60 bg-background/72 p-4 text-sm">
-                <p className="font-medium text-foreground">{uploadedFile.name}</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {uploadedFile.type || "Selected file"} · {formatFileSize(uploadedFile.size)}
-                </p>
-                <p className="mt-2 text-xs text-muted-foreground">
-                  This stays selected if upload or preparation fails, so you can retry directly.
-                </p>
-              </div>
-            ) : null}
-
             <label className="grid gap-1.5 text-sm font-medium">
-              {noteLabelForSourceMode(sourceMode)}
+              Optional context
               <textarea
                 value={sourceNote}
                 onChange={(event) => {
@@ -587,7 +558,7 @@ export function HomeschoolOnboardingForm(props: {
                   markPackageStale();
                 }}
                 rows={3}
-                placeholder={notePlaceholderForSourceMode(sourceMode)}
+                placeholder="Optional: add any quick context we should keep in mind."
                 className="min-h-28 rounded-xl border border-input bg-background px-3 py-2 font-normal"
               />
             </label>
@@ -625,12 +596,12 @@ export function HomeschoolOnboardingForm(props: {
             </fieldset>
 
             <div className="grid gap-2 sm:flex sm:justify-between">
-              <Button type="button" variant="outline" onClick={() => setStep(2)} className="w-full sm:w-auto">
+              <Button type="button" variant="outline" onClick={() => setStep(1)} className="w-full sm:w-auto">
                 Back
               </Button>
               <Button
                 type="button"
-                disabled={!canContinueStep3 || submitting}
+                disabled={!canContinueSourceStep || submitting}
                 onClick={() => void submitFastPath(false)}
                 className="min-h-11 w-full sm:min-h-10 sm:w-auto"
               >
@@ -641,7 +612,7 @@ export function HomeschoolOnboardingForm(props: {
         </Card>
       ) : null}
 
-      {step === 4 && preview ? (
+      {step === 3 && preview ? (
         <Card className="quiet-panel border-border/60 bg-card/78 shadow-none">
           <CardHeader>
             <CardTitle>Quick preview before save</CardTitle>
@@ -676,7 +647,7 @@ export function HomeschoolOnboardingForm(props: {
               />
             </label>
             <label className="grid gap-1.5 font-medium">
-              Intake route
+              Use this as
               <select
                 value={previewRoute}
                 onChange={(event) => setPreviewRoute(event.target.value as FastPathIntakeRoute)}
@@ -713,15 +684,19 @@ export function HomeschoolOnboardingForm(props: {
                 ))}
               </select>
             </label>
-            <p>
-              <span className="font-medium">Requested route:</span> {routeLabel(preview.requestedRoute)}
-            </p>
+            {preview.requestedRouteWasExplicit ? (
+              <p>
+                <span className="font-medium">Requested route:</span>{" "}
+                {routeLabel(preview.requestedRoute)}
+              </p>
+            ) : null}
             <p>
               <span className="font-medium">Detected source kind:</span>{" "}
               {sourceKindLabels[preview.sourceKind]}
             </p>
             <p>
-              <span className="font-medium">Routing now:</span> {routeLabel(preview.intakeRoute)}
+              <span className="font-medium">We&apos;ll use it as:</span>{" "}
+              {routeLabel(preview.intakeRoute)}
             </p>
             <p>
               <span className="font-medium">Suggested horizon:</span>{" "}
@@ -750,7 +725,7 @@ export function HomeschoolOnboardingForm(props: {
               </ul>
             </div>
             <div className="grid gap-2 sm:flex sm:justify-between">
-              <Button type="button" variant="outline" onClick={() => setStep(3)} className="w-full sm:w-auto">Edit source</Button>
+              <Button type="button" variant="outline" onClick={() => setStep(2)} className="w-full sm:w-auto">Edit source</Button>
               <Button type="button" disabled={submitting} onClick={() => void submitFastPath(true)} className="min-h-11 w-full sm:min-h-10 sm:w-auto">
                 Save and open Today
               </Button>
@@ -784,7 +759,9 @@ export function HomeschoolOnboardingForm(props: {
                     {jobState.stage === "uploading_source"
                       ? "Uploading file"
                       : jobState.stage === "preparing_source"
-                        ? "Preparing text"
+                        ? usesTextInput
+                          ? "Preparing text"
+                          : "Preparing upload"
                         : sourcePackage ||
                             jobState.stage === "source_ready" ||
                             jobState.stage === "preview_ready" ||
@@ -795,7 +772,7 @@ export function HomeschoolOnboardingForm(props: {
                 </div>
                 <div className="rounded-lg border border-border/60 bg-background/70 px-3 py-2">
                   <p className="font-medium text-foreground">Preview</p>
-                  <p>{jobState.stage === "preview_ready" ? "Needs review" : step === 4 ? "Reviewing" : "Auto when needed"}</p>
+                  <p>{jobState.stage === "preview_ready" ? "Needs review" : step === 3 ? "Reviewing" : "Auto when needed"}</p>
                 </div>
                 <div className="rounded-lg border border-border/60 bg-background/70 px-3 py-2">
                   <p className="font-medium text-foreground">Today build</p>
@@ -806,7 +783,7 @@ export function HomeschoolOnboardingForm(props: {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => void submitFastPath(step === 4 && preview !== null)}
+                  onClick={() => void submitFastPath(step === 3 && preview !== null)}
                   disabled={submitting}
                   className="min-h-11 w-full sm:min-h-10 sm:w-auto"
                 >

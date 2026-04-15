@@ -107,6 +107,7 @@ const FastPathIntakeRouteInputSchema = z.union([
 const CurriculumGenerationHorizonSchema = z.enum(CURRICULUM_GENERATION_HORIZONS);
 const CurriculumHorizonDecisionSourceSchema = z.enum(CURRICULUM_HORIZON_DECISION_SOURCES);
 const CurriculumIntakeConfidenceSchema = z.enum(CURRICULUM_INTAKE_CONFIDENCE_LEVELS);
+const DEFAULT_FAST_PATH_INTAKE_ROUTE: FastPathIntakeRoute = "single_lesson";
 
 function normalizeFastPathIntakeRoute(route: z.infer<typeof FastPathIntakeRouteInputSchema>): FastPathIntakeRoute {
   switch (route) {
@@ -140,14 +141,6 @@ const RawHomeschoolFastPathOnboardingSchema = z.object({
 
 export const HomeschoolFastPathOnboardingSchema = RawHomeschoolFastPathOnboardingSchema.superRefine(
   (input, ctx) => {
-    if (!input.intakeRoute && !input.intakeType) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Intake route is required.",
-        path: ["intakeRoute"],
-      });
-    }
-
     if (!input.sourceInput && !input.sourcePackageId) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -159,7 +152,12 @@ export const HomeschoolFastPathOnboardingSchema = RawHomeschoolFastPathOnboardin
 ).transform((input) => ({
   organizationId: input.organizationId,
   learnerName: input.learnerName,
-  intakeRoute: normalizeFastPathIntakeRoute(input.intakeRoute ?? input.intakeType!),
+  intakeRoute: normalizeFastPathIntakeRoute(
+    (input.intakeRoute ?? input.intakeType ?? DEFAULT_FAST_PATH_INTAKE_ROUTE) as z.infer<
+      typeof FastPathIntakeRouteInputSchema
+    >,
+  ),
+  intakeRouteExplicit: Boolean(input.intakeRoute ?? input.intakeType),
   sourceInput: input.sourceInput,
   sourcePackageId: input.sourcePackageId,
   horizonIntent: input.horizonIntent,
@@ -1020,6 +1018,7 @@ function buildFastPathPreview(
   input: {
     learnerName: string;
     intakeRoute: FastPathIntakeRoute;
+    intakeRouteExplicit: boolean;
     sourceInput: string;
     horizonIntent?: "today_only" | "auto";
     interpretation: {
@@ -1037,6 +1036,7 @@ function buildFastPathPreview(
 ): HomeschoolFastPathPreview {
   const routedByPolicy = sourceKindToRoute(input.interpretation.sourceKind);
   const requestedRoute = input.intakeRoute;
+  const requestedRouteWasExplicit = input.intakeRouteExplicit;
   const inferredRoute = corrections?.intakeRoute ?? routedByPolicy;
   const inferredHorizonCandidate =
     input.horizonIntent === "today_only" ? "today" : input.interpretation.recommendedHorizon;
@@ -1068,8 +1068,9 @@ function buildFastPathPreview(
       ? input.interpretation.detectedChunks
       : extractDetectedChunks(input.sourceInput);
   const assumptions = [...input.interpretation.assumptions];
+  const routeMismatch = routedByPolicy !== requestedRoute;
 
-  if (routedByPolicy !== requestedRoute) {
+  if (requestedRouteWasExplicit && routeMismatch) {
     assumptions.push(
       `We are routing this as ${routedByPolicy.replaceAll("_", " ")} instead of ${requestedRoute.replaceAll("_", " ")}.`,
     );
@@ -1082,6 +1083,7 @@ function buildFastPathPreview(
   return {
     learnerTarget: corrections?.learnerName?.trim() || input.learnerName.trim(),
     requestedRoute,
+    requestedRouteWasExplicit,
     intakeRoute: inferredRoute,
     sourceKind: input.interpretation.sourceKind,
     title:
@@ -1099,7 +1101,7 @@ function buildFastPathPreview(
       input.interpretation.needsConfirmation ||
       input.interpretation.confidence !== "high" ||
       input.interpretation.sourceKind === "ambiguous" ||
-      routedByPolicy !== requestedRoute ||
+      (requestedRouteWasExplicit && routeMismatch) ||
       Boolean(input.interpretation.followUpQuestion),
   };
 }
@@ -1191,7 +1193,11 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
   await trackProductEvent({
     name: ACTIVATION_EVENT_NAMES.intakeTypeSelected,
     organizationId: input.organizationId,
-    metadata: { intakeRoute: input.intakeRoute, horizonIntent: input.horizonIntent ?? "auto" },
+    metadata: {
+      intakeRoute: input.intakeRoute,
+      intakeRouteExplicit: input.intakeRouteExplicit ?? false,
+      horizonIntent: input.horizonIntent ?? "auto",
+    },
   });
   await trackProductEvent({
     name: ACTIVATION_EVENT_NAMES.intakeSourceSubmitted,
@@ -1246,6 +1252,7 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
       sourceInput: resolvedSource.sourceInput,
       learnerName: input.learnerName,
       intakeRoute: input.intakeRoute,
+      intakeRouteExplicit: input.intakeRouteExplicit ?? false,
       horizonIntent: input.horizonIntent,
       interpretation: sourceInterpretResult.artifact,
     },
