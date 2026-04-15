@@ -17,6 +17,7 @@ import {
   weeklyRouteItems,
   weeklyRoutes,
 } from "@/lib/db/schema";
+import type { DailyWorkspaceExpansionScope } from "@/lib/planning/types";
 
 type WeeklyRouteItemRow = typeof weeklyRouteItems.$inferSelect;
 type WeeklyRouteRecord = typeof weeklyRoutes.$inferSelect;
@@ -41,6 +42,14 @@ function addDays(baseDate: string, days: number): string {
 
 function buildWeekdayDates(weekStartDate: string) {
   return Array.from({ length: WEEKDAY_COUNT }, (_, index) => addDays(weekStartDate, index));
+}
+
+function isFastPathQueuedItem(row: WeeklyRouteItemRow) {
+  return row.manualOverrideNote === "fast_path_future_queue";
+}
+
+function isFastPathQueuedBoardItem(item: WeeklyRouteBoard["items"][number]) {
+  return item.manualOverrideNote === "fast_path_future_queue";
 }
 
 async function findPlannedSkillNodeIdsBeforeWeek(route: WeeklyRouteRecord) {
@@ -112,7 +121,12 @@ async function ensureSuggestedWeeklyRouteSchedule(route: WeeklyRouteRecord) {
   );
 
   const openDates = weekdayDates.filter((date) => !occupiedDates.has(date));
-  const unscheduledRows = rows.filter((row) => row.state !== "removed" && row.scheduledDate == null);
+  const unscheduledRows = rows.filter(
+    (row) =>
+      row.state !== "removed" &&
+      row.scheduledDate == null &&
+      !isFastPathQueuedItem(row),
+  );
   const assignments: Array<{ id: string; scheduledDate: string }> = [];
 
   for (const row of unscheduledRows) {
@@ -172,6 +186,21 @@ function deriveOverrideKind(item: WeeklyRouteItemRow, nextPosition: number, next
   }
 
   return "none";
+}
+
+function deriveNextState(
+  item: WeeklyRouteItemRow,
+  nextScheduledDate: string | null,
+): WeeklyRouteItemRow["state"] {
+  if (item.state === "done" || item.state === "in_progress") {
+    return item.state;
+  }
+
+  if (nextScheduledDate) {
+    return "scheduled";
+  }
+
+  return item.state === "removed" ? "removed" : "queued";
 }
 
 export async function getOrCreateWeeklyRouteBoardForLearner(params: {
@@ -258,6 +287,255 @@ export async function getOrCreateWeeklyRouteBoardForLearner(params: {
   }
 
   return { weekStartDate, board: generated };
+}
+
+function getLaunchAnchorItem(board: WeeklyRouteBoard, date: string) {
+  return (
+    board.items.find((item) => item.state !== "removed" && item.scheduledDate === date) ??
+    board.items.find(
+      (item) => item.state !== "removed" && item.scheduledDate != null && item.scheduledDate > date,
+    ) ??
+    board.items.find((item) => item.state !== "removed") ??
+    null
+  );
+}
+
+function getExpansionTargetDates(params: {
+  scope: DailyWorkspaceExpansionScope;
+  date: string;
+  weekdayDates: string[];
+}) {
+  const futureDates = params.weekdayDates.filter((candidate) => candidate > params.date);
+
+  switch (params.scope) {
+    case "tomorrow":
+      return futureDates.slice(0, 1);
+    case "next_few_days":
+      return futureDates.slice(0, 3);
+    case "current_week":
+      return futureDates;
+  }
+}
+
+export async function collapseWeeklyRouteToTodayWindow(params: {
+  learnerId: string;
+  sourceId: string;
+  date: string;
+}) {
+  const weekStartDate = toWeekStartDate(params.date);
+  const db = getDb();
+  const route = await db.query.weeklyRoutes.findFirst({
+    where: and(
+      eq(weeklyRoutes.learnerId, params.learnerId),
+      eq(weeklyRoutes.sourceId, params.sourceId),
+      eq(weeklyRoutes.weekStartDate, weekStartDate),
+    ),
+  });
+
+  if (!route) {
+    return null;
+  }
+
+  const { board } = await getOrCreateWeeklyRouteBoardForLearner({
+    learnerId: params.learnerId,
+    sourceId: params.sourceId,
+    weekStartDate,
+  });
+  const anchor = getLaunchAnchorItem(board, params.date);
+
+  if (!anchor) {
+    return board;
+  }
+
+  const rows = await db.query.weeklyRouteItems.findMany({
+    where: eq(weeklyRouteItems.weeklyRouteId, route.id),
+    orderBy: [asc(weeklyRouteItems.currentPosition), asc(weeklyRouteItems.createdAt)],
+  });
+
+  await db.transaction(async (tx) => {
+    for (const row of rows) {
+      let nextState = row.state;
+      let nextScheduledDate = row.scheduledDate;
+      let nextOverrideKind = row.manualOverrideKind;
+      let nextOverrideNote = row.manualOverrideNote;
+
+      if (row.id === anchor.id) {
+        nextState = "scheduled";
+        nextScheduledDate = params.date;
+        nextOverrideKind = "pinned";
+        nextOverrideNote = "fast_path_today_anchor";
+      } else if (row.currentPosition < anchor.currentPosition) {
+        nextState = "removed";
+        nextScheduledDate = null;
+        nextOverrideKind = "deferred";
+        nextOverrideNote = "fast_path_prelaunch_pruned";
+      } else {
+        nextState = "queued";
+        nextScheduledDate = null;
+        nextOverrideKind = "none";
+        nextOverrideNote = "fast_path_future_queue";
+      }
+
+      if (
+        row.state !== nextState ||
+        row.scheduledDate !== nextScheduledDate ||
+        row.manualOverrideKind !== nextOverrideKind ||
+        row.manualOverrideNote !== nextOverrideNote
+      ) {
+        await tx
+          .update(weeklyRouteItems)
+          .set({
+            state: nextState,
+            scheduledDate: nextScheduledDate,
+            manualOverrideKind: nextOverrideKind,
+            manualOverrideNote: nextOverrideNote,
+            updatedAt: new Date(),
+          })
+          .where(eq(weeklyRouteItems.id, row.id));
+      }
+    }
+  });
+
+  return getWeeklyRouteBoardById({
+    learnerId: params.learnerId,
+    weeklyRouteId: route.id,
+  });
+}
+
+export async function expandWeeklyRouteFromToday(params: {
+  learnerId: string;
+  sourceId: string;
+  date: string;
+  scope: DailyWorkspaceExpansionScope;
+}) {
+  const weekStartDate = toWeekStartDate(params.date);
+  const db = getDb();
+  const route = await db.query.weeklyRoutes.findFirst({
+    where: and(
+      eq(weeklyRoutes.learnerId, params.learnerId),
+      eq(weeklyRoutes.sourceId, params.sourceId),
+      eq(weeklyRoutes.weekStartDate, weekStartDate),
+    ),
+  });
+
+  if (!route) {
+    throw new Error("Weekly route not found.");
+  }
+
+  const profile = await db.query.learnerRouteProfiles.findFirst({
+    where: and(
+      eq(learnerRouteProfiles.learnerId, params.learnerId),
+      eq(learnerRouteProfiles.sourceId, params.sourceId),
+    ),
+  });
+  const enabledOffsets = getEnabledPlanningDayOffsets(profile?.planningDays ?? null);
+  const weekdayDates = enabledOffsets
+    .map((offset) => buildWeekdayDates(route.weekStartDate)[offset])
+    .filter((candidate): candidate is string => candidate != null);
+  const targetDates = getExpansionTargetDates({
+    scope: params.scope,
+    date: params.date,
+    weekdayDates,
+  });
+
+  let { board } = await getOrCreateWeeklyRouteBoardForLearner({
+    learnerId: params.learnerId,
+    sourceId: params.sourceId,
+    weekStartDate,
+  });
+
+  const anchor = getLaunchAnchorItem(board, params.date);
+  const anchorPosition = anchor?.currentPosition ?? -1;
+
+  if (targetDates.length === 0) {
+    return {
+      board,
+      status: "blocked" as const,
+      scheduledCount: 0,
+      scheduledDates: [] as string[],
+      targetDates,
+      reason: "No future planning days remain in this week.",
+    };
+  }
+
+  const scheduledFutureDates = new Set(
+    board.items
+      .filter(
+        (item) =>
+          item.state !== "removed" &&
+          item.scheduledDate != null &&
+          item.scheduledDate > params.date,
+      )
+      .map((item) => item.scheduledDate as string),
+  );
+  const datesToFill = targetDates.filter((candidate) => !scheduledFutureDates.has(candidate));
+
+  if (datesToFill.length === 0) {
+    return {
+      board,
+      status: "already_scheduled" as const,
+      scheduledCount: 0,
+      scheduledDates: [] as string[],
+      targetDates,
+      reason: "Future days are already scheduled through this scope.",
+    };
+  }
+
+  const scheduledDates: string[] = [];
+
+  for (const targetDate of datesToFill) {
+    const nextQueuedItem =
+      board.items.find(
+        (item) =>
+          item.state !== "removed" &&
+          item.scheduledDate == null &&
+          isFastPathQueuedBoardItem(item),
+      ) ??
+      board.items.find(
+        (item) =>
+          item.state !== "removed" &&
+          item.scheduledDate == null &&
+          item.currentPosition > anchorPosition,
+      );
+
+    if (!nextQueuedItem) {
+      break;
+    }
+
+    const targetIndex = board.items.filter(
+      (item) => item.state !== "removed" && item.scheduledDate === targetDate,
+    ).length;
+
+    board = await moveWeeklyRouteItem({
+      learnerId: params.learnerId,
+      weeklyRouteId: board.summary.weeklyRouteId,
+      weeklyRouteItemId: nextQueuedItem.id,
+      targetScheduledDate: targetDate,
+      targetIndex,
+      manualOverrideNote: `fast_path_expand:${params.scope}`,
+    });
+    scheduledDates.push(targetDate);
+  }
+
+  if (scheduledDates.length === 0) {
+    return {
+      board,
+      status: "blocked" as const,
+      scheduledCount: 0,
+      scheduledDates,
+      targetDates,
+      reason: "This route is still bounded to today. Add more source depth before expanding further.",
+    };
+  }
+
+  return {
+    board,
+    status: "expanded" as const,
+    scheduledCount: scheduledDates.length,
+    scheduledDates,
+    targetDates,
+    reason: null,
+  };
 }
 
 async function ensureDefaultBranchActivations(params: {
@@ -410,6 +688,7 @@ export async function moveWeeklyRouteItem(params: {
         const columnKey = columnByItemId.get(itemId)!;
         const nextScheduledDate = columnKey === "unassigned" ? null : columnKey;
         const nextOverrideKind = deriveOverrideKind(row, position, nextScheduledDate);
+        const nextState = deriveNextState(row, nextScheduledDate);
         const nextManualOverrideNote =
           itemId === movingItem.id
             ? params.manualOverrideNote ?? row.manualOverrideNote
@@ -418,6 +697,7 @@ export async function moveWeeklyRouteItem(params: {
         if (
           row.currentPosition !== position ||
           row.scheduledDate !== nextScheduledDate ||
+          row.state !== nextState ||
           row.manualOverrideKind !== nextOverrideKind ||
           row.manualOverrideNote !== nextManualOverrideNote
         ) {
@@ -426,6 +706,7 @@ export async function moveWeeklyRouteItem(params: {
             .set({
               currentPosition: position,
               scheduledDate: nextScheduledDate,
+              state: nextState,
               manualOverrideKind: nextOverrideKind,
               manualOverrideNote: nextManualOverrideNote,
               updatedAt: new Date(),
@@ -568,10 +849,12 @@ export async function moveWeeklyRouteItem(params: {
       const columnKey = sourceColumnByItemId.get(itemId)!;
       const nextScheduledDate = columnKey === "unassigned" ? null : columnKey;
       const nextOverrideKind = deriveOverrideKind(row, position, nextScheduledDate);
+      const nextState = deriveNextState(row, nextScheduledDate);
 
       if (
         row.currentPosition !== position ||
         row.scheduledDate !== nextScheduledDate ||
+        row.state !== nextState ||
         row.manualOverrideKind !== nextOverrideKind
       ) {
         await tx
@@ -579,6 +862,7 @@ export async function moveWeeklyRouteItem(params: {
           .set({
             currentPosition: position,
             scheduledDate: nextScheduledDate,
+            state: nextState,
             manualOverrideKind: nextOverrideKind,
             updatedAt: new Date(),
           })
@@ -591,6 +875,7 @@ export async function moveWeeklyRouteItem(params: {
       const columnKey = targetColumnByItemId.get(itemId)!;
       const nextScheduledDate = columnKey === "unassigned" ? null : columnKey;
       const nextOverrideKind = deriveOverrideKind(row, position, nextScheduledDate);
+      const nextState = deriveNextState(row, nextScheduledDate);
       const nextManualOverrideNote =
         itemId === movingItem.id
           ? params.manualOverrideNote ?? row.manualOverrideNote
@@ -600,6 +885,7 @@ export async function moveWeeklyRouteItem(params: {
         row.weeklyRouteId !== targetRoute.id ||
         row.currentPosition !== position ||
         row.scheduledDate !== nextScheduledDate ||
+        row.state !== nextState ||
         row.manualOverrideKind !== nextOverrideKind ||
         row.manualOverrideNote !== nextManualOverrideNote
       ) {
@@ -609,6 +895,7 @@ export async function moveWeeklyRouteItem(params: {
             weeklyRouteId: targetRoute.id,
             currentPosition: position,
             scheduledDate: nextScheduledDate,
+            state: nextState,
             manualOverrideKind: nextOverrideKind,
             manualOverrideNote: nextManualOverrideNote,
             updatedAt: new Date(),

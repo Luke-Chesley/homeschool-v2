@@ -22,6 +22,8 @@ export const ACTIVATION_EVENT_NAMES = {
   todayActivityBuildStarted: "today_activity_build_started",
   todayActivityBuildCompleted: "today_activity_build_completed",
   todayActivityBuildFailed: "today_activity_build_failed",
+  routeExpansionApplied: "route_expansion_applied",
+  routeExpansionBlocked: "route_expansion_blocked",
   firstTodayOpened: "first_today_opened",
   todayOpened: "today_opened",
   firstPlanItemStatusChange: "first_plan_item_status_change",

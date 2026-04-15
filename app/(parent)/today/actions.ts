@@ -5,12 +5,16 @@ import { revalidatePath } from "next/cache";
 import { requireAppSession } from "@/lib/app-session/server";
 import { createRepositories } from "@/lib/db";
 import { getDb } from "@/lib/db/server";
+import { ACTIVATION_EVENT_NAMES } from "@/lib/homeschool/onboarding/activation-contracts";
 import {
   getTodayWorkspace,
   saveTodayExpansionIntent,
   saveTodayLessonRegenerationNote,
 } from "@/lib/planning/today-service";
+import type { DailyWorkspaceExpansionScope } from "@/lib/planning/types";
+import { expandWeeklyRouteFromToday } from "@/lib/planning/weekly-route-service";
 import { previewLessonDraftActivityPrompt } from "@/lib/learning-core/activity";
+import { trackProductEvent } from "@/lib/platform/observability";
 import { getLessonEvaluationLabel, type LessonEvaluationLevel } from "@/lib/session-workspace/evaluation";
 import { recordSessionEvaluation } from "@/lib/session-workspace/service";
 import { generateTodayActivity } from "@/lib/planning/today-activity-generation";
@@ -75,6 +79,23 @@ export interface TodayLessonSupportResult {
   ok: boolean;
   message?: string;
   error?: string;
+}
+
+export interface TodayRouteExpansionResult extends TodayLessonSupportResult {
+  status?: "expanded" | "already_scheduled" | "blocked";
+  scheduledCount?: number;
+  scheduledDates?: string[];
+}
+
+function getExpansionScopeLabel(scope: DailyWorkspaceExpansionScope) {
+  switch (scope) {
+    case "tomorrow":
+      return "tomorrow";
+    case "next_few_days":
+      return "the next few days";
+    case "current_week":
+      return "the current week";
+  }
 }
 
 /**
@@ -430,13 +451,102 @@ export async function saveExpansionIntentAction(input: {
       message:
         input.intent === "keep_today"
           ? "Saved: keep this launch flow bounded to today."
-          : "Saved: expand from here when larger route controls are available.",
+          : "Saved: expand from here when you are ready to schedule more days.",
     };
   } catch (error) {
     console.error("[saveExpansionIntentAction]", error);
     return {
       ok: false,
       error: error instanceof Error ? error.message : "Could not save the expansion preference.",
+    };
+  }
+}
+
+export async function expandTodayRouteAction(input: {
+  date: string;
+  scope: DailyWorkspaceExpansionScope;
+}): Promise<TodayRouteExpansionResult> {
+  try {
+    const session = await requireAppSession();
+    const workspaceResult = await getTodayWorkspace({
+      organizationId: session.organization.id,
+      learnerId: session.activeLearner.id,
+      learnerName: session.activeLearner.displayName,
+      date: input.date,
+    });
+
+    if (!workspaceResult) {
+      return { ok: false, error: "Workspace not found." };
+    }
+
+    const sourceId = workspaceResult.sourceId;
+    if (!sourceId) {
+      return { ok: false, error: "No live curriculum source was found for this learner." };
+    }
+
+    const result = await expandWeeklyRouteFromToday({
+      learnerId: session.activeLearner.id,
+      sourceId,
+      date: input.date,
+      scope: input.scope,
+    });
+
+    revalidatePath("/today");
+    revalidatePath("/planning");
+
+    const metadata = {
+      sourceId,
+      date: input.date,
+      scope: input.scope,
+      targetDates: result.targetDates,
+      scheduledDates: result.scheduledDates,
+      scheduledCount: result.scheduledCount,
+      reason: result.reason,
+    };
+
+    if (result.status === "expanded") {
+      await trackProductEvent({
+        name: ACTIVATION_EVENT_NAMES.routeExpansionApplied,
+        organizationId: session.organization.id,
+        learnerId: session.activeLearner.id,
+        metadata,
+      }).catch((error) => {
+        console.error("[expandTodayRouteAction:routeExpansionApplied]", error);
+      });
+
+      return {
+        ok: true,
+        status: result.status,
+        scheduledCount: result.scheduledCount,
+        scheduledDates: result.scheduledDates,
+        message:
+          result.scheduledCount === 1
+            ? `Scheduled the next route item for ${getExpansionScopeLabel(input.scope)}.`
+            : `Scheduled ${result.scheduledCount} more route items for ${getExpansionScopeLabel(input.scope)}.`,
+      };
+    }
+
+    await trackProductEvent({
+      name: ACTIVATION_EVENT_NAMES.routeExpansionBlocked,
+      organizationId: session.organization.id,
+      learnerId: session.activeLearner.id,
+      metadata,
+    }).catch((error) => {
+      console.error("[expandTodayRouteAction:routeExpansionBlocked]", error);
+    });
+
+    return {
+      ok: true,
+      status: result.status,
+      scheduledCount: result.scheduledCount,
+      scheduledDates: result.scheduledDates,
+      message: result.reason,
+    };
+  } catch (error) {
+    console.error("[expandTodayRouteAction]", error);
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Could not expand the route.",
     };
   }
 }
