@@ -961,6 +961,7 @@ function buildDailyWorkspace(date: string): DailyWorkspace {
     recoveryOptions: day.recoveryOptions,
     alternatesByPlanItemId,
     lessonDraft: null,
+    lessonBuild: null,
   };
 }
 

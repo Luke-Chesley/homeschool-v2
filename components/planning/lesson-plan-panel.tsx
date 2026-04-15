@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Loader2, Sparkles } from "lucide-react";
 
 import { LearningCorePromptPreviewCard } from "@/components/debug/LearningCorePromptPreviewCard";
@@ -15,6 +16,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { MarkdownContent } from "@/components/ui/markdown-content";
 import type { StructuredLessonDraft } from "@/lib/lesson-draft/types";
+import type { DailyWorkspaceLessonBuild } from "@/lib/planning/types";
 import { cn } from "@/lib/utils";
 
 const LESSON_PLAN_PROMPT_PANEL_ID = "lesson-plan-prompt-preview";
@@ -35,6 +37,7 @@ interface LessonPlanPanelProps {
   objectives: string[];
   routeItemTitles: string[];
   draftState?: DraftState;
+  buildState?: DailyWorkspaceLessonBuild | null;
   onDraftChange?: (draft: StructuredLessonDraft | string | null) => void;
   showDraftOutput?: boolean;
 }
@@ -72,11 +75,17 @@ export function LessonPlanPanel({
   objectives,
   routeItemTitles,
   draftState,
+  buildState,
   onDraftChange,
   showDraftOutput = true,
 }: LessonPlanPanelProps) {
+  const router = useRouter();
   const [state, setState] = useState<LessonPlanState>({ status: "idle" });
   const [promptDebugState, setPromptDebugState] = useState<PromptDebugState>({ status: "idle" });
+  const [activeTrigger, setActiveTrigger] = useState<
+    "onboarding_auto" | "today_resume" | "manual" | null
+  >(null);
+  const [autoBuildStarted, setAutoBuildStarted] = useState(false);
   const { access, isEnabled: studioEnabled, openPanel } = useStudio();
   const contextKey = useMemo(
     () =>
@@ -105,19 +114,35 @@ export function LessonPlanPanel({
   useEffect(() => {
     setState({ status: "idle" });
     setPromptDebugState({ status: "idle" });
+    setActiveTrigger(null);
+    setAutoBuildStarted(false);
   }, [contextKey]);
 
   const hasDraft = draftState !== null && draftState !== undefined;
   const canViewPromptPreview = studioEnabled && access.canViewPrompts;
+  const isQueuedBuild = !hasDraft && buildState?.status === "queued";
+  const isGeneratingBuild =
+    !hasDraft &&
+    (buildState?.status === "generating" ||
+      (state.status === "loading" && activeTrigger !== null && activeTrigger !== "manual"));
+  const showAutoBuildState = isQueuedBuild || isGeneratingBuild;
+  const showFailedBuildState = !hasDraft && buildState?.status === "failed";
+  const buildErrorMessage =
+    state.status === "error"
+      ? state.message
+      : showFailedBuildState
+        ? buildState?.error ?? "The lesson draft build did not finish."
+        : null;
 
-  async function handleGenerate() {
+  async function requestDraft(trigger: "onboarding_auto" | "today_resume" | "manual") {
+    setActiveTrigger(trigger);
     setState({ status: "loading" });
 
     try {
       const response = await fetch("/api/ai/lesson-plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date, sourceId }),
+        body: JSON.stringify({ date, sourceId, trigger }),
       });
 
       const data = (await response.json()) as
@@ -134,13 +159,40 @@ export function LessonPlanPanel({
 
       setState({ status: "ready", draft: data.structured });
       onDraftChange?.(data.structured);
+      router.refresh();
     } catch (error) {
       setState({
         status: "error",
         message: error instanceof Error ? error.message : "Lesson plan generation failed.",
       });
+      router.refresh();
     }
   }
+
+  function handleGenerate(trigger: "onboarding_auto" | "today_resume" | "manual" = "manual") {
+    void requestDraft(trigger);
+  }
+
+  useEffect(() => {
+    if (!isQueuedBuild || autoBuildStarted) {
+      return;
+    }
+
+    setAutoBuildStarted(true);
+    void requestDraft("onboarding_auto");
+  }, [autoBuildStarted, isQueuedBuild]);
+
+  useEffect(() => {
+    if (!hasDraft && buildState?.status === "generating" && state.status !== "loading") {
+      const timeout = window.setTimeout(() => {
+        router.refresh();
+      }, 2000);
+
+      return () => window.clearTimeout(timeout);
+    }
+
+    return undefined;
+  }, [buildState?.status, buildState?.updatedAt, hasDraft, router, state.status]);
 
   async function handlePromptPreview() {
     if (!canViewPromptPreview) {
@@ -203,19 +255,25 @@ export function LessonPlanPanel({
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={handleGenerate}
-              disabled={state.status === "loading" || routeItemCount === 0}
-              className={cn(buttonVariants({ variant: "default", size: "sm" }))}
-            >
-              {state.status === "loading" ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <Sparkles className="size-4" />
-              )}
-              {hasDraft ? "Regenerate" : "Generate"}
-            </button>
+            {!showAutoBuildState ? (
+              <button
+                type="button"
+                onClick={() => handleGenerate(showFailedBuildState ? "today_resume" : "manual")}
+                disabled={state.status === "loading" || routeItemCount === 0}
+                className={cn(buttonVariants({ variant: "default", size: "sm" }))}
+              >
+                {state.status === "loading" ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Sparkles className="size-4" />
+                )}
+                {hasDraft
+                  ? "Regenerate"
+                  : showFailedBuildState
+                    ? "Retry build"
+                    : "Generate"}
+              </button>
+            ) : null}
 
             {canViewPromptPreview ? (
               <button
@@ -248,9 +306,9 @@ export function LessonPlanPanel({
             </div>
           </details>
 
-          {state.status === "error" ? (
+          {buildErrorMessage ? (
             <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-4 text-sm text-destructive">
-              {state.message}
+              {buildErrorMessage}
             </div>
           ) : null}
 
@@ -264,6 +322,30 @@ export function LessonPlanPanel({
               <div className="mt-4">
                 <MarkdownContent content={draftState.markdown} />
               </div>
+            </div>
+          ) : showDraftOutput && showAutoBuildState ? (
+            <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 text-sm text-foreground">
+              <div className="flex items-start gap-3">
+                <Loader2 className="mt-0.5 size-4 animate-spin text-primary" />
+                <div className="space-y-1">
+                  <p className="font-medium">
+                    {isQueuedBuild
+                      ? "Preparing your first lesson draft…"
+                      : "Building today’s lesson draft…"}
+                  </p>
+                  <p className="text-muted-foreground">
+                    Stay on this page. We&apos;re using the saved route and intake context to build
+                    the first teachable day automatically.
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : showDraftOutput && showFailedBuildState ? (
+            <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-4 text-sm text-destructive">
+              <p className="font-medium">The first lesson draft did not finish.</p>
+              <p className="mt-1">
+                Retry the build here. The bounded route is still saved and ready to use.
+              </p>
             </div>
           ) : showDraftOutput && !hasDraft ? (
             <div className="rounded-lg border border-dashed border-border/70 bg-background p-4 text-sm text-muted-foreground">

@@ -236,6 +236,30 @@ export interface DailyWorkspaceLessonDraft {
   savedAt: string;
 }
 
+export type DailyWorkspaceLessonBuildStatus =
+  | "queued"
+  | "generating"
+  | "failed"
+  | "ready";
+
+export type DailyWorkspaceLessonBuildTrigger =
+  | "onboarding_auto"
+  | "today_resume"
+  | "manual";
+
+export interface DailyWorkspaceLessonBuild {
+  status: DailyWorkspaceLessonBuildStatus;
+  trigger?: DailyWorkspaceLessonBuildTrigger;
+  sourceId: string;
+  routeFingerprint: string;
+  queuedAt?: string;
+  startedAt?: string;
+  completedAt?: string;
+  failedAt?: string;
+  updatedAt: string;
+  error?: string | null;
+}
+
 export interface DailyWorkspace {
   date: string;
   headline: string;
@@ -251,4 +275,5 @@ export interface DailyWorkspace {
   recoveryOptions: RecoveryOption[];
   alternatesByPlanItemId: Record<string, WeeklyRouteItem[]>;
   lessonDraft: DailyWorkspaceLessonDraft | null;
+  lessonBuild: DailyWorkspaceLessonBuild | null;
 }
