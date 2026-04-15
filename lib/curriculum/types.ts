@@ -84,16 +84,35 @@ export const CurriculumSourceIntakeConfidenceSchema = z.enum(["low", "medium", "
 
 export const CurriculumSourceIntakeSchema = z.object({
   route: CurriculumSourceIntakeRouteSchema,
+  requestedRoute: CurriculumSourceIntakeRouteSchema.optional(),
   routeVersion: z.literal(1),
   rawText: z.string().nullable().optional(),
   assetIds: z.array(z.string()).default([]),
   learnerId: z.string().nullable().optional(),
   confidence: CurriculumSourceIntakeConfidenceSchema,
+  sourceKind: z
+    .enum([
+      "single_day_material",
+      "weekly_assignments",
+      "sequence_outline",
+      "topic_seed",
+      "manual_shell",
+      "ambiguous",
+    ])
+    .optional(),
   inferredHorizon: CurriculumSourceGenerationHorizonSchema,
   chosenHorizon: CurriculumSourceGenerationHorizonSchema,
   horizonDecisionSource: CurriculumSourceHorizonDecisionSourceSchema,
   assumptions: z.array(z.string()).default([]),
   detectedChunks: z.array(z.string()).default([]),
+  followUpQuestion: z.string().nullable().optional(),
+  needsConfirmation: z.boolean().optional(),
+  sourcePackageId: z.string().nullable().optional(),
+  sourceModality: z
+    .enum(["text", "outline", "photo", "image", "pdf", "file"])
+    .optional(),
+  curriculumMode: z.enum(["manual_shell", "paste_outline", "ai_decompose"]).optional(),
+  learningCoreLineage: JsonRecordSchema.optional(),
   sourceFingerprint: z.string().optional(),
   createdFrom: z.enum(["onboarding_fast_path", "curriculum_add_flow", "curriculum_regeneration"]),
 });
