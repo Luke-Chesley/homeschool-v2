@@ -1,6 +1,28 @@
 {
   "contracts": [
     {
+      "id": "normalized-intake-source-package",
+      "title": "Normalized Intake Source Package",
+      "docPath": "contracts/normalized-intake-source-package.md",
+      "canonicalSources": [
+        "lib/homeschool/intake/types.ts",
+        "lib/homeschool/intake/service.ts",
+        "app/api/homeschool/intake-package/route.ts",
+        "components/onboarding/homeschool-onboarding-form.tsx"
+      ],
+      "producerEntrypoints": [
+        "app/api/homeschool/intake-package/route.ts"
+      ],
+      "consumerEntrypoints": [
+        "app/api/homeschool/onboarding/route.ts",
+        "lib/homeschool/onboarding/service.ts"
+      ],
+      "versionFields": [
+        "status",
+        "sourceFingerprint"
+      ]
+    },
+    {
       "id": "curriculum-artifact",
       "title": "Curriculum Artifact",
       "docPath": "contracts/curriculum-artifact.md",

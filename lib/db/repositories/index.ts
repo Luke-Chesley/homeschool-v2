@@ -1,3 +1,4 @@
+import { createAiIntakeRepository } from "@/lib/db/repositories/ai-intake";
 import type { HomeschoolDb } from "@/lib/db/client";
 import { createActivitiesRepository } from "@/lib/db/repositories/activities";
 import { createCopilotRepository } from "@/lib/db/repositories/copilot";
@@ -12,6 +13,7 @@ import { createTrackingRepository } from "@/lib/db/repositories/tracking";
 
 export function createRepositories(db: HomeschoolDb) {
   return {
+    aiIntake: createAiIntakeRepository(db),
     organizations: createOrganizationRepository(db),
     observability: createObservabilityRepository(db),
     learners: createLearnerRepository(db),

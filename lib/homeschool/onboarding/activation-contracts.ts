@@ -9,6 +9,8 @@ export const ACTIVATION_EVENT_NAMES = {
   learnerNameSubmitted: "learner_name_submitted",
   intakeTypeSelected: "intake_type_selected",
   intakeSourceSubmitted: "intake_source_submitted",
+  intakePackageCreated: "intake_package_created",
+  intakeAssetUploaded: "intake_asset_uploaded",
   generationStarted: "generation_started",
   generationCompleted: "generation_completed",
   firstTodayOpened: "first_today_opened",
