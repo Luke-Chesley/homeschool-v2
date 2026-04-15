@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
-    <main className="mx-auto flex min-h-[calc(100dvh-var(--global-tabs-height))] w-full max-w-6xl items-center px-5 py-10 sm:px-6 lg:px-8">
+    <main className="native-shell-page mx-auto flex min-h-[calc(100dvh-var(--global-tabs-height))] w-full max-w-6xl items-center px-5 py-10 sm:px-6 lg:px-8">
       <div className="grid w-full gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(380px,460px)]">
         <section className="space-y-6">
           <div className="space-y-3">

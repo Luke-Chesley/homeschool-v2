@@ -23,7 +23,7 @@ export default async function LearnerLayout({ children }: { children: ReactNode 
 
   return (
     <div className="learner-shell">
-      <header className="learner-topbar">
+      <header className="learner-topbar native-shell-top-inset">
         <div className="learner-topbar-inner">
           <div className="flex min-w-0 items-center gap-2 sm:gap-3">
             <Link href="/learner" className="inline-flex shrink-0 items-center gap-2 text-sm font-medium text-foreground">

@@ -23,11 +23,25 @@ const body = Source_Sans_3({
 export const metadata: Metadata = {
   title: "Homeschool V2",
   description: "A fresh restart for a planning-first homeschool platform.",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Homeschool V2",
+  },
+  formatDetection: {
+    telephone: false,
+  },
+  icons: {
+    apple: "/apple-icon",
+  },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#bb6a3a",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
@@ -36,7 +50,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning data-scroll-behavior="smooth">
       <body
-        className={`${display.variable} ${body.variable} min-h-screen overflow-x-hidden bg-background text-foreground [--global-tabs-height:3.5rem]`}
+        className={`${display.variable} ${body.variable} min-h-screen overflow-x-hidden bg-background text-foreground`}
       >
         <Script id="theme-init" strategy="beforeInteractive">
           {THEME_INIT_SCRIPT}

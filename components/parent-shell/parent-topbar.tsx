@@ -31,7 +31,7 @@ export function ParentTopbar({
   const pathname = usePathname();
 
   return (
-    <div className="sticky top-[var(--global-tabs-height)] z-30 border-b border-border/70 bg-background/92 backdrop-blur lg:hidden">
+    <div className="native-shell-top-inset sticky top-[var(--global-tabs-height)] z-30 border-b border-border/70 bg-background/92 backdrop-blur lg:hidden">
       <div className="mx-auto grid max-w-7xl gap-3 px-4 py-3 sm:px-6">
         <div className="min-w-0">
           <p className="truncate text-xs text-muted-foreground">

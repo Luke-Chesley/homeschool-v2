@@ -95,7 +95,10 @@ export function GlobalPageTabs() {
   }
 
   return (
-    <div className="sticky top-0 z-40 border-b border-border/70 bg-background/92 backdrop-blur">
+    <div
+      data-global-tabs
+      className="native-shell-top-inset sticky top-0 z-40 border-b border-border/70 bg-background/92 backdrop-blur"
+    >
       <div className="mx-auto grid h-[var(--global-tabs-height)] max-w-7xl grid-cols-[auto_1fr_auto] items-center gap-4 px-4 sm:px-6 lg:px-8">
         <div className="flex min-w-0 items-center gap-5">
           <Link href="/" className="shrink-0 text-[15px] font-semibold tracking-tight text-foreground">
