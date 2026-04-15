@@ -326,19 +326,20 @@ function TodayLearnerActivityBridge({
 
   return (
     <Card className="quiet-panel">
-      <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-end sm:justify-between">
-        <div className="space-y-2">
-          <p className="section-meta">Learner work</p>
-          <div className="space-y-1">
-            <h2 className="font-serif text-2xl tracking-tight">Move directly from the daily plan into learner work.</h2>
-            <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-              Keep the day in view here, then open the learner queue or the live activity without switching mental models.
-            </p>
-          </div>
-          <div className="toolbar-row text-sm text-muted-foreground">
-            <span>{workspace.leadItem.title}</span>
+      <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0 space-y-2">
+          <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+            <span>Learner work</span>
             <span>{formatMinutes(workspace.leadItem.estimatedMinutes)}</span>
             {activitySummary ? <span>{activitySummary}</span> : null}
+          </div>
+          <div className="space-y-1">
+            <h2 className="font-serif text-xl leading-tight tracking-tight sm:text-2xl">
+              {workspace.leadItem.title}
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Open the live activity or hand off the learner queue from the same place.
+            </p>
           </div>
         </div>
 

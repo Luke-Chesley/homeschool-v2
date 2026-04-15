@@ -8,7 +8,6 @@ import type {
   LessonBlockType,
   StructuredLessonDraft,
 } from "@/lib/lesson-draft/types";
-import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
@@ -75,7 +74,7 @@ function getBlockAccent(type: LessonBlockType): string {
 
 function LessonHeader({ draft }: { draft: StructuredLessonDraft }) {
   return (
-    <div className="space-y-2 border-b border-border/70 pb-4">
+    <div className="space-y-3 border-b border-border/70 pb-4">
       <div className="flex flex-wrap items-center gap-2">
         <Badge variant="outline">{draft.total_minutes} min</Badge>
         {draft.lesson_shape ? (
@@ -83,20 +82,20 @@ function LessonHeader({ draft }: { draft: StructuredLessonDraft }) {
         ) : null}
         <Badge variant="outline">{draft.blocks.length} blocks</Badge>
       </div>
-      <h2 className="font-serif text-2xl leading-tight">{draft.title}</h2>
-      <p className="text-sm text-muted-foreground">{draft.lesson_focus}</p>
+      <h2 className="font-serif text-[1.75rem] leading-tight">{draft.title}</h2>
+      <p className="max-w-3xl text-base leading-6 text-muted-foreground">{draft.lesson_focus}</p>
     </div>
   );
 }
 
 function ObjectivesAndCriteria({ draft }: { draft: StructuredLessonDraft }) {
   return (
-    <div className="grid gap-4 sm:grid-cols-2">
-      <div className="space-y-1.5">
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+    <div className="grid gap-3 sm:grid-cols-2">
+      <div className="rounded-lg border border-border/60 bg-muted/15 p-3">
+        <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
           Objectives
         </p>
-        <ul className="space-y-1">
+        <ul className="mt-2 space-y-1.5">
           {draft.primary_objectives.map((obj, i) => (
             <li key={i} className="text-sm leading-5">
               {obj}
@@ -104,11 +103,11 @@ function ObjectivesAndCriteria({ draft }: { draft: StructuredLessonDraft }) {
           ))}
         </ul>
       </div>
-      <div className="space-y-1.5">
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+      <div className="rounded-lg border border-border/60 bg-muted/15 p-3">
+        <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
           Done when
         </p>
-        <ul className="space-y-1">
+        <ul className="mt-2 space-y-1.5">
           {draft.success_criteria.map((sc, i) => (
             <li key={i} className="text-sm leading-5 text-muted-foreground">
               {sc}
@@ -132,17 +131,17 @@ function BlockCard({
   return (
     <div
       className={cn(
-        "rounded-md border border-border/70 border-l-2 bg-background p-4",
+        "rounded-lg border border-border/70 border-l-2 bg-background px-4 py-3",
         getBlockAccent(block.type),
         block.optional && "opacity-75",
       )}
     >
-      <div className="flex flex-wrap items-start justify-between gap-2">
+      <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs text-muted-foreground">
             {String(index + 1).padStart(2, "0")}
           </span>
-          <Badge variant="outline" className="text-xs">
+          <Badge variant="outline" className="text-[11px]">
             {BLOCK_TYPE_LABELS[block.type]}
           </Badge>
           <span className="text-xs text-muted-foreground">{block.minutes} min</span>
@@ -150,44 +149,55 @@ function BlockCard({
             <span className="text-xs text-muted-foreground italic">optional</span>
           ) : null}
         </div>
+
+        <div className="space-y-1">
+          <p className="text-base font-medium leading-5 text-foreground">{block.title}</p>
+          <p className="text-sm leading-6 text-muted-foreground">{block.purpose}</p>
+        </div>
+
+        {block.check_for ? (
+          <p className="text-sm leading-6 text-muted-foreground">
+            <span className="font-medium text-foreground">Check:</span> {block.check_for}
+          </p>
+        ) : null}
       </div>
 
-      <p className="mt-2 text-sm font-medium leading-5">{block.title}</p>
-      <p className="mt-1 text-xs text-muted-foreground">{block.purpose}</p>
+      {(block.teacher_action || block.learner_action || (block.materials_needed?.length ?? 0) > 0) ? (
+        <details className="mt-3 rounded-md border border-border/50 bg-muted/15">
+          <summary className="cursor-pointer list-none px-3 py-2 text-xs font-medium text-muted-foreground">
+            Open guidance
+          </summary>
+          <div className="grid gap-3 border-t border-border/50 px-3 py-3 sm:grid-cols-2">
+            <div>
+              <p className="text-xs font-medium text-foreground">You</p>
+              <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                {block.teacher_action}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-medium text-foreground">Learner</p>
+              <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                {block.learner_action}
+              </p>
+            </div>
 
-      <div className="mt-3 grid gap-2 sm:grid-cols-2">
-        <div>
-          <p className="text-xs font-medium text-foreground">You</p>
-          <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
-            {block.teacher_action}
-          </p>
-        </div>
-        <div>
-          <p className="text-xs font-medium text-foreground">Learner</p>
-          <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
-            {block.learner_action}
-          </p>
-        </div>
-      </div>
-
-      {block.check_for ? (
-        <div className="mt-3 rounded border border-border/50 bg-muted/30 px-3 py-2">
-          <p className="text-xs font-medium text-foreground">Check for</p>
-          <p className="mt-0.5 text-xs text-muted-foreground">{block.check_for}</p>
-        </div>
-      ) : null}
-
-      {block.materials_needed && block.materials_needed.length > 0 ? (
-        <div className="mt-2 flex flex-wrap gap-1">
-          {block.materials_needed.map((m, i) => (
-            <span
-              key={i}
-              className="rounded bg-muted/40 px-1.5 py-0.5 text-xs text-muted-foreground"
-            >
-              {m}
-            </span>
-          ))}
-        </div>
+            {block.materials_needed && block.materials_needed.length > 0 ? (
+              <div className="sm:col-span-2">
+                <p className="text-xs font-medium text-foreground">Needs</p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {block.materials_needed.map((m, i) => (
+                    <span
+                      key={i}
+                      className="rounded bg-muted/60 px-2 py-1 text-xs text-muted-foreground"
+                    >
+                      {m}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </details>
       ) : null}
 
       {footer ? <div className="mt-3 flex justify-end">{footer}</div> : null}
@@ -195,41 +205,70 @@ function BlockCard({
   );
 }
 
-function MaterialsList({ materials }: { materials: string[] }) {
-  if (materials.length === 0) return null;
+function CollapsibleSection({
+  label,
+  children,
+  defaultOpen = false,
+}: {
+  label: string;
+  children: ReactNode;
+  defaultOpen?: boolean;
+}) {
   return (
-    <div className="space-y-2">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        Materials
-      </p>
-      <ul className="grid gap-1 sm:grid-cols-2">
-        {materials.map((m, i) => (
-          <li key={i} className="flex items-start gap-2 text-sm">
-            <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-muted-foreground/50" />
+    <details className="rounded-lg border border-border/60 bg-muted/12" open={defaultOpen}>
+      <summary className="cursor-pointer list-none px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </summary>
+      <div className="border-t border-border/50 px-3 py-3">{children}</div>
+    </details>
+  );
+}
+
+function isVisibleMaterial(material: string) {
+  const value = material.trim();
+
+  if (!value) return false;
+  if (value.includes("domain:")) return false;
+  if (value.includes("strand:")) return false;
+  if (value.includes("goal_group:")) return false;
+  if (value.includes("skill:")) return false;
+  if (value.split("/").length >= 4) return false;
+
+  return true;
+}
+
+function MaterialsList({ materials }: { materials: string[] }) {
+  const visibleMaterials = materials.filter(isVisibleMaterial);
+
+  if (visibleMaterials.length === 0) return null;
+
+  return (
+    <CollapsibleSection label={`Materials · ${visibleMaterials.length}`}>
+      <ul className="grid gap-2 sm:grid-cols-2">
+        {visibleMaterials.map((m, i) => (
+          <li key={i} className="flex items-start gap-2 text-sm leading-6">
+            <span className="mt-2 size-1.5 shrink-0 rounded-full bg-muted-foreground/50" />
             {m}
           </li>
         ))}
       </ul>
-    </div>
+    </CollapsibleSection>
   );
 }
 
 function TeacherNotes({ notes }: { notes: string[] }) {
   if (notes.length === 0) return null;
   return (
-    <div className="space-y-2">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        Notes
-      </p>
-      <ul className="space-y-1">
+    <CollapsibleSection label="Notes">
+      <ul className="space-y-2">
         {notes.map((note, i) => (
-          <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
-            <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-muted-foreground/40" />
+          <li key={i} className="flex items-start gap-2 text-sm leading-6 text-muted-foreground">
+            <span className="mt-2 size-1.5 shrink-0 rounded-full bg-muted-foreground/40" />
             {note}
           </li>
         ))}
       </ul>
-    </div>
+    </CollapsibleSection>
   );
 }
 
@@ -246,9 +285,9 @@ function AdaptationCard({ adaptation, index }: { adaptation: LessonAdaptation; i
             : adaptation.trigger;
 
   return (
-    <div key={index} className="rounded border border-border/60 bg-muted/20 p-3">
+    <div key={index} className="rounded-lg border border-border/50 bg-background/70 p-3">
       <p className="text-xs font-medium text-foreground">{triggerLabel}</p>
-      <p className="mt-1 text-xs text-muted-foreground">{adaptation.action}</p>
+      <p className="mt-1 text-sm leading-6 text-muted-foreground">{adaptation.action}</p>
     </div>
   );
 }
@@ -278,29 +317,26 @@ function OptionalModules({ draft }: { draft: StructuredLessonDraft }) {
   if (modules.length === 0) return null;
 
   return (
-    <div className="space-y-2">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        Additional
-      </p>
+    <CollapsibleSection label="More guidance">
       <div className="grid gap-2 sm:grid-cols-2">
         {modules.map((mod, i) => (
-          <div key={i} className="rounded border border-border/50 bg-muted/20 p-3">
+          <div key={i} className="rounded-lg border border-border/50 bg-background/70 p-3">
             <p className="text-xs font-medium text-foreground">{mod.label}</p>
             {Array.isArray(mod.content) ? (
-              <ul className="mt-1 space-y-0.5">
+              <ul className="mt-2 space-y-1">
                 {mod.content.map((item, j) => (
-                  <li key={j} className="text-xs text-muted-foreground">
+                  <li key={j} className="text-sm leading-6 text-muted-foreground">
                     {item}
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="mt-1 text-xs text-muted-foreground">{mod.content}</p>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">{mod.content}</p>
             )}
           </div>
         ))}
       </div>
-    </div>
+    </CollapsibleSection>
   );
 }
 
@@ -320,6 +356,8 @@ export function LessonDraftRenderer({
 
       <ObjectivesAndCriteria draft={draft} />
 
+      <MaterialsList materials={draft.materials} />
+
       {/* Lesson blocks */}
       <div className="space-y-2">
         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -337,21 +375,15 @@ export function LessonDraftRenderer({
         </div>
       </div>
 
-      {/* Materials */}
-      <MaterialsList materials={draft.materials} />
-
       {/* Adaptations */}
       {draft.adaptations.length > 0 ? (
-        <div className="space-y-2">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Adaptations
-          </p>
+        <CollapsibleSection label="Adaptations">
           <div className="grid gap-2 sm:grid-cols-2">
             {draft.adaptations.map((a, i) => (
               <AdaptationCard key={i} adaptation={a} index={i} />
             ))}
           </div>
-        </div>
+        </CollapsibleSection>
       ) : null}
 
       {/* Teacher notes */}

@@ -150,7 +150,7 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
         date={workspace.date}
         onboardingStartedAt={trackerBaseline.onboardingStartedAt}
       />
-      <header className="page-header">
+      <header className="page-header gap-1 pb-3">
         <p className="section-meta">{formatLongDate(workspace.date)}</p>
         <h1 className="page-title">Today</h1>
         <div className="toolbar-row text-sm text-muted-foreground">
