@@ -22,6 +22,7 @@ import {
   ONBOARDING_MILESTONES,
   type OnboardingMilestone,
 } from "@/lib/homeschool/onboarding/activation-contracts";
+import { createFastPathBoundedCurriculum } from "@/lib/homeschool/onboarding/bounded-plan";
 import { getNormalizedIntakeSourcePackage } from "@/lib/homeschool/intake/service";
 import { executeSourceInterpret } from "@/lib/learning-core/source-interpret";
 import { trackProductEvent } from "@/lib/platform/observability";
@@ -1270,29 +1271,29 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
       resolvedSource.sourcePackage ? ` · ${resolvedSource.sourcePackage.modality}` : ""
     }`,
     curriculumText: sourceInput,
-    curriculumSourceMetadata: {
-      intake: {
-        route: preview.intakeRoute,
-        requestedRoute: preview.requestedRoute,
-        routeVersion: 1,
-        rawText: sourceInput,
-        assetIds: resolvedSource.assetIds,
-        learnerId: null,
-        confidence: preview.confidence,
-        sourceKind: preview.sourceKind,
-        inferredHorizon: preview.inferredHorizon,
-        chosenHorizon: preview.chosenHorizon,
-        horizonDecisionSource: preview.horizonDecisionSource,
-        assumptions: preview.assumptions,
-        detectedChunks: preview.detectedChunks,
-        followUpQuestion: preview.followUpQuestion ?? null,
-        needsConfirmation: preview.needsConfirmation,
-        sourcePackageId: resolvedSource.sourcePackage?.id ?? null,
-        sourceModality: resolvedSource.sourcePackage?.modality ?? "text",
-        learningCoreLineage: sourceInterpretResult.lineage,
-        createdFrom: "onboarding_fast_path",
-      },
-    },
+    curriculumSourceMetadata: {},
+  };
+  const intakeMetadata = {
+    route: preview.intakeRoute,
+    requestedRoute: preview.requestedRoute,
+    routeVersion: 1,
+    rawText: sourceInput,
+    assetIds: resolvedSource.assetIds,
+    learnerId: null,
+    confidence: preview.confidence,
+    sourceKind: preview.sourceKind,
+    inferredHorizon: preview.inferredHorizon,
+    chosenHorizon: preview.chosenHorizon,
+    horizonDecisionSource: preview.horizonDecisionSource,
+    assumptions: preview.assumptions,
+    detectedChunks: preview.detectedChunks,
+    followUpQuestion: preview.followUpQuestion ?? null,
+    needsConfirmation: preview.needsConfirmation,
+    sourcePackageId: resolvedSource.sourcePackage?.id ?? null,
+    sourceModality: resolvedSource.sourcePackage?.modality ?? "text",
+    learningCoreLineage: sourceInterpretResult.lineage,
+    curriculumMode,
+    createdFrom: "onboarding_fast_path" as const,
   };
 
   await trackProductEvent({
@@ -1308,8 +1309,15 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
   });
 
   const { primaryLearner } = await persistHomeschoolSetupBase(setupInput);
-  const curriculum = await initializeCurriculum(setupInput, primaryLearner);
-  const sourceId = "sourceId" in curriculum ? curriculum.sourceId : curriculum.id;
+  const boundedCurriculum = await createFastPathBoundedCurriculum({
+    organizationId: input.organizationId,
+    learnerName: preview.learnerTarget,
+    sourceText: sourceInput,
+    preview,
+    intakeMetadata,
+  });
+  const curriculum = boundedCurriculum.curriculum;
+  const sourceId = curriculum.id;
   await setLiveCurriculumSource(input.organizationId, sourceId);
 
   const { weekStartDate } = await getOrCreateWeeklyRouteBoardForLearner({
