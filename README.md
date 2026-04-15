@@ -147,6 +147,9 @@ What you should not look for here anymore:
 - Split development is two processes:
   - `homeschool-v2` on `http://localhost:3000`
   - `learning-core` on `http://127.0.0.1:8000`
+- Thin-shell mobile entry points:
+  - `/open` resolves auth, setup, onboarding, learner switching, Today, and direct activity opens
+  - `/api/mobile/bootstrap` returns one shell/bootstrap payload for auth, workspace, launch route, and `learning-core` status
 - Minimum verification in this repo:
   - `corepack pnpm typecheck`
   - `corepack pnpm test:architecture`

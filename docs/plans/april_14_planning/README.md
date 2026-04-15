@@ -9,3 +9,4 @@
 - [Phase 5 Implementation](./phase5_activity_chaining_and_ai_ux_polish_implementation.md)
 - [Phase 6 Implementation](./phase6_weekly_continuity_and_expansion_controls_implementation.md)
 - [Phase 7 Implementation](./phase7_phone_runtime_hardening_implementation.md)
+- [Phase 8 Implementation](./phase8_thin_native_shell_implementation.md)

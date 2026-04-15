@@ -4,7 +4,17 @@ import { NextResponse, type NextRequest } from "next/server";
 import { AUTH_NEXT_COOKIE, sanitizeNextPath } from "@/lib/auth/next";
 import { getClientEnv } from "@/lib/env/client";
 
-const PUBLIC_PATH_PREFIXES = ["/", "/auth", "/_next", "/favicon.ico"];
+const PUBLIC_PATH_PREFIXES = [
+  "/",
+  "/auth",
+  "/_next",
+  "/favicon.ico",
+  "/open",
+  "/icon",
+  "/apple-icon",
+  "/manifest.webmanifest",
+  "/api/mobile/bootstrap",
+];
 
 function isPublicPath(pathname: string) {
   if (

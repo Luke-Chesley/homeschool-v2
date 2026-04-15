@@ -6,6 +6,10 @@
 @source "../lib";
 
 :root {
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-right: env(safe-area-inset-right, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-left: env(safe-area-inset-left, 0px);
   --background: oklch(0.986 0.012 95.4);
   --foreground: oklch(0.262 0.03 195.1);
   --card: oklch(0.995 0.008 95.4 / 0.92);
@@ -114,6 +118,7 @@
     @apply bg-background text-foreground font-sans antialiased;
     background-image: var(--page-gradient);
     min-height: 100vh;
+    --global-tabs-height: 3.5rem;
   }
 
   ::selection {
@@ -204,5 +209,25 @@
 
   .toolbar-row {
     @apply flex flex-wrap items-center gap-2;
+  }
+}
+
+@media (display-mode: standalone) {
+  body {
+    --global-tabs-height: 0px;
+  }
+
+  [data-global-tabs] {
+    display: none;
+  }
+
+  .native-shell-top-inset {
+    padding-top: var(--safe-area-top);
+  }
+
+  .page-shell,
+  .learner-page,
+  .native-shell-page {
+    padding-bottom: calc(1.25rem + var(--safe-area-bottom));
   }
 }
