@@ -17,7 +17,11 @@ import { Card } from "@/components/ui/card";
 import { MarkdownContent } from "@/components/ui/markdown-content";
 import type { StructuredLessonDraft } from "@/lib/lesson-draft/types";
 import { type LessonEvaluationLevel } from "@/lib/session-workspace/evaluation";
-import type { DailyWorkspace, DailyWorkspaceLessonDraft } from "@/lib/planning/types";
+import type {
+  DailyWorkspace,
+  DailyWorkspaceLessonBuild,
+  DailyWorkspaceLessonDraft,
+} from "@/lib/planning/types";
 import { cn } from "@/lib/utils";
 import {
   generateLessonDraftActivityAction,
@@ -665,6 +669,7 @@ export function TodayWorkspaceView({ workspace, sourceId }: TodayWorkspaceViewPr
             workspace={workspace}
             sourceId={sourceId}
             draftState={draftState}
+            buildState={workspace.lessonBuild}
             onDraftChange={handleDraftChange}
             showDraftOutput={false}
             compact
@@ -687,6 +692,7 @@ export function TodayWorkspaceView({ workspace, sourceId }: TodayWorkspaceViewPr
           workspace={workspace}
           sourceId={sourceId}
           draftState={null}
+          buildState={workspace.lessonBuild}
           onDraftChange={handleDraftChange}
         />
       </div>
@@ -874,11 +880,13 @@ export function TodayLessonPlanSection({
   workspace,
   sourceId,
   draftState,
+  buildState,
   onDraftChange,
   showDraftOutput = true,
   compact = false,
 }: TodayWorkspaceViewProps & {
   draftState?: DraftState;
+  buildState?: DailyWorkspaceLessonBuild | null;
   onDraftChange?: (draft: StructuredLessonDraft | string | null) => void;
   showDraftOutput?: boolean;
   compact?: boolean;
@@ -910,6 +918,7 @@ export function TodayLessonPlanSection({
         objectives={workspace.sessionTargets}
         routeItemTitles={workspace.items.map((item) => item.title)}
         draftState={draftState ?? null}
+        buildState={buildState ?? null}
         onDraftChange={onDraftChange}
         showDraftOutput={showDraftOutput}
       />

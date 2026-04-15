@@ -29,8 +29,11 @@ import {
 } from "@/lib/db/schema";
 import type {
   DailyWorkspace,
+  DailyWorkspaceLessonBuild,
   DailyWorkspaceLessonDraft,
   PlanItem,
+  DailyWorkspaceLessonBuildStatus,
+  DailyWorkspaceLessonBuildTrigger,
   WeeklyRouteItem,
 } from "@/lib/planning/types";
 import { completeSessionWorkspace, ensureSessionWorkspace } from "@/lib/session-workspace/service";
@@ -54,6 +57,7 @@ import type { CurriculumSource } from "@/lib/curriculum/types";
 const DEFAULT_UNSCHEDULED_ITEM_COUNT = 4;
 const TODAY_WORKSPACE_PLAN_PURPOSE = "today_workspace";
 const TODAY_LESSON_DRAFTS_KEY = "todayLessonDrafts";
+const TODAY_LESSON_BUILDS_KEY = "todayLessonBuilds";
 
 function addDays(baseDate: string, days: number) {
   const date = new Date(`${baseDate}T12:00:00.000Z`);
@@ -84,6 +88,14 @@ function isLessonEvaluationLevel(value: unknown): value is LessonEvaluationLevel
 
 export function buildTodayLessonDraftFingerprint(itemIds: string[]) {
   return itemIds.join("::");
+}
+
+function isLessonBuildStatus(value: unknown): value is DailyWorkspaceLessonBuildStatus {
+  return value === "queued" || value === "generating" || value === "failed" || value === "ready";
+}
+
+function isLessonBuildTrigger(value: unknown): value is DailyWorkspaceLessonBuildTrigger {
+  return value === "onboarding_auto" || value === "today_resume" || value === "manual";
 }
 
 function readLessonDraftFromMetadata(
@@ -139,6 +151,55 @@ function readLessonDraftFromMetadata(
       typeof candidate.savedAt === "string"
         ? candidate.savedAt
         : new Date().toISOString(),
+  };
+}
+
+function readLessonBuildFromMetadata(
+  metadata: Record<string, unknown> | null | undefined,
+  sourceId: string,
+  routeFingerprint: string,
+): DailyWorkspaceLessonBuild | null {
+  if (!isRecord(metadata)) {
+    return null;
+  }
+
+  const buildSources = metadata[TODAY_LESSON_BUILDS_KEY];
+  if (!isRecord(buildSources)) {
+    return null;
+  }
+
+  const sourceBuilds = buildSources[sourceId];
+  if (!isRecord(sourceBuilds)) {
+    return null;
+  }
+
+  const candidate = sourceBuilds[routeFingerprint];
+  if (!isRecord(candidate) || !isLessonBuildStatus(candidate.status)) {
+    return null;
+  }
+
+  const updatedAt =
+    typeof candidate.updatedAt === "string" ? candidate.updatedAt : new Date().toISOString();
+
+  return {
+    status: candidate.status,
+    trigger: isLessonBuildTrigger(candidate.trigger) ? candidate.trigger : undefined,
+    sourceId: typeof candidate.sourceId === "string" ? candidate.sourceId : sourceId,
+    routeFingerprint:
+      typeof candidate.routeFingerprint === "string"
+        ? candidate.routeFingerprint
+        : routeFingerprint,
+    queuedAt: typeof candidate.queuedAt === "string" ? candidate.queuedAt : undefined,
+    startedAt: typeof candidate.startedAt === "string" ? candidate.startedAt : undefined,
+    completedAt: typeof candidate.completedAt === "string" ? candidate.completedAt : undefined,
+    failedAt: typeof candidate.failedAt === "string" ? candidate.failedAt : undefined,
+    updatedAt,
+    error:
+      typeof candidate.error === "string"
+        ? candidate.error
+        : candidate.error == null
+          ? null
+          : undefined,
   };
 }
 
@@ -491,6 +552,176 @@ export async function getSavedTodayLessonDraft(params: {
   return readLessonDraftFromMetadata(day.metadata, params.sourceId, params.routeFingerprint);
 }
 
+export async function getSavedTodayLessonBuild(params: {
+  organizationId: string;
+  learnerId: string;
+  date: string;
+  sourceId: string;
+  routeFingerprint: string;
+}) {
+  if (!params.routeFingerprint) {
+    return null;
+  }
+
+  const day = await getTodayWorkspaceDay(params);
+  if (!day) {
+    return null;
+  }
+
+  return readLessonBuildFromMetadata(day.metadata, params.sourceId, params.routeFingerprint);
+}
+
+async function writeTodayLessonBuild(params: {
+  organizationId: string;
+  learnerId: string;
+  date: string;
+  sourceId: string;
+  routeFingerprint: string;
+  patch: (
+    current: DailyWorkspaceLessonBuild | null,
+    now: string,
+  ) => DailyWorkspaceLessonBuild;
+}) {
+  const day = await getOrCreateTodayWorkspaceDay(params);
+  const db = getDb();
+  const metadata = isRecord(day.metadata) ? day.metadata : {};
+  const buildSources = isRecord(metadata[TODAY_LESSON_BUILDS_KEY])
+    ? (metadata[TODAY_LESSON_BUILDS_KEY] as Record<string, unknown>)
+    : {};
+  const sourceBuilds = isRecord(buildSources[params.sourceId])
+    ? (buildSources[params.sourceId] as Record<string, unknown>)
+    : {};
+  const current = readLessonBuildFromMetadata(metadata, params.sourceId, params.routeFingerprint);
+  const now = new Date().toISOString();
+  const next = params.patch(current, now);
+
+  await db
+    .update(planDays)
+    .set({
+      metadata: {
+        ...metadata,
+        [TODAY_LESSON_BUILDS_KEY]: {
+          ...buildSources,
+          [params.sourceId]: {
+            ...sourceBuilds,
+            [params.routeFingerprint]: next,
+          },
+        },
+      },
+      updatedAt: new Date(now),
+    })
+    .where(eq(planDays.id, day.id));
+
+  return next;
+}
+
+export async function queueTodayLessonBuild(params: {
+  organizationId: string;
+  learnerId: string;
+  date: string;
+  sourceId: string;
+  routeFingerprint: string;
+  trigger: DailyWorkspaceLessonBuildTrigger;
+}) {
+  return writeTodayLessonBuild({
+    ...params,
+    patch: (current, now) => {
+      if (current?.status === "ready") {
+        return current;
+      }
+
+      return {
+        status: "queued",
+        trigger: params.trigger,
+        sourceId: params.sourceId,
+        routeFingerprint: params.routeFingerprint,
+        queuedAt: current?.queuedAt ?? now,
+        startedAt: current?.startedAt,
+        completedAt: undefined,
+        failedAt: undefined,
+        updatedAt: now,
+        error: null,
+      };
+    },
+  });
+}
+
+export async function markTodayLessonBuildGenerating(params: {
+  organizationId: string;
+  learnerId: string;
+  date: string;
+  sourceId: string;
+  routeFingerprint: string;
+  trigger: DailyWorkspaceLessonBuildTrigger;
+}) {
+  return writeTodayLessonBuild({
+    ...params,
+    patch: (current, now) => ({
+      status: "generating",
+      trigger: params.trigger,
+      sourceId: params.sourceId,
+      routeFingerprint: params.routeFingerprint,
+      queuedAt: current?.queuedAt ?? now,
+      startedAt: now,
+      completedAt: undefined,
+      failedAt: undefined,
+      updatedAt: now,
+      error: null,
+    }),
+  });
+}
+
+export async function markTodayLessonBuildFailed(params: {
+  organizationId: string;
+  learnerId: string;
+  date: string;
+  sourceId: string;
+  routeFingerprint: string;
+  trigger: DailyWorkspaceLessonBuildTrigger;
+  error: string;
+}) {
+  return writeTodayLessonBuild({
+    ...params,
+    patch: (current, now) => ({
+      status: "failed",
+      trigger: params.trigger,
+      sourceId: params.sourceId,
+      routeFingerprint: params.routeFingerprint,
+      queuedAt: current?.queuedAt ?? now,
+      startedAt: current?.startedAt,
+      completedAt: undefined,
+      failedAt: now,
+      updatedAt: now,
+      error: params.error,
+    }),
+  });
+}
+
+export async function markTodayLessonBuildReady(params: {
+  organizationId: string;
+  learnerId: string;
+  date: string;
+  sourceId: string;
+  routeFingerprint: string;
+  trigger: DailyWorkspaceLessonBuildTrigger;
+}) {
+  return writeTodayLessonBuild({
+    ...params,
+    patch: (current, now) => ({
+      status: "ready",
+      trigger: params.trigger,
+      sourceId: params.sourceId,
+      routeFingerprint: params.routeFingerprint,
+      queuedAt: current?.queuedAt ?? now,
+      startedAt: current?.startedAt,
+      completedAt: now,
+      failedAt: undefined,
+      updatedAt: now,
+      error: null,
+    }),
+  });
+}
+
 export async function saveTodayLessonDraft(params: {
   organizationId: string;
   learnerId: string;
@@ -836,6 +1067,7 @@ export async function getTodayWorkspace(params: {
         recoveryOptions: [],
         alternatesByPlanItemId: {},
         lessonDraft: null,
+        lessonBuild: null,
       },
     };
   }
@@ -883,6 +1115,7 @@ export async function getTodayWorkspace(params: {
         recoveryOptions: [],
         alternatesByPlanItemId: {},
         lessonDraft: null,
+        lessonBuild: null,
       },
     };
   }
@@ -909,6 +1142,13 @@ export async function getTodayWorkspace(params: {
   );
   const routeFingerprint = buildTodayLessonDraftFingerprint(selectedPlansWithWorkflow.map((item) => item.id));
   const savedLessonDraft = await getSavedTodayLessonDraft({
+    organizationId: params.organizationId,
+    learnerId: params.learnerId,
+    date: params.date,
+    sourceId: selectedSource.id,
+    routeFingerprint,
+  });
+  const savedLessonBuild = await getSavedTodayLessonBuild({
     organizationId: params.organizationId,
     learnerId: params.learnerId,
     date: params.date,
@@ -952,6 +1192,7 @@ export async function getTodayWorkspace(params: {
     recoveryOptions: [],
     alternatesByPlanItemId,
     lessonDraft: savedLessonDraft,
+    lessonBuild: savedLessonBuild,
   };
   const syncedRecords = await syncDailyWorkspaceSessionRecords({
     organizationId: params.organizationId,

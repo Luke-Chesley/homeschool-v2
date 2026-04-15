@@ -14,7 +14,11 @@ import { generateCurriculumArtifact } from "@/lib/curriculum/ai-draft-service";
 import type { ImportedCurriculumDocument } from "@/lib/curriculum/local-json-import";
 import { getDb } from "@/lib/db/server";
 import { learnerProfiles, learners, organizationPlatformSettings, organizations } from "@/lib/db/schema";
-import { getTodayWorkspace } from "@/lib/planning/today-service";
+import {
+  buildTodayLessonDraftFingerprint,
+  getTodayWorkspace,
+  queueTodayLessonBuild,
+} from "@/lib/planning/today-service";
 import { getOrCreateWeeklyRouteBoardForLearner } from "@/lib/planning/weekly-route-service";
 import { recordHomeschoolAuditEvent } from "@/lib/homeschool/reporting/service";
 import {
@@ -1324,12 +1328,37 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
     learnerId: primaryLearner.id,
     sourceId,
   });
-  await getTodayWorkspace({
+  const todayDate = new Date().toISOString().slice(0, 10);
+  const todayWorkspace = await getTodayWorkspace({
     organizationId: input.organizationId,
     learnerId: primaryLearner.id,
     learnerName: primaryLearner.displayName,
-    date: new Date().toISOString().slice(0, 10),
+    date: todayDate,
   });
+  if (todayWorkspace?.workspace.items.length) {
+    await queueTodayLessonBuild({
+      organizationId: input.organizationId,
+      learnerId: primaryLearner.id,
+      date: todayDate,
+      sourceId,
+      routeFingerprint: buildTodayLessonDraftFingerprint(
+        todayWorkspace.workspace.items.map((item) => item.id),
+      ),
+      trigger: "onboarding_auto",
+    });
+    await trackProductEvent({
+      name: ACTIVATION_EVENT_NAMES.todayLessonBuildQueued,
+      organizationId: input.organizationId,
+      learnerId: primaryLearner.id,
+      metadata: {
+        sourceId,
+        date: todayDate,
+        itemCount: todayWorkspace.workspace.items.length,
+        sourceKind: preview.sourceKind,
+        chosenHorizon: preview.chosenHorizon,
+      },
+    });
+  }
 
   await trackProductEvent({
     name: ACTIVATION_EVENT_NAMES.generationCompleted,
@@ -1407,12 +1436,36 @@ export async function completeHomeschoolOnboarding(rawInput: unknown) {
     sourceId,
   });
 
-  await getTodayWorkspace({
+  const todayDate = new Date().toISOString().slice(0, 10);
+  const todayWorkspace = await getTodayWorkspace({
     organizationId: input.organizationId,
     learnerId: primaryLearner.id,
     learnerName: primaryLearner.displayName,
-    date: new Date().toISOString().slice(0, 10),
+    date: todayDate,
   });
+  if (todayWorkspace?.workspace.items.length) {
+    await queueTodayLessonBuild({
+      organizationId: input.organizationId,
+      learnerId: primaryLearner.id,
+      date: todayDate,
+      sourceId,
+      routeFingerprint: buildTodayLessonDraftFingerprint(
+        todayWorkspace.workspace.items.map((item) => item.id),
+      ),
+      trigger: "onboarding_auto",
+    });
+    await trackProductEvent({
+      name: ACTIVATION_EVENT_NAMES.todayLessonBuildQueued,
+      organizationId: input.organizationId,
+      learnerId: primaryLearner.id,
+      metadata: {
+        sourceId,
+        date: todayDate,
+        itemCount: todayWorkspace.workspace.items.length,
+        curriculumMode: input.curriculumMode,
+      },
+    });
+  }
 
   const organization = await getDb().query.organizations.findFirst({
     where: eq(organizations.id, input.organizationId),
