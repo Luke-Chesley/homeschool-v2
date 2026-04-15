@@ -65,10 +65,6 @@ export function GlobalPageTabs() {
   const workspaceLabel = getWorkspaceLabel(pathname);
   const [session, setSession] = useState<WorkspaceSnapshot | null>(null);
 
-  if (isLearnerRoute) {
-    return null;
-  }
-
   useEffect(() => {
     if (!inWorkspace) {
       setSession(null);
@@ -93,6 +89,10 @@ export function GlobalPageTabs() {
       cancelled = true;
     };
   }, [inWorkspace]);
+
+  if (isLearnerRoute) {
+    return null;
+  }
 
   return (
     <div className="sticky top-0 z-40 border-b border-border/70 bg-background/92 backdrop-blur">

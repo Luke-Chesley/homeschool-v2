@@ -6,7 +6,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 
 import { ActivityRenderer } from "@/components/activities/ActivityRenderer";
 import { ActivityStudioPanel } from "@/components/activities/ActivityStudioPanel";
@@ -195,8 +195,24 @@ export default function ActivitySessionPage({ params }: Props) {
   if (loading) {
     return (
       <div className="learner-reading-surface">
-        <div className="learner-reading-column flex items-center justify-center py-12">
-          <p className="text-sm text-muted-foreground">Loading activity…</p>
+        <div className="learner-reading-column space-y-4 py-2">
+          <div className="space-y-2">
+            <div className="h-3 w-24 rounded-full bg-muted/80" />
+            <div className="h-9 w-3/4 rounded-2xl bg-muted/80" />
+            <div className="h-4 w-full rounded-full bg-muted/70" />
+            <div className="h-4 w-2/3 rounded-full bg-muted/70" />
+          </div>
+          <div className="rounded-xl border border-border/70 bg-background/80 p-4">
+            <div className="flex items-start gap-3">
+              <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-primary" />
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-foreground">Loading activity…</p>
+                <p className="text-sm text-muted-foreground">
+                  Restoring the learner session and any saved progress from this activity.
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -228,7 +244,6 @@ export default function ActivitySessionPage({ params }: Props) {
         </p>
       </div>
 
-      {/* Activity surface */}
       <div className="space-y-6">
         <ActivityRenderer
           definition={session.definition}
@@ -258,7 +273,7 @@ export default function ActivitySessionPage({ params }: Props) {
                 This session is finished and saved to today’s work.
               </p>
               <Link href="/learner">
-                <Button variant="outline">Back to queue</Button>
+                <Button variant="outline" size="sm">Back to queue</Button>
               </Link>
             </div>
           </div>

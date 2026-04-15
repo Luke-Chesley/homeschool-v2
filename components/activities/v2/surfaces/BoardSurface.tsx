@@ -238,15 +238,6 @@ export function BoardSurface({
     },
   };
   const parsedPosition = parseFenPosition(renderFen);
-
-  if (!parsedPosition) {
-    return (
-      <div className="rounded-xl border border-border bg-muted/20 p-4 text-sm text-muted-foreground">
-        Board state is invalid and cannot be rendered.
-      </div>
-    );
-  }
-
   const activeFeedback = transitionFeedback ?? feedback ?? null;
   const boardLocked = disabled || pendingTransition || activeFeedback?.allowRetry === false;
   const allowInput = widgetForRequest.interaction.mode === "move_input";
@@ -254,7 +245,7 @@ export function BoardSurface({
   const files = orientation === "black" ? [...FILES].reverse() : [...FILES];
   const ranks = orientation === "black" ? [...RANKS_BLACK] : [...RANKS_WHITE];
   const inlineFeedback = widgetForRequest.feedback.displayMode === "inline" ? activeFeedback : null;
-  const sideToMoveLabel = parsedPosition.sideToMove === "white" ? "White to move" : "Black to move";
+  const sideToMoveLabel = parsedPosition?.sideToMove === "black" ? "Black to move" : "White to move";
   const instructionText = widgetInstructionText(widgetForRequest);
   const caption = widgetCaption(widgetForRequest);
   const moveHint = buildMoveHint(widgetForRequest);
@@ -278,6 +269,14 @@ export function BoardSurface({
     },
     { disabled: !dragEnabled },
   );
+
+  if (!parsedPosition) {
+    return (
+      <div className="rounded-xl border border-border bg-muted/20 p-4 text-sm text-muted-foreground">
+        Board state is invalid and cannot be rendered.
+      </div>
+    );
+  }
 
   async function requestTransition(
     learnerAction:

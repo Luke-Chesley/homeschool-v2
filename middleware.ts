@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+import { AUTH_NEXT_COOKIE, sanitizeNextPath } from "@/lib/auth/next";
 import { getClientEnv } from "@/lib/env/client";
 
 const PUBLIC_PATH_PREFIXES = ["/", "/auth", "/_next", "/favicon.ico"];
@@ -44,10 +45,18 @@ export async function middleware(request: NextRequest) {
     return NextResponse.json({ error: "Sign in is required." }, { status: 401 });
   }
 
+  const requestedPath = sanitizeNextPath(request.nextUrl.pathname + request.nextUrl.search, "/");
   const loginUrl = request.nextUrl.clone();
   loginUrl.pathname = "/auth/login";
-  loginUrl.searchParams.set("next", request.nextUrl.pathname + request.nextUrl.search);
-  return NextResponse.redirect(loginUrl);
+  loginUrl.searchParams.set("next", requestedPath);
+
+  const redirectResponse = NextResponse.redirect(loginUrl);
+  redirectResponse.cookies.set(AUTH_NEXT_COOKIE, requestedPath, {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+  });
+  return redirectResponse;
 }
 
 export const config = {

@@ -357,7 +357,7 @@ export function ActivitySpecRenderer({
                   <button
                     type="button"
                     onClick={() => focusMissingComponent(nextMissingComponent.id)}
-                    className="inline-flex items-center rounded-md border border-amber-300 bg-white/70 px-2.5 py-1.5 text-xs font-medium text-amber-900 transition-colors hover:bg-white"
+                    className="inline-flex min-h-11 items-center rounded-md border border-amber-300 bg-white/70 px-3 py-2 text-sm font-medium text-amber-900 transition-colors hover:bg-white sm:min-h-8 sm:px-2.5 sm:py-1.5 sm:text-xs"
                   >
                     Go to the next missing step
                   </button>
@@ -368,13 +368,14 @@ export function ActivitySpecRenderer({
         ) : null}
 
         {!submitted && onSubmit ? (
-          <div className="flex flex-wrap items-center justify-end gap-3 border-t border-border/70 pt-4">
+          <div className="flex flex-col gap-3 border-t border-border/70 pt-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
             {spec.adaptationRules?.allowSkip ? (
               <Button
                 variant="ghost"
                 size="sm"
                 disabled={submitting}
                 onClick={() => onSubmit(evidence)}
+                className="min-h-11 w-full justify-center sm:min-h-8 sm:w-auto"
               >
                 Skip
               </Button>
@@ -383,6 +384,7 @@ export function ActivitySpecRenderer({
               size="sm"
               disabled={submitting}
               onClick={handleSubmitAttempt}
+              className="min-h-11 w-full justify-center sm:min-h-8 sm:w-auto"
             >
               {submitting ? "Submitting…" : canSubmit() ? "Submit" : "Review missing steps"}
             </Button>
