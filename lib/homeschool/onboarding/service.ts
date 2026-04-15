@@ -1,6 +1,6 @@
 import "@/lib/server-only";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { z } from "zod";
 
 import { homeschoolTemplate } from "@/config/templates/homeschool";
@@ -13,7 +13,15 @@ import type { CurriculumAiChatMessage } from "@/lib/curriculum/ai-draft";
 import { generateCurriculumArtifact } from "@/lib/curriculum/ai-draft-service";
 import type { ImportedCurriculumDocument } from "@/lib/curriculum/local-json-import";
 import { getDb } from "@/lib/db/server";
-import { learnerProfiles, learners, organizationPlatformSettings, organizations } from "@/lib/db/schema";
+import {
+  curriculumSources,
+  learnerProfiles,
+  learners,
+  lessonSessions,
+  organizationPlatformSettings,
+  organizations,
+  plans,
+} from "@/lib/db/schema";
 import {
   buildTodayLessonDraftFingerprint,
   getTodayWorkspace,
@@ -592,19 +600,45 @@ function buildAiMessages(input: HomeschoolOnboardingInput): CurriculumAiChatMess
 }
 
 export async function getHomeschoolOnboardingStatus(organizationId: string) {
-  const organization = await getDb().query.organizations.findFirst({
-    where: eq(organizations.id, organizationId),
-  });
+  const db = getDb();
+  const [organization, activeLearner, curriculumSource, plan, lessonSession] = await Promise.all([
+    db.query.organizations.findFirst({
+      where: eq(organizations.id, organizationId),
+    }),
+    db.query.learners.findFirst({
+      where: and(eq(learners.organizationId, organizationId), ne(learners.status, "archived")),
+      columns: { id: true },
+    }),
+    db.query.curriculumSources.findFirst({
+      where: and(
+        eq(curriculumSources.organizationId, organizationId),
+        ne(curriculumSources.status, "archived"),
+      ),
+      columns: { id: true },
+    }),
+    db.query.plans.findFirst({
+      where: and(eq(plans.organizationId, organizationId), ne(plans.status, "archived")),
+      columns: { id: true },
+    }),
+    db.query.lessonSessions.findFirst({
+      where: eq(lessonSessions.organizationId, organizationId),
+      columns: { id: true },
+    }),
+  ]);
   const metadata = asRecord(organization?.metadata);
   const homeschool = asRecord(metadata.homeschool);
   const onboarding = asRecord(homeschool.onboarding);
   const milestones = toMilestoneList(onboarding.milestones);
   const currentMilestone = milestones[milestones.length - 1] ?? null;
   const completedAt = typeof onboarding.completedAt === "string" ? onboarding.completedAt : null;
+  const inferredLegacyCompletion =
+    activeLearner !== undefined &&
+    (curriculumSource !== undefined || plan !== undefined || lessonSession !== undefined);
   const isComplete =
     completedAt !== null ||
     milestones.includes("first_day_ready") ||
-    milestones.includes("week_ready");
+    milestones.includes("week_ready") ||
+    inferredLegacyCompletion;
 
   return { isComplete, completedAt, milestones, currentMilestone } satisfies HomeschoolOnboardingStatus;
 }
