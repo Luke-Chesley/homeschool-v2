@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 
 import { ACTIVATION_EVENT_NAMES } from "@/lib/homeschool/onboarding/activation-contracts";
-import { trackProductEvent } from "@/lib/platform/observability";
+import { trackProductEvent } from "@/lib/platform/observability-client";
 
 export function BillingOfferViewTracker({
   organizationId,

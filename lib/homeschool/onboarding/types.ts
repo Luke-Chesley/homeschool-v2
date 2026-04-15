@@ -76,7 +76,8 @@ export type HomeschoolFastPathOnboardingInput = {
   organizationId: string;
   learnerName: string;
   intakeRoute: FastPathIntakeRoute;
-  sourceInput: string;
+  sourceInput?: string;
+  sourcePackageId?: string;
   horizonIntent?: FastPathHorizonIntent;
   confirmPreview?: boolean;
   previewCorrections?: {

@@ -22,6 +22,7 @@ import {
   ONBOARDING_MILESTONES,
   type OnboardingMilestone,
 } from "@/lib/homeschool/onboarding/activation-contracts";
+import { getNormalizedIntakeSourcePackage } from "@/lib/homeschool/intake/service";
 import { trackProductEvent } from "@/lib/platform/observability";
 
 import {
@@ -113,7 +114,8 @@ const RawHomeschoolFastPathOnboardingSchema = z.object({
   learnerName: z.string().trim().min(1).max(80),
   intakeRoute: FastPathIntakeRouteInputSchema.optional(),
   intakeType: FastPathIntakeRouteInputSchema.optional(),
-  sourceInput: z.string().trim().min(1).max(12000),
+  sourceInput: z.string().trim().min(1).max(12000).optional(),
+  sourcePackageId: z.string().min(1).optional(),
   horizonIntent: z.enum(["today_only", "auto"]).optional(),
   confirmPreview: z.boolean().optional(),
   previewCorrections: z
@@ -135,12 +137,21 @@ export const HomeschoolFastPathOnboardingSchema = RawHomeschoolFastPathOnboardin
         path: ["intakeRoute"],
       });
     }
+
+    if (!input.sourceInput && !input.sourcePackageId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Source input or source package is required.",
+        path: ["sourceInput"],
+      });
+    }
   },
 ).transform((input) => ({
   organizationId: input.organizationId,
   learnerName: input.learnerName,
   intakeRoute: normalizeFastPathIntakeRoute(input.intakeRoute ?? input.intakeType!),
   sourceInput: input.sourceInput,
+  sourcePackageId: input.sourcePackageId,
   horizonIntent: input.horizonIntent,
   confirmPreview: input.confirmPreview,
   previewCorrections: input.previewCorrections,
@@ -867,8 +878,44 @@ function buildPreviewTitle(input: {
   return `${prefix}: ${input.sourceInput.trim().slice(0, 48)}`;
 }
 
+async function resolveFastPathSource(params: Pick<
+  HomeschoolFastPathOnboardingInput,
+  "sourceInput" | "sourcePackageId"
+>) {
+  if (params.sourcePackageId) {
+    const sourcePackage = await getNormalizedIntakeSourcePackage(params.sourcePackageId);
+    const normalizedText = sourcePackage.normalizedText.trim();
+
+    if (!normalizedText) {
+      throw new Error("The selected source package did not produce usable text.");
+    }
+
+    return {
+      sourceInput: normalizedText,
+      sourcePackage,
+      assetIds: sourcePackage.assets.map((asset) => asset.id),
+    };
+  }
+
+  const sourceInput = params.sourceInput?.trim() ?? "";
+  if (!sourceInput) {
+    throw new Error("Source input is required.");
+  }
+
+  return {
+    sourceInput,
+    sourcePackage: null,
+    assetIds: [],
+  };
+}
+
 function buildFastPathPreview(
-  input: Pick<HomeschoolFastPathOnboardingInput, "learnerName" | "intakeRoute" | "sourceInput" | "horizonIntent">,
+  input: {
+    learnerName: string;
+    intakeRoute: FastPathIntakeRoute;
+    sourceInput: string;
+    horizonIntent?: "today_only" | "auto";
+  },
   corrections?: HomeschoolFastPathOnboardingInput["previewCorrections"],
 ): HomeschoolFastPathPreview {
   const detectedChunks = extractDetectedChunks(input.sourceInput);
@@ -931,6 +978,7 @@ async function markOnboardingMilestone(params: {
 
 export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPathOnboardingInput) {
   const input = HomeschoolFastPathOnboardingSchema.parse(rawInput);
+  const resolvedSource = await resolveFastPathSource(input);
   await markOnboardingMilestone({
     organizationId: input.organizationId,
     milestone: "fast_path_started",
@@ -953,10 +1001,21 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
   await trackProductEvent({
     name: ACTIVATION_EVENT_NAMES.intakeSourceSubmitted,
     organizationId: input.organizationId,
-    metadata: { sourceLength: input.sourceInput.trim().length },
+    metadata: {
+      sourceLength: resolvedSource.sourceInput.length,
+      sourcePackageId: resolvedSource.sourcePackage?.id ?? null,
+      sourceModality: resolvedSource.sourcePackage?.modality ?? "text",
+      assetCount: resolvedSource.assetIds.length,
+    },
   });
 
-  const preview = buildFastPathPreview(input, input.previewCorrections);
+  const preview = buildFastPathPreview(
+    {
+      ...input,
+      sourceInput: resolvedSource.sourceInput,
+    },
+    input.previewCorrections,
+  );
   if ((preview.confidence === "low" || preview.confidence === "medium") && !input.confirmPreview) {
     return {
       mode: "preview_required" as const,
@@ -975,7 +1034,7 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
     pacePreference: "balanced" as const,
     loadPreference: "balanced" as const,
   };
-  const sourceInput = input.sourceInput.trim();
+  const sourceInput = resolvedSource.sourceInput;
   const setupInput: HomeschoolOnboardingPayload = {
     organizationId: input.organizationId,
     householdName: "Homeschool Household",
@@ -985,14 +1044,16 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
     learners: [learnerInput],
     curriculumMode,
     curriculumTitle: preview.title,
-    curriculumSummary: `Fast-path intake (${preview.intakeRoute.replaceAll("_", " ")})`,
+    curriculumSummary: `Fast-path intake (${preview.intakeRoute.replaceAll("_", " ")})${
+      resolvedSource.sourcePackage ? ` · ${resolvedSource.sourcePackage.modality}` : ""
+    }`,
     curriculumText: sourceInput,
     curriculumSourceMetadata: {
       intake: {
         route: preview.intakeRoute,
         routeVersion: 1,
         rawText: sourceInput,
-        assetIds: [],
+        assetIds: resolvedSource.assetIds,
         learnerId: null,
         confidence: preview.confidence,
         inferredHorizon: preview.inferredHorizon,
@@ -1000,6 +1061,8 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
         horizonDecisionSource: preview.horizonDecisionSource,
         assumptions: preview.assumptions,
         detectedChunks: preview.detectedChunks,
+        sourcePackageId: resolvedSource.sourcePackage?.id ?? null,
+        sourceModality: resolvedSource.sourcePackage?.modality ?? "text",
         createdFrom: "onboarding_fast_path",
       },
     },
@@ -1049,6 +1112,8 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
       intake: {
         route: preview.intakeRoute,
         sourceInput,
+        sourcePackageId: resolvedSource.sourcePackage?.id ?? null,
+        sourceModality: resolvedSource.sourcePackage?.modality ?? "text",
         confidence: preview.confidence,
         inferredHorizon: preview.inferredHorizon,
         chosenHorizon: preview.chosenHorizon,

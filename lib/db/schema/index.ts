@@ -1,3 +1,4 @@
+export * from "@/lib/db/schema/aiIntake";
 export * from "@/lib/db/schema/activities";
 export * from "@/lib/db/schema/copilot";
 export * from "@/lib/db/schema/curriculum";
