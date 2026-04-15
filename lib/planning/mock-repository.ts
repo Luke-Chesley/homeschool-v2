@@ -962,6 +962,10 @@ function buildDailyWorkspace(date: string): DailyWorkspace {
     alternatesByPlanItemId,
     lessonDraft: null,
     lessonBuild: null,
+    activityBuild: null,
+    activityState: { status: "no_draft" },
+    lessonRegenerationNote: null,
+    expansionIntent: null,
   };
 }
 

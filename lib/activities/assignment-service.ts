@@ -1,5 +1,7 @@
 import "@/lib/server-only";
 
+import { createHash } from "node:crypto";
+
 /**
  * Assignment service — lesson-draft-owned activity creation.
  *
@@ -27,6 +29,15 @@ import type { StructuredLessonDraft } from "@/lib/lesson-draft/types";
 import { computeLessonDraftFingerprint } from "@/lib/lesson-draft/fingerprint";
 import { generateLessonDraftActivitySpec } from "@/lib/learning-core/activity";
 
+function buildLessonDraftActivityId(lessonSessionId: string, lessonDraftFingerprint: string) {
+  const fingerprint = createHash("sha256")
+    .update(`${lessonSessionId}:${lessonDraftFingerprint}`)
+    .digest("hex")
+    .slice(0, 24);
+
+  return `activity_${fingerprint}`;
+}
+
 // ---------------------------------------------------------------------------
 // Lesson-draft-owned activity publishing
 // ---------------------------------------------------------------------------
@@ -50,7 +61,7 @@ export async function publishActivityForLessonDraft(params: {
   workflowMode: string;
   planItems?: PlanItem[];
   leadPlanItemId?: string;
-}): Promise<void> {
+}): Promise<{ activityId: string; reusedExisting: boolean }> {
   const repos = createRepositories(getDb());
 
   // Idempotent check — same draft version already published
@@ -59,7 +70,7 @@ export async function publishActivityForLessonDraft(params: {
     params.lessonDraftFingerprint,
   );
   if (existingForDraft?.status === "published") {
-    return;
+    return { activityId: existingForDraft.id, reusedExisting: true };
   }
 
   // Stale check — archive any published activity with a different fingerprint
@@ -81,7 +92,8 @@ export async function publishActivityForLessonDraft(params: {
 
   const planItems = params.planItems ?? [];
 
-  await repos.activities.createActivity({
+  const activity = await repos.activities.upsertActivity({
+    id: buildLessonDraftActivityId(params.lessonSessionId, params.lessonDraftFingerprint),
     organizationId: params.organizationId,
     learnerId: params.learnerId,
     planItemId: params.leadPlanItemId ?? null,
@@ -116,6 +128,8 @@ export async function publishActivityForLessonDraft(params: {
       learningCoreModel: genResult.lineage.model,
     },
   });
+
+  return { activityId: activity.id, reusedExisting: false };
 }
 
 // ---------------------------------------------------------------------------
