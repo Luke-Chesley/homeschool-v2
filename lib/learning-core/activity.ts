@@ -24,10 +24,40 @@ export interface BuildLearningCoreActivityInputParams {
   leadPlanItemId?: string | null;
 }
 
+function buildPlanItemFeedbackNotes(planItems: PlanItem[]) {
+  return uniqueStrings(
+    planItems.flatMap((item) => {
+      const evaluation = item.latestEvaluation;
+      if (!evaluation) {
+        return [];
+      }
+
+      const summary = evaluation.note?.trim().length
+        ? `${item.title}: ${evaluation.label}. ${evaluation.note.trim()}`
+        : `${item.title}: ${evaluation.label}.`;
+
+      return [summary];
+    }),
+  );
+}
+
+function buildRecentLessonOutcomes(planItems: PlanItem[]) {
+  return planItems
+    .filter((item) => item.latestEvaluation)
+    .slice(0, 5)
+    .map((item) => ({
+      title: item.title,
+      status: item.latestEvaluation!.label,
+      date: item.latestEvaluation!.createdAt.slice(0, 10),
+    }));
+}
+
 export function buildLearningCoreActivityGenerateInput(
   params: BuildLearningCoreActivityInputParams,
 ) {
   const planItems = params.planItems ?? [];
+  const feedbackNotes = buildPlanItemFeedbackNotes(planItems);
+  const recentLessonOutcomes = buildRecentLessonOutcomes(planItems);
 
   return {
     learner_name: params.learnerName,
@@ -41,6 +71,8 @@ export function buildLearningCoreActivityGenerateInput(
     linked_skill_titles: uniqueStrings(planItems.map((item) => item.title)),
     linked_objective_ids: [],
     standard_ids: uniqueStrings(planItems.flatMap((item) => item.standards ?? [])),
+    feedback_notes: feedbackNotes,
+    recent_lesson_outcomes: recentLessonOutcomes,
     lesson_draft: params.lessonDraft,
   };
 }

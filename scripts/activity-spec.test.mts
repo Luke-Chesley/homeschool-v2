@@ -901,6 +901,35 @@ test("buildLearningCoreActivityGenerateInput — plan items are traceability onl
   assert.equal(input.lesson_draft.title, sampleLessonDraft.title);
 });
 
+test("buildLearningCoreActivityGenerateInput — includes recent lesson outcomes for adaptation", () => {
+  const input = buildLearningCoreActivityGenerateInput({
+    lessonDraft: sampleLessonDraft,
+    learnerName: "Alex",
+    planItems: [
+      {
+        ...samplePlanItem,
+        latestEvaluation: {
+          level: "partial",
+          label: "Partial",
+          note: "Needed extra prompting on the final two problems.",
+          createdAt: "2026-04-15T18:30:00.000Z",
+        },
+      },
+    ],
+  });
+
+  assert.deepEqual(input.feedback_notes, [
+    "Long Division: Partial. Needed extra prompting on the final two problems.",
+  ]);
+  assert.deepEqual(input.recent_lesson_outcomes, [
+    {
+      title: "Long Division",
+      status: "Partial",
+      date: "2026-04-15",
+    },
+  ]);
+});
+
 test("computeLessonDraftFingerprint — same draft produces same fingerprint", () => {
   const fp1 = computeLessonDraftFingerprint(sampleLessonDraft);
   const fp2 = computeLessonDraftFingerprint(sampleLessonDraft);

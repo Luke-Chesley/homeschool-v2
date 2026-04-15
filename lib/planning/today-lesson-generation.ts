@@ -36,6 +36,38 @@ function buildTodayLessonGenerationSummary(params: {
   };
 }
 
+function buildLessonOutcomeFeedback(params: {
+  workspaceResult: TodayWorkspaceResult;
+}) {
+  const { workspaceResult } = params;
+  const feedbackNotes = [...(workspaceResult.planningContext?.feedbackNotes ?? [])];
+  const recentOutcomes = workspaceResult.workspace.items
+    .filter((item) => item.latestEvaluation)
+    .slice(0, 5)
+    .map((item) => {
+      const evaluation = item.latestEvaluation!;
+      const title = item.title;
+      const status = evaluation.label;
+      const date = evaluation.createdAt.slice(0, 10);
+      const summary = evaluation.note?.trim().length
+        ? `${title}: ${status}. ${evaluation.note.trim()}`
+        : `${title}: ${status}.`;
+
+      feedbackNotes.push(summary);
+
+      return {
+        title,
+        status,
+        date,
+      };
+    });
+
+  return {
+    feedbackNotes,
+    recentOutcomes,
+  };
+}
+
 async function buildTodayLessonGenerationContext(params: {
   organizationId: string;
   learnerId: string;
@@ -68,6 +100,7 @@ async function buildTodayLessonGenerationContext(params: {
     sourceId,
     routeFingerprint,
   });
+  const lessonOutcomeFeedback = buildLessonOutcomeFeedback({ workspaceResult });
 
   const input = {
     title: sourceTitle,
@@ -97,8 +130,8 @@ async function buildTodayLessonGenerationContext(params: {
       goalIds: workspace.items.flatMap((item) => item.goals),
       curriculumSnapshot: planningContext?.curriculumSnapshot,
       weeklyPlanningSnapshot: planningContext?.weeklyPlanningSnapshot,
-      feedbackNotes: planningContext?.feedbackNotes ?? [],
-      recentOutcomes: [],
+      feedbackNotes: lessonOutcomeFeedback.feedbackNotes,
+      recentOutcomes: lessonOutcomeFeedback.recentOutcomes,
       onboardingIntake: intake
         ? {
             requestedRoute: intake.requestedRoute,

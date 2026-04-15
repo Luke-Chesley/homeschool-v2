@@ -740,6 +740,162 @@ function TodayPlanItemEvaluationControl({
   );
 }
 
+function LessonDraftOutcomeControl({
+  item,
+  date,
+}: {
+  item: DailyWorkspace["items"][number];
+  date: string;
+}) {
+  type SavedLessonOutcome = {
+    level: LessonEvaluationLevel;
+    label: string;
+    note?: string | null;
+    createdAt: string;
+  };
+
+  const [pendingLevel, setPendingLevel] = useState<LessonEvaluationLevel | null>(null);
+  const [savedEvaluation, setSavedEvaluation] = useState<SavedLessonOutcome | null>(
+    item.latestEvaluation ?? null,
+  );
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  useEffect(() => {
+    setPendingLevel(null);
+    setSavedEvaluation(item.latestEvaluation ?? null);
+    setError(null);
+  }, [item.id, item.latestEvaluation]);
+
+  function saveOutcome(level: LessonEvaluationLevel) {
+    setError(null);
+    setPendingLevel(level);
+
+    startTransition(async () => {
+      const result = await saveTodayPlanItemEvaluationAction({
+        date,
+        planItemId: item.id,
+        level,
+      });
+
+      if (!result.ok || !result.evaluation) {
+        setError(result.error ?? "Could not save this lesson outcome.");
+        setPendingLevel(null);
+        return;
+      }
+
+      setSavedEvaluation(result.evaluation);
+      setPendingLevel(null);
+      setOpen(false);
+    });
+  }
+
+  const options: Array<{
+    level: LessonEvaluationLevel;
+    label: string;
+    toneClassName?: string;
+  }> = [
+    {
+      level: "successful",
+      label: "Complete",
+      toneClassName: "border-primary/30 bg-primary/5 text-primary hover:bg-primary/10",
+    },
+    {
+      level: "partial",
+      label: "Partial",
+    },
+    {
+      level: "needs_more_work",
+      label: "Needs support",
+    },
+  ];
+
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target;
+      if (!(target instanceof Element)) {
+        return;
+      }
+
+      if (!target.closest(`[data-lesson-outcome-root="${item.id}"]`)) {
+        setOpen(false);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    }
+
+    window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [item.id, open]);
+
+  return (
+    <div className="relative" data-lesson-outcome-root={item.id}>
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        className={cn(
+          "inline-flex items-center gap-2 rounded-md border border-border/60 bg-background/80 px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          savedEvaluation ? "border-primary/20 text-foreground" : undefined,
+        )}
+      >
+        <span>How&apos;d it go?</span>
+        {savedEvaluation ? (
+          <span className="rounded-full bg-muted px-1.5 py-0.5 text-[11px] leading-none text-foreground">
+            {savedEvaluation.label}
+          </span>
+        ) : null}
+      </button>
+
+      {open ? (
+        <div className="absolute right-0 top-full z-20 mt-2 w-56 rounded-lg border border-border/70 bg-background/98 p-2 shadow-[var(--shadow-card)]">
+          <p className="px-2 pb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            Save lesson outcome
+          </p>
+          <div className="grid gap-1">
+            {options.map((option) => {
+              const active = savedEvaluation?.level === option.level;
+              const loading = pendingLevel === option.level;
+
+              return (
+                <button
+                  key={option.level}
+                  type="button"
+                  onClick={() => saveOutcome(option.level)}
+                  disabled={isPending}
+                  aria-pressed={active}
+                  className={cn(
+                    "flex min-h-9 items-center justify-between rounded-md border border-border bg-background px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60",
+                    active ? option.toneClassName : undefined,
+                    active && !option.toneClassName ? "border-foreground/20 bg-muted/60" : undefined,
+                  )}
+                >
+                  <span>{option.label}</span>
+                  {loading ? <Loader2 className="size-3.5 animate-spin" /> : null}
+                </button>
+              );
+            })}
+          </div>
+          {error ? <p className="px-2 pt-2 text-xs text-destructive">{error}</p> : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 
 export function TodayWorkspaceView({ workspace, sourceId }: TodayWorkspaceViewProps) {
@@ -977,7 +1133,16 @@ function TodayLessonDraftArticle({
 }) {
   const draftContent =
     draftState.kind === "structured" ? (
-      <LessonDraftRenderer draft={draftState.draft} />
+      <LessonDraftRenderer
+        draft={draftState.draft}
+        renderBlockFooter={(_block, index) => (
+          <LessonDraftOutcomeControl
+            item={workspace.leadItem}
+            date={workspace.date}
+            key={`${workspace.leadItem.id}-${index}`}
+          />
+        )}
+      />
     ) : draftState.kind === "markdown" ? (
       <div className="space-y-4">
         <LegacyLessonDraftNotice />
