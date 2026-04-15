@@ -105,6 +105,8 @@ Best recurring local setup:
 - one `multi_learner_parent` account ready for switching and complexity review
 - one `active_learner` account or session ready for responsive learner QA
 
+Use the shared local fake-account registry at `/home/luke/Desktop/learning/codex-agent-loop-harness/LOCAL_TEST_USERS.md` for reusable seeded accounts when possible.
+
 ## Coverage Guidance
 
 If time is limited:

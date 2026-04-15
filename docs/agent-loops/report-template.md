@@ -33,6 +33,7 @@
 - activity interaction summary:
 - component / widget summary:
 - screenshot artifacts:
+- account used or created:
 - screenshots / artifact paths:
 
 ## Rubric scores

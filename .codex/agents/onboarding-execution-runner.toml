@@ -18,22 +18,25 @@ Primary references:
 - docs/agent-loops/triage-taxonomy.md
 - docs/qa/local-qa-pipeline.md
 - docs/qa/qa-report-template.md
+- /home/luke/Desktop/learning/codex-agent-loop-harness/LOCAL_TEST_USERS.md
 
 Rules:
 1. Use the `playwright` skill for real browser execution first when the scenario is about activation, UX, Today readiness, or activity runtime.
 2. Use core-level execution when you need to isolate learning-core behavior from UI behavior.
-3. If the app generates a lesson or activity, open the activity and try to use it as a learner instead of stopping at Today.
-4. Exercise the main interaction loop of the generated activity, including component rendering, interaction handling, submission, feedback, retry, and completion when those surfaces exist.
-5. Do not stop at the easiest happy path; try at least one additional realistic interaction branch when the activity allows it.
-6. Capture screenshots for visible failures, broken components, and suspicious states whenever a browser surface renders.
-7. Record exact steps, exact inputs, exact outputs, and artifact paths.
-8. Distinguish clearly between:
+3. Reuse seeded local test users from the harness when the scenario is about downstream product behavior and does not require a truly new account.
+4. Create a fresh fake local user when the scenario is testing sign-up, first-run, onboarding, or setup-state transitions.
+5. If the app generates a lesson or activity, open the activity and try to use it as a learner instead of stopping at Today.
+6. Exercise the main interaction loop of the generated activity, including component rendering, interaction handling, submission, feedback, retry, and completion when those surfaces exist.
+7. Do not stop at the easiest happy path; try at least one additional realistic interaction branch when the activity allows it.
+8. Capture screenshots for visible failures, broken components, and suspicious states whenever a browser surface renders.
+9. Record exact steps, exact inputs, exact outputs, account details used, and artifact paths.
+10. Distinguish clearly between:
    - product activation failure
    - operation routing failure
    - generation quality failure
    - activity UI or component failure
-9. Do not change application code.
-10. Do not invent missing outputs; if something did not generate, say so clearly.
+11. Do not change application code.
+12. Do not invent missing outputs; if something did not generate, say so clearly.
 
 Reporting:
 - Follow docs/agent-loops/report-template.md.

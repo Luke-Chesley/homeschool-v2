@@ -48,7 +48,7 @@ Unless a prompt says otherwise, agents should test:
 
 1. Pick the QA prompts that match the flows you changed.
 2. Give the agent the prompt file or paste the prompt content directly.
-3. Provide current credentials separately if needed.
+3. Use the seeded fake accounts in `/home/luke/Desktop/learning/codex-agent-loop-harness/LOCAL_TEST_USERS.md` when you want stable local state, and create a fresh fake account when the flow specifically needs new-user coverage.
 4. Require a report with:
    - findings
    - execution log
@@ -115,4 +115,5 @@ Before merge to `main` or before a staging push:
 - Agents should not stop at route discovery or code inspection.
 - Agents should use the `playwright` skill for real browser execution in Codex.
 - Agents should capture screenshots for visible failures, broken components, and suspicious runtime states.
+- Agents should reuse seeded local accounts when appropriate, but still create fresh fake accounts for true first-run and sign-up checks.
 - Agents should use the report template structure so results stay comparable across runs.
