@@ -91,6 +91,19 @@ const horizonLabels: Record<CurriculumGenerationHorizon, string> = {
   starter_week: "Starter week",
 };
 
+const sourceKindLabels: Record<HomeschoolFastPathPreview["sourceKind"], string> = {
+  single_day_material: "Single day material",
+  weekly_assignments: "Weekly assignments",
+  sequence_outline: "Sequence outline",
+  topic_seed: "Topic seed",
+  manual_shell: "Manual shell",
+  ambiguous: "Ambiguous",
+};
+
+function routeLabel(value: FastPathIntakeRoute) {
+  return intakeOptions.find((option) => option.value === value)?.label ?? value;
+}
+
 function placeholderForRoute(route: FastPathIntakeRoute) {
   switch (route) {
     case "topic":
@@ -590,9 +603,25 @@ export function HomeschoolOnboardingForm(props: {
               </select>
             </label>
             <p>
+              <span className="font-medium">Requested route:</span> {routeLabel(preview.requestedRoute)}
+            </p>
+            <p>
+              <span className="font-medium">Detected source kind:</span>{" "}
+              {sourceKindLabels[preview.sourceKind]}
+            </p>
+            <p>
+              <span className="font-medium">Routing now:</span> {routeLabel(preview.intakeRoute)}
+            </p>
+            <p>
               <span className="font-medium">Suggested horizon:</span>{" "}
               {horizonLabels[preview.inferredHorizon]}
             </p>
+            {preview.followUpQuestion ? (
+              <div className="rounded-xl border border-border/60 bg-background/70 p-3 text-muted-foreground">
+                <p className="font-medium text-foreground">Check before save</p>
+                <p className="mt-1">{preview.followUpQuestion}</p>
+              </div>
+            ) : null}
             <div>
               <p className="font-medium">Detected chunks</p>
               <ul className="list-disc pl-5 text-muted-foreground">

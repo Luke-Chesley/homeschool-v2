@@ -23,6 +23,7 @@ import {
   type OnboardingMilestone,
 } from "@/lib/homeschool/onboarding/activation-contracts";
 import { getNormalizedIntakeSourcePackage } from "@/lib/homeschool/intake/service";
+import { executeSourceInterpret } from "@/lib/learning-core/source-interpret";
 import { trackProductEvent } from "@/lib/platform/observability";
 
 import {
@@ -41,6 +42,7 @@ import type {
   HomeschoolOnboardingInput,
   HomeschoolOnboardingStatus,
   HomeschoolFastPathPreview,
+  SourceInterpretSourceKind,
 } from "@/lib/homeschool/onboarding/types";
 
 const LearnerSchema = z.object({
@@ -220,8 +222,145 @@ function mergeSourceMetadata(
   };
 }
 
+function getFastPathIntakeMetadata(input: HomeschoolOnboardingInput) {
+  const metadata = asRecord(input.curriculumSourceMetadata);
+  const intake = asRecord(metadata.intake);
+  const detectedChunks = Array.isArray(intake.detectedChunks)
+    ? intake.detectedChunks.filter((entry): entry is string => typeof entry === "string")
+    : [];
+  const chosenHorizonParse =
+    typeof intake.chosenHorizon === "string"
+      ? CurriculumGenerationHorizonSchema.safeParse(intake.chosenHorizon)
+      : null;
+  const chosenHorizon = chosenHorizonParse?.success ? chosenHorizonParse.data : null;
+  const sourceKind =
+    typeof intake.sourceKind === "string" ? intake.sourceKind : null;
+
+  return {
+    detectedChunks,
+    chosenHorizon,
+    sourceKind,
+  };
+}
+
+function lessonCountForHorizon(horizon: CurriculumGenerationHorizon | null) {
+  switch (horizon) {
+    case "today":
+      return 1;
+    case "tomorrow":
+      return 2;
+    case "next_few_days":
+      return 3;
+    case "current_week":
+      return 5;
+    case "starter_module":
+      return 4;
+    case "starter_week":
+      return 5;
+    default:
+      return 3;
+  }
+}
+
+function buildStarterLessonsFromChunks(params: {
+  title: string;
+  subject: string;
+  chunks: string[];
+  horizon: CurriculumGenerationHorizon | null;
+  dailyTimeBudgetMinutes: number;
+}) {
+  const lessons = params.chunks
+    .slice(0, lessonCountForHorizon(params.horizon))
+    .map((chunk, index) => ({
+      title: chunk,
+      description:
+        index === 0
+          ? `Start with ${chunk}.`
+          : `Carry the plan forward with ${chunk}.`,
+      subject: params.subject,
+      estimatedMinutes: Math.max(20, Math.round(params.dailyTimeBudgetMinutes)),
+      materials: [],
+      objectives: [chunk],
+      linkedSkillTitles: [],
+    }));
+
+  if (lessons.length > 0) {
+    return lessons;
+  }
+
+  return [
+    {
+      title: params.title,
+      description: `Start a bounded plan for ${params.title}.`,
+      subject: params.subject,
+      estimatedMinutes: Math.max(20, Math.round(params.dailyTimeBudgetMinutes)),
+      materials: [],
+      objectives: [],
+      linkedSkillTitles: [],
+    },
+  ];
+}
+
 function buildStarterDocument(input: HomeschoolOnboardingInput) {
   const lessonsPerSubject = ["Warm-up", "Core lesson", "Review and evidence"];
+  const intake = getFastPathIntakeMetadata(input);
+  const useSourceAwareShell = intake.detectedChunks.length > 0;
+
+  if (useSourceAwareShell) {
+    const subject = input.subjects[0] ?? "Integrated Studies";
+    const lessons = buildStarterLessonsFromChunks({
+      title: input.curriculumTitle,
+      subject,
+      chunks: intake.detectedChunks,
+      horizon: intake.chosenHorizon,
+      dailyTimeBudgetMinutes: Math.max(
+        20,
+        Math.round(input.dailyTimeBudgetMinutes / Math.max(input.subjects.length, 1)),
+      ),
+    });
+
+    return {
+      title: input.curriculumTitle,
+      description:
+        input.curriculumSummary ??
+        `Starter curriculum shell for ${input.householdName}.`,
+      kind: "manual" as const,
+      academicYear: input.schoolYearLabel,
+      subjects: input.subjects,
+      gradeLevels: uniqueStrings(
+        input.learners
+          .map((learner) => learner.gradeLevel)
+          .filter((value): value is string => Boolean(value)),
+      ),
+      document: {
+        [subject]: {
+          [input.curriculumTitle]: lessons.map((lesson) => lesson.title),
+        },
+      },
+      units: [
+        {
+          title: input.curriculumTitle,
+          description:
+            intake.sourceKind === "topic_seed"
+              ? `Starter module seeded from ${input.curriculumTitle}.`
+              : `Starter sequence derived from fast-path intake.`,
+          estimatedSessions: lessons.length,
+          lessons,
+        },
+      ],
+      metadata: {
+        ...mergeSourceMetadata(
+          {
+            lineage: {
+              mode: "manual_shell",
+              createdFromOnboarding: true,
+            },
+          },
+          input.curriculumSourceMetadata,
+        ),
+      },
+    };
+  }
 
   return {
     title: input.curriculumTitle,
@@ -757,109 +896,6 @@ function extractDetectedChunks(sourceInput: string) {
   return trimmedLines.length > 0 ? trimmedLines : [sourceInput.trim().slice(0, 80)];
 }
 
-function inferDefaultHorizon(input: {
-  intakeRoute: FastPathIntakeRoute;
-  sourceInput: string;
-  horizonIntent?: "today_only" | "auto";
-}): {
-  inferredHorizon: CurriculumGenerationHorizon;
-  decisionSource: CurriculumHorizonDecisionSource;
-} {
-  if (input.horizonIntent === "today_only") {
-    return {
-      inferredHorizon: "today",
-      decisionSource: "user_selected",
-    };
-  }
-
-  const sourceLength = input.sourceInput.trim().length;
-  switch (input.intakeRoute) {
-    case "single_lesson":
-      return {
-        inferredHorizon: sourceLength > 180 ? "tomorrow" : "today",
-        decisionSource: "system_default",
-      };
-    case "weekly_plan":
-      return {
-        inferredHorizon: "current_week",
-        decisionSource: "system_default",
-      };
-    case "outline":
-      return {
-        inferredHorizon: sourceLength > 260 ? "current_week" : "next_few_days",
-        decisionSource: "system_default",
-      };
-    case "topic":
-      return {
-        inferredHorizon: "starter_module",
-        decisionSource: "system_default",
-      };
-    case "manual_shell":
-      return {
-        inferredHorizon: "starter_week",
-        decisionSource: "system_default",
-      };
-  }
-}
-
-function estimateConfidence(input: {
-  intakeRoute: FastPathIntakeRoute;
-  sourceInput: string;
-  horizonIntent?: "today_only" | "auto";
-}): CurriculumIntakeConfidence {
-  const sourceLength = input.sourceInput.trim().length;
-  const lines = input.sourceInput.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  const numberedMarkers = lines.filter((line) => /^(\d+[.)]|[-*+])\s+/.test(line)).length;
-
-  switch (input.intakeRoute) {
-    case "single_lesson":
-      if (sourceLength >= 160) {
-        return "high";
-      }
-      return sourceLength >= 60 ? "medium" : "low";
-    case "weekly_plan":
-      if (numberedMarkers >= 3 || sourceLength >= 120) {
-        return "high";
-      }
-      return sourceLength >= 60 ? "medium" : "low";
-    case "outline":
-      if (numberedMarkers >= 4 || lines.length >= 4) {
-        return "high";
-      }
-      return sourceLength >= 80 ? "medium" : "low";
-    case "topic":
-      return sourceLength >= 80 ? "medium" : "low";
-    case "manual_shell":
-      return "low";
-  }
-}
-
-function buildAssumptions(params: {
-  intakeRoute: FastPathIntakeRoute;
-  chosenHorizon: CurriculumGenerationHorizon;
-  confidence: CurriculumIntakeConfidence;
-}) {
-  const assumptions = [
-    params.chosenHorizon === "today"
-      ? "We will keep the first plan bounded to today."
-      : params.chosenHorizon === "current_week"
-        ? "We will plan against the current week, not a longer curriculum arc."
-        : `We will start with ${params.chosenHorizon.replaceAll("_", " ")}.`,
-  ];
-
-  if (params.intakeRoute === "outline") {
-    assumptions.push("We are treating this as a sequence outline, not a complete curriculum import.");
-  }
-  if (params.intakeRoute === "topic") {
-    assumptions.push("We are treating this as a starter module, not a full course.");
-  }
-  if (params.confidence === "low") {
-    assumptions.push("Some source details are ambiguous, so the plan will stay conservative until you confirm.");
-  }
-
-  return assumptions;
-}
-
 function buildPreviewTitle(input: {
   intakeRoute: FastPathIntakeRoute;
   sourceInput: string;
@@ -876,6 +912,188 @@ function buildPreviewTitle(input: {
             : "Lesson plan";
 
   return `${prefix}: ${input.sourceInput.trim().slice(0, 48)}`;
+}
+
+function sourceKindToRoute(sourceKind: SourceInterpretSourceKind): FastPathIntakeRoute {
+  switch (sourceKind) {
+    case "single_day_material":
+      return "single_lesson";
+    case "weekly_assignments":
+      return "weekly_plan";
+    case "sequence_outline":
+      return "outline";
+    case "topic_seed":
+      return "topic";
+    case "manual_shell":
+    case "ambiguous":
+      return "manual_shell";
+  }
+}
+
+function routeToCurriculumMode(intakeRoute: FastPathIntakeRoute) {
+  switch (intakeRoute) {
+    case "weekly_plan":
+    case "outline":
+      return "paste_outline" as const;
+    case "single_lesson":
+    case "topic":
+    case "manual_shell":
+      return "manual_shell" as const;
+  }
+}
+
+const HORIZON_RANK: Record<CurriculumGenerationHorizon, number> = {
+  today: 1,
+  tomorrow: 2,
+  next_few_days: 3,
+  current_week: 4,
+  starter_module: 5,
+  starter_week: 6,
+};
+
+const HORIZON_BY_RANK: Record<number, CurriculumGenerationHorizon> = {
+  1: "today",
+  2: "tomorrow",
+  3: "next_few_days",
+  4: "current_week",
+  5: "starter_module",
+  6: "starter_week",
+};
+
+function maxHorizonRankForRoute(intakeRoute: FastPathIntakeRoute) {
+  switch (intakeRoute) {
+    case "single_lesson":
+      return 2;
+    case "weekly_plan":
+    case "outline":
+      return 4;
+    case "topic":
+      return 5;
+    case "manual_shell":
+      return 6;
+  }
+}
+
+function maxHorizonRankForSourceKind(sourceKind: SourceInterpretSourceKind) {
+  switch (sourceKind) {
+    case "single_day_material":
+      return 2;
+    case "weekly_assignments":
+    case "sequence_outline":
+      return 4;
+    case "topic_seed":
+      return 5;
+    case "manual_shell":
+      return 6;
+    case "ambiguous":
+      return 1;
+  }
+}
+
+function clampHorizon(params: {
+  sourceKind: SourceInterpretSourceKind;
+  intakeRoute: FastPathIntakeRoute;
+  requestedHorizon: CurriculumGenerationHorizon;
+}) {
+  const maxRank = Math.min(
+    maxHorizonRankForRoute(params.intakeRoute),
+    maxHorizonRankForSourceKind(params.sourceKind),
+  );
+  const requestedRank = HORIZON_RANK[params.requestedHorizon];
+
+  if (requestedRank <= maxRank) {
+    return params.requestedHorizon;
+  }
+
+  return HORIZON_BY_RANK[maxRank];
+}
+
+function buildFastPathPreview(
+  input: {
+    learnerName: string;
+    intakeRoute: FastPathIntakeRoute;
+    sourceInput: string;
+    horizonIntent?: "today_only" | "auto";
+    interpretation: {
+      sourceKind: SourceInterpretSourceKind;
+      suggestedTitle: string;
+      confidence: CurriculumIntakeConfidence;
+      recommendedHorizon: CurriculumGenerationHorizon;
+      assumptions: string[];
+      detectedChunks: string[];
+      followUpQuestion?: string | null;
+      needsConfirmation: boolean;
+    };
+  },
+  corrections?: HomeschoolFastPathOnboardingInput["previewCorrections"],
+): HomeschoolFastPathPreview {
+  const routedByPolicy = sourceKindToRoute(input.interpretation.sourceKind);
+  const requestedRoute = input.intakeRoute;
+  const inferredRoute = corrections?.intakeRoute ?? routedByPolicy;
+  const inferredHorizonCandidate =
+    input.horizonIntent === "today_only" ? "today" : input.interpretation.recommendedHorizon;
+  const inferredHorizon = clampHorizon({
+    sourceKind: input.interpretation.sourceKind,
+    intakeRoute: routedByPolicy,
+    requestedHorizon: inferredHorizonCandidate,
+  });
+  const inferredDecisionSource: CurriculumHorizonDecisionSource =
+    input.horizonIntent === "today_only"
+      ? "user_selected"
+      : inferredHorizon !== input.interpretation.recommendedHorizon
+        ? "confidence_limited"
+        : "system_default";
+  const requestedChosenHorizon = corrections?.chosenHorizon ?? inferredHorizon;
+  const chosenHorizon = clampHorizon({
+    sourceKind: input.interpretation.sourceKind,
+    intakeRoute: inferredRoute,
+    requestedHorizon: requestedChosenHorizon,
+  });
+  const decisionSource: CurriculumHorizonDecisionSource =
+    corrections?.chosenHorizon
+      ? chosenHorizon === corrections.chosenHorizon
+        ? "user_corrected_in_preview"
+        : "confidence_limited"
+      : inferredDecisionSource;
+  const detectedChunks =
+    input.interpretation.detectedChunks.length > 0
+      ? input.interpretation.detectedChunks
+      : extractDetectedChunks(input.sourceInput);
+  const assumptions = [...input.interpretation.assumptions];
+
+  if (routedByPolicy !== requestedRoute) {
+    assumptions.push(
+      `We are routing this as ${routedByPolicy.replaceAll("_", " ")} instead of ${requestedRoute.replaceAll("_", " ")}.`,
+    );
+  }
+
+  if (chosenHorizon !== requestedChosenHorizon) {
+    assumptions.push("We kept the first plan conservative so the source does not overpromise scope.");
+  }
+
+  return {
+    learnerTarget: corrections?.learnerName?.trim() || input.learnerName.trim(),
+    requestedRoute,
+    intakeRoute: inferredRoute,
+    sourceKind: input.interpretation.sourceKind,
+    title:
+      corrections?.title?.trim() ||
+      input.interpretation.suggestedTitle ||
+      buildPreviewTitle({ intakeRoute: inferredRoute, sourceInput: input.sourceInput }),
+    detectedChunks,
+    assumptions: assumptions.length > 0 ? assumptions : ["We will keep the first plan bounded."],
+    inferredHorizon,
+    chosenHorizon,
+    horizonDecisionSource: decisionSource,
+    confidence: input.interpretation.confidence,
+    followUpQuestion: input.interpretation.followUpQuestion ?? null,
+    needsConfirmation:
+      input.interpretation.needsConfirmation ||
+      input.interpretation.confidence !== "high" ||
+      input.interpretation.sourceKind === "ambiguous" ||
+      routedByPolicy !== requestedRoute ||
+      Boolean(input.interpretation.followUpQuestion),
+  };
 }
 
 async function resolveFastPathSource(params: Pick<
@@ -906,37 +1124,6 @@ async function resolveFastPathSource(params: Pick<
     sourceInput,
     sourcePackage: null,
     assetIds: [],
-  };
-}
-
-function buildFastPathPreview(
-  input: {
-    learnerName: string;
-    intakeRoute: FastPathIntakeRoute;
-    sourceInput: string;
-    horizonIntent?: "today_only" | "auto";
-  },
-  corrections?: HomeschoolFastPathOnboardingInput["previewCorrections"],
-): HomeschoolFastPathPreview {
-  const detectedChunks = extractDetectedChunks(input.sourceInput);
-  const confidence = estimateConfidence(input);
-  const { inferredHorizon, decisionSource } = inferDefaultHorizon(input);
-  const chosenHorizon = corrections?.chosenHorizon ?? inferredHorizon;
-
-  return {
-    learnerTarget: corrections?.learnerName?.trim() || input.learnerName.trim(),
-    intakeRoute: corrections?.intakeRoute ?? input.intakeRoute,
-    title: corrections?.title?.trim() || buildPreviewTitle(input),
-    detectedChunks,
-    assumptions: buildAssumptions({
-      intakeRoute: corrections?.intakeRoute ?? input.intakeRoute,
-      chosenHorizon,
-      confidence,
-    }),
-    inferredHorizon,
-    chosenHorizon,
-    horizonDecisionSource: corrections?.chosenHorizon ? "user_corrected_in_preview" : decisionSource,
-    confidence,
   };
 }
 
@@ -1009,26 +1196,61 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
     },
   });
 
+  const sourceInterpretResult = await executeSourceInterpret({
+    input: {
+      learnerName: input.learnerName,
+      requestedRoute: input.intakeRoute,
+      inputModalities: [resolvedSource.sourcePackage?.modality ?? "text"],
+      rawText: input.sourceInput?.trim() ?? resolvedSource.sourceInput,
+      extractedText: resolvedSource.sourceInput,
+      extractedStructure: resolvedSource.sourcePackage
+        ? {
+            summary: resolvedSource.sourcePackage.summary,
+            detectedChunks: resolvedSource.sourcePackage.detectedChunks,
+            extractionStatus: resolvedSource.sourcePackage.extractionStatus,
+          }
+        : {
+            detectedChunks: extractDetectedChunks(resolvedSource.sourceInput),
+          },
+      assetRefs: resolvedSource.assetIds,
+      userHorizonIntent: input.horizonIntent ?? "auto",
+      titleCandidate: resolvedSource.sourcePackage?.title ?? null,
+    },
+    surface: "onboarding",
+    organizationId: input.organizationId,
+    workflowMode: "fast_path",
+  });
+
+  await trackProductEvent({
+    name: ACTIVATION_EVENT_NAMES.sourceInterpreted,
+    organizationId: input.organizationId,
+    metadata: {
+      requestedRoute: input.intakeRoute,
+      sourceKind: sourceInterpretResult.artifact.sourceKind,
+      confidence: sourceInterpretResult.artifact.confidence,
+      recommendedHorizon: sourceInterpretResult.artifact.recommendedHorizon,
+      needsConfirmation: sourceInterpretResult.artifact.needsConfirmation,
+    },
+  });
+
   const preview = buildFastPathPreview(
     {
-      ...input,
       sourceInput: resolvedSource.sourceInput,
+      learnerName: input.learnerName,
+      intakeRoute: input.intakeRoute,
+      horizonIntent: input.horizonIntent,
+      interpretation: sourceInterpretResult.artifact,
     },
     input.previewCorrections,
   );
-  if ((preview.confidence === "low" || preview.confidence === "medium") && !input.confirmPreview) {
+  if (preview.needsConfirmation && !input.confirmPreview) {
     return {
       mode: "preview_required" as const,
       preview,
     };
   }
 
-  const curriculumMode =
-    preview.intakeRoute === "topic" || preview.intakeRoute === "manual_shell"
-      ? "manual_shell"
-      : preview.intakeRoute === "outline"
-        ? "paste_outline"
-        : "ai_decompose";
+  const curriculumMode = routeToCurriculumMode(preview.intakeRoute);
   const learnerInput = {
     displayName: preview.learnerTarget,
     pacePreference: "balanced" as const,
@@ -1051,18 +1273,23 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
     curriculumSourceMetadata: {
       intake: {
         route: preview.intakeRoute,
+        requestedRoute: preview.requestedRoute,
         routeVersion: 1,
         rawText: sourceInput,
         assetIds: resolvedSource.assetIds,
         learnerId: null,
         confidence: preview.confidence,
+        sourceKind: preview.sourceKind,
         inferredHorizon: preview.inferredHorizon,
         chosenHorizon: preview.chosenHorizon,
         horizonDecisionSource: preview.horizonDecisionSource,
         assumptions: preview.assumptions,
         detectedChunks: preview.detectedChunks,
+        followUpQuestion: preview.followUpQuestion ?? null,
+        needsConfirmation: preview.needsConfirmation,
         sourcePackageId: resolvedSource.sourcePackage?.id ?? null,
         sourceModality: resolvedSource.sourcePackage?.modality ?? "text",
+        learningCoreLineage: sourceInterpretResult.lineage,
         createdFrom: "onboarding_fast_path",
       },
     },
@@ -1071,7 +1298,13 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
   await trackProductEvent({
     name: ACTIVATION_EVENT_NAMES.generationStarted,
     organizationId: input.organizationId,
-    metadata: { intakeRoute: preview.intakeRoute, chosenHorizon: preview.chosenHorizon },
+    metadata: {
+      intakeRoute: preview.intakeRoute,
+      requestedRoute: preview.requestedRoute,
+      sourceKind: preview.sourceKind,
+      chosenHorizon: preview.chosenHorizon,
+      curriculumMode,
+    },
   });
 
   const { primaryLearner } = await persistHomeschoolSetupBase(setupInput);
@@ -1111,13 +1344,16 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
       firstReadyAt: new Date().toISOString(),
       intake: {
         route: preview.intakeRoute,
+        requestedRoute: preview.requestedRoute,
         sourceInput,
         sourcePackageId: resolvedSource.sourcePackage?.id ?? null,
         sourceModality: resolvedSource.sourcePackage?.modality ?? "text",
         confidence: preview.confidence,
+        sourceKind: preview.sourceKind,
         inferredHorizon: preview.inferredHorizon,
         chosenHorizon: preview.chosenHorizon,
         horizonDecisionSource: preview.horizonDecisionSource,
+        followUpQuestion: preview.followUpQuestion ?? null,
       },
     },
   });
@@ -1130,6 +1366,8 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
     summary: `Completed fast-path onboarding for ${primaryLearner.displayName}.`,
     metadata: {
       intakeRoute: preview.intakeRoute,
+      requestedRoute: preview.requestedRoute,
+      sourceKind: preview.sourceKind,
       confidence: preview.confidence,
       chosenHorizon: preview.chosenHorizon,
     },

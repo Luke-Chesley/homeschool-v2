@@ -11,6 +11,7 @@ export const ACTIVATION_EVENT_NAMES = {
   intakeSourceSubmitted: "intake_source_submitted",
   intakePackageCreated: "intake_package_created",
   intakeAssetUploaded: "intake_asset_uploaded",
+  sourceInterpreted: "source_interpreted",
   generationStarted: "generation_started",
   generationCompleted: "generation_completed",
   firstTodayOpened: "first_today_opened",

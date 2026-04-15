@@ -32,6 +32,15 @@ export const CURRICULUM_HORIZON_DECISION_SOURCES = [
 
 export const CURRICULUM_INTAKE_CONFIDENCE_LEVELS = ["low", "medium", "high"] as const;
 
+export const SOURCE_INTERPRET_SOURCE_KINDS = [
+  "single_day_material",
+  "weekly_assignments",
+  "sequence_outline",
+  "topic_seed",
+  "manual_shell",
+  "ambiguous",
+] as const;
+
 export type HomeschoolOnboardingInput = {
   organizationId: string;
   householdName: string;
@@ -72,6 +81,8 @@ export type CurriculumHorizonDecisionSource =
 
 export type CurriculumIntakeConfidence = (typeof CURRICULUM_INTAKE_CONFIDENCE_LEVELS)[number];
 
+export type SourceInterpretSourceKind = (typeof SOURCE_INTERPRET_SOURCE_KINDS)[number];
+
 export type HomeschoolFastPathOnboardingInput = {
   organizationId: string;
   learnerName: string;
@@ -90,7 +101,9 @@ export type HomeschoolFastPathOnboardingInput = {
 
 export type HomeschoolFastPathPreview = {
   learnerTarget: string;
+  requestedRoute: FastPathIntakeRoute;
   intakeRoute: FastPathIntakeRoute;
+  sourceKind: SourceInterpretSourceKind;
   title: string;
   detectedChunks: string[];
   assumptions: string[];
@@ -98,6 +111,8 @@ export type HomeschoolFastPathPreview = {
   chosenHorizon: CurriculumGenerationHorizon;
   horizonDecisionSource: CurriculumHorizonDecisionSource;
   confidence: CurriculumIntakeConfidence;
+  followUpQuestion?: string | null;
+  needsConfirmation: boolean;
 };
 
 export type HomeschoolOnboardingStatus = {
