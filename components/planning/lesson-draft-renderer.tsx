@@ -1,5 +1,7 @@
 "use client";
 
+import type { ReactNode } from "react";
+
 import type {
   LessonAdaptation,
   LessonBlock,
@@ -20,6 +22,7 @@ interface LessonDraftRendererProps {
   draft: StructuredLessonDraft;
   mode?: LessonDraftViewMode;
   className?: string;
+  renderBlockFooter?: (block: LessonBlock, index: number) => ReactNode;
 }
 
 // ---------------------------------------------------------------------------
@@ -117,7 +120,15 @@ function ObjectivesAndCriteria({ draft }: { draft: StructuredLessonDraft }) {
   );
 }
 
-function BlockCard({ block, index }: { block: LessonBlock; index: number }) {
+function BlockCard({
+  block,
+  index,
+  footer,
+}: {
+  block: LessonBlock;
+  index: number;
+  footer?: ReactNode;
+}) {
   return (
     <div
       className={cn(
@@ -178,6 +189,8 @@ function BlockCard({ block, index }: { block: LessonBlock; index: number }) {
           ))}
         </div>
       ) : null}
+
+      {footer ? <div className="mt-3 flex justify-end">{footer}</div> : null}
     </div>
   );
 }
@@ -299,6 +312,7 @@ export function LessonDraftRenderer({
   draft,
   mode = "full",
   className,
+  renderBlockFooter,
 }: LessonDraftRendererProps) {
   return (
     <div className={cn("space-y-6", className)}>
@@ -313,7 +327,12 @@ export function LessonDraftRenderer({
         </p>
         <div className="space-y-2">
           {draft.blocks.map((block, i) => (
-            <BlockCard key={i} block={block} index={i} />
+            <BlockCard
+              key={i}
+              block={block}
+              index={i}
+              footer={renderBlockFooter?.(block, i)}
+            />
           ))}
         </div>
       </div>
