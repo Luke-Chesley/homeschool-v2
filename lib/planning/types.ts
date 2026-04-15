@@ -302,6 +302,11 @@ export type DailyWorkspaceExpansionIntent =
   | "keep_today"
   | "expand_from_here";
 
+export type DailyWorkspaceExpansionScope =
+  | "tomorrow"
+  | "next_few_days"
+  | "current_week";
+
 export interface DailyWorkspace {
   date: string;
   headline: string;

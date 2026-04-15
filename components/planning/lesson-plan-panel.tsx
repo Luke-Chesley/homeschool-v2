@@ -18,11 +18,13 @@ import { MarkdownContent } from "@/components/ui/markdown-content";
 import type { StructuredLessonDraft } from "@/lib/lesson-draft/types";
 import type {
   DailyWorkspaceExpansionIntent,
+  DailyWorkspaceExpansionScope,
   DailyWorkspaceLessonBuild,
 } from "@/lib/planning/types";
 import { acquireAutoBuildLock, releaseAutoBuildLock } from "@/lib/planning/client-auto-build";
 import { cn } from "@/lib/utils";
 import {
+  expandTodayRouteAction,
   saveExpansionIntentAction,
   saveLessonRegenerationNoteAction,
 } from "@/app/(parent)/today/actions";
@@ -101,6 +103,7 @@ export function LessonPlanPanel({
   const [supportMessage, setSupportMessage] = useState<string | null>(null);
   const [supportError, setSupportError] = useState<string | null>(null);
   const [savingIntent, setSavingIntent] = useState<DailyWorkspaceExpansionIntent | null>(null);
+  const [expandingScope, setExpandingScope] = useState<DailyWorkspaceExpansionScope | null>(null);
   const { access, isEnabled: studioEnabled, openPanel } = useStudio();
   const contextKey = useMemo(
     () =>
@@ -134,6 +137,7 @@ export function LessonPlanPanel({
     setSupportMessage(null);
     setSupportError(null);
     setSavingIntent(null);
+    setExpandingScope(null);
   }, [contextKey, regenerationNote]);
 
   const hasDraft = draftState !== null && draftState !== undefined;
@@ -307,6 +311,38 @@ export function LessonPlanPanel({
 
     setSupportMessage(saved.message ?? "Saved.");
     router.refresh();
+  }
+
+  async function handleRouteExpansion(scope: DailyWorkspaceExpansionScope) {
+    setSupportError(null);
+    setSupportMessage(null);
+    setExpandingScope(scope);
+
+    const expanded = await expandTodayRouteAction({
+      date,
+      scope,
+    });
+
+    setExpandingScope(null);
+
+    if (!expanded.ok) {
+      setSupportError(expanded.error ?? "Could not expand the route.");
+      return;
+    }
+
+    setSupportMessage(expanded.message ?? "Saved.");
+    router.refresh();
+  }
+
+  function getExpansionButtonLabel(scope: DailyWorkspaceExpansionScope) {
+    switch (scope) {
+      case "tomorrow":
+        return "Expand to tomorrow";
+      case "next_few_days":
+        return "Expand to next few days";
+      case "current_week":
+        return "Expand to current week";
+    }
   }
 
   return (
@@ -498,6 +534,34 @@ export function LessonPlanPanel({
               </button>
             </div>
           </div>
+
+          {hasDraft ? (
+            <div className="space-y-3 rounded-lg border border-border/70 bg-background/72 p-4">
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-foreground">Route expansion</p>
+                <p className="text-sm text-muted-foreground">
+                  Schedule more of the already-generated route without replacing today&apos;s
+                  lesson.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {(["tomorrow", "next_few_days", "current_week"] as const).map((scope) => (
+                  <button
+                    key={scope}
+                    type="button"
+                    onClick={() => handleRouteExpansion(scope)}
+                    disabled={!sourceId || expandingScope !== null}
+                    className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+                  >
+                    {expandingScope === scope ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : null}
+                    {getExpansionButtonLabel(scope)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
           {supportMessage ? (
             <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm text-foreground">

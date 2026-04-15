@@ -19,7 +19,10 @@ import {
   getTodayWorkspace,
   queueTodayLessonBuild,
 } from "@/lib/planning/today-service";
-import { getOrCreateWeeklyRouteBoardForLearner } from "@/lib/planning/weekly-route-service";
+import {
+  collapseWeeklyRouteToTodayWindow,
+  getOrCreateWeeklyRouteBoardForLearner,
+} from "@/lib/planning/weekly-route-service";
 import { recordHomeschoolAuditEvent } from "@/lib/homeschool/reporting/service";
 import {
   ACTIVATION_EVENT_NAMES,
@@ -1329,6 +1332,11 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
     sourceId,
   });
   const todayDate = new Date().toISOString().slice(0, 10);
+  await collapseWeeklyRouteToTodayWindow({
+    learnerId: primaryLearner.id,
+    sourceId,
+    date: todayDate,
+  });
   const todayWorkspace = await getTodayWorkspace({
     organizationId: input.organizationId,
     learnerId: primaryLearner.id,
