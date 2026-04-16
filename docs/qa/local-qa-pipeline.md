@@ -43,10 +43,10 @@ Repo:
 - `/home/luke/Desktop/learning/homeschool-v2`
 
 Default app target:
+- latest Vercel preview deployment URL resolved via the Vercel tool for stage/preview runs
 - `http://localhost:3000` for local runs
-- the latest Vercel preview deployment URL for stage/preview runs
 
-If `localhost:3000` is not already running, start it from the main checkout:
+If the run is explicitly local and `localhost:3000` is not already running, start it from the main checkout:
 
 ```bash
 corepack pnpm dev
@@ -140,8 +140,10 @@ Before merge to `main` or before a staging push:
 
 - Agents should treat these as execution instructions, not documents to critique.
 - Agents should not stop at route discovery or code inspection.
+- Agents should use the Vercel tool to resolve the latest preview deployment URL before browser QA unless the run is explicitly local.
 - Agents should use the `playwright` skill for real browser execution in Codex.
 - Agents should use the Vercel tool first for preview/stage runs and record the exact deployment URL in the report.
 - Agents should capture screenshots for visible failures, broken components, and suspicious runtime states.
-- Agents should reuse seeded local accounts when appropriate, still create fresh fake accounts for true first-run and sign-up checks, and never carry preview credentials into production checks.
+- Agents should prefer fresh fake preview accounts for hosted sign-up and first-run checks, should not assume local seeded users also exist in preview, and should never carry preview credentials into production checks.
+- Agents should reuse seeded local accounts only for explicitly local runs.
 - Agents should use the report template structure so results stay comparable across runs.
