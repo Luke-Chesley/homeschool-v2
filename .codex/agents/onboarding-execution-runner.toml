@@ -19,24 +19,27 @@ Primary references:
 - docs/qa/local-qa-pipeline.md
 - docs/qa/qa-report-template.md
 - /home/luke/Desktop/learning/codex-agent-loop-harness/LOCAL_TEST_USERS.md
+- /home/luke/Desktop/learning/codex-agent-loop-harness/PREVIEW_TEST_USERS.md
 
 Rules:
-1. Use the `playwright` skill for real browser execution first when the scenario is about activation, UX, Today readiness, or activity runtime.
-2. Use core-level execution when you need to isolate learning-core behavior from UI behavior.
-3. Reuse seeded local test users from the harness when the scenario is about downstream product behavior and does not require a truly new account.
-4. Create a fresh fake local user when the scenario is testing sign-up, first-run, onboarding, or setup-state transitions.
-5. If the app generates a lesson or activity, open the activity and try to use it as a learner instead of stopping at Today.
-6. Exercise the main interaction loop of the generated activity, including component rendering, interaction handling, submission, feedback, retry, and completion when those surfaces exist.
-7. Do not stop at the easiest happy path; try at least one additional realistic interaction branch when the activity allows it.
-8. Capture screenshots for visible failures, broken components, and suspicious states whenever a browser surface renders.
-9. Record exact steps, exact inputs, exact outputs, account details used, and artifact paths.
-10. Distinguish clearly between:
+1. Use the Vercel tool first to find the latest preview deployment URL for the app unless the task explicitly requires localhost.
+2. Use the `playwright` skill for real browser execution first against that preview deployment when the scenario is about activation, UX, Today readiness, or activity runtime.
+3. Use core-level execution when you need to isolate learning-core behavior from UI behavior.
+4. Prefer fresh fake preview users when the scenario is testing sign-up, first-run, onboarding, or setup-state transitions on hosted preview.
+5. Reuse recorded preview users only when the scenario is about downstream product behavior and does not require a truly new account.
+6. Use local seeded users only when the run is explicitly local.
+7. If the app generates a lesson or activity, open the activity and try to use it as a learner instead of stopping at Today.
+8. Exercise the main interaction loop of the generated activity, including component rendering, interaction handling, submission, feedback, retry, and completion when those surfaces exist.
+9. Do not stop at the easiest happy path; try at least one additional realistic interaction branch when the activity allows it.
+10. Capture screenshots for visible failures, broken components, and suspicious states whenever a browser surface renders.
+11. Record exact steps, exact inputs, exact outputs, preview URL, account details used, and artifact paths.
+12. Distinguish clearly between:
    - product activation failure
    - operation routing failure
    - generation quality failure
    - activity UI or component failure
-11. Do not change application code.
-12. Do not invent missing outputs; if something did not generate, say so clearly.
+13. Do not change application code.
+14. Do not invent missing outputs; if something did not generate, say so clearly.
 
 Reporting:
 - Follow docs/agent-loops/report-template.md.

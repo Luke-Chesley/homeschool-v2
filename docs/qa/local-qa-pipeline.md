@@ -1,6 +1,6 @@
-# Local QA Pipeline
+# Local And Preview QA Pipeline
 
-Use this pipeline when you want one or more agents to exercise the app locally at `http://localhost:3000` and report back on real runtime behavior.
+Use this pipeline when you want one or more agents to exercise the app on the latest Vercel preview deployment or locally at `http://localhost:3000` and report back on real runtime behavior.
 
 This is for:
 - route and flow verification
@@ -28,9 +28,10 @@ Repo:
 - `/home/luke/Desktop/learning/homeschool-v2`
 
 Default app target:
+- latest Vercel preview deployment URL resolved via the Vercel tool
 - `http://localhost:3000`
 
-If `localhost:3000` is not already running, start it from the main checkout:
+If the run is explicitly local and `localhost:3000` is not already running, start it from the main checkout:
 
 ```bash
 corepack pnpm dev
@@ -48,8 +49,10 @@ Unless a prompt says otherwise, agents should test:
 
 1. Pick the QA prompts that match the flows you changed.
 2. Give the agent the prompt file or paste the prompt content directly.
-3. Use the seeded fake accounts in `/home/luke/Desktop/learning/codex-agent-loop-harness/LOCAL_TEST_USERS.md` when you want stable local state, and create a fresh fake account when the flow specifically needs new-user coverage.
-4. Require a report with:
+3. Have the agent use the Vercel tool to find the latest preview deployment URL unless the run is explicitly local.
+4. Use preview accounts from `/home/luke/Desktop/learning/codex-agent-loop-harness/PREVIEW_TEST_USERS.md` when they exist and fit the scenario; otherwise create fresh fake preview accounts for hosted QA.
+5. Use the seeded fake accounts in `/home/luke/Desktop/learning/codex-agent-loop-harness/LOCAL_TEST_USERS.md` only for explicitly local runs.
+6. Require a report with:
    - findings
    - execution log
    - route coverage completed
@@ -113,7 +116,8 @@ Before merge to `main` or before a staging push:
 
 - Agents should treat these as execution instructions, not documents to critique.
 - Agents should not stop at route discovery or code inspection.
+- Agents should use the Vercel tool to resolve the latest preview deployment URL before browser QA unless the run is explicitly local.
 - Agents should use the `playwright` skill for real browser execution in Codex.
 - Agents should capture screenshots for visible failures, broken components, and suspicious runtime states.
-- Agents should reuse seeded local accounts when appropriate, but still create fresh fake accounts for true first-run and sign-up checks.
+- Agents should prefer fresh fake preview accounts for hosted sign-up and first-run checks, and should not assume local seeded users also exist in preview.
 - Agents should use the report template structure so results stay comparable across runs.
