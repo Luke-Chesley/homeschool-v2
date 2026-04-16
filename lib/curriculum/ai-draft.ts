@@ -121,8 +121,8 @@ export const CurriculumAiProgressionEdgeKindSchema = z.enum([
 export type CurriculumAiProgressionEdgeKind = z.infer<typeof CurriculumAiProgressionEdgeKindSchema>;
 
 export const CurriculumAiProgressionEdgeSchema = z.object({
-  fromSkillRef: z.string().trim().min(1).max(180),
-  toSkillRef: z.string().trim().min(1).max(180),
+  fromSkillRef: z.string().trim().min(1).max(1_000),
+  toSkillRef: z.string().trim().min(1).max(1_000),
   kind: CurriculumAiProgressionEdgeKindSchema,
 });
 
@@ -131,7 +131,7 @@ export type CurriculumAiProgressionEdge = z.infer<typeof CurriculumAiProgression
 export const CurriculumAiProgressionPhaseSchema = z.object({
   title: z.string().trim().min(1).max(180),
   description: z.string().trim().max(600).optional(),
-  skillRefs: z.array(z.string().trim().min(1).max(180)).min(1),
+  skillRefs: z.array(z.string().trim().min(1).max(1_000)).min(1),
 });
 
 export type CurriculumAiProgressionPhase = z.infer<typeof CurriculumAiProgressionPhaseSchema>;

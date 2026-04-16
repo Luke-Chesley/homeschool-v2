@@ -63,3 +63,75 @@ test("CurriculumAiGeneratedArtifactSchema truncates overflowing summary arrays",
   assert.equal(parsed.units[0]?.lessons[0]?.objectives.length, 8);
   assert.equal(parsed.units[0]?.lessons[0]?.linkedSkillTitles.length, 8);
 });
+
+test("CurriculumAiGeneratedArtifactSchema accepts long progression refs so unresolved progression can fall back later", () => {
+  const longRef = "Virginia History / ".repeat(14);
+  const trimmedLongRef = longRef.trim();
+
+  const parsed = CurriculumAiGeneratedArtifactSchema.parse({
+    source: {
+      title: "Virginia History in the 1800s",
+      description: "A middle-school history curriculum.",
+      subjects: ["Virginia History", "US History", "Civics"],
+      gradeLevels: ["Middle School"],
+      summary: "Study Virginia's 19th century through primary sources and writing.",
+      teachingApproach: "Story-first, map work, primary sources, discussion, writing.",
+      successSignals: ["Learner can narrate major changes across the century."],
+      parentNotes: ["Keep a running timeline and map notebook."],
+      rationale: ["Ground state history in chronology, people, and place."],
+    },
+    intakeSummary: "Virginia history across the 1800s with weekly discussion and writing.",
+    pacing: {
+      totalWeeks: 10,
+      sessionsPerWeek: 4,
+      sessionMinutes: 35,
+      totalSessions: 40,
+      coverageStrategy: "Chronological survey with recurring map and source analysis.",
+      coverageNotes: ["Use biographies, maps, timelines, and short writing responses."],
+    },
+    document: {
+      History: {
+        "Virginia in the 1800s": {
+          Foundations: ["Early 1800s life in Virginia", "Transportation and industry"],
+        },
+      },
+    },
+    units: [
+      {
+        title: "Unit 1",
+        description: "Start with daily life and structural change in early 19th-century Virginia.",
+        estimatedWeeks: 2,
+        estimatedSessions: 8,
+        lessons: [
+          {
+            title: "Lesson 1",
+            description: "Study early 1800s Virginia life through maps and narration.",
+            subject: "Virginia History",
+            estimatedMinutes: 35,
+            materials: ["Map", "Notebook"],
+            objectives: ["Describe daily life in early 1800s Virginia."],
+            linkedSkillTitles: ["Early 1800s life in Virginia"],
+          },
+        ],
+      },
+    ],
+    progression: {
+      phases: [
+        {
+          title: "Phase 1",
+          skillRefs: [longRef, `${longRef} / slavery and reform`],
+        },
+      ],
+      edges: [
+        {
+          fromSkillRef: longRef,
+          toSkillRef: `${longRef} / slavery and reform`,
+          kind: "recommendedBefore",
+        },
+      ],
+    },
+  });
+
+  assert.equal(parsed.progression?.phases[0]?.skillRefs[0], trimmedLongRef);
+  assert.equal(parsed.progression?.edges[0]?.fromSkillRef, trimmedLongRef);
+});
