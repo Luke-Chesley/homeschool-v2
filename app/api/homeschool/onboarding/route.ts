@@ -13,6 +13,18 @@ import {
 } from "@/lib/homeschool/onboarding/service";
 import { trackOperationalError } from "@/lib/platform/observability";
 
+function getSafeOnboardingErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : "Onboarding failed.";
+  if (
+    message.includes("SourceInterpretationArtifact")
+    || message.includes("recommendedHorizon")
+    || message.includes("OUTPUT_PARSING_FAILURE")
+  ) {
+    return "We couldn't interpret that source just yet. Please try again.";
+  }
+  return message;
+}
+
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
 
@@ -58,13 +70,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });
     }
 
+    const safeMessage = getSafeOnboardingErrorMessage(error);
     console.error("[api/homeschool/onboarding POST]", error);
     trackOperationalError({
       source: "api/homeschool/onboarding",
       message: error instanceof Error ? error.message : "Onboarding failed.",
     });
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Onboarding failed." },
+      { error: safeMessage },
       { status: 500 },
     );
   }
