@@ -1,7 +1,7 @@
 # Phase 5: Parent Product Redesign Checklist
 
-Use this alongside [phase5_parent_product_redesign.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase5_parent_product_redesign.md) and [phase5_surface_inventory.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase5_surface_inventory.md).
-Also use [phase5_checklist_design_review.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase5_checklist_design_review.md) as the completeness reference for flows and components.
+Use this alongside [phase5_parent_product_redesign.md](/home/luke/Desktop/learning/homeschool-v2/docs/plans/path_to_deployment/phase5_parent_product_redesign.md) and [phase5_surface_inventory.md](/home/luke/Desktop/learning/homeschool-v2/docs/plans/path_to_deployment/phase5_surface_inventory.md).
+Also use [phase5_checklist_design_review.md](/home/luke/Desktop/learning/homeschool-v2/docs/plans/path_to_deployment/phase5_checklist_design_review.md) as the completeness reference for flows and components.
 
 This is the execution tracker for the parent-facing redesign pass.
 
@@ -108,10 +108,10 @@ This is the execution tracker for the parent-facing redesign pass.
 
 ## Docs And Tracking
 
-- [x] Update [docs/plans/path_to_deployment/README.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/README.md) as Phase 5 starts and finishes.
-- [ ] Keep [phase5_parent_product_redesign.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase5_parent_product_redesign.md) current if implementation decisions change.
-- [ ] Keep [phase5_surface_inventory.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase5_surface_inventory.md) current if scope changes.
-- [ ] Keep [phase5_checklist_design_review.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase5_checklist_design_review.md) current if scope or product surfaces change.
+- [x] Update [docs/plans/path_to_deployment/README.md](/home/luke/Desktop/learning/homeschool-v2/docs/plans/path_to_deployment/README.md) as Phase 5 starts and finishes.
+- [ ] Keep [phase5_parent_product_redesign.md](/home/luke/Desktop/learning/homeschool-v2/docs/plans/path_to_deployment/phase5_parent_product_redesign.md) current if implementation decisions change.
+- [ ] Keep [phase5_surface_inventory.md](/home/luke/Desktop/learning/homeschool-v2/docs/plans/path_to_deployment/phase5_surface_inventory.md) current if scope changes.
+- [ ] Keep [phase5_checklist_design_review.md](/home/luke/Desktop/learning/homeschool-v2/docs/plans/path_to_deployment/phase5_checklist_design_review.md) current if scope or product surfaces change.
 - [ ] Record any deferrals before moving to Phase 6.
 
 ## Exit Criteria

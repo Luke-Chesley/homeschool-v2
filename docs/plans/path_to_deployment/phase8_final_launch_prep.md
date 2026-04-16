@@ -144,15 +144,15 @@ If a problem discovered in Phase 8 is not launch-critical, document it and defer
 
 Read these first:
 
-- [README.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/README.md)
-- [phase6_learner_flow_checklist.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase6_learner_flow_checklist.md)
-- [phase7_product_polish_checklist.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase7_product_polish_checklist.md)
-- [phase4_hosted_deployment_setup.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase4_hosted_deployment_setup.md)
-- [phase4_env_matrix.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase4_env_matrix.md)
-- [phase4_provisioned_inventory.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase4_provisioned_inventory.md)
-- [docs/qa/README.md](/home/luke/Desktop/homeschool-v2/docs/qa/README.md)
-- [docs/qa/learner-flow-responsive-qa.md](/home/luke/Desktop/homeschool-v2/docs/qa/learner-flow-responsive-qa.md)
-- [docs/qa/phase7-product-polish-qa.md](/home/luke/Desktop/homeschool-v2/docs/qa/phase7-product-polish-qa.md)
+- [README.md](/home/luke/Desktop/learning/homeschool-v2/docs/plans/path_to_deployment/README.md)
+- [phase6_learner_flow_checklist.md](/home/luke/Desktop/learning/homeschool-v2/docs/plans/path_to_deployment/phase6_learner_flow_checklist.md)
+- [phase7_product_polish_checklist.md](/home/luke/Desktop/learning/homeschool-v2/docs/plans/path_to_deployment/phase7_product_polish_checklist.md)
+- [phase4_hosted_deployment_setup.md](/home/luke/Desktop/learning/homeschool-v2/docs/plans/path_to_deployment/phase4_hosted_deployment_setup.md)
+- [phase4_env_matrix.md](/home/luke/Desktop/learning/homeschool-v2/docs/plans/path_to_deployment/phase4_env_matrix.md)
+- [phase4_provisioned_inventory.md](/home/luke/Desktop/learning/homeschool-v2/docs/plans/path_to_deployment/phase4_provisioned_inventory.md)
+- [docs/qa/README.md](/home/luke/Desktop/learning/homeschool-v2/docs/qa/README.md)
+- [docs/qa/learner-flow-responsive-qa.md](/home/luke/Desktop/learning/homeschool-v2/docs/qa/learner-flow-responsive-qa.md)
+- [docs/qa/phase7-product-polish-qa.md](/home/luke/Desktop/learning/homeschool-v2/docs/qa/phase7-product-polish-qa.md)
 
 ## Suggested Implementation Order
 

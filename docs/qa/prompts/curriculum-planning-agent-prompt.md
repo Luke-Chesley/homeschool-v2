@@ -1,15 +1,15 @@
 Execute a live browser QA pass for curriculum and planning using the local QA pipeline docs:
 
-- `/home/luke/Desktop/homeschool-v2/docs/qa/local-qa-pipeline.md`
-- `/home/luke/Desktop/homeschool-v2/docs/qa/qa-report-template.md`
-- `/home/luke/Desktop/homeschool-v2/docs/qa/qa-flow-inventory.md`
+- `/home/luke/Desktop/learning/homeschool-v2/docs/qa/local-qa-pipeline.md`
+- `/home/luke/Desktop/learning/homeschool-v2/docs/qa/qa-report-template.md`
+- `/home/luke/Desktop/learning/homeschool-v2/docs/qa/qa-flow-inventory.md`
 
 Important:
 - this is live browser execution, not a review of the docs
 - actually click through the planning and curriculum flows
 
 Repo:
-- `/home/luke/Desktop/homeschool-v2`
+- `/home/luke/Desktop/learning/homeschool-v2`
 
 Target:
 - `http://localhost:3000`

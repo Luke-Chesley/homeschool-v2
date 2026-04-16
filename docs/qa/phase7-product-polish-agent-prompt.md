@@ -1,4 +1,4 @@
-Execute the QA pass described in `/home/luke/Desktop/homeschool-v2/docs/qa/phase7-product-polish-qa.md`.
+Execute the QA pass described in `/home/luke/Desktop/learning/homeschool-v2/docs/qa/phase7-product-polish-qa.md`.
 
 Important:
 - Do not review or critique the QA document itself.
@@ -9,7 +9,7 @@ Important:
 - Your report must include an execution log so we can see exactly what you did and what might still be untested.
 
 Repo:
-- `/home/luke/Desktop/homeschool-v2`
+- `/home/luke/Desktop/learning/homeschool-v2`
 
 Target:
 - use the branch review URL provided by the requesting agent or user

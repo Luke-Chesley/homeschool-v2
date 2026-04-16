@@ -1,6 +1,6 @@
 # Phase 3: Authorization And Data Safety Checklist
 
-Use this alongside [phase3_authorization_data_safety.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase3_authorization_data_safety.md).
+Use this alongside [phase3_authorization_data_safety.md](/home/luke/Desktop/learning/homeschool-v2/docs/plans/path_to_deployment/phase3_authorization_data_safety.md).
 
 This is the execution tracker for the Phase 3 implementation pass.
 
@@ -93,8 +93,8 @@ This is the execution tracker for the Phase 3 implementation pass.
 
 ## Docs And Tracking
 
-- [x] Keep [docs/plans/path_to_deployment/README.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/README.md) updated as work starts and finishes.
-- [x] Keep [phase3_authorization_data_safety.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase3_authorization_data_safety.md) current if implementation decisions change.
+- [x] Keep [docs/plans/path_to_deployment/README.md](/home/luke/Desktop/learning/homeschool-v2/docs/plans/path_to_deployment/README.md) updated as work starts and finishes.
+- [x] Keep [phase3_authorization_data_safety.md](/home/luke/Desktop/learning/homeschool-v2/docs/plans/path_to_deployment/phase3_authorization_data_safety.md) current if implementation decisions change.
 - [x] Add a policy inventory/review note once the final migration set is known.
 - [x] Record any deferrals before moving to Phase 4.
 

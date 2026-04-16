@@ -1,6 +1,6 @@
 # Phase 7: Product Polish Checklist
 
-Use this alongside [phase7_product_polish_and_account_surfaces.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase7_product_polish_and_account_surfaces.md) and [phase7_surface_inventory.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase7_surface_inventory.md).
+Use this alongside [phase7_product_polish_and_account_surfaces.md](/home/luke/Desktop/learning/homeschool-v2/docs/plans/path_to_deployment/phase7_product_polish_and_account_surfaces.md) and [phase7_surface_inventory.md](/home/luke/Desktop/learning/homeschool-v2/docs/plans/path_to_deployment/phase7_surface_inventory.md).
 
 ## Phase Status
 
@@ -63,9 +63,9 @@ Use this alongside [phase7_product_polish_and_account_surfaces.md](/home/luke/De
 
 ## Documentation
 
-- [x] Update [docs/plans/path_to_deployment/README.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/README.md) as Phase 7 starts and finishes.
-- [x] Keep [phase7_product_polish_and_account_surfaces.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase7_product_polish_and_account_surfaces.md) current if implementation decisions change.
-- [x] Keep [phase7_surface_inventory.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase7_surface_inventory.md) current if scope changes.
+- [x] Update [docs/plans/path_to_deployment/README.md](/home/luke/Desktop/learning/homeschool-v2/docs/plans/path_to_deployment/README.md) as Phase 7 starts and finishes.
+- [x] Keep [phase7_product_polish_and_account_surfaces.md](/home/luke/Desktop/learning/homeschool-v2/docs/plans/path_to_deployment/phase7_product_polish_and_account_surfaces.md) current if implementation decisions change.
+- [x] Keep [phase7_surface_inventory.md](/home/luke/Desktop/learning/homeschool-v2/docs/plans/path_to_deployment/phase7_surface_inventory.md) current if scope changes.
 
 ## Deferrals
 

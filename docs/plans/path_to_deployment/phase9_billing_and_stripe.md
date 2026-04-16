@@ -88,5 +88,5 @@ Before Phase 9 begins, decide:
 
 ## Related Surfaces
 
-- [app/(parent)/account/page.tsx](/home/luke/Desktop/homeschool-v2/app/(parent)/account/page.tsx)
-- [docs/plans/path_to_deployment/phase7_product_polish_and_account_surfaces.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase7_product_polish_and_account_surfaces.md)
+- [app/(parent)/account/page.tsx](</home/luke/Desktop/learning/homeschool-v2/app/(parent)/account/page.tsx>)
+- [docs/plans/path_to_deployment/phase7_product_polish_and_account_surfaces.md](/home/luke/Desktop/learning/homeschool-v2/docs/plans/path_to_deployment/phase7_product_polish_and_account_surfaces.md)

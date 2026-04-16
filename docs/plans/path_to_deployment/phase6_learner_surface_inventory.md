@@ -10,9 +10,9 @@ Use it to keep Phase 6 focused on the actual learner experience rather than trea
 
 Primary files:
 
-- [app/(learner)/layout.tsx](/home/luke/Desktop/homeschool-v2/app/(learner)/layout.tsx)
-- [app/globals.css](/home/luke/Desktop/homeschool-v2/app/globals.css)
-- [components/studio](/home/luke/Desktop/homeschool-v2/components/studio)
+- [app/(learner)/layout.tsx](</home/luke/Desktop/learning/homeschool-v2/app/(learner)/layout.tsx>)
+- [app/globals.css](/home/luke/Desktop/learning/homeschool-v2/app/globals.css)
+- [components/studio](/home/luke/Desktop/learning/homeschool-v2/components/studio)
 
 Why it matters:
 
@@ -30,9 +30,9 @@ Primary redesign targets:
 
 Primary files:
 
-- [components/activities/ActivityRenderer.tsx](/home/luke/Desktop/homeschool-v2/components/activities/ActivityRenderer.tsx)
-- [components/activities/v2/ActivitySpecRenderer.tsx](/home/luke/Desktop/homeschool-v2/components/activities/v2/ActivitySpecRenderer.tsx)
-- [components/activities](/home/luke/Desktop/homeschool-v2/components/activities)
+- [components/activities/ActivityRenderer.tsx](/home/luke/Desktop/learning/homeschool-v2/components/activities/ActivityRenderer.tsx)
+- [components/activities/v2/ActivitySpecRenderer.tsx](/home/luke/Desktop/learning/homeschool-v2/components/activities/v2/ActivitySpecRenderer.tsx)
+- [components/activities](/home/luke/Desktop/learning/homeschool-v2/components/activities)
 
 Why it matters:
 
@@ -52,9 +52,9 @@ Primary redesign targets:
 
 Primary files:
 
-- [app/(parent)/today/page.tsx](/home/luke/Desktop/homeschool-v2/app/(parent)/today/page.tsx)
-- [components/planning](/home/luke/Desktop/homeschool-v2/components/planning)
-- [app/(learner)/learner/page.tsx](/home/luke/Desktop/homeschool-v2/app/(learner)/learner/page.tsx)
+- [app/(parent)/today/page.tsx](</home/luke/Desktop/learning/homeschool-v2/app/(parent)/today/page.tsx>)
+- [components/planning](/home/luke/Desktop/learning/homeschool-v2/components/planning)
+- [app/(learner)/learner/page.tsx](</home/luke/Desktop/learning/homeschool-v2/app/(learner)/learner/page.tsx>)
 
 Why it matters:
 
@@ -71,8 +71,8 @@ Primary redesign targets:
 
 Primary files:
 
-- [app/(learner)/learner/page.tsx](/home/luke/Desktop/homeschool-v2/app/(learner)/learner/page.tsx)
-- [lib/activities/session-service.ts](/home/luke/Desktop/homeschool-v2/lib/activities/session-service.ts)
+- [app/(learner)/learner/page.tsx](</home/luke/Desktop/learning/homeschool-v2/app/(learner)/learner/page.tsx>)
+- [lib/activities/session-service.ts](/home/luke/Desktop/learning/homeschool-v2/lib/activities/session-service.ts)
 
 Why it matters:
 
@@ -90,8 +90,8 @@ Primary redesign targets:
 
 Primary files:
 
-- [app/(learner)/activity/[sessionId]/page.tsx](/home/luke/Desktop/homeschool-v2/app/(learner)/activity/[sessionId]/page.tsx)
-- [components/activities/ActivityStudioPanel.tsx](/home/luke/Desktop/homeschool-v2/components/activities/ActivityStudioPanel.tsx)
+- [app/(learner)/activity/[sessionId]/page.tsx](</home/luke/Desktop/learning/homeschool-v2/app/(learner)/activity/[sessionId]/page.tsx>)
+- [components/activities/ActivityStudioPanel.tsx](/home/luke/Desktop/learning/homeschool-v2/components/activities/ActivityStudioPanel.tsx)
 
 Why it matters:
 
@@ -110,7 +110,7 @@ Primary redesign targets:
 
 Primary files:
 
-- [app/sample-activity/page.tsx](/home/luke/Desktop/homeschool-v2/app/sample-activity/page.tsx)
+- [app/sample-activity/page.tsx](/home/luke/Desktop/learning/homeschool-v2/app/sample-activity/page.tsx)
 
 Why it matters:
 
@@ -127,9 +127,9 @@ Primary redesign targets:
 
 Primary files:
 
-- [components/activities/ActivityStudioPanel.tsx](/home/luke/Desktop/homeschool-v2/components/activities/ActivityStudioPanel.tsx)
-- [components/studio/StudioDrawer.tsx](/home/luke/Desktop/homeschool-v2/components/studio/StudioDrawer.tsx)
-- [components/studio/StudioJsonInspector.tsx](/home/luke/Desktop/homeschool-v2/components/studio/StudioJsonInspector.tsx)
+- [components/activities/ActivityStudioPanel.tsx](/home/luke/Desktop/learning/homeschool-v2/components/activities/ActivityStudioPanel.tsx)
+- [components/studio/StudioDrawer.tsx](/home/luke/Desktop/learning/homeschool-v2/components/studio/StudioDrawer.tsx)
+- [components/studio/StudioJsonInspector.tsx](/home/luke/Desktop/learning/homeschool-v2/components/studio/StudioJsonInspector.tsx)
 
 Primary redesign targets:
 
@@ -141,9 +141,9 @@ Primary redesign targets:
 
 Primary files:
 
-- [app/globals.css](/home/luke/Desktop/homeschool-v2/app/globals.css)
-- learner route files under [app/(learner)](/home/luke/Desktop/homeschool-v2/app/(learner))
-- activity renderer files under [components/activities](/home/luke/Desktop/homeschool-v2/components/activities)
+- [app/globals.css](/home/luke/Desktop/learning/homeschool-v2/app/globals.css)
+- learner route files under [app/(learner)](</home/luke/Desktop/learning/homeschool-v2/app/(learner)>)
+- activity renderer files under [components/activities](/home/luke/Desktop/learning/homeschool-v2/components/activities)
 
 Primary redesign targets:
 

@@ -28,7 +28,7 @@ These contract docs therefore describe the boundary between the product app and 
 
 1. If you change required fields, optional fields, defaults, lineage/version fields, or persistence shape, update the matching contract file.
 2. If you add a new artifact or durable generation input, create a contract from `_template.md` and register it in `contract-index.json`.
-3. Run `npm run contracts:check` before finishing.
+3. Run `corepack pnpm contracts:check` before finishing.
 
 ## Index
 

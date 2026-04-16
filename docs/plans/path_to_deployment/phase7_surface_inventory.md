@@ -7,7 +7,7 @@ Use this inventory to keep Phase 7 focused on the real remaining product surface
 ### Account
 
 Route:
-- [app/(parent)/account/page.tsx](/home/luke/Desktop/homeschool-v2/app/(parent)/account/page.tsx)
+- [app/(parent)/account/page.tsx](</home/luke/Desktop/learning/homeschool-v2/app/(parent)/account/page.tsx>)
 
 Current state:
 - obvious placeholder framing
@@ -22,13 +22,13 @@ Phase 7 goals:
 ### Tracking
 
 Route:
-- [app/(parent)/tracking/page.tsx](/home/luke/Desktop/homeschool-v2/app/(parent)/tracking/page.tsx)
+- [app/(parent)/tracking/page.tsx](</home/luke/Desktop/learning/homeschool-v2/app/(parent)/tracking/page.tsx>)
 
 Components:
-- [components/tracking/tracking-shell.tsx](/home/luke/Desktop/homeschool-v2/components/tracking/tracking-shell.tsx)
-- [components/tracking/tracking-overview.tsx](/home/luke/Desktop/homeschool-v2/components/tracking/tracking-overview.tsx)
-- [components/tracking/reports-view.tsx](/home/luke/Desktop/homeschool-v2/components/tracking/reports-view.tsx)
-- [components/tracking/attendance-card.tsx](/home/luke/Desktop/homeschool-v2/components/tracking/attendance-card.tsx)
+- [components/tracking/tracking-shell.tsx](/home/luke/Desktop/learning/homeschool-v2/components/tracking/tracking-shell.tsx)
+- [components/tracking/tracking-overview.tsx](/home/luke/Desktop/learning/homeschool-v2/components/tracking/tracking-overview.tsx)
+- [components/tracking/reports-view.tsx](/home/luke/Desktop/learning/homeschool-v2/components/tracking/reports-view.tsx)
+- [components/tracking/attendance-card.tsx](/home/luke/Desktop/learning/homeschool-v2/components/tracking/attendance-card.tsx)
 
 Current state:
 - functionally useful
@@ -42,15 +42,15 @@ Phase 7 goals:
 ### Auth And Setup
 
 Routes:
-- [app/auth/login/page.tsx](/home/luke/Desktop/homeschool-v2/app/auth/login/page.tsx)
-- [app/auth/sign-up/page.tsx](/home/luke/Desktop/homeschool-v2/app/auth/sign-up/page.tsx)
-- [app/auth/setup/page.tsx](/home/luke/Desktop/homeschool-v2/app/auth/setup/page.tsx)
-- [app/onboarding/page.tsx](/home/luke/Desktop/homeschool-v2/app/onboarding/page.tsx)
+- [app/auth/login/page.tsx](/home/luke/Desktop/learning/homeschool-v2/app/auth/login/page.tsx)
+- [app/auth/sign-up/page.tsx](/home/luke/Desktop/learning/homeschool-v2/app/auth/sign-up/page.tsx)
+- [app/auth/setup/page.tsx](/home/luke/Desktop/learning/homeschool-v2/app/auth/setup/page.tsx)
+- [app/onboarding/page.tsx](/home/luke/Desktop/learning/homeschool-v2/app/onboarding/page.tsx)
 
 Components:
-- [components/auth/AuthCredentialsForm.tsx](/home/luke/Desktop/homeschool-v2/components/auth/AuthCredentialsForm.tsx)
-- [components/auth/AuthSetupForm.tsx](/home/luke/Desktop/homeschool-v2/components/auth/AuthSetupForm.tsx)
-- [components/onboarding/homeschool-onboarding-form.tsx](/home/luke/Desktop/homeschool-v2/components/onboarding/homeschool-onboarding-form.tsx)
+- [components/auth/AuthCredentialsForm.tsx](/home/luke/Desktop/learning/homeschool-v2/components/auth/AuthCredentialsForm.tsx)
+- [components/auth/AuthSetupForm.tsx](/home/luke/Desktop/learning/homeschool-v2/components/auth/AuthSetupForm.tsx)
+- [components/onboarding/homeschool-onboarding-form.tsx](/home/luke/Desktop/learning/homeschool-v2/components/onboarding/homeschool-onboarding-form.tsx)
 
 Current state:
 - structurally sound
@@ -65,12 +65,12 @@ Phase 7 goals:
 
 These routes should be reviewed during Phase 7 for consistency, even if they are not deeply rebuilt:
 
-- [app/(parent)/today/page.tsx](/home/luke/Desktop/homeschool-v2/app/(parent)/today/page.tsx)
-- [app/(parent)/planning/page.tsx](/home/luke/Desktop/homeschool-v2/app/(parent)/planning/page.tsx)
-- [app/(parent)/curriculum/page.tsx](/home/luke/Desktop/homeschool-v2/app/(parent)/curriculum/page.tsx)
-- [app/(parent)/copilot/page.tsx](/home/luke/Desktop/homeschool-v2/app/(parent)/copilot/page.tsx)
-- [app/(parent)/tracking/page.tsx](/home/luke/Desktop/homeschool-v2/app/(parent)/tracking/page.tsx)
-- [app/(parent)/account/page.tsx](/home/luke/Desktop/homeschool-v2/app/(parent)/account/page.tsx)
+- [app/(parent)/today/page.tsx](</home/luke/Desktop/learning/homeschool-v2/app/(parent)/today/page.tsx>)
+- [app/(parent)/planning/page.tsx](</home/luke/Desktop/learning/homeschool-v2/app/(parent)/planning/page.tsx>)
+- [app/(parent)/curriculum/page.tsx](</home/luke/Desktop/learning/homeschool-v2/app/(parent)/curriculum/page.tsx>)
+- [app/(parent)/copilot/page.tsx](</home/luke/Desktop/learning/homeschool-v2/app/(parent)/copilot/page.tsx>)
+- [app/(parent)/tracking/page.tsx](</home/luke/Desktop/learning/homeschool-v2/app/(parent)/tracking/page.tsx>)
+- [app/(parent)/account/page.tsx](</home/luke/Desktop/learning/homeschool-v2/app/(parent)/account/page.tsx>)
 
 Review goals:
 - no route should feel like a different product
@@ -82,9 +82,9 @@ Review goals:
 
 These shared files matter because Phase 7 is partly a consistency pass:
 
-- [app/globals.css](/home/luke/Desktop/homeschool-v2/app/globals.css)
-- [components/navigation/global-page-tabs.tsx](/home/luke/Desktop/homeschool-v2/components/navigation/global-page-tabs.tsx)
-- [components/navigation/parent-nav.tsx](/home/luke/Desktop/homeschool-v2/components/navigation/parent-nav.tsx)
+- [app/globals.css](/home/luke/Desktop/learning/homeschool-v2/app/globals.css)
+- [components/navigation/global-page-tabs.tsx](/home/luke/Desktop/learning/homeschool-v2/components/navigation/global-page-tabs.tsx)
+- [components/navigation/parent-nav.tsx](/home/luke/Desktop/learning/homeschool-v2/components/navigation/parent-nav.tsx)
 
 Adjust these only if the change clearly improves cross-surface consistency.
 

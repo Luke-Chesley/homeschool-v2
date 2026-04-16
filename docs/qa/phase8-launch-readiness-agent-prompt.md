@@ -1,4 +1,4 @@
-Execute the launch-readiness QA pass described in `/home/luke/Desktop/homeschool-v2/docs/qa/phase8-launch-readiness-qa.md`, but treat that file as the baseline and update it with new results rather than critiquing the document itself.
+Execute the launch-readiness QA pass described in `/home/luke/Desktop/learning/homeschool-v2/docs/qa/phase8-launch-readiness-qa.md`, but treat that file as the baseline and update it with new results rather than critiquing the document itself.
 
 Important:
 - this is a live browser QA run, not a code review
@@ -7,7 +7,7 @@ Important:
 - include an execution log of exactly what you did
 
 Repo:
-- `/home/luke/Desktop/homeschool-v2`
+- `/home/luke/Desktop/learning/homeschool-v2`
 
 Default target:
 - `http://localhost:3000`

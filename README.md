@@ -17,7 +17,7 @@ This repo no longer owns extracted prompt templates or a generic AI gateway.
 
 - `app/(parent)` and `app/(learner)` are route groups, not URL segments.
 - The parent shell lives in `app/(parent)/layout.tsx`.
-- `http://localhost:3000` is reserved for the main checkout at `/home/luke/Desktop/homeschool-v2`.
+- `http://localhost:3000` is reserved for the main checkout at `/home/luke/Desktop/learning/homeschool-v2`.
 - AI provider keys and model config belong in `learning-core`, not here.
 - `homeschool-v2` should only carry the service boundary env:
   - `LEARNING_CORE_BASE_URL`
@@ -134,7 +134,7 @@ What you should not look for here anymore:
 
 ## Development Notes
 
-- Start the main app from `/home/luke/Desktop/homeschool-v2` with `corepack pnpm dev` or `make dev`.
+- Start the main app from `/home/luke/Desktop/learning/homeschool-v2` with `corepack pnpm dev` or `make dev`.
 - For local auth flows, start the Supabase stack with `corepack pnpm dev:stack` and copy the publishable/secret keys from `corepack pnpm dev:stack:status` into `.env.local`.
 - Local app startup still applies repo SQL files from `drizzle/*.sql` automatically. Hosted startup does not. Staging and production databases must be provisioned or migrated before the Vercel app boots.
 - Stripe billing is optional in local development. If you want real hosted checkout and webhook flows, add `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and `STRIPE_FOUNDING_HOUSEHOLD_ANNUAL_PRICE_ID` to `.env.local`.

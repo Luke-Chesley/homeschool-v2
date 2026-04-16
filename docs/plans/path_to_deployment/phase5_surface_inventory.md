@@ -11,10 +11,10 @@ The goal is to make Phase 5 broad and coherent rather than producing one polishe
 
 Primary files:
 
-- [app/layout.tsx](/home/luke/Desktop/homeschool-v2/app/layout.tsx)
-- [app/(parent)/layout.tsx](/home/luke/Desktop/homeschool-v2/app/(parent)/layout.tsx)
-- [components/parent-shell](/home/luke/Desktop/homeschool-v2/components/parent-shell)
-- [components/navigation](/home/luke/Desktop/homeschool-v2/components/navigation)
+- [app/layout.tsx](/home/luke/Desktop/learning/homeschool-v2/app/layout.tsx)
+- [app/(parent)/layout.tsx](</home/luke/Desktop/learning/homeschool-v2/app/(parent)/layout.tsx>)
+- [components/parent-shell](/home/luke/Desktop/learning/homeschool-v2/components/parent-shell)
+- [components/navigation](/home/luke/Desktop/learning/homeschool-v2/components/navigation)
 
 Phase 5 responsibilities:
 
@@ -34,8 +34,8 @@ Key questions:
 
 Primary files:
 
-- [components/ui](/home/luke/Desktop/homeschool-v2/components/ui)
-- [app/globals.css](/home/luke/Desktop/homeschool-v2/app/globals.css)
+- [components/ui](/home/luke/Desktop/learning/homeschool-v2/components/ui)
+- [app/globals.css](/home/luke/Desktop/learning/homeschool-v2/app/globals.css)
 
 Phase 5 responsibilities:
 
@@ -51,10 +51,10 @@ Phase 5 responsibilities:
 
 Primary files:
 
-- [app/(parent)/today/page.tsx](/home/luke/Desktop/homeschool-v2/app/(parent)/today/page.tsx)
-- [app/(parent)/today/actions.ts](/home/luke/Desktop/homeschool-v2/app/(parent)/today/actions.ts)
-- [components/planning](/home/luke/Desktop/homeschool-v2/components/planning)
-- [lib/planning/today-service.ts](/home/luke/Desktop/homeschool-v2/lib/planning/today-service.ts)
+- [app/(parent)/today/page.tsx](</home/luke/Desktop/learning/homeschool-v2/app/(parent)/today/page.tsx>)
+- [app/(parent)/today/actions.ts](</home/luke/Desktop/learning/homeschool-v2/app/(parent)/today/actions.ts>)
+- [components/planning](/home/luke/Desktop/learning/homeschool-v2/components/planning)
+- [lib/planning/today-service.ts](/home/luke/Desktop/learning/homeschool-v2/lib/planning/today-service.ts)
 
 Why it matters:
 
@@ -73,9 +73,9 @@ Primary redesign targets:
 
 Primary files:
 
-- [app/(parent)/planning/page.tsx](/home/luke/Desktop/homeschool-v2/app/(parent)/planning/page.tsx)
-- [components/planning](/home/luke/Desktop/homeschool-v2/components/planning)
-- [lib/planning](/home/luke/Desktop/homeschool-v2/lib/planning)
+- [app/(parent)/planning/page.tsx](</home/luke/Desktop/learning/homeschool-v2/app/(parent)/planning/page.tsx>)
+- [components/planning](/home/luke/Desktop/learning/homeschool-v2/components/planning)
+- [lib/planning](/home/luke/Desktop/learning/homeschool-v2/lib/planning)
 
 Why it matters:
 
@@ -92,9 +92,9 @@ Primary redesign targets:
 
 Primary files:
 
-- [app/(parent)/curriculum/page.tsx](/home/luke/Desktop/homeschool-v2/app/(parent)/curriculum/page.tsx)
-- [components/curriculum](/home/luke/Desktop/homeschool-v2/components/curriculum)
-- [lib/curriculum](/home/luke/Desktop/homeschool-v2/lib/curriculum)
+- [app/(parent)/curriculum/page.tsx](</home/luke/Desktop/learning/homeschool-v2/app/(parent)/curriculum/page.tsx>)
+- [components/curriculum](/home/luke/Desktop/learning/homeschool-v2/components/curriculum)
+- [lib/curriculum](/home/luke/Desktop/learning/homeschool-v2/lib/curriculum)
 
 Why it matters:
 
@@ -111,9 +111,9 @@ Primary redesign targets:
 
 Primary files:
 
-- [app/(parent)/tracking/page.tsx](/home/luke/Desktop/homeschool-v2/app/(parent)/tracking/page.tsx)
-- [components/tracking](/home/luke/Desktop/homeschool-v2/components/tracking)
-- [lib/tracking](/home/luke/Desktop/homeschool-v2/lib/tracking)
+- [app/(parent)/tracking/page.tsx](</home/luke/Desktop/learning/homeschool-v2/app/(parent)/tracking/page.tsx>)
+- [components/tracking](/home/luke/Desktop/learning/homeschool-v2/components/tracking)
+- [lib/tracking](/home/luke/Desktop/learning/homeschool-v2/lib/tracking)
 
 Why it matters:
 
@@ -130,9 +130,9 @@ Primary redesign targets:
 
 Primary files:
 
-- [app/(parent)/copilot/page.tsx](/home/luke/Desktop/homeschool-v2/app/(parent)/copilot/page.tsx)
-- [components/copilot](/home/luke/Desktop/homeschool-v2/components/copilot)
-- [components/debug](/home/luke/Desktop/homeschool-v2/components/debug)
+- [app/(parent)/copilot/page.tsx](</home/luke/Desktop/learning/homeschool-v2/app/(parent)/copilot/page.tsx>)
+- [components/copilot](/home/luke/Desktop/learning/homeschool-v2/components/copilot)
+- [components/debug](/home/luke/Desktop/learning/homeschool-v2/components/debug)
 
 Why it matters:
 
@@ -151,8 +151,8 @@ Primary redesign targets:
 
 Primary files:
 
-- [app/onboarding/page.tsx](/home/luke/Desktop/homeschool-v2/app/onboarding/page.tsx)
-- [lib/homeschool/onboarding](/home/luke/Desktop/homeschool-v2/lib/homeschool/onboarding)
+- [app/onboarding/page.tsx](/home/luke/Desktop/learning/homeschool-v2/app/onboarding/page.tsx)
+- [lib/homeschool/onboarding](/home/luke/Desktop/learning/homeschool-v2/lib/homeschool/onboarding)
 
 Primary redesign targets:
 
@@ -164,10 +164,10 @@ Primary redesign targets:
 
 Primary files:
 
-- [app/auth/layout.tsx](/home/luke/Desktop/homeschool-v2/app/auth/layout.tsx)
-- [app/auth/login/page.tsx](/home/luke/Desktop/homeschool-v2/app/auth/login/page.tsx)
-- [app/auth/sign-up/page.tsx](/home/luke/Desktop/homeschool-v2/app/auth/sign-up/page.tsx)
-- [app/auth/setup/page.tsx](/home/luke/Desktop/homeschool-v2/app/auth/setup/page.tsx)
+- [app/auth/layout.tsx](/home/luke/Desktop/learning/homeschool-v2/app/auth/layout.tsx)
+- [app/auth/login/page.tsx](/home/luke/Desktop/learning/homeschool-v2/app/auth/login/page.tsx)
+- [app/auth/sign-up/page.tsx](/home/luke/Desktop/learning/homeschool-v2/app/auth/sign-up/page.tsx)
+- [app/auth/setup/page.tsx](/home/luke/Desktop/learning/homeschool-v2/app/auth/setup/page.tsx)
 
 Primary redesign targets:
 
@@ -179,8 +179,8 @@ Primary redesign targets:
 
 Primary files:
 
-- [app/users/page.tsx](/home/luke/Desktop/homeschool-v2/app/users/page.tsx)
-- [components/users](/home/luke/Desktop/homeschool-v2/components/users)
+- [app/users/page.tsx](/home/luke/Desktop/learning/homeschool-v2/app/users/page.tsx)
+- [components/users](/home/luke/Desktop/learning/homeschool-v2/components/users)
 
 Primary redesign targets:
 

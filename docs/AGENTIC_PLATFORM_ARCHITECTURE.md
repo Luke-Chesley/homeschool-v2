@@ -67,48 +67,48 @@ The system already has strong architectural anchors for agentic behavior.
 
 ### Product and platform direction
 
-- [docs/PRODUCT_IMPLEMENTATION_PLAN.md](/home/luke/Desktop/homeschool-v2/docs/PRODUCT_IMPLEMENTATION_PLAN.md)
-- [docs/VISION.md](/home/luke/Desktop/homeschool-v2/docs/VISION.md)
-- [lib/platform/settings.ts](/home/luke/Desktop/homeschool-v2/lib/platform/settings.ts)
+- [docs/PRODUCT_IMPLEMENTATION_PLAN.md](/home/luke/Desktop/learning/homeschool-v2/docs/PRODUCT_IMPLEMENTATION_PLAN.md)
+- [docs/VISION.md](/home/luke/Desktop/learning/homeschool-v2/docs/VISION.md)
+- [lib/platform/settings.ts](/home/luke/Desktop/learning/homeschool-v2/lib/platform/settings.ts)
 
 ### Learning-core boundary and operation calls
 
-- [lib/learning-core/operations.ts](/home/luke/Desktop/homeschool-v2/lib/learning-core/operations.ts)
-- [lib/learning-core/copilot.ts](/home/luke/Desktop/homeschool-v2/lib/learning-core/copilot.ts)
-- [lib/learning-core/session.ts](/home/luke/Desktop/homeschool-v2/lib/learning-core/session.ts)
-- [lib/learning-core/curriculum.ts](/home/luke/Desktop/homeschool-v2/lib/learning-core/curriculum.ts)
+- [lib/learning-core/operations.ts](/home/luke/Desktop/learning/homeschool-v2/lib/learning-core/operations.ts)
+- [lib/learning-core/copilot.ts](/home/luke/Desktop/learning/homeschool-v2/lib/learning-core/copilot.ts)
+- [lib/learning-core/session.ts](/home/luke/Desktop/learning/homeschool-v2/lib/learning-core/session.ts)
+- [lib/learning-core/curriculum.ts](/home/luke/Desktop/learning/homeschool-v2/lib/learning-core/curriculum.ts)
 
 ### Copilot context, threads, and actions
 
-- [app/(parent)/copilot/page.tsx](/home/luke/Desktop/homeschool-v2/app/(parent)/copilot/page.tsx)
-- [app/api/ai/chat/route.ts](/home/luke/Desktop/homeschool-v2/app/api/ai/chat/route.ts)
-- [lib/ai/copilot-store.ts](/home/luke/Desktop/homeschool-v2/lib/ai/copilot-store.ts)
-- [lib/planning/copilot-snapshot.ts](/home/luke/Desktop/homeschool-v2/lib/planning/copilot-snapshot.ts)
-- [lib/db/schema/copilot.ts](/home/luke/Desktop/homeschool-v2/lib/db/schema/copilot.ts)
+- [app/(parent)/copilot/page.tsx](</home/luke/Desktop/learning/homeschool-v2/app/(parent)/copilot/page.tsx>)
+- [app/api/ai/chat/route.ts](/home/luke/Desktop/learning/homeschool-v2/app/api/ai/chat/route.ts)
+- [lib/ai/copilot-store.ts](/home/luke/Desktop/learning/homeschool-v2/lib/ai/copilot-store.ts)
+- [lib/planning/copilot-snapshot.ts](/home/luke/Desktop/learning/homeschool-v2/lib/planning/copilot-snapshot.ts)
+- [lib/db/schema/copilot.ts](/home/luke/Desktop/learning/homeschool-v2/lib/db/schema/copilot.ts)
 
 ### Planning, sessions, and execution state
 
-- [lib/planning/today-service.ts](/home/luke/Desktop/homeschool-v2/lib/planning/today-service.ts)
-- [lib/session-workspace/service.ts](/home/luke/Desktop/homeschool-v2/lib/session-workspace/service.ts)
-- [components/planning/today-workspace-view.tsx](/home/luke/Desktop/homeschool-v2/components/planning/today-workspace-view.tsx)
+- [lib/planning/today-service.ts](/home/luke/Desktop/learning/homeschool-v2/lib/planning/today-service.ts)
+- [lib/session-workspace/service.ts](/home/luke/Desktop/learning/homeschool-v2/lib/session-workspace/service.ts)
+- [components/planning/today-workspace-view.tsx](/home/luke/Desktop/learning/homeschool-v2/components/planning/today-workspace-view.tsx)
 
 ### Activity runtime and adaptive outcomes
 
-- [lib/activities/types.ts](/home/luke/Desktop/homeschool-v2/lib/activities/types.ts)
-- [lib/activities/assignment-service.ts](/home/luke/Desktop/homeschool-v2/lib/activities/assignment-service.ts)
-- [lib/activities/session-service.ts](/home/luke/Desktop/homeschool-v2/lib/activities/session-service.ts)
-- [lib/db/schema/activities.ts](/home/luke/Desktop/homeschool-v2/lib/db/schema/activities.ts)
+- [lib/activities/types.ts](/home/luke/Desktop/learning/homeschool-v2/lib/activities/types.ts)
+- [lib/activities/assignment-service.ts](/home/luke/Desktop/learning/homeschool-v2/lib/activities/assignment-service.ts)
+- [lib/activities/session-service.ts](/home/luke/Desktop/learning/homeschool-v2/lib/activities/session-service.ts)
+- [lib/db/schema/activities.ts](/home/luke/Desktop/learning/homeschool-v2/lib/db/schema/activities.ts)
 
 ### Evidence, review, and recommendations
 
-- [lib/db/schema/workflow.ts](/home/luke/Desktop/homeschool-v2/lib/db/schema/workflow.ts)
-- [lib/tracking/service.ts](/home/luke/Desktop/homeschool-v2/lib/tracking/service.ts)
-- [components/tracking/tracking-overview.tsx](/home/luke/Desktop/homeschool-v2/components/tracking/tracking-overview.tsx)
+- [lib/db/schema/workflow.ts](/home/luke/Desktop/learning/homeschool-v2/lib/db/schema/workflow.ts)
+- [lib/tracking/service.ts](/home/luke/Desktop/learning/homeschool-v2/lib/tracking/service.ts)
+- [components/tracking/tracking-overview.tsx](/home/luke/Desktop/learning/homeschool-v2/components/tracking/tracking-overview.tsx)
 
 ### Transcript and intake generation patterns
 
-- [lib/curriculum/ai-draft-service.ts](/home/luke/Desktop/homeschool-v2/lib/curriculum/ai-draft-service.ts)
-- [app/api/homeschool/onboarding/route.ts](/home/luke/Desktop/homeschool-v2/app/api/homeschool/onboarding/route.ts)
+- [lib/curriculum/ai-draft-service.ts](/home/luke/Desktop/learning/homeschool-v2/lib/curriculum/ai-draft-service.ts)
+- [app/api/homeschool/onboarding/route.ts](/home/luke/Desktop/learning/homeschool-v2/app/api/homeschool/onboarding/route.ts)
 
 ## Working Definition Of Agentic
 

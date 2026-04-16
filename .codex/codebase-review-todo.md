@@ -9,7 +9,7 @@ Scope reviewed:
 - domain, AI, activity, curriculum, planning, tracking, auth, env, and DB code under `lib/`
 - local scripts and platform config
 
-Verification snapshot from the canonical main checkout at `/home/luke/Desktop/homeschool-v2`:
+Verification snapshot from the canonical main checkout at `/home/luke/Desktop/learning/homeschool-v2`:
 - `corepack pnpm typecheck` fails because `tsconfig.json` still hard-requires missing `.next/types/**/*.ts` files.
 - `corepack pnpm build` no longer fails on `/curriculum`, but it now fails during page-data collection with `PageNotFoundError` for `/api/users` and `/api/activities/attempts/[attemptId]/submit`.
 - `git status` and `git worktree list` both work normally again from the main checkout.
@@ -20,7 +20,7 @@ Verification snapshot from the canonical main checkout at `/home/luke/Desktop/ho
   Evidence: `app/(parent)/curriculum/page.tsx` now renders `CurriculumSourceCard` as a presentational child inside `Link`, and `components/curriculum/CurriculumSourceCard.tsx` no longer carries click/keyboard handlers through a server-rendered path.
 
 - [x] Fix repo/worktree metadata so normal git operations work again.
-  Evidence: `git status` and `git worktree list` run successfully from `/home/luke/Desktop/homeschool-v2`.
+  Evidence: `git status` and `git worktree list` run successfully from `/home/luke/Desktop/learning/homeschool-v2`.
 
 - [x] Remove hard-coded demo household and learner IDs from route surfaces and resolve them from session state.
   Evidence: the reviewed route surfaces now use `requireAppSession()` instead of wiring `household-demo` / `learner-demo` directly in the page or route layer.

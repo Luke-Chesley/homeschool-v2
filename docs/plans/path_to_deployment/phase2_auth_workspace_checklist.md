@@ -1,6 +1,6 @@
 # Phase 2: Auth And Workspace Checklist
 
-Use this alongside [phase2_auth_workspace_hardening.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase2_auth_workspace_hardening.md).
+Use this alongside [phase2_auth_workspace_hardening.md](/home/luke/Desktop/learning/homeschool-v2/docs/plans/path_to_deployment/phase2_auth_workspace_hardening.md).
 
 This is the execution tracker for the Phase 2 implementation pass.
 
@@ -82,8 +82,8 @@ This is the execution tracker for the Phase 2 implementation pass.
 
 ## Docs And Tracking
 
-- [x] Keep [docs/plans/path_to_deployment/README.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/README.md) updated as work starts and finishes.
-- [x] Keep [phase2_auth_workspace_hardening.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase2_auth_workspace_hardening.md) current if implementation decisions change.
+- [x] Keep [docs/plans/path_to_deployment/README.md](/home/luke/Desktop/learning/homeschool-v2/docs/plans/path_to_deployment/README.md) updated as work starts and finishes.
+- [x] Keep [phase2_auth_workspace_hardening.md](/home/luke/Desktop/learning/homeschool-v2/docs/plans/path_to_deployment/phase2_auth_workspace_hardening.md) current if implementation decisions change.
 - [x] Record any scope cuts or deferrals before moving to Phase 3.
 
 ## Notes

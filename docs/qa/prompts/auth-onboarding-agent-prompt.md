@@ -1,8 +1,8 @@
 Execute a live browser QA pass for auth and initial setup using the local QA pipeline docs:
 
-- `/home/luke/Desktop/homeschool-v2/docs/qa/local-qa-pipeline.md`
-- `/home/luke/Desktop/homeschool-v2/docs/qa/qa-report-template.md`
-- `/home/luke/Desktop/homeschool-v2/docs/qa/qa-flow-inventory.md`
+- `/home/luke/Desktop/learning/homeschool-v2/docs/qa/local-qa-pipeline.md`
+- `/home/luke/Desktop/learning/homeschool-v2/docs/qa/qa-report-template.md`
+- `/home/luke/Desktop/learning/homeschool-v2/docs/qa/qa-flow-inventory.md`
 
 Important:
 - this is a live browser QA run, not a code review
@@ -11,7 +11,7 @@ Important:
 - actually run the app and click through the flows
 
 Repo:
-- `/home/luke/Desktop/homeschool-v2`
+- `/home/luke/Desktop/learning/homeschool-v2`
 
 Target:
 - `http://localhost:3000`

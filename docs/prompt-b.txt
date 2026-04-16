@@ -1,4 +1,4 @@
-You are an autonomous coding agent working in /home/luke/Desktop/homeschoolV2.
+You are an autonomous coding agent working in /home/luke/Desktop/learning/homeschool-v2.
 
 Read these files first:
 - docs/PRODUCT_IMPLEMENTATION_PLAN.md

@@ -1,6 +1,6 @@
 # Phase 4: Hosted Deployment Setup Checklist
 
-Use this alongside [phase4_hosted_deployment_setup.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase4_hosted_deployment_setup.md) and [phase4_env_matrix.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase4_env_matrix.md).
+Use this alongside [phase4_hosted_deployment_setup.md](/home/luke/Desktop/learning/homeschool-v2/docs/plans/path_to_deployment/phase4_hosted_deployment_setup.md) and [phase4_env_matrix.md](/home/luke/Desktop/learning/homeschool-v2/docs/plans/path_to_deployment/phase4_env_matrix.md).
 
 This is the execution tracker for the hosted deployment setup pass.
 
@@ -43,7 +43,7 @@ This is the execution tracker for the hosted deployment setup pass.
 
 ## Slice 5: Environment Matrix
 
-- [x] Complete [phase4_env_matrix.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase4_env_matrix.md) with current hosted values and known owners/placeholders.
+- [x] Complete [phase4_env_matrix.md](/home/luke/Desktop/learning/homeschool-v2/docs/plans/path_to_deployment/phase4_env_matrix.md) with current hosted values and known owners/placeholders.
 - [x] Mark which env vars are public, secret, optional, or temporary.
 - [x] Mark which secrets must differ between staging and production.
 - [x] Confirm `NEXT_PUBLIC_SITE_URL` is correct for each hosted environment.
@@ -79,9 +79,9 @@ This is the execution tracker for the hosted deployment setup pass.
 
 ## Docs And Tracking
 
-- [x] Update [docs/plans/path_to_deployment/README.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/README.md) as Phase 4 starts and finishes.
-- [x] Keep [phase4_hosted_deployment_setup.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase4_hosted_deployment_setup.md) current if implementation decisions change.
-- [x] Keep [phase4_env_matrix.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase4_env_matrix.md) current with actual hosted values.
+- [x] Update [docs/plans/path_to_deployment/README.md](/home/luke/Desktop/learning/homeschool-v2/docs/plans/path_to_deployment/README.md) as Phase 4 starts and finishes.
+- [x] Keep [phase4_hosted_deployment_setup.md](/home/luke/Desktop/learning/homeschool-v2/docs/plans/path_to_deployment/phase4_hosted_deployment_setup.md) current if implementation decisions change.
+- [x] Keep [phase4_env_matrix.md](/home/luke/Desktop/learning/homeschool-v2/docs/plans/path_to_deployment/phase4_env_matrix.md) current with actual hosted values.
 - [x] Record any deferrals before moving into Phase 5.
 
 

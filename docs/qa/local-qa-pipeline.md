@@ -25,7 +25,7 @@ Turn QA into a repeatable local process with:
 ## Default Environment
 
 Repo:
-- `/home/luke/Desktop/homeschool-v2`
+- `/home/luke/Desktop/learning/homeschool-v2`
 
 Default app target:
 - `http://localhost:3000`
@@ -59,19 +59,19 @@ Unless a prompt says otherwise, agents should test:
 ## Prompt Set
 
 Core prompts:
-- [Auth And Onboarding QA](/home/luke/Desktop/homeschool-v2/docs/qa/prompts/auth-onboarding-agent-prompt.md)
-- [Parent Workspace QA](/home/luke/Desktop/homeschool-v2/docs/qa/prompts/parent-workspace-agent-prompt.md)
-- [Curriculum And Planning QA](/home/luke/Desktop/homeschool-v2/docs/qa/prompts/curriculum-planning-agent-prompt.md)
-- [Learner Flow Responsive QA](/home/luke/Desktop/homeschool-v2/docs/qa/prompts/learner-flow-agent-prompt.md)
-- [Tracking And Account QA](/home/luke/Desktop/homeschool-v2/docs/qa/prompts/tracking-account-agent-prompt.md)
-- [Copilot QA](/home/luke/Desktop/homeschool-v2/docs/qa/prompts/copilot-agent-prompt.md)
-- [Full Product Smoke QA](/home/luke/Desktop/homeschool-v2/docs/qa/prompts/full-product-smoke-agent-prompt.md)
+- [Auth And Onboarding QA](/home/luke/Desktop/learning/homeschool-v2/docs/qa/prompts/auth-onboarding-agent-prompt.md)
+- [Parent Workspace QA](/home/luke/Desktop/learning/homeschool-v2/docs/qa/prompts/parent-workspace-agent-prompt.md)
+- [Curriculum And Planning QA](/home/luke/Desktop/learning/homeschool-v2/docs/qa/prompts/curriculum-planning-agent-prompt.md)
+- [Learner Flow Responsive QA](/home/luke/Desktop/learning/homeschool-v2/docs/qa/prompts/learner-flow-agent-prompt.md)
+- [Tracking And Account QA](/home/luke/Desktop/learning/homeschool-v2/docs/qa/prompts/tracking-account-agent-prompt.md)
+- [Copilot QA](/home/luke/Desktop/learning/homeschool-v2/docs/qa/prompts/copilot-agent-prompt.md)
+- [Full Product Smoke QA](/home/luke/Desktop/learning/homeschool-v2/docs/qa/prompts/full-product-smoke-agent-prompt.md)
 
 Reference docs:
-- [QA Flow Inventory](/home/luke/Desktop/homeschool-v2/docs/qa/qa-flow-inventory.md)
-- [QA Report Template](/home/luke/Desktop/homeschool-v2/docs/qa/qa-report-template.md)
-- [Persona Test Matrix](/home/luke/Desktop/homeschool-v2/docs/qa/persona-test-matrix.md)
-- [Subagent Activation Prompts](/home/luke/Desktop/homeschool-v2/docs/qa/subagent-activation-prompts.md)
+- [QA Flow Inventory](/home/luke/Desktop/learning/homeschool-v2/docs/qa/qa-flow-inventory.md)
+- [QA Report Template](/home/luke/Desktop/learning/homeschool-v2/docs/qa/qa-report-template.md)
+- [Persona Test Matrix](/home/luke/Desktop/learning/homeschool-v2/docs/qa/persona-test-matrix.md)
+- [Subagent Activation Prompts](/home/luke/Desktop/learning/homeschool-v2/docs/qa/subagent-activation-prompts.md)
 
 ## Subagent Pattern
 

@@ -31,7 +31,7 @@ Secondary review areas:
 ## Environment
 
 Repo:
-- `/home/luke/Desktop/homeschool-v2`
+- `/home/luke/Desktop/learning/homeschool-v2`
 
 Default review target:
 - `http://localhost:3000`

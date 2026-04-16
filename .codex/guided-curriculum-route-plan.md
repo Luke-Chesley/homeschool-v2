@@ -35,7 +35,7 @@ The product goal is "recognize a finite set of common curriculum shapes and norm
 
 ## Why This Needs A New Planning Layer
 
-The current local JSON import path in [lib/curriculum/local-json-import.ts](/home/luke/Desktop/homeschool-v2/.worktrees/update-guided-route-plan/lib/curriculum/local-json-import.ts) flattens nested curriculum content into:
+The current local JSON import path in [lib/curriculum/local-json-import.ts](/home/luke/Desktop/learning/homeschool-v2/lib/curriculum/local-json-import.ts) flattens nested curriculum content into:
 
 - source
 - units
@@ -353,11 +353,11 @@ When a route item is dragged:
 
 Current page:
 
-- [app/(parent)/curriculum/[sourceId]/page.tsx](/home/luke/Desktop/homeschool-v2/.worktrees/update-guided-route-plan/app/(parent)/curriculum/[sourceId]/page.tsx)
+- [app/(parent)/curriculum/[sourceId]/page.tsx](</home/luke/Desktop/learning/homeschool-v2/app/(parent)/curriculum/[sourceId]/page.tsx>)
 
 Current tree:
 
-- [components/curriculum/CurriculumTree.tsx](/home/luke/Desktop/homeschool-v2/.worktrees/update-guided-route-plan/components/curriculum/CurriculumTree.tsx)
+- [components/curriculum/CurriculumTree.tsx](/home/luke/Desktop/learning/homeschool-v2/components/curriculum/CurriculumTree.tsx)
 
 Upgrade this page into a route-aware source page with three panes:
 
@@ -404,8 +404,8 @@ Suggested layout:
 
 Integrate with the existing daily plan flow:
 
-- [app/(parent)/planning/day/[date]/page.tsx](/home/luke/Desktop/homeschool-v2/.worktrees/update-guided-route-plan/app/(parent)/planning/day/[date]/page.tsx)
-- [app/(parent)/today/page.tsx](/home/luke/Desktop/homeschool-v2/.worktrees/update-guided-route-plan/app/(parent)/today/page.tsx)
+- [app/(parent)/planning/day/[date]/page.tsx](</home/luke/Desktop/learning/homeschool-v2/app/(parent)/planning/day/[date]/page.tsx>)
+- [app/(parent)/today/page.tsx](</home/luke/Desktop/learning/homeschool-v2/app/(parent)/today/page.tsx>)
 
 Add a selector that lets the parent pick from:
 

@@ -23,7 +23,7 @@ Move AI runtime concerns out of `homeschool-v2` and into a separate Python servi
 ## New Repo Tree
 
 ```text
-/home/luke/Desktop/learning-core
+/home/luke/Desktop/learning/learning-core
   README.md
   pyproject.toml
   learning_core/
@@ -116,10 +116,10 @@ Seven are explicit fail-fast stubs. Activity generation is implemented end to en
 ### What moved for activities
 
 - Prompt source moved from `homeschool-v2` into:
-  - `/home/luke/Desktop/learning-core/learning_core/skills/activity_generate/SKILL.md`
+  - `/home/luke/Desktop/learning/learning-core/learning_core/skills/activity_generate/SKILL.md`
 - Runtime execution moved from in-repo TS generation service into:
-  - `/home/luke/Desktop/learning-core/learning_core/runtime/*`
-  - `/home/luke/Desktop/learning-core/learning_core/api/app.py`
+  - `/home/luke/Desktop/learning/learning-core/learning_core/runtime/*`
+  - `/home/luke/Desktop/learning/learning-core/learning_core/api/app.py`
 - App boundary now goes through:
   - `lib/learning-core/client.ts`
   - `lib/learning-core/activity.ts`

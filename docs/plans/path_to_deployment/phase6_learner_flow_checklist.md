@@ -1,6 +1,6 @@
 # Phase 6: Learner Flow Redesign Checklist
 
-Use this alongside [phase6_learner_flow_redesign.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase6_learner_flow_redesign.md) and [phase6_learner_surface_inventory.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase6_learner_surface_inventory.md).
+Use this alongside [phase6_learner_flow_redesign.md](/home/luke/Desktop/learning/homeschool-v2/docs/plans/path_to_deployment/phase6_learner_flow_redesign.md) and [phase6_learner_surface_inventory.md](/home/luke/Desktop/learning/homeschool-v2/docs/plans/path_to_deployment/phase6_learner_surface_inventory.md).
 
 This is the execution tracker for the learner-facing redesign pass.
 
@@ -80,9 +80,9 @@ This is the execution tracker for the learner-facing redesign pass.
 
 ## Docs And Tracking
 
-- [x] Update [docs/plans/path_to_deployment/README.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/README.md) as Phase 6 starts and finishes.
-- [x] Keep [phase6_learner_flow_redesign.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase6_learner_flow_redesign.md) current if implementation decisions change.
-- [x] Keep [phase6_learner_surface_inventory.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase6_learner_surface_inventory.md) current if learner scope changes.
+- [x] Update [docs/plans/path_to_deployment/README.md](/home/luke/Desktop/learning/homeschool-v2/docs/plans/path_to_deployment/README.md) as Phase 6 starts and finishes.
+- [x] Keep [phase6_learner_flow_redesign.md](/home/luke/Desktop/learning/homeschool-v2/docs/plans/path_to_deployment/phase6_learner_flow_redesign.md) current if implementation decisions change.
+- [x] Keep [phase6_learner_surface_inventory.md](/home/luke/Desktop/learning/homeschool-v2/docs/plans/path_to_deployment/phase6_learner_surface_inventory.md) current if learner scope changes.
 - [x] Record any deferrals before moving to the next phase.
 
 ## Exit Criteria

@@ -155,27 +155,27 @@ If billing implementation is needed later, Phase 7 should prepare the surface fo
 ## Files To Read First
 
 ### Account
-- [app/(parent)/account/page.tsx](/home/luke/Desktop/homeschool-v2/app/(parent)/account/page.tsx)
+- [app/(parent)/account/page.tsx](</home/luke/Desktop/learning/homeschool-v2/app/(parent)/account/page.tsx>)
 
 ### Tracking
-- [app/(parent)/tracking/page.tsx](/home/luke/Desktop/homeschool-v2/app/(parent)/tracking/page.tsx)
-- [components/tracking/tracking-shell.tsx](/home/luke/Desktop/homeschool-v2/components/tracking/tracking-shell.tsx)
-- [components/tracking/tracking-overview.tsx](/home/luke/Desktop/homeschool-v2/components/tracking/tracking-overview.tsx)
-- [components/tracking/reports-view.tsx](/home/luke/Desktop/homeschool-v2/components/tracking/reports-view.tsx)
-- [components/tracking/attendance-card.tsx](/home/luke/Desktop/homeschool-v2/components/tracking/attendance-card.tsx)
+- [app/(parent)/tracking/page.tsx](</home/luke/Desktop/learning/homeschool-v2/app/(parent)/tracking/page.tsx>)
+- [components/tracking/tracking-shell.tsx](/home/luke/Desktop/learning/homeschool-v2/components/tracking/tracking-shell.tsx)
+- [components/tracking/tracking-overview.tsx](/home/luke/Desktop/learning/homeschool-v2/components/tracking/tracking-overview.tsx)
+- [components/tracking/reports-view.tsx](/home/luke/Desktop/learning/homeschool-v2/components/tracking/reports-view.tsx)
+- [components/tracking/attendance-card.tsx](/home/luke/Desktop/learning/homeschool-v2/components/tracking/attendance-card.tsx)
 
 ### Auth And Setup
-- [app/auth/login/page.tsx](/home/luke/Desktop/homeschool-v2/app/auth/login/page.tsx)
-- [app/auth/sign-up/page.tsx](/home/luke/Desktop/homeschool-v2/app/auth/sign-up/page.tsx)
-- [app/auth/setup/page.tsx](/home/luke/Desktop/homeschool-v2/app/auth/setup/page.tsx)
-- [components/auth/AuthCredentialsForm.tsx](/home/luke/Desktop/homeschool-v2/components/auth/AuthCredentialsForm.tsx)
-- [components/auth/AuthSetupForm.tsx](/home/luke/Desktop/homeschool-v2/components/auth/AuthSetupForm.tsx)
-- [components/onboarding/homeschool-onboarding-form.tsx](/home/luke/Desktop/homeschool-v2/components/onboarding/homeschool-onboarding-form.tsx)
+- [app/auth/login/page.tsx](/home/luke/Desktop/learning/homeschool-v2/app/auth/login/page.tsx)
+- [app/auth/sign-up/page.tsx](/home/luke/Desktop/learning/homeschool-v2/app/auth/sign-up/page.tsx)
+- [app/auth/setup/page.tsx](/home/luke/Desktop/learning/homeschool-v2/app/auth/setup/page.tsx)
+- [components/auth/AuthCredentialsForm.tsx](/home/luke/Desktop/learning/homeschool-v2/components/auth/AuthCredentialsForm.tsx)
+- [components/auth/AuthSetupForm.tsx](/home/luke/Desktop/learning/homeschool-v2/components/auth/AuthSetupForm.tsx)
+- [components/onboarding/homeschool-onboarding-form.tsx](/home/luke/Desktop/learning/homeschool-v2/components/onboarding/homeschool-onboarding-form.tsx)
 
 ### Shared Context
-- [app/globals.css](/home/luke/Desktop/homeschool-v2/app/globals.css)
-- [components/navigation/global-page-tabs.tsx](/home/luke/Desktop/homeschool-v2/components/navigation/global-page-tabs.tsx)
-- [components/navigation/parent-nav.tsx](/home/luke/Desktop/homeschool-v2/components/navigation/parent-nav.tsx)
+- [app/globals.css](/home/luke/Desktop/learning/homeschool-v2/app/globals.css)
+- [components/navigation/global-page-tabs.tsx](/home/luke/Desktop/learning/homeschool-v2/components/navigation/global-page-tabs.tsx)
+- [components/navigation/parent-nav.tsx](/home/luke/Desktop/learning/homeschool-v2/components/navigation/parent-nav.tsx)
 
 ## Implementation Order
 

@@ -13,7 +13,7 @@ Focus on:
 ## Environment
 
 Repo:
-- `/home/luke/Desktop/homeschool-v2`
+- `/home/luke/Desktop/learning/homeschool-v2`
 
 Review target:
 - use the branch server URL provided by the implementing agent

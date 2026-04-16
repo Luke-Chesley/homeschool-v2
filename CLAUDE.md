@@ -12,10 +12,11 @@ make stop-stack           # Stop local Supabase services
 make reset-db             # Reset local DB via Supabase
 make inngest              # Run local Inngest dev process
 make typecheck            # tsc --noEmit
-pnpm build                # Production build
-pnpm lint                 # ESLint via Next.js
-pnpm test:curriculum      # Run curriculum unit tests (Node test runner)
-pnpm test:architecture    # Assert the old AI prompt/gateway paths are gone
+corepack pnpm build       # Production build
+corepack pnpm test:curriculum    # Run curriculum unit tests
+corepack pnpm test:activity      # Validate activity contract/runtime behavior
+corepack pnpm test:architecture  # Assert the old AI prompt/gateway paths are gone
+corepack pnpm contracts:check    # Validate the artifact contract registry
 bash ./scripts/verify-before-merge.sh  # typecheck + browser smoke test (run after merging to main)
 ```
 
@@ -43,7 +44,7 @@ Environment: copy `.env.example` to `.env.local` and fill in Supabase, DB, and s
 
 **Core domain objects**: Organization (multi-tenant workspace), Learner, Curriculum, Plan, Schedule, Lesson, Worksheet, Progress — each has one source-of-truth owner in `lib/`.
 
-**Current phase**: Foundation/scaffold. Auth, data model, and AI job boundaries must be stable before adding product features (see `docs/ROADMAP.md`).
+**Current product state**: `Today`, `Planning`, `Curriculum`, `Tracking`, `Copilot`, onboarding/auth, learner activity routes, and the `learning-core` boundary are all live. Treat this as an active product app, not a fresh scaffold.
 
 ## Worktree Workflow
 
@@ -53,8 +54,8 @@ Feature work should be done in a git worktree, not directly on `main`:
 git worktree add ./.worktrees/<task-name> -b <branch-name> main
 ```
 
-- `main` checkout at `/home/luke/Desktop/homeschool-v2` owns `localhost:3000`
-- Worktree dev servers must use alternate ports (`pnpm dev -- --port 3001`)
+- `main` checkout at `/home/luke/Desktop/learning/homeschool-v2` owns `localhost:3000`
+- Worktree dev servers must use alternate ports (`corepack pnpm dev -- --port 3001`)
 - Merges into `stage` are pre-approved and can be used for staging/preview fixes without asking again
 - Never merge a feature branch to `main` without explicit user approval
 - After merge: `git worktree remove ./.worktrees/<task-name>`
@@ -81,7 +82,7 @@ Match existing style: `feat(scope): description` for features, `fix(scope): desc
 The `docs/` directory contains product and architecture decisions.
 The `/contracts/` directory contains first-class contracts for all AI-generated artifacts (curriculum, lesson drafts, activities).
 
-- **Contract Maintenance**: If a task changes the shape, required fields, defaults, versioning, persistence, or consumer expectations of a generated artifact, you **must** update the matching file in `/contracts/` and run `npm run contracts:check`.
+- **Contract Maintenance**: If a task changes the shape, required fields, defaults, versioning, persistence, or consumer expectations of a generated artifact, you **must** update the matching file in `/contracts/` and run `corepack pnpm contracts:check`.
 - If no contract file exists for a new generated artifact, create one using `contracts/_template.md`.
 
 Read these before implementing new features:

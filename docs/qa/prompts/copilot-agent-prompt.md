@@ -1,15 +1,15 @@
 Execute a live browser QA pass for Copilot using the local QA pipeline docs:
 
-- `/home/luke/Desktop/homeschool-v2/docs/qa/local-qa-pipeline.md`
-- `/home/luke/Desktop/homeschool-v2/docs/qa/qa-report-template.md`
-- `/home/luke/Desktop/homeschool-v2/docs/qa/qa-flow-inventory.md`
+- `/home/luke/Desktop/learning/homeschool-v2/docs/qa/local-qa-pipeline.md`
+- `/home/luke/Desktop/learning/homeschool-v2/docs/qa/qa-report-template.md`
+- `/home/luke/Desktop/learning/homeschool-v2/docs/qa/qa-flow-inventory.md`
 
 Important:
 - this is live browser QA, not a code review
 - actually load and use the Copilot route
 
 Repo:
-- `/home/luke/Desktop/homeschool-v2`
+- `/home/luke/Desktop/learning/homeschool-v2`
 
 Target:
 - `http://localhost:3000`

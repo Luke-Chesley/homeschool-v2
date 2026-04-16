@@ -38,7 +38,7 @@ Some are relevant later but not part of the current product surface.
 
 Apply to:
 
-- [app/auth/login/page.tsx](/home/luke/Desktop/homeschool-v2/app/auth/login/page.tsx)
+- [app/auth/login/page.tsx](/home/luke/Desktop/learning/homeschool-v2/app/auth/login/page.tsx)
 
 Key Phase 5 implications:
 
@@ -57,8 +57,8 @@ Reference:
 
 Apply to:
 
-- [app/auth/sign-up/page.tsx](/home/luke/Desktop/homeschool-v2/app/auth/sign-up/page.tsx)
-- [app/auth/setup/page.tsx](/home/luke/Desktop/homeschool-v2/app/auth/setup/page.tsx)
+- [app/auth/sign-up/page.tsx](/home/luke/Desktop/learning/homeschool-v2/app/auth/sign-up/page.tsx)
+- [app/auth/setup/page.tsx](/home/luke/Desktop/learning/homeschool-v2/app/auth/setup/page.tsx)
 
 Key Phase 5 implications:
 

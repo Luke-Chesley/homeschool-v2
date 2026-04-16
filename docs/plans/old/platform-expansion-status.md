@@ -3,8 +3,8 @@
 ## Execution Context
 
 - Umbrella branch: `feat/platform-expansion-exec`
-- Umbrella worktree: `/home/luke/Desktop/homeschool-v2/.worktrees/platform-expansion-exec`
-- Canonical main checkout: `/home/luke/Desktop/homeschool-v2`
+- Umbrella worktree: `/home/luke/Desktop/learning/homeschool-v2/.worktrees/platform-expansion-exec`
+- Canonical main checkout: `/home/luke/Desktop/learning/homeschool-v2`
 - Status owner: Codex
 - Last updated: 2026-04-03
 

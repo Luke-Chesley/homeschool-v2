@@ -15,7 +15,7 @@ This phase should be completed before:
 
 ## Current State
 
-The current app session is derived from cookies in [lib/app-session/server.ts](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/../../../../lib/app-session/server.ts).
+The current app session is derived from cookies in [lib/app-session/server.ts](/home/luke/Desktop/learning/homeschool-v2/lib/app-session/server.ts).
 
 Today it works like this:
 
@@ -78,12 +78,12 @@ After Phase 2, session behavior should work like this:
 
 The repo already has several pieces we should reuse instead of rewriting:
 
-- [lib/platform/supabase.ts](/home/luke/Desktop/homeschool-v2/lib/platform/supabase.ts)
-- [lib/auth/server.ts](/home/luke/Desktop/homeschool-v2/lib/auth/server.ts)
-- [lib/db/schema/organizations.ts](/home/luke/Desktop/homeschool-v2/lib/db/schema/organizations.ts)
-- [lib/db/repositories/organizations.ts](/home/luke/Desktop/homeschool-v2/lib/db/repositories/organizations.ts)
-- [lib/users/service.ts](/home/luke/Desktop/homeschool-v2/lib/users/service.ts)
-- [lib/app-session/server.ts](/home/luke/Desktop/homeschool-v2/lib/app-session/server.ts)
+- [lib/platform/supabase.ts](/home/luke/Desktop/learning/homeschool-v2/lib/platform/supabase.ts)
+- [lib/auth/server.ts](/home/luke/Desktop/learning/homeschool-v2/lib/auth/server.ts)
+- [lib/db/schema/organizations.ts](/home/luke/Desktop/learning/homeschool-v2/lib/db/schema/organizations.ts)
+- [lib/db/repositories/organizations.ts](/home/luke/Desktop/learning/homeschool-v2/lib/db/repositories/organizations.ts)
+- [lib/users/service.ts](/home/luke/Desktop/learning/homeschool-v2/lib/users/service.ts)
+- [lib/app-session/server.ts](/home/luke/Desktop/learning/homeschool-v2/lib/app-session/server.ts)
 
 Important data model facts already present:
 

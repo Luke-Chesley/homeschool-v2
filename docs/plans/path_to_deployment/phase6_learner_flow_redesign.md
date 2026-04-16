@@ -279,36 +279,36 @@ Target characteristics:
 
 Primary files:
 
-- [app/(learner)/layout.tsx](/home/luke/Desktop/homeschool-v2/app/(learner)/layout.tsx)
-- [components/studio/StudioToggle.tsx](/home/luke/Desktop/homeschool-v2/components/studio/StudioToggle.tsx)
-- [app/globals.css](/home/luke/Desktop/homeschool-v2/app/globals.css)
+- [app/(learner)/layout.tsx](</home/luke/Desktop/learning/homeschool-v2/app/(learner)/layout.tsx>)
+- [components/studio/StudioToggle.tsx](/home/luke/Desktop/learning/homeschool-v2/components/studio/StudioToggle.tsx)
+- [app/globals.css](/home/luke/Desktop/learning/homeschool-v2/app/globals.css)
 
 ### Learner Home
 
 Primary files:
 
-- [app/(learner)/learner/page.tsx](/home/luke/Desktop/homeschool-v2/app/(learner)/learner/page.tsx)
-- [lib/activities/session-service.ts](/home/luke/Desktop/homeschool-v2/lib/activities/session-service.ts)
+- [app/(learner)/learner/page.tsx](</home/luke/Desktop/learning/homeschool-v2/app/(learner)/learner/page.tsx>)
+- [lib/activities/session-service.ts](/home/luke/Desktop/learning/homeschool-v2/lib/activities/session-service.ts)
 
 Related parent files:
 
-- [app/(parent)/today/page.tsx](/home/luke/Desktop/homeschool-v2/app/(parent)/today/page.tsx)
-- [components/planning](/home/luke/Desktop/homeschool-v2/components/planning)
+- [app/(parent)/today/page.tsx](</home/luke/Desktop/learning/homeschool-v2/app/(parent)/today/page.tsx>)
+- [components/planning](/home/luke/Desktop/learning/homeschool-v2/components/planning)
 
 ### Activity Runtime
 
 Primary files:
 
-- [app/(learner)/activity/[sessionId]/page.tsx](/home/luke/Desktop/homeschool-v2/app/(learner)/activity/[sessionId]/page.tsx)
-- [components/activities/ActivityRenderer.tsx](/home/luke/Desktop/homeschool-v2/components/activities/ActivityRenderer.tsx)
-- [components/activities/v2/ActivitySpecRenderer.tsx](/home/luke/Desktop/homeschool-v2/components/activities/v2/ActivitySpecRenderer.tsx)
+- [app/(learner)/activity/[sessionId]/page.tsx](</home/luke/Desktop/learning/homeschool-v2/app/(learner)/activity/[sessionId]/page.tsx>)
+- [components/activities/ActivityRenderer.tsx](/home/luke/Desktop/learning/homeschool-v2/components/activities/ActivityRenderer.tsx)
+- [components/activities/v2/ActivitySpecRenderer.tsx](/home/luke/Desktop/learning/homeschool-v2/components/activities/v2/ActivitySpecRenderer.tsx)
 
 ### Studio Diagnostics
 
 Primary files:
 
-- [components/activities/ActivityStudioPanel.tsx](/home/luke/Desktop/homeschool-v2/components/activities/ActivityStudioPanel.tsx)
-- [components/studio](/home/luke/Desktop/homeschool-v2/components/studio)
+- [components/activities/ActivityStudioPanel.tsx](/home/luke/Desktop/learning/homeschool-v2/components/activities/ActivityStudioPanel.tsx)
+- [components/studio](/home/luke/Desktop/learning/homeschool-v2/components/studio)
 
 ## Design Constraints
 

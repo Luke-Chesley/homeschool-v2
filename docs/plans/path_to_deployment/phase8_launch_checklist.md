@@ -1,6 +1,6 @@
 # Phase 8: Launch Checklist
 
-Use this alongside [phase8_final_launch_prep.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase8_final_launch_prep.md) and [phase8_launch_readiness_inventory.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase8_launch_readiness_inventory.md).
+Use this alongside [phase8_final_launch_prep.md](/home/luke/Desktop/learning/homeschool-v2/docs/plans/path_to_deployment/phase8_final_launch_prep.md) and [phase8_launch_readiness_inventory.md](/home/luke/Desktop/learning/homeschool-v2/docs/plans/path_to_deployment/phase8_launch_readiness_inventory.md).
 
 ## Phase Status
 
@@ -78,6 +78,6 @@ Use this alongside [phase8_final_launch_prep.md](/home/luke/Desktop/homeschool-v
 
 ## Documentation
 
-- [x] Update [README.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/README.md) as Phase 8 starts and finishes.
-- [x] Keep [phase8_final_launch_prep.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase8_final_launch_prep.md) current if scope changes.
-- [x] Keep [phase8_launch_readiness_inventory.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase8_launch_readiness_inventory.md) current as environments and risks are rechecked.
+- [x] Update [README.md](/home/luke/Desktop/learning/homeschool-v2/docs/plans/path_to_deployment/README.md) as Phase 8 starts and finishes.
+- [x] Keep [phase8_final_launch_prep.md](/home/luke/Desktop/learning/homeschool-v2/docs/plans/path_to_deployment/phase8_final_launch_prep.md) current if scope changes.
+- [x] Keep [phase8_launch_readiness_inventory.md](/home/luke/Desktop/learning/homeschool-v2/docs/plans/path_to_deployment/phase8_launch_readiness_inventory.md) current as environments and risks are rechecked.

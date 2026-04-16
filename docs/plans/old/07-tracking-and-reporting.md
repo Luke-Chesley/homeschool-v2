@@ -1,12 +1,14 @@
 # 07 Tracking and Reporting
 
+Archive note: this plan references the historical `docs/plans/STATUS.md` coordination board, which is no longer present in the repo.
+
 ## Branch Workflow
 
 If this directory is not already a Git repo, run `git init` and rename the default branch to `main` once before using this workflow.
 
 1. `git checkout main`
 2. `git pull --ff-only`
-3. Check [STATUS.md](/home/luke/Desktop/homeschoolV2/docs/plans/STATUS.md). If this task is available, update it on `main` to `in_progress` with your owner name, branch name, and timestamp.
+3. Historical workflow: check `docs/plans/STATUS.md` on `main`. That coordination file is no longer present in the current repo.
 4. Commit the `STATUS.md` claim on `main`.
 5. `git checkout -b ai/07-tracking-and-reporting`
 6. Implement only the owned scope below.
@@ -14,7 +16,7 @@ If this directory is not already a Git repo, run `git init` and rename the defau
 8. `git checkout main`
 9. `git merge ai/07-tracking-and-reporting`
 10. Resolve any conflicts, rerun checks, and commit the merge.
-11. Update [STATUS.md](/home/luke/Desktop/homeschoolV2/docs/plans/STATUS.md) on `main` to `done`, then commit that update.
+11. Historical workflow: update `docs/plans/STATUS.md` on `main` to `done`, then commit that update.
 
 ## Goal
 

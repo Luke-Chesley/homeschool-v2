@@ -14,9 +14,9 @@ The goal is to preserve existing debug and operator visibility while removing in
 
 Start here:
 
-- [Path To Deployment README](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/README.md)
-- [Studio Mode Implementation Checklist](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/studio-mode-implementation-checklist.md)
-- [Deployment Studio Roadmap](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/deployment-studio-roadmap.md)
+- [Path To Deployment README](/home/luke/Desktop/learning/homeschool-v2/docs/plans/path_to_deployment/README.md)
+- [Studio Mode Implementation Checklist](/home/luke/Desktop/learning/homeschool-v2/docs/plans/path_to_deployment/studio-mode-implementation-checklist.md)
+- [Deployment Studio Roadmap](/home/luke/Desktop/learning/homeschool-v2/docs/plans/path_to_deployment/deployment-studio-roadmap.md)
 
 ## Scope
 
@@ -93,13 +93,13 @@ Do not expand scope into these areas unless absolutely necessary:
 
 Read these before changing anything:
 
-- [components/planning/lesson-plan-panel.tsx](/home/luke/Desktop/homeschool-v2/components/planning/lesson-plan-panel.tsx)
-- [components/debug/LearningCorePromptPreviewCard.tsx](/home/luke/Desktop/homeschool-v2/components/debug/LearningCorePromptPreviewCard.tsx)
-- [components/parent-shell/parent-shell.tsx](/home/luke/Desktop/homeschool-v2/components/parent-shell/parent-shell.tsx)
-- [components/parent-shell/parent-topbar.tsx](/home/luke/Desktop/homeschool-v2/components/parent-shell/parent-topbar.tsx)
-- [app/(parent)/layout.tsx](/home/luke/Desktop/homeschool-v2/app/(parent)/layout.tsx)
-- [components/planning/today-workspace-view.tsx](/home/luke/Desktop/homeschool-v2/components/planning/today-workspace-view.tsx)
-- [app/globals.css](/home/luke/Desktop/homeschool-v2/app/globals.css)
+- [components/planning/lesson-plan-panel.tsx](/home/luke/Desktop/learning/homeschool-v2/components/planning/lesson-plan-panel.tsx)
+- [components/debug/LearningCorePromptPreviewCard.tsx](/home/luke/Desktop/learning/homeschool-v2/components/debug/LearningCorePromptPreviewCard.tsx)
+- [components/parent-shell/parent-shell.tsx](/home/luke/Desktop/learning/homeschool-v2/components/parent-shell/parent-shell.tsx)
+- [components/parent-shell/parent-topbar.tsx](/home/luke/Desktop/learning/homeschool-v2/components/parent-shell/parent-topbar.tsx)
+- [app/(parent)/layout.tsx](</home/luke/Desktop/learning/homeschool-v2/app/(parent)/layout.tsx>)
+- [components/planning/today-workspace-view.tsx](/home/luke/Desktop/learning/homeschool-v2/components/planning/today-workspace-view.tsx)
+- [app/globals.css](/home/luke/Desktop/learning/homeschool-v2/app/globals.css)
 
 ## Recommended Implementation Order
 

@@ -246,7 +246,7 @@ That matrix should answer:
 - which values must never be reused across staging and production
 - which values are safe to expose publicly (`NEXT_PUBLIC_*`)
 
-Use [phase4_env_matrix.md](/home/luke/Desktop/homeschool-v2/docs/plans/path_to_deployment/phase4_env_matrix.md) as the source of truth.
+Use [phase4_env_matrix.md](/home/luke/Desktop/learning/homeschool-v2/docs/plans/path_to_deployment/phase4_env_matrix.md) as the source of truth.
 
 ### Step 5: Define Hosted Migration Flow
 
