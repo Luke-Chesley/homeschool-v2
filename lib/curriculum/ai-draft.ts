@@ -46,17 +46,24 @@ export const CurriculumAiChatRequestSchema = z.object({
   messages: z.array(CurriculumAiChatMessageSchema).max(40).default([]),
 });
 
+function truncatedArraySchema<TItem extends z.ZodTypeAny>(itemSchema: TItem, max: number) {
+  return z.preprocess(
+    (value) => (Array.isArray(value) ? value.slice(0, max) : value),
+    z.array(itemSchema).max(max).default([]),
+  );
+}
+
 export const CurriculumAiDraftSummarySchema = z.object({
   title: z.string().trim().min(1).max(160),
   description: z.string().trim().min(1).max(600),
-  subjects: z.array(z.string().trim().min(1).max(80)).max(6).default([]),
-  gradeLevels: z.array(z.string().trim().min(1).max(40)).max(4).default([]),
+  subjects: truncatedArraySchema(z.string().trim().min(1).max(80), 6),
+  gradeLevels: truncatedArraySchema(z.string().trim().min(1).max(40), 4),
   academicYear: z.string().trim().min(1).max(80).optional(),
   summary: z.string().trim().min(1).max(1_200),
   teachingApproach: z.string().trim().min(1).max(400),
-  successSignals: z.array(z.string().trim().min(1).max(220)).max(6).default([]),
-  parentNotes: z.array(z.string().trim().min(1).max(260)).max(6).default([]),
-  rationale: z.array(z.string().trim().min(1).max(260)).max(6).default([]),
+  successSignals: truncatedArraySchema(z.string().trim().min(1).max(220), 6),
+  parentNotes: truncatedArraySchema(z.string().trim().min(1).max(260), 6),
+  rationale: truncatedArraySchema(z.string().trim().min(1).max(260), 6),
 });
 
 export type CurriculumAiDraftSummary = z.infer<typeof CurriculumAiDraftSummarySchema>;
@@ -77,7 +84,7 @@ export const CurriculumAiPacingSchema = z.object({
   sessionMinutes: z.number().int().positive().max(240).optional(),
   totalSessions: z.number().int().positive().max(500).optional(),
   coverageStrategy: z.string().trim().min(1).max(800),
-  coverageNotes: z.array(z.string().trim().min(1).max(220)).max(8).default([]),
+  coverageNotes: truncatedArraySchema(z.string().trim().min(1).max(220), 8),
 });
 
 export type CurriculumAiPacing = z.infer<typeof CurriculumAiPacingSchema>;
@@ -87,9 +94,9 @@ export const CurriculumAiLessonSchema = z.object({
   description: z.string().trim().min(1).max(600),
   subject: z.string().trim().min(1).max(80).optional(),
   estimatedMinutes: z.number().int().positive().max(240).optional(),
-  materials: z.array(z.string().trim().min(1).max(180)).max(12).default([]),
-  objectives: z.array(z.string().trim().min(1).max(220)).max(8).default([]),
-  linkedSkillTitles: z.array(z.string().trim().min(1).max(180)).max(8).default([]),
+  materials: truncatedArraySchema(z.string().trim().min(1).max(180), 12),
+  objectives: truncatedArraySchema(z.string().trim().min(1).max(220), 8),
+  linkedSkillTitles: truncatedArraySchema(z.string().trim().min(1).max(180), 8),
 });
 
 export type CurriculumAiLesson = z.infer<typeof CurriculumAiLessonSchema>;

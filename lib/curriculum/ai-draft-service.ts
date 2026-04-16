@@ -32,6 +32,17 @@ import {
 } from "./service";
 import type { CurriculumTreeNode } from "./types";
 
+const MAX_FAILURE_REASON_LENGTH = 120;
+
+export function truncateCurriculumFailureReason(reason: string) {
+  const trimmed = reason.trim();
+  if (trimmed.length <= MAX_FAILURE_REASON_LENGTH) {
+    return trimmed;
+  }
+
+  return `${trimmed.slice(0, MAX_FAILURE_REASON_LENGTH - 3)}...`;
+}
+
 function buildFailureResult(params: {
   stage: "generation" | "parse" | "schema" | "persistence" | "revision" | "quality";
   reason: string;
@@ -39,15 +50,24 @@ function buildFailureResult(params: {
   attemptCount?: number;
   debugMetadata?: Record<string, unknown>;
 }): CurriculumAiFailureResult {
+  const reason = truncateCurriculumFailureReason(params.reason);
+  const debugMetadata =
+    reason === params.reason
+      ? params.debugMetadata
+      : {
+          ...(params.debugMetadata ?? {}),
+          originalReason: params.reason,
+        };
+
   return CurriculumAiFailureResultSchema.parse({
     kind: "failure",
     stage: params.stage,
-    reason: params.reason,
+    reason,
     userSafeMessage: params.userSafeMessage,
     issues: [],
     attemptCount: params.attemptCount ?? 1,
     retryable: false,
-    debugMetadata: params.debugMetadata,
+    debugMetadata,
   });
 }
 
@@ -191,9 +211,14 @@ export async function buildCurriculumRevisionPromptPreview(params: {
 export async function generateCurriculumArtifact(params: {
   learner: AppLearner;
   messages: CurriculumAiChatMessage[];
+},
+deps?: {
+  execute?: typeof executeCurriculumGenerate;
 }): Promise<CurriculumAiGenerateResult> {
+  const execute = deps?.execute ?? executeCurriculumGenerate;
+
   try {
-    const response = await executeCurriculumGenerate({
+    const response = await execute({
       input: {
         learnerName: params.learner.displayName,
         messages: params.messages,
