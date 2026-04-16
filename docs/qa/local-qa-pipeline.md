@@ -1,6 +1,6 @@
-# Local QA Pipeline
+# Local And Hosted QA Pipeline
 
-Use this pipeline when you want one or more agents to exercise the app locally at `http://localhost:3000` and report back on real runtime behavior.
+Use this pipeline when you want one or more agents to exercise the app locally or on the hosted stage deployment and report back on real runtime behavior.
 
 This is for:
 - route and flow verification
@@ -22,13 +22,29 @@ Turn QA into a repeatable local process with:
 - explicit execution logs
 - clear signoff language
 
+## Environment Map
+
+Use one environment intentionally:
+
+- `local`
+  `http://localhost:3000` with local Supabase data. Use `/home/luke/Desktop/learning/codex-agent-loop-harness/LOCAL_TEST_USERS.md`.
+- `preview` / `stage`
+  The latest Vercel preview deployment or the stable `stage` branch alias. This environment maps to the hosted stage Supabase project. Use `/home/luke/Desktop/learning/codex-agent-loop-harness/PREVIEW_TEST_USERS.md`.
+- `production`
+  The `main` branch deployment and hosted production Supabase project. Only run production QA when the task explicitly asks for it. Do not use preview accounts on production.
+
+Current hosted aliases:
+- `stage`: `homeschool-v2-git-stage-lukechesleyfive-2290s-projects.vercel.app`
+- `production`: `homeschool-v2.vercel.app` and `homeschool-v2-git-main-lukechesleyfive-2290s-projects.vercel.app`
+
 ## Default Environment
 
 Repo:
 - `/home/luke/Desktop/learning/homeschool-v2`
 
 Default app target:
-- `http://localhost:3000`
+- `http://localhost:3000` for local runs
+- the latest Vercel preview deployment URL for stage/preview runs
 
 If `localhost:3000` is not already running, start it from the main checkout:
 
@@ -48,10 +64,21 @@ Unless a prompt says otherwise, agents should test:
 
 1. Pick the QA prompts that match the flows you changed.
 2. Give the agent the prompt file or paste the prompt content directly.
-3. Use the seeded fake accounts in `/home/luke/Desktop/learning/codex-agent-loop-harness/LOCAL_TEST_USERS.md` when you want stable local state, and create a fresh fake account when the flow specifically needs new-user coverage.
-4. Require a report with:
+3. Choose the environment before the browser run:
+   - local -> `localhost:3000`
+   - preview/stage -> latest Vercel preview deployment
+   - production -> only when explicitly requested
+4. Choose the right account source:
+   - local -> `/home/luke/Desktop/learning/codex-agent-loop-harness/LOCAL_TEST_USERS.md`
+   - preview/stage -> `/home/luke/Desktop/learning/codex-agent-loop-harness/PREVIEW_TEST_USERS.md`
+   - production -> dedicated production-safe credentials only
+5. For downstream stage QA on `Today`, `Tracking`, planning, or lesson-flow work, prefer `stage_single_parent_seed` from `PREVIEW_TEST_USERS.md` unless the scenario specifically needs a fresh account or a heavier existing household.
+6. Require a report with:
    - findings
    - execution log
+   - environment checked
+   - target deployment URL
+   - account used
    - route coverage completed
    - residual risks
    - signoff recommendation
@@ -114,6 +141,7 @@ Before merge to `main` or before a staging push:
 - Agents should treat these as execution instructions, not documents to critique.
 - Agents should not stop at route discovery or code inspection.
 - Agents should use the `playwright` skill for real browser execution in Codex.
+- Agents should use the Vercel tool first for preview/stage runs and record the exact deployment URL in the report.
 - Agents should capture screenshots for visible failures, broken components, and suspicious runtime states.
-- Agents should reuse seeded local accounts when appropriate, but still create fresh fake accounts for true first-run and sign-up checks.
+- Agents should reuse seeded local accounts when appropriate, still create fresh fake accounts for true first-run and sign-up checks, and never carry preview credentials into production checks.
 - Agents should use the report template structure so results stay comparable across runs.
