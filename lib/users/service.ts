@@ -156,14 +156,7 @@ export async function getWorkspaceContextForOrganization(options: {
 
   const learners = await listLearnersForOrganization(organization.id);
   const activeLearner = resolveActiveLearner(learners, options.learnerId);
-
-  if (activeLearner) {
-    await ensureActivitiesForLearner({
-      organizationId: organization.id,
-      learnerId: activeLearner.id,
-      learnerName: activeLearner.displayName,
-    });
-  }
+  // Keep workspace resolution read-only. Activity publication is handled at learner/activity entry points.
 
   return {
     organization: {

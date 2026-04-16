@@ -1,6 +1,7 @@
 import "@/lib/server-only";
 
-import type { Session, User } from "@supabase/supabase-js";
+import type { User } from "@supabase/supabase-js";
+import { cache } from "react";
 
 import { createServerSupabaseClient, createServerSupabaseSsrClient } from "@/lib/platform/supabase";
 
@@ -23,23 +24,21 @@ export async function getServerUser(accessToken?: string): Promise<User | null> 
   return data.user;
 }
 
-export async function getRequestAuthSession(): Promise<{ session: Session | null; user: User | null }> {
+// Deduplicate the auth-user lookup across a single server render/request.
+const getCachedRequestAuthUser = cache(async (): Promise<User | null> => {
   const client = await createServerSupabaseSsrClient();
-  const [{ data: sessionData }, { data: userData, error: userError }] = await Promise.all([
-    client.auth.getSession(),
-    client.auth.getUser(),
-  ]);
+  const { data: userData, error: userError } = await client.auth.getUser();
 
   if (userError || !userData.user) {
-    return {
-      session: null,
-      user: null,
-    };
+    return null;
   }
 
+  return userData.user;
+});
+
+export async function getRequestAuthSession(): Promise<{ user: User | null }> {
   return {
-    session: sessionData.session,
-    user: userData.user,
+    user: await getCachedRequestAuthUser(),
   };
 }
 

@@ -39,8 +39,11 @@ function formatLongDate(date: string) {
 
 export default async function TodayPage({ searchParams }: TodayPageProps) {
   const session = await requireAppSession();
-  const trackerBaseline = await getOrganizationTodayTrackerBaseline(session.organization.id);
-  const resolvedSearchParams = await searchParams;
+  const [trackerBaseline, resolvedSearchParams, liveSource] = await Promise.all([
+    getOrganizationTodayTrackerBaseline(session.organization.id),
+    searchParams,
+    getLiveCurriculumSource(session.organization.id),
+  ]);
   const date =
     typeof resolvedSearchParams.date === "string" ? resolvedSearchParams.date : undefined;
   const action =
@@ -53,7 +56,6 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
     typeof resolvedSearchParams.alternateWeeklyRouteItemId === "string"
       ? resolvedSearchParams.alternateWeeklyRouteItemId
       : undefined;
-  const liveSource = await getLiveCurriculumSource(session.organization.id);
 
   if (!liveSource) {
     return (

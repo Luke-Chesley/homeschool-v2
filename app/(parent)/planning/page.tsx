@@ -16,8 +16,7 @@ interface PlanningPageProps {
 }
 
 export default async function PlanningPage({ searchParams }: PlanningPageProps) {
-  const session = await requireAppSession();
-  const params = await searchParams;
+  const [session, params] = await Promise.all([requireAppSession(), searchParams]);
   const liveSource = await getLiveCurriculumSource(session.organization.id);
 
   if (!liveSource) {

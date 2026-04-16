@@ -18,8 +18,10 @@ export const metadata = {
 export default async function CurriculumPage() {
   const session = await requireAppSession();
   const organizationId = session.organization.id;
-  const sources = await listCurriculumSources(session.organization.id);
-  const activeSource = await getLiveCurriculumSource(session.organization.id);
+  const [sources, activeSource] = await Promise.all([
+    listCurriculumSources(organizationId),
+    getLiveCurriculumSource(organizationId),
+  ]);
 
   if (sources.length === 0) {
     return (

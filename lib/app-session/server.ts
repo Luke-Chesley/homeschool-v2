@@ -2,6 +2,7 @@ import "@/lib/server-only";
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { cache } from "react";
 
 import { AUTH_NEXT_COOKIE, buildPathWithNext, sanitizeNextPath } from "@/lib/auth/next";
 import { getRequestAuthSession } from "@/lib/auth/server";
@@ -67,6 +68,18 @@ export class AppApiSessionError extends Error {
   }
 }
 
+// Layouts and pages often resolve the same session in one render tree.
+const getResolvedAuthorizedOrganizations = cache(async (authUserId: string) =>
+  resolveAuthorizedOrganizations(authUserId),
+);
+
+const getResolvedWorkspaceContext = cache(async (organizationId: string, learnerId: string | null) =>
+  getWorkspaceContextForOrganization({
+    organizationId,
+    learnerId,
+  }),
+);
+
 export async function getAppAuthState(): Promise<AppAuthState> {
   const [{ user }, cookieStore] = await Promise.all([getRequestAuthSession(), cookies()]);
 
@@ -74,7 +87,7 @@ export async function getAppAuthState(): Promise<AppAuthState> {
     return { status: "signed_out" };
   }
 
-  const resolved = await resolveAuthorizedOrganizations(user.id);
+  const resolved = await getResolvedAuthorizedOrganizations(user.id);
   if (!resolved.adultUser || resolved.memberships.length === 0) {
     return {
       status: "needs_setup",
@@ -99,10 +112,10 @@ export async function getAppAuthState(): Promise<AppAuthState> {
     resolved.memberships.find(({ membership }) => membership.isDefault) ??
     resolved.memberships[0];
 
-  const workspace = await getWorkspaceContextForOrganization({
-    organizationId: selectedMembership.organization.id,
-    learnerId: learnerPreference,
-  });
+  const workspace = await getResolvedWorkspaceContext(
+    selectedMembership.organization.id,
+    learnerPreference,
+  );
 
   return {
     status: "ready",
