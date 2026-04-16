@@ -32,6 +32,27 @@ export function AuthCredentialsForm({ mode }: AuthCredentialsFormProps) {
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const normalizedEmail = email.trim();
+    const normalizedFullName = fullName.trim();
+
+    if (!normalizedEmail) {
+      setError("Enter an email address.");
+      setNotice(null);
+      return;
+    }
+
+    if (!password) {
+      setError("Enter a password.");
+      setNotice(null);
+      return;
+    }
+
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters.");
+      setNotice(null);
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
     setNotice(null);
@@ -41,7 +62,7 @@ export function AuthCredentialsForm({ mode }: AuthCredentialsFormProps) {
 
       if (mode === "login") {
         const { error: authError } = await auth.auth.signInWithPassword({
-          email: email.trim(),
+          email: normalizedEmail,
           password,
         });
 
@@ -56,11 +77,11 @@ export function AuthCredentialsForm({ mode }: AuthCredentialsFormProps) {
 
       const redirectTo = getAuthConfirmRedirectUrl(nextPath);
       const { data, error: authError } = await auth.auth.signUp({
-        email: email.trim(),
+        email: normalizedEmail,
         password,
         options: {
           emailRedirectTo: redirectTo,
-          data: fullName.trim() ? { full_name: fullName.trim() } : undefined,
+          data: normalizedFullName ? { full_name: normalizedFullName } : undefined,
         },
       });
 
@@ -93,7 +114,7 @@ export function AuthCredentialsForm({ mode }: AuthCredentialsFormProps) {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <form className="space-y-4" onSubmit={handleSubmit}>
+        <form className="space-y-4" onSubmit={handleSubmit} noValidate>
           {mode === "sign_up" ? (
             <div className="space-y-1.5">
               <label htmlFor="full-name" className="text-sm font-medium">
@@ -116,12 +137,15 @@ export function AuthCredentialsForm({ mode }: AuthCredentialsFormProps) {
             </label>
             <input
               id="email"
-              type="email"
+              type="text"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
               placeholder="parent@example.com"
               autoComplete="email"
+              autoCapitalize="none"
+              inputMode="email"
+              spellCheck={false}
               required
             />
           </div>
