@@ -270,7 +270,7 @@ export async function saveTodayPlanItemEvaluationAction(input: {
       evaluationLevel: input.level,
       note: input.note ?? null,
       metadata: {
-        source: "today_workspace_evaluation",
+        surface: "today_workspace",
         weeklyRouteItemId: item.id,
         date: input.date,
       },

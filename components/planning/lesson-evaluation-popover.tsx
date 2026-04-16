@@ -71,8 +71,11 @@ export function LessonEvaluationPopover({
   }
 
   return (
-    <div ref={wrapperRef} className="absolute right-0 top-full z-20 mt-2 w-[min(22rem,calc(100vw-2rem))]">
-      <Card className="border-border/70 bg-background/98 shadow-[var(--shadow-card)]">
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-background/35 p-4 backdrop-blur-[1px]">
+      <Card
+        ref={wrapperRef}
+        className="w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto border-border/70 bg-background/98 shadow-[var(--shadow-card)]"
+      >
         <div className="space-y-4 p-4">
           <div className="space-y-1">
             <p className="text-sm font-medium text-foreground">How well did the learner complete this task?</p>
