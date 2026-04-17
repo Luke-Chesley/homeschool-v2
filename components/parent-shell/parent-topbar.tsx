@@ -29,17 +29,26 @@ export function ParentTopbar({
   onOpenMenu,
 }: ParentTopbarProps) {
   const pathname = usePathname();
+  const hasMultipleLearners = learners.length > 1;
 
   return (
     <div className="native-shell-top-inset sticky top-[var(--global-tabs-height)] z-30 border-b border-border/70 bg-background/92 backdrop-blur lg:hidden">
       <div className="mx-auto grid max-w-7xl gap-3 px-4 py-3 sm:px-6">
         <div className="min-w-0">
           <p className="truncate text-xs text-muted-foreground">
-            {learnerLabel} · {activeLearnerName}
+            {hasMultipleLearners ? learnerLabel : `${learnerLabel} · ${activeLearnerName}`}
           </p>
+          {hasMultipleLearners ? (
+            <p
+              className="mt-1 max-w-full truncate rounded-full border border-border/60 bg-card/60 px-2 py-0.5 text-xs text-foreground"
+              title={activeLearnerName}
+            >
+              {activeLearnerName}
+            </p>
+          ) : null}
         </div>
 
-        {learners.length > 1 ? (
+        {hasMultipleLearners ? (
           <ActiveLearnerSwitcher
             learners={learners}
             activeLearnerId={activeLearnerId}
