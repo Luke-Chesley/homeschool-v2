@@ -7,11 +7,19 @@ import { createRepositories } from "@/lib/db";
 import { getDb } from "@/lib/db/server";
 import { ACTIVATION_EVENT_NAMES } from "@/lib/homeschool/onboarding/activation-contracts";
 import {
-  getTodayWorkspace,
+  getTodayActivityBuildStatus,
+  getTodayWorkspaceView,
+  materializeTodayWorkspace,
   saveTodayExpansionIntent,
   saveTodayLessonRegenerationNote,
 } from "@/lib/planning/today-service";
-import type { DailyWorkspaceExpansionScope } from "@/lib/planning/types";
+import type {
+  DailyWorkspace,
+  DailyWorkspaceActivityBuild,
+  DailyWorkspaceActivityState,
+  DailyWorkspaceExpansionIntent,
+  DailyWorkspaceExpansionScope,
+} from "@/lib/planning/types";
 import { expandWeeklyRouteFromToday } from "@/lib/planning/weekly-route-service";
 import { previewLessonDraftActivityPrompt } from "@/lib/learning-core/activity";
 import { trackProductEvent } from "@/lib/platform/observability";
@@ -59,6 +67,8 @@ export interface TodayPlanItemActionResult {
   ok: boolean;
   action: TodayPlanItemAction;
   planItemId: string;
+  itemPatch?: Partial<Pick<DailyWorkspace["items"][number], "status" | "completionStatus" | "reviewState">>;
+  workspacePatch?: TodayWorkspacePatch;
   message?: string;
   error?: string;
 }
@@ -77,6 +87,8 @@ export interface TodayPlanItemEvaluationResult {
 
 export interface TodayLessonSupportResult {
   ok: boolean;
+  note?: string | null;
+  intent?: DailyWorkspaceExpansionIntent | null;
   message?: string;
   error?: string;
 }
@@ -85,6 +97,13 @@ export interface TodayRouteExpansionResult extends TodayLessonSupportResult {
   status?: "expanded" | "already_scheduled" | "blocked";
   scheduledCount?: number;
   scheduledDates?: string[];
+  workspacePatch?: TodayWorkspacePatch;
+}
+
+export interface TodayWorkspacePatch {
+  workspace: DailyWorkspace;
+  sourceId: string;
+  routeFingerprint: string;
 }
 
 function getExpansionScopeLabel(scope: DailyWorkspaceExpansionScope) {
@@ -103,26 +122,29 @@ function getExpansionScopeLabel(scope: DailyWorkspaceExpansionScope) {
  * Drives the UI: no_draft / no_activity / ready / stale.
  */
 export async function getLessonDraftActivityStatusAction(
-  date: string,
+  input: {
+    date: string;
+    sourceId: string;
+    routeFingerprint: string;
+    lessonSessionId?: string | null;
+  },
 ): Promise<LessonDraftActivityState> {
   try {
     const session = await requireAppSession();
-
-    const workspaceResult = await getTodayWorkspace({
+    const status = await getTodayActivityBuildStatus({
       organizationId: session.organization.id,
       learnerId: session.activeLearner.id,
-      learnerName: session.activeLearner.displayName,
-      date,
+      date: input.date,
+      sourceId: input.sourceId,
+      routeFingerprint: input.routeFingerprint,
+      lessonSessionId: input.lessonSessionId,
     });
 
-    if (!workspaceResult) return { ok: false, error: "Workspace not found" };
-
-    const activityState = workspaceResult.workspace.activityState;
     return {
       ok: true,
-      status: activityState?.status ?? "no_draft",
-      sessionId: activityState?.sessionId,
-      activityId: activityState?.activityId,
+      status: status.activityState.status ?? "no_draft",
+      sessionId: status.activityState.sessionId,
+      activityId: status.activityState.activityId,
     };
   } catch (err) {
     console.error("[getLessonDraftActivityStatusAction]", err);
@@ -130,11 +152,40 @@ export async function getLessonDraftActivityStatusAction(
   }
 }
 
+async function loadTodayWorkspacePatch(input: {
+  organizationId: string;
+  learnerId: string;
+  learnerName: string;
+  date: string;
+  materialize?: boolean;
+}) {
+  if (input.materialize) {
+    await materializeTodayWorkspace(input);
+  }
+
+  const workspaceResult = await getTodayWorkspaceView(input);
+  if (!workspaceResult) {
+    return null;
+  }
+
+  return {
+    workspace: workspaceResult.workspace,
+    sourceId: workspaceResult.sourceId,
+    routeFingerprint: workspaceResult.routeFingerprint,
+  } satisfies TodayWorkspacePatch;
+}
+
 export async function updateTodayPlanItemAction(input: {
   date: string;
   planItemId: string;
   action: TodayPlanItemAction;
   alternateWeeklyRouteItemId?: string;
+  planParentId?: string | null;
+  planDayRecordId?: string | null;
+  planRecordId?: string | null;
+  sessionRecordId?: string | null;
+  estimatedMinutes?: number | null;
+  title?: string | null;
 }): Promise<TodayPlanItemActionResult> {
   try {
     const session = await requireAppSession();
@@ -145,6 +196,11 @@ export async function updateTodayPlanItemAction(input: {
         learnerId: session.activeLearner.id,
         weeklyRouteItemId: input.planItemId,
         date: input.date,
+        planParentId: input.planParentId,
+        planDayRecordId: input.planDayRecordId,
+        planRecordId: input.planRecordId,
+        estimatedMinutes: input.estimatedMinutes,
+        title: input.title,
       });
     } else if (input.action === "reset") {
       await resetTodayPlanItem({
@@ -152,6 +208,8 @@ export async function updateTodayPlanItemAction(input: {
         learnerId: session.activeLearner.id,
         weeklyRouteItemId: input.planItemId,
         date: input.date,
+        planRecordId: input.planRecordId,
+        sessionRecordId: input.sessionRecordId,
       });
     } else if (input.action === "partial") {
       await partiallyCompleteTodayPlanItem({
@@ -159,6 +217,11 @@ export async function updateTodayPlanItemAction(input: {
         learnerId: session.activeLearner.id,
         weeklyRouteItemId: input.planItemId,
         date: input.date,
+        planParentId: input.planParentId,
+        planDayRecordId: input.planDayRecordId,
+        planRecordId: input.planRecordId,
+        estimatedMinutes: input.estimatedMinutes,
+        title: input.title,
       });
     } else if (input.action === "skip_today") {
       await skipTodayPlanItem({
@@ -166,6 +229,11 @@ export async function updateTodayPlanItemAction(input: {
         learnerId: session.activeLearner.id,
         weeklyRouteItemId: input.planItemId,
         date: input.date,
+        planParentId: input.planParentId,
+        planDayRecordId: input.planDayRecordId,
+        planRecordId: input.planRecordId,
+        estimatedMinutes: input.estimatedMinutes,
+        title: input.title,
       });
     } else if (input.action === "push_to_tomorrow") {
       await pushTodayPlanItemToTomorrow(
@@ -198,10 +266,23 @@ export async function updateTodayPlanItemAction(input: {
       };
     }
 
+    const structuralAction =
+      input.action === "partial" ||
+      input.action === "push_to_tomorrow" ||
+      input.action === "skip_today" ||
+      input.action === "swap_with_alternate";
+
+    const workspacePatch = structuralAction
+      ? await loadTodayWorkspacePatch({
+          organizationId: session.organization.id,
+          learnerId: session.activeLearner.id,
+          learnerName: session.activeLearner.displayName,
+          date: input.date,
+          materialize: true,
+        })
+      : null;
+
     revalidatePath("/today");
-    revalidatePath("/planning");
-    revalidatePath("/tracking");
-    revalidatePath("/tracking/reports");
 
     const messageByAction: Record<TodayPlanItemAction, string> = {
       complete: "Marked done and saved to today's record.",
@@ -217,6 +298,21 @@ export async function updateTodayPlanItemAction(input: {
       ok: true,
       action: input.action,
       planItemId: input.planItemId,
+      itemPatch:
+        input.action === "complete"
+          ? {
+              status: "completed",
+              completionStatus: "completed_as_planned",
+              reviewState: "not_required",
+            }
+          : input.action === "reset"
+            ? {
+                status: "ready",
+                completionStatus: "not_started",
+                reviewState: "not_required",
+              }
+            : undefined,
+      workspacePatch: workspacePatch ?? undefined,
       message: messageByAction[input.action],
     };
   } catch (err) {
@@ -233,53 +329,29 @@ export async function updateTodayPlanItemAction(input: {
 export async function saveTodayPlanItemEvaluationAction(input: {
   date: string;
   planItemId: string;
+  weeklyRouteItemId: string;
+  planRecordId: string;
+  sessionRecordId: string;
   level: LessonEvaluationLevel;
   note?: string;
 }): Promise<TodayPlanItemEvaluationResult> {
   try {
     const session = await requireAppSession();
-    const workspace = await getTodayWorkspace({
-      organizationId: session.organization.id,
-      learnerId: session.activeLearner.id,
-      learnerName: session.activeLearner.displayName,
-      date: input.date,
-    });
-
-    if (!workspace) {
-      return { ok: false, planItemId: input.planItemId, error: "Workspace not found." };
-    }
-
-    const item = workspace.workspace.items.find((candidate) => candidate.id === input.planItemId);
-    if (!item) {
-      return { ok: false, planItemId: input.planItemId, error: "Lesson card not found." };
-    }
-
-    if (!item.planRecordId || !item.sessionRecordId) {
-      return {
-        ok: false,
-        planItemId: input.planItemId,
-        error: "Session record not found for this lesson card.",
-      };
-    }
-
     const evaluation = await recordSessionEvaluation({
       organizationId: session.organization.id,
       learnerId: session.activeLearner.id,
-      planItemId: item.planRecordId,
-      lessonSessionId: item.sessionRecordId,
+      planItemId: input.planRecordId,
+      lessonSessionId: input.sessionRecordId,
       evaluationLevel: input.level,
       note: input.note ?? null,
       metadata: {
         surface: "today_workspace",
-        weeklyRouteItemId: item.id,
+        weeklyRouteItemId: input.weeklyRouteItemId,
         date: input.date,
       },
     });
 
     revalidatePath("/today");
-    revalidatePath("/planning");
-    revalidatePath("/tracking");
-    revalidatePath("/tracking/reports");
 
     return {
       ok: true,
@@ -313,9 +385,17 @@ export async function saveTodayPlanItemEvaluationAction(input: {
 export async function generateLessonDraftActivityAction(
   input: {
     date: string;
+    sourceId: string;
+    routeFingerprint: string;
+    lessonSessionId?: string | null;
     trigger?: "after_lesson_auto" | "today_resume" | "manual";
   },
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{
+  ok: boolean;
+  build?: DailyWorkspaceActivityBuild | null;
+  activityState?: DailyWorkspaceActivityState;
+  error?: string;
+}> {
   try {
     const session = await requireAppSession();
     await generateTodayActivity({
@@ -326,7 +406,16 @@ export async function generateLessonDraftActivityAction(
       trigger: input.trigger ?? "manual",
     });
 
-    return { ok: true };
+    const status = await getTodayActivityBuildStatus({
+      organizationId: session.organization.id,
+      learnerId: session.activeLearner.id,
+      date: input.date,
+      sourceId: input.sourceId,
+      routeFingerprint: input.routeFingerprint,
+      lessonSessionId: input.lessonSessionId,
+    });
+
+    return { ok: true, build: status.build, activityState: status.activityState };
   } catch (err) {
     console.error("[generateLessonDraftActivityAction]", err);
     return { ok: false, error: err instanceof Error ? err.message : "Generation failed" };
@@ -354,7 +443,14 @@ export async function getLessonDraftPromptPreviewAction(
     );
     const workflowMode = platformSettings?.workflowMode ?? "family_guided";
 
-    const workspaceResult = await getTodayWorkspace({
+    await materializeTodayWorkspace({
+      organizationId: session.organization.id,
+      learnerId: session.activeLearner.id,
+      learnerName: session.activeLearner.displayName,
+      date,
+    });
+
+    const workspaceResult = await getTodayWorkspaceView({
       organizationId: session.organization.id,
       learnerId: session.activeLearner.id,
       learnerName: session.activeLearner.displayName,
@@ -381,33 +477,26 @@ export async function getLessonDraftPromptPreviewAction(
 
 export async function saveLessonRegenerationNoteAction(input: {
   date: string;
+  sourceId: string;
+  routeFingerprint: string;
   note: string;
 }): Promise<TodayLessonSupportResult> {
   try {
     const session = await requireAppSession();
-    const workspaceResult = await getTodayWorkspace({
-      organizationId: session.organization.id,
-      learnerId: session.activeLearner.id,
-      learnerName: session.activeLearner.displayName,
-      date: input.date,
-    });
-
-    if (!workspaceResult) {
-      return { ok: false, error: "Workspace not found." };
-    }
+    const note = input.note.trim().length > 0 ? input.note.trim() : null;
 
     await saveTodayLessonRegenerationNote({
       organizationId: session.organization.id,
       learnerId: session.activeLearner.id,
       date: input.date,
-      sourceId: workspaceResult.sourceId,
-      routeFingerprint: workspaceResult.workspace.items.map((item) => item.id).join("::"),
-      note: input.note.trim().length > 0 ? input.note.trim() : null,
+      sourceId: input.sourceId,
+      routeFingerprint: input.routeFingerprint,
+      note,
     });
 
     revalidatePath("/today");
 
-    return { ok: true, message: "Saved note for the next regenerate." };
+    return { ok: true, note, message: "Saved note for the next regenerate." };
   } catch (error) {
     console.error("[saveLessonRegenerationNoteAction]", error);
     return {
@@ -419,35 +508,27 @@ export async function saveLessonRegenerationNoteAction(input: {
 
 export async function saveExpansionIntentAction(input: {
   date: string;
+  sourceId: string;
+  routeFingerprint: string;
   intent: "keep_today" | "expand_from_here";
 }): Promise<TodayLessonSupportResult> {
   try {
     const session = await requireAppSession();
-    const workspaceResult = await getTodayWorkspace({
-      organizationId: session.organization.id,
-      learnerId: session.activeLearner.id,
-      learnerName: session.activeLearner.displayName,
-      date: input.date,
-    });
-
-    if (!workspaceResult) {
-      return { ok: false, error: "Workspace not found." };
-    }
 
     await saveTodayExpansionIntent({
       organizationId: session.organization.id,
       learnerId: session.activeLearner.id,
       date: input.date,
-      sourceId: workspaceResult.sourceId,
-      routeFingerprint: workspaceResult.workspace.items.map((item) => item.id).join("::"),
+      sourceId: input.sourceId,
+      routeFingerprint: input.routeFingerprint,
       intent: input.intent,
     });
 
     revalidatePath("/today");
-    revalidatePath("/planning");
 
     return {
       ok: true,
+      intent: input.intent,
       message:
         input.intent === "keep_today"
           ? "Saved: keep this launch flow bounded to today."
@@ -464,29 +545,18 @@ export async function saveExpansionIntentAction(input: {
 
 export async function expandTodayRouteAction(input: {
   date: string;
+  sourceId: string;
   scope: DailyWorkspaceExpansionScope;
 }): Promise<TodayRouteExpansionResult> {
   try {
     const session = await requireAppSession();
-    const workspaceResult = await getTodayWorkspace({
-      organizationId: session.organization.id,
-      learnerId: session.activeLearner.id,
-      learnerName: session.activeLearner.displayName,
-      date: input.date,
-    });
-
-    if (!workspaceResult) {
-      return { ok: false, error: "Workspace not found." };
-    }
-
-    const sourceId = workspaceResult.sourceId;
-    if (!sourceId) {
+    if (!input.sourceId) {
       return { ok: false, error: "No live curriculum source was found for this learner." };
     }
 
     const result = await expandWeeklyRouteFromToday({
       learnerId: session.activeLearner.id,
-      sourceId,
+      sourceId: input.sourceId,
       date: input.date,
       scope: input.scope,
     });
@@ -495,7 +565,7 @@ export async function expandTodayRouteAction(input: {
     revalidatePath("/planning");
 
     const metadata = {
-      sourceId,
+      sourceId: input.sourceId,
       date: input.date,
       scope: input.scope,
       targetDates: result.targetDates,
@@ -514,11 +584,20 @@ export async function expandTodayRouteAction(input: {
         console.error("[expandTodayRouteAction:routeExpansionApplied]", error);
       });
 
+      const workspacePatch = await loadTodayWorkspacePatch({
+        organizationId: session.organization.id,
+        learnerId: session.activeLearner.id,
+        learnerName: session.activeLearner.displayName,
+        date: input.date,
+        materialize: true,
+      });
+
       return {
         ok: true,
         status: result.status,
         scheduledCount: result.scheduledCount,
         scheduledDates: result.scheduledDates,
+        workspacePatch: workspacePatch ?? undefined,
         message:
           result.scheduledCount === 1
             ? `Scheduled the next route item for ${getExpansionScopeLabel(input.scope)}.`

@@ -54,7 +54,6 @@ import { duplicateWeeklyRouteItem, getOrCreateWeeklyRouteBoardForLearner } from 
 import type { WeeklyRouteBoard } from "@/lib/curriculum-routing";
 import { toWeekStartDate } from "@/lib/curriculum-routing";
 import { buildCopilotPlanningContext } from "@/lib/planning/copilot-snapshot";
-import { syncDailyWorkspaceSessionRecords } from "@/lib/planning/session-workspace-service";
 import {
   resolveLessonSessionMinutes,
   type LessonTimingContract,
@@ -69,6 +68,38 @@ const TODAY_ACTIVITY_BUILDS_KEY = "todayActivityBuilds";
 const TODAY_LESSON_REGEN_NOTES_KEY = "todayLessonRegenerationNotes";
 const TODAY_EXPANSION_INTENTS_KEY = "todayExpansionIntents";
 
+type TodayMaterializedWorkflowEntry = {
+  planParentId: string;
+  planDayRecordId: string;
+  planItemId: string;
+  lessonSessionId: string | null;
+  completionStatus: string | null;
+  reviewState: string | null;
+  evidenceCount: number;
+  activityCount: number;
+};
+
+type TodayWorkspaceContext = {
+  selectedSource: CurriculumSource;
+  sourceId: string;
+  sourceTitle: string;
+  sessionTiming: LessonTimingContract;
+  sessionBudgetMinutes: number;
+  board: WeeklyRouteBoard;
+  selectedRouteItems: WeeklyRouteBoard["items"];
+  nodeById: Map<string, Awaited<ReturnType<typeof listCurriculumNodes>>[number]>;
+  planningContext: ReturnType<typeof buildCopilotPlanningContext>;
+  routeFingerprint: string;
+};
+
+type TodayWorkspaceMetadataState = {
+  lessonDraft: DailyWorkspaceLessonDraft | null;
+  lessonBuild: DailyWorkspaceLessonBuild | null;
+  activityBuild: DailyWorkspaceActivityBuild | null;
+  lessonRegenerationNote: string | null;
+  expansionIntent: DailyWorkspaceExpansionIntent | null;
+};
+
 function addDays(baseDate: string, days: number) {
   const date = new Date(`${baseDate}T12:00:00.000Z`);
   date.setUTCDate(date.getUTCDate() + days);
@@ -77,6 +108,14 @@ function addDays(baseDate: string, days: number) {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readWeeklyRouteItemIdFromMetadata(metadata: unknown) {
+  if (!isRecord(metadata)) {
+    return null;
+  }
+
+  return typeof metadata.weeklyRouteItemId === "string" ? metadata.weeklyRouteItemId : null;
 }
 
 function formatPlannerDate(date: string) {
@@ -457,180 +496,237 @@ async function syncTodayPlanItems(params: {
   const routeItemIds = params.selectedRouteItems.map((item) => item.id);
 
   if (routeItemIds.length === 0) {
-    return new Map<
-      string,
-      {
-        planItemId: string;
-        lessonSessionId: string | null;
-        completionStatus: string | null;
-        reviewState: string | null;
-        evidenceCount: number;
-        activityCount: number;
-      }
-    >();
+    return new Map<string, TodayMaterializedWorkflowEntry>();
   }
 
   const existingLinks = await db.query.planItemCurriculumLinks.findMany({
     where: inArray(planItemCurriculumLinks.weeklyRouteItemId, routeItemIds),
   });
-  const existingPlanItems = existingLinks.length
+  const existingPlanItems = existingLinks.length > 0
     ? await db.query.planItems.findMany({
         where: inArray(
           planItems.id,
-          existingLinks.map((link) => link.planItemId),
+          [...new Set(existingLinks.map((link) => link.planItemId))],
         ),
       })
     : [];
+  const existingPlanItemById = new Map(existingPlanItems.map((item) => [item.id, item]));
+  const existingPlanItemByRouteItemId = new Map<string, typeof planItems.$inferSelect>();
 
-  const linkByWeeklyRouteItemId = new Map(
-    existingLinks
-      .filter((link) => typeof link.weeklyRouteItemId === "string")
-      .map((link) => [link.weeklyRouteItemId as string, link]),
-  );
-  const planItemById = new Map(existingPlanItems.map((item) => [item.id, item]));
-
-  const materializedByRouteItemId = new Map<
-    string,
-    {
-      planItemId: string;
-      lessonSessionId: string | null;
-      completionStatus: string | null;
-      reviewState: string | null;
-      evidenceCount: number;
-      activityCount: number;
-    }
-  >();
-
-  for (const [index, routeItem] of params.selectedRouteItems.entries()) {
-    const node = params.nodeById.get(routeItem.skillNodeId);
-    let linkRecord = linkByWeeklyRouteItemId.get(routeItem.id) ?? null;
-    const existingPlanItem = linkRecord ? planItemById.get(linkRecord.planItemId) ?? null : null;
-    const scheduledDate = routeItem.scheduledDate ?? params.date;
-    // Item-effort: node-level override if explicitly set, otherwise session budget.
-    // This is NOT the session's total budget — it is one item's effort share.
-    const itemEffortMinutes = node?.estimatedMinutes ?? params.sessionBudgetMinutes;
-    const subject = node?.normalizedPath.split("/")[0] ?? params.sourceTitle;
-
-    let planItemRecord =
-      existingPlanItem ??
-      (await db
-        .insert(planItems)
-        .values({
-          planId: workspacePlan.id,
-          planDayId: workspaceDay.id,
-          curriculumItemId: null,
-          title: routeItem.skillTitle,
-          description: node?.description ?? routeItem.skillTitle,
-          subject,
-          status: mapRouteStateToPlanStatus(routeItem.state) === "blocked" ? "skipped" : "ready",
-          scheduledDate,
-          estimatedMinutes: itemEffortMinutes,
-          ordering: index,
-          metadata: {
-            sourceLabel: params.sourceTitle,
-            lessonLabel: getSkillPathLabel(routeItem.skillPath),
-            weeklyRouteItemId: routeItem.id,
-            skillNodeId: routeItem.skillNodeId,
-          },
-        })
-        .returning()
-        .then((rows) => rows[0]!));
-
-    if (existingPlanItem) {
-      await db
-        .update(planItems)
-        .set({
-          planId: workspacePlan.id,
-          planDayId: workspaceDay.id,
-          title: routeItem.skillTitle,
-          description: node?.description ?? routeItem.skillTitle,
-          subject,
-          status: mapRouteStateToPlanStatus(routeItem.state) === "blocked" ? "skipped" : "ready",
-          scheduledDate,
-          estimatedMinutes: itemEffortMinutes,
-          ordering: index,
-          metadata: {
-            ...(existingPlanItem.metadata ?? {}),
-            sourceLabel: params.sourceTitle,
-            lessonLabel: getSkillPathLabel(routeItem.skillPath),
-            weeklyRouteItemId: routeItem.id,
-            skillNodeId: routeItem.skillNodeId,
-          },
-          updatedAt: new Date(),
-        })
-        .where(eq(planItems.id, existingPlanItem.id));
-    }
-
-    if (!planItemRecord) {
+  for (const link of existingLinks) {
+    if (typeof link.weeklyRouteItemId !== "string") {
       continue;
     }
 
-    if (!linkRecord) {
-      await db
-        .insert(planItemCurriculumLinks)
-        .values({
-          planItemId: planItemRecord.id,
-          sourceId: routeItem.sourceId,
-          skillNodeId: routeItem.skillNodeId,
+    const planItem = existingPlanItemById.get(link.planItemId);
+    if (planItem) {
+      existingPlanItemByRouteItemId.set(link.weeklyRouteItemId, planItem);
+    }
+  }
+
+  const routeItemPayloads = params.selectedRouteItems.map((routeItem, index) => {
+    const node = params.nodeById.get(routeItem.skillNodeId);
+    const scheduledDate = routeItem.scheduledDate ?? params.date;
+    const itemEffortMinutes = node?.estimatedMinutes ?? params.sessionBudgetMinutes;
+    const subject = node?.normalizedPath.split("/")[0] ?? params.sourceTitle;
+    const lessonLabel = getSkillPathLabel(routeItem.skillPath);
+    const planItemStatus: typeof planItems.$inferInsert.status =
+      mapRouteStateToPlanStatus(routeItem.state) === "blocked" ? "skipped" : "ready";
+
+    return {
+      index,
+      node,
+      routeItem,
+      scheduledDate,
+      itemEffortMinutes,
+      values: {
+        planId: workspacePlan.id,
+        planDayId: workspaceDay.id,
+        curriculumItemId: null,
+        title: routeItem.skillTitle,
+        description: node?.description ?? routeItem.skillTitle,
+        subject,
+        status: planItemStatus,
+        scheduledDate,
+        estimatedMinutes: itemEffortMinutes,
+        ordering: index,
+        metadata: {
+          sourceLabel: params.sourceTitle,
+          lessonLabel,
           weeklyRouteItemId: routeItem.id,
-          origin: "curriculum_route",
-          metadata: {},
-        })
-        .onConflictDoNothing({
-          target: planItemCurriculumLinks.weeklyRouteItemId,
-        });
+          skillNodeId: routeItem.skillNodeId,
+        },
+      },
+    };
+  });
 
-      linkRecord =
-        (await db.query.planItemCurriculumLinks.findFirst({
-          where: eq(planItemCurriculumLinks.weeklyRouteItemId, routeItem.id),
-        })) ?? null;
+  const itemsToCreate = routeItemPayloads.filter(
+    ({ routeItem }) => !existingPlanItemByRouteItemId.has(routeItem.id),
+  );
+  const itemsToUpdate = routeItemPayloads.filter(({ routeItem }) =>
+    existingPlanItemByRouteItemId.has(routeItem.id),
+  );
 
-      if (linkRecord && linkRecord.planItemId !== planItemRecord.id) {
-        planItemRecord =
-          (await db.query.planItems.findFirst({
-            where: eq(planItems.id, linkRecord.planItemId),
-          })) ?? planItemRecord;
-      }
+  const createdPlanItems =
+    itemsToCreate.length > 0
+      ? await db.insert(planItems).values(itemsToCreate.map(({ values }) => values)).returning()
+      : [];
+
+  if (itemsToUpdate.length > 0) {
+    await Promise.all(
+      itemsToUpdate.map(async ({ routeItem, values }) => {
+        const existingPlanItem = existingPlanItemByRouteItemId.get(routeItem.id);
+        if (!existingPlanItem) {
+          return;
+        }
+
+        await db
+          .update(planItems)
+          .set({
+            ...values,
+            metadata: {
+              ...(existingPlanItem.metadata ?? {}),
+              ...(values.metadata ?? {}),
+            },
+            updatedAt: new Date(),
+          })
+          .where(eq(planItems.id, existingPlanItem.id));
+      }),
+    );
+  }
+
+  const provisionalPlanItemByRouteItemId = new Map(existingPlanItemByRouteItemId);
+  for (const planItem of createdPlanItems) {
+    const routeItemId = readWeeklyRouteItemIdFromMetadata(planItem.metadata);
+    if (routeItemId) {
+      provisionalPlanItemByRouteItemId.set(routeItemId, planItem);
+    }
+  }
+
+  const existingLinkedRouteItemIds = new Set(
+    existingLinks
+      .map((link) => link.weeklyRouteItemId)
+      .filter((value): value is string => typeof value === "string"),
+  );
+  const missingLinks = routeItemPayloads.flatMap(({ routeItem }) => {
+    if (existingLinkedRouteItemIds.has(routeItem.id)) {
+      return [];
     }
 
-    const session = await ensureSessionWorkspace({
-      organizationId: params.organizationId,
-      learnerId: params.learnerId,
-      planId: workspacePlan.id,
-      planDayId: workspaceDay.id,
-      planItemId: planItemRecord.id,
-      sessionDate: scheduledDate,
-      // Use the canonical session budget (from curriculum pacing), not item effort.
-      scheduledMinutes: params.sessionBudgetMinutes,
-      metadata: {
-        weeklyRouteItemId: routeItem.id,
+    const planItem = provisionalPlanItemByRouteItemId.get(routeItem.id);
+    if (!planItem) {
+      return [];
+    }
+
+    return [
+      {
+        planItemId: planItem.id,
         sourceId: routeItem.sourceId,
         skillNodeId: routeItem.skillNodeId,
+        weeklyRouteItemId: routeItem.id,
+        origin: "curriculum_route" as const,
+        metadata: {},
       },
-    });
+    ];
+  });
 
-    materializedByRouteItemId.set(routeItem.id, {
-      planItemId: planItemRecord.id,
-      lessonSessionId: session.id,
-      completionStatus: session.completionStatus,
-      reviewState: session.reviewState,
-      evidenceCount: 0,
-      activityCount: 0,
+  if (missingLinks.length > 0) {
+    await db.insert(planItemCurriculumLinks).values(missingLinks).onConflictDoNothing({
+      target: planItemCurriculumLinks.weeklyRouteItemId,
     });
   }
 
-  const planItemIds = [...materializedByRouteItemId.values()].map((entry) => entry.planItemId);
-  const sessions = await db.query.lessonSessions.findMany({
-    where: inArray(
-      lessonSessions.id,
-      [...materializedByRouteItemId.values()]
-        .map((entry) => entry.lessonSessionId)
-        .filter((value): value is string => Boolean(value)),
-    ),
+  const canonicalLinks = await db.query.planItemCurriculumLinks.findMany({
+    where: inArray(planItemCurriculumLinks.weeklyRouteItemId, routeItemIds),
   });
+  const canonicalPlanItemIds = [...new Set(canonicalLinks.map((link) => link.planItemId))];
+  const canonicalPlanItems = canonicalPlanItemIds.length > 0
+    ? await db.query.planItems.findMany({
+        where: inArray(planItems.id, canonicalPlanItemIds),
+      })
+    : [];
+  const canonicalPlanItemById = new Map(canonicalPlanItems.map((item) => [item.id, item]));
+  const canonicalPlanItemByRouteItemId = new Map<string, typeof planItems.$inferSelect>();
+
+  for (const link of canonicalLinks) {
+    if (typeof link.weeklyRouteItemId !== "string") {
+      continue;
+    }
+
+    const planItem = canonicalPlanItemById.get(link.planItemId);
+    if (planItem) {
+      canonicalPlanItemByRouteItemId.set(link.weeklyRouteItemId, planItem);
+    }
+  }
+
+  const materializedByRouteItemId = new Map<string, TodayMaterializedWorkflowEntry>();
+  const ensuredSessions = await Promise.all(
+    routeItemPayloads.map(async ({ routeItem, scheduledDate }) => {
+      const planItemRecord =
+        canonicalPlanItemByRouteItemId.get(routeItem.id) ??
+        provisionalPlanItemByRouteItemId.get(routeItem.id);
+      if (!planItemRecord) {
+        return null;
+      }
+
+      const session = await ensureSessionWorkspace({
+        organizationId: params.organizationId,
+        learnerId: params.learnerId,
+        planId: workspacePlan.id,
+        planDayId: workspaceDay.id,
+        planItemId: planItemRecord.id,
+        sessionDate: scheduledDate,
+        scheduledMinutes: params.sessionBudgetMinutes,
+        metadata: {
+          weeklyRouteItemId: routeItem.id,
+          sourceId: routeItem.sourceId,
+          skillNodeId: routeItem.skillNodeId,
+        },
+      });
+
+      return {
+        routeItemId: routeItem.id,
+        entry: {
+          planParentId: workspacePlan.id,
+          planDayRecordId: workspaceDay.id,
+          planItemId: planItemRecord.id,
+          lessonSessionId: session.id,
+          completionStatus: session.completionStatus,
+          reviewState: session.reviewState,
+          evidenceCount: 0,
+          activityCount: 0,
+        } satisfies TodayMaterializedWorkflowEntry,
+      };
+    }),
+  );
+
+  for (const ensured of ensuredSessions) {
+    if (ensured) {
+      materializedByRouteItemId.set(ensured.routeItemId, ensured.entry);
+    }
+  }
+
+  return hydrateTodayMaterializedWorkflow(materializedByRouteItemId);
+}
+
+async function hydrateTodayMaterializedWorkflow(
+  entries: Map<string, TodayMaterializedWorkflowEntry>,
+) {
+  const db = getDb();
+  const hydratedEntries = new Map(entries);
+  const planItemIds = [...hydratedEntries.values()].map((entry) => entry.planItemId);
+  const lessonSessionIds = [...hydratedEntries.values()]
+    .map((entry) => entry.lessonSessionId)
+    .filter((value): value is string => Boolean(value));
+
+  const sessions = lessonSessionIds.length > 0
+    ? await db.query.lessonSessions.findMany({
+        where: inArray(lessonSessions.id, lessonSessionIds),
+      })
+    : [];
   const sessionById = new Map(sessions.map((session) => [session.id, session]));
 
-  const activityRows = planItemIds.length
+  const activityRows = planItemIds.length > 0
     ? await db.query.interactiveActivities.findMany({
         where: and(
           inArray(interactiveActivities.planItemId, planItemIds),
@@ -650,15 +746,11 @@ async function syncTodayPlanItems(params: {
     );
   }
 
-  const evidenceRows =
-    sessions.length > 0
-      ? await db.query.evidenceRecords.findMany({
-          where: inArray(
-            evidenceRecords.lessonSessionId,
-            sessions.map((session) => session.id),
-          ),
-        })
-      : [];
+  const evidenceRows = lessonSessionIds.length > 0
+    ? await db.query.evidenceRecords.findMany({
+        where: inArray(evidenceRecords.lessonSessionId, lessonSessionIds),
+      })
+    : [];
   const evidenceCountBySessionId = new Map<string, number>();
   for (const evidence of evidenceRows) {
     if (!evidence.lessonSessionId) {
@@ -671,9 +763,9 @@ async function syncTodayPlanItems(params: {
     );
   }
 
-  for (const [routeItemId, entry] of materializedByRouteItemId) {
+  for (const [routeItemId, entry] of hydratedEntries) {
     const session = entry.lessonSessionId ? sessionById.get(entry.lessonSessionId) : null;
-    materializedByRouteItemId.set(routeItemId, {
+    hydratedEntries.set(routeItemId, {
       ...entry,
       completionStatus: session?.completionStatus ?? entry.completionStatus,
       reviewState: session?.reviewState ?? entry.reviewState,
@@ -684,7 +776,87 @@ async function syncTodayPlanItems(params: {
     });
   }
 
-  return materializedByRouteItemId;
+  return hydratedEntries;
+}
+
+async function loadTodayMaterializedWorkflow(params: {
+  organizationId: string;
+  learnerId: string;
+  date: string;
+  selectedRouteItems: WeeklyRouteBoard["items"];
+}) {
+  const workspacePlan = await getTodayWorkspacePlan(params.organizationId, params.learnerId);
+  const workspaceDay = workspacePlan
+    ? await getTodayWorkspaceDay({
+        organizationId: params.organizationId,
+        learnerId: params.learnerId,
+        date: params.date,
+      })
+    : null;
+
+  if (!workspacePlan || !workspaceDay || params.selectedRouteItems.length === 0) {
+    return new Map<string, TodayMaterializedWorkflowEntry>();
+  }
+
+  const routeItemIds = params.selectedRouteItems.map((item) => item.id);
+  const db = getDb();
+  const links = await db.query.planItemCurriculumLinks.findMany({
+    where: inArray(planItemCurriculumLinks.weeklyRouteItemId, routeItemIds),
+  });
+  const linkedPlanItemIds = [...new Set(links.map((link) => link.planItemId))];
+  const linkedPlanItems = linkedPlanItemIds.length > 0
+    ? await db.query.planItems.findMany({
+        where: inArray(planItems.id, linkedPlanItemIds),
+      })
+    : [];
+  const planItemById = new Map(linkedPlanItems.map((item) => [item.id, item]));
+
+  const sessionRows = linkedPlanItemIds.length > 0
+    ? await db
+        .select()
+        .from(lessonSessions)
+        .where(
+          and(
+            eq(lessonSessions.organizationId, params.organizationId),
+            eq(lessonSessions.learnerId, params.learnerId),
+            eq(lessonSessions.sessionDate, params.date),
+            inArray(lessonSessions.planItemId, linkedPlanItemIds),
+          ),
+        )
+        .orderBy(desc(lessonSessions.updatedAt), desc(lessonSessions.createdAt))
+    : [];
+  const latestSessionByPlanItemId = new Map<string, typeof lessonSessions.$inferSelect>();
+  for (const session of sessionRows) {
+    if (!latestSessionByPlanItemId.has(session.planItemId)) {
+      latestSessionByPlanItemId.set(session.planItemId, session);
+    }
+  }
+
+  const workflowEntries = new Map<string, TodayMaterializedWorkflowEntry>();
+  for (const link of links) {
+    if (typeof link.weeklyRouteItemId !== "string") {
+      continue;
+    }
+
+    const planItem = planItemById.get(link.planItemId);
+    if (!planItem) {
+      continue;
+    }
+
+    const session = latestSessionByPlanItemId.get(planItem.id) ?? null;
+    workflowEntries.set(link.weeklyRouteItemId, {
+      planParentId: planItem.planId,
+      planDayRecordId: planItem.planDayId,
+      planItemId: planItem.id,
+      lessonSessionId: session?.id ?? null,
+      completionStatus: session?.completionStatus ?? null,
+      reviewState: session?.reviewState ?? null,
+      evidenceCount: 0,
+      activityCount: 0,
+    });
+  }
+
+  return hydrateTodayMaterializedWorkflow(workflowEntries);
 }
 
 export async function getSavedTodayLessonDraft(params: {
@@ -780,6 +952,70 @@ export async function getSavedTodayExpansionIntent(params: {
   }
 
   return readExpansionIntentFromMetadata(day.metadata, params.sourceId, params.routeFingerprint);
+}
+
+export async function getTodayLessonBuildStatus(params: {
+  organizationId: string;
+  learnerId: string;
+  date: string;
+  sourceId: string;
+  routeFingerprint: string;
+}) {
+  const state = await readTodayWorkspaceMetadataState(params);
+
+  return {
+    build: state.lessonBuild,
+    draft: state.lessonDraft,
+    activityBuild: state.activityBuild,
+  };
+}
+
+export async function getTodayActivityBuildStatus(params: {
+  organizationId: string;
+  learnerId: string;
+  date: string;
+  sourceId: string;
+  routeFingerprint: string;
+  lessonSessionId?: string | null;
+}) {
+  const metadataState = await readTodayWorkspaceMetadataState(params);
+  const lessonDraft = metadataState.lessonDraft?.structured;
+  const leadSessionId = params.lessonSessionId ?? metadataState.activityBuild?.lessonSessionId ?? null;
+
+  if (!lessonDraft) {
+    return {
+      build: metadataState.activityBuild,
+      activityState: { status: "no_draft" } satisfies DailyWorkspaceActivityState,
+    };
+  }
+
+  if (!leadSessionId) {
+    return {
+      build: metadataState.activityBuild,
+      activityState: { status: "no_activity" } satisfies DailyWorkspaceActivityState,
+    };
+  }
+
+  const repos = createRepositories(getDb());
+  const currentFingerprint = computeLessonDraftFingerprint(lessonDraft);
+  const existingActivity = await repos.activities.findPublishedActivityForSession(leadSessionId);
+
+  if (!existingActivity) {
+    return {
+      build: metadataState.activityBuild,
+      activityState: { status: "no_activity", sessionId: leadSessionId } satisfies DailyWorkspaceActivityState,
+    };
+  }
+
+  return {
+    build: metadataState.activityBuild,
+    activityState: {
+      status:
+        existingActivity.lessonDraftFingerprint === currentFingerprint ? "ready" : "stale",
+      sessionId: leadSessionId,
+      activityId: existingActivity.id,
+    } satisfies DailyWorkspaceActivityState,
+  };
 }
 
 async function writeTodayLessonBuild(params: {
@@ -1258,14 +1494,7 @@ function buildPlanItem(
   date: string,
   sessionBudgetMinutes: number,
   node?: Awaited<ReturnType<typeof listCurriculumNodes>>[number],
-  workflow?: {
-    planItemId: string;
-    lessonSessionId: string | null;
-    completionStatus: string | null;
-    reviewState: string | null;
-    evidenceCount: number;
-    activityCount: number;
-  },
+  workflow?: TodayMaterializedWorkflowEntry,
 ): PlanItem {
   const subject = node?.normalizedPath.split("/")[0] ?? sourceTitle;
   // Item-effort: node override if explicitly set, otherwise the session budget.
@@ -1295,6 +1524,12 @@ function buildPlanItem(
     sourceLabel: sourceTitle,
     lessonLabel: getSkillPathLabel(routeItem.skillPath),
     planOrigin: "curriculum_route",
+    planParentId: workflow?.planParentId,
+    planDayRecordId: workflow?.planDayRecordId,
+    planRecordId: workflow?.planItemId,
+    sessionRecordId: workflow?.lessonSessionId ?? undefined,
+    reviewState: workflow?.reviewState ?? undefined,
+    completionStatus: workflow?.completionStatus ?? undefined,
     curriculum: {
       sourceId: routeItem.sourceId,
       skillNodeId: routeItem.skillNodeId,
@@ -1433,19 +1668,12 @@ async function resolveSourceContext(params: {
   };
 }
 
-export async function getTodayWorkspace(params: {
+async function resolveTodayWorkspaceContext(params: {
   organizationId: string;
   learnerId: string;
   learnerName: string;
   date: string;
-}): Promise<{
-  workspace: DailyWorkspace;
-  sourceId: string;
-  sourceTitle: string;
-  /** Resolved session budget from the canonical timing contract. */
-  sessionTiming: LessonTimingContract;
-  planningContext: ReturnType<typeof buildCopilotPlanningContext>;
-} | null> {
+}): Promise<TodayWorkspaceContext | null> {
   const { selectedSource } = await resolveSourceContext({
     organizationId: params.organizationId,
   });
@@ -1454,13 +1682,10 @@ export async function getTodayWorkspace(params: {
     return null;
   }
 
-  // Resolve the canonical session budget for this source once.
-  // All planning and lesson-draft code downstream must use this value.
   const sessionTiming = resolveLessonSessionMinutes({
     sourceSessionMinutes: selectedSource.pacing?.sessionMinutes,
   });
   const sessionBudgetMinutes = sessionTiming.resolvedTotalMinutes;
-
   const weekStartDate = toWeekStartDate(params.date);
   const { board } = await getOrCreateWeeklyRouteBoardForLearner({
     learnerId: params.learnerId,
@@ -1469,16 +1694,195 @@ export async function getTodayWorkspace(params: {
   });
   const nodes = await listCurriculumNodes(selectedSource.id);
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const selectedRouteItems = getVisibleRouteItems(board, params.date);
+  const planningContext = buildCopilotPlanningContext({
+    board,
+    learnerId: params.learnerId,
+    learnerName: params.learnerName,
+    sourceId: selectedSource.id,
+    selectedDate: params.date,
+  });
 
-  if (board.items.length === 0) {
+  return {
+    selectedSource,
+    sourceId: selectedSource.id,
+    sourceTitle: selectedSource.title,
+    sessionTiming,
+    sessionBudgetMinutes,
+    board,
+    selectedRouteItems,
+    nodeById,
+    planningContext,
+    routeFingerprint: buildTodayLessonDraftFingerprint(selectedRouteItems.map((item) => item.id)),
+  };
+}
+
+async function readTodayWorkspaceMetadataState(params: {
+  organizationId: string;
+  learnerId: string;
+  date: string;
+  sourceId: string;
+  routeFingerprint: string;
+}): Promise<TodayWorkspaceMetadataState> {
+  if (!params.routeFingerprint) {
     return {
-      sourceId: selectedSource.id,
-      sourceTitle: selectedSource.title,
-      sessionTiming,
+      lessonDraft: null,
+      lessonBuild: null,
+      activityBuild: null,
+      lessonRegenerationNote: null,
+      expansionIntent: null,
+    };
+  }
+
+  const day = await getTodayWorkspaceDay(params);
+  if (!day) {
+    return {
+      lessonDraft: null,
+      lessonBuild: null,
+      activityBuild: null,
+      lessonRegenerationNote: null,
+      expansionIntent: null,
+    };
+  }
+
+  return {
+    lessonDraft: readLessonDraftFromMetadata(day.metadata, params.sourceId, params.routeFingerprint),
+    lessonBuild: readLessonBuildFromMetadata(day.metadata, params.sourceId, params.routeFingerprint),
+    activityBuild: readActivityBuildFromMetadata(day.metadata, params.sourceId, params.routeFingerprint),
+    lessonRegenerationNote: readLessonRegenerationNoteFromMetadata(
+      day.metadata,
+      params.sourceId,
+      params.routeFingerprint,
+    ),
+    expansionIntent: readExpansionIntentFromMetadata(
+      day.metadata,
+      params.sourceId,
+      params.routeFingerprint,
+    ),
+  };
+}
+
+async function loadLatestEvaluationsForPlanItems(items: PlanItem[]) {
+  const syncedSessionIds = items
+    .map((item) => item.sessionRecordId)
+    .filter((value): value is string => Boolean(value));
+  const syncedPlanItemIds = items
+    .map((item) => item.planRecordId)
+    .filter((value): value is string => Boolean(value));
+
+  if (syncedSessionIds.length === 0 || syncedPlanItemIds.length === 0) {
+    return items;
+  }
+
+  const db = getDb();
+  const latestFeedbackRows = await db.query.feedbackEntries.findMany({
+    where: and(
+      inArray(feedbackEntries.lessonSessionId, syncedSessionIds),
+      inArray(feedbackEntries.planItemId, syncedPlanItemIds),
+    ),
+    orderBy: [desc(feedbackEntries.createdAt)],
+  });
+
+  const latestEvaluationByPlanItemId = new Map<
+    string,
+    {
+      level: LessonEvaluationLevel;
+      label: string;
+      note?: string;
+      createdAt: string;
+    }
+  >();
+
+  for (const entry of latestFeedbackRows) {
+    if (!entry.planItemId || latestEvaluationByPlanItemId.has(entry.planItemId)) {
+      continue;
+    }
+
+    const metadata = isRecord(entry.metadata) ? entry.metadata : null;
+    if (!metadata || metadata.source !== "lesson_evaluation") {
+      continue;
+    }
+
+    const level = isLessonEvaluationLevel(metadata.evaluationLevel)
+      ? metadata.evaluationLevel
+      : getLessonEvaluationLevelFromRating(entry.rating) ?? "successful";
+
+    latestEvaluationByPlanItemId.set(entry.planItemId, {
+      level,
+      label:
+        typeof metadata.evaluationLabel === "string"
+          ? metadata.evaluationLabel
+          : getLessonEvaluationLabel(level),
+      note:
+        typeof metadata.note === "string" && metadata.note.trim().length > 0
+          ? metadata.note
+          : undefined,
+      createdAt: entry.createdAt.toISOString(),
+    });
+  }
+
+  return items.map((item) => {
+    const latestEvaluation = item.planRecordId
+      ? latestEvaluationByPlanItemId.get(item.planRecordId)
+      : undefined;
+
+    return latestEvaluation ? { ...item, latestEvaluation } : item;
+  });
+}
+
+export async function materializeTodayWorkspace(params: {
+  organizationId: string;
+  learnerId: string;
+  learnerName: string;
+  date: string;
+}) {
+  const context = await resolveTodayWorkspaceContext(params);
+  if (!context || context.selectedRouteItems.length === 0) {
+    return context;
+  }
+
+  await syncTodayPlanItems({
+    organizationId: params.organizationId,
+    learnerId: params.learnerId,
+    date: params.date,
+    sourceId: context.sourceId,
+    sourceTitle: context.sourceTitle,
+    sessionBudgetMinutes: context.sessionBudgetMinutes,
+    selectedRouteItems: context.selectedRouteItems,
+    nodeById: context.nodeById,
+  });
+
+  return context;
+}
+
+export async function getTodayWorkspaceView(params: {
+  organizationId: string;
+  learnerId: string;
+  learnerName: string;
+  date: string;
+}): Promise<{
+  workspace: DailyWorkspace;
+  sourceId: string;
+  sourceTitle: string;
+  sessionTiming: LessonTimingContract;
+  planningContext: ReturnType<typeof buildCopilotPlanningContext>;
+  routeFingerprint: string;
+} | null> {
+  const context = await resolveTodayWorkspaceContext(params);
+  if (!context) {
+    return null;
+  }
+
+  if (context.board.items.length === 0) {
+    return {
+      sourceId: context.sourceId,
+      sourceTitle: context.sourceTitle,
+      sessionTiming: context.sessionTiming,
       planningContext: null,
+      routeFingerprint: context.routeFingerprint,
       workspace: {
         date: params.date,
-        headline: `${selectedSource.title} route for ${params.learnerName}`,
+        headline: `${context.sourceTitle} route for ${params.learnerName}`,
         learner: {
           id: params.learnerId,
           name: params.learnerName,
@@ -1500,14 +1904,14 @@ export async function getTodayWorkspace(params: {
           materials: [],
           artifactSlots: [],
           copilotPrompts: [],
-          sourceLabel: selectedSource.title,
+          sourceLabel: context.sourceTitle,
           lessonLabel: "Empty route",
           planOrigin: "manual",
         },
         items: [],
         prepChecklist: [],
         sessionTargets: [],
-        artifactSlots: buildArtifactSlots(selectedSource.title, []),
+        artifactSlots: buildArtifactSlots(context.sourceTitle, []),
         copilotInsertions: [],
         completionPrompts: [],
         familyNotes: [],
@@ -1523,22 +1927,16 @@ export async function getTodayWorkspace(params: {
     };
   }
 
-  const selectedRouteItems = getVisibleRouteItems(board, params.date);
-  if (selectedRouteItems.length === 0) {
+  if (context.selectedRouteItems.length === 0) {
     return {
-      sourceId: selectedSource.id,
-      sourceTitle: selectedSource.title,
-      sessionTiming,
-      planningContext: buildCopilotPlanningContext({
-        board,
-        learnerId: params.learnerId,
-        learnerName: params.learnerName,
-        sourceId: selectedSource.id,
-        selectedDate: params.date,
-      }),
+      sourceId: context.sourceId,
+      sourceTitle: context.sourceTitle,
+      sessionTiming: context.sessionTiming,
+      planningContext: context.planningContext,
+      routeFingerprint: context.routeFingerprint,
       workspace: {
         date: params.date,
-        headline: `${selectedSource.title} route for ${params.learnerName}`,
+        headline: `${context.sourceTitle} route for ${params.learnerName}`,
         learner: {
           id: params.learnerId,
           name: params.learnerName,
@@ -1548,18 +1946,18 @@ export async function getTodayWorkspace(params: {
         },
         leadItem: buildPlanItem(
           {
-            ...board.items[0]!,
+            ...context.board.items[0]!,
             scheduledDate: params.date,
           },
-          selectedSource.title,
+          context.sourceTitle,
           params.date,
-          sessionBudgetMinutes,
-          nodeById.get(board.items[0]!.skillNodeId),
+          context.sessionBudgetMinutes,
+          context.nodeById.get(context.board.items[0]!.skillNodeId),
         ),
         items: [],
         prepChecklist: [],
         sessionTargets: [],
-        artifactSlots: buildArtifactSlots(selectedSource.title, []),
+        artifactSlots: buildArtifactSlots(context.sourceTitle, []),
         copilotInsertions: [],
         completionPrompts: [],
         familyNotes: [],
@@ -1575,77 +1973,54 @@ export async function getTodayWorkspace(params: {
     };
   }
 
-  const materializedWorkflow = await syncTodayPlanItems({
+  const materializedWorkflow = await loadTodayMaterializedWorkflow({
     organizationId: params.organizationId,
     learnerId: params.learnerId,
     date: params.date,
-    sourceId: selectedSource.id,
-    sourceTitle: selectedSource.title,
-    sessionBudgetMinutes,
-    selectedRouteItems,
-    nodeById,
+    selectedRouteItems: context.selectedRouteItems,
   });
-  const selectedPlansWithWorkflow = selectedRouteItems.map((item) =>
+  let selectedPlansWithWorkflow = context.selectedRouteItems.map((item) =>
     buildPlanItem(
       item,
-      selectedSource.title,
+      context.sourceTitle,
       item.scheduledDate ?? params.date,
-      sessionBudgetMinutes,
-      nodeById.get(item.skillNodeId),
+      context.sessionBudgetMinutes,
+      context.nodeById.get(item.skillNodeId),
       materializedWorkflow.get(item.id),
     ),
   );
-  const routeFingerprint = buildTodayLessonDraftFingerprint(selectedPlansWithWorkflow.map((item) => item.id));
-  const savedLessonDraft = await getSavedTodayLessonDraft({
+  selectedPlansWithWorkflow = await loadLatestEvaluationsForPlanItems(selectedPlansWithWorkflow);
+
+  const metadataState = await readTodayWorkspaceMetadataState({
     organizationId: params.organizationId,
     learnerId: params.learnerId,
     date: params.date,
-    sourceId: selectedSource.id,
-    routeFingerprint,
+    sourceId: context.sourceId,
+    routeFingerprint: context.routeFingerprint,
   });
-  const savedLessonBuild = await getSavedTodayLessonBuild({
-    organizationId: params.organizationId,
-    learnerId: params.learnerId,
-    date: params.date,
-    sourceId: selectedSource.id,
-    routeFingerprint,
-  });
-  const savedActivityBuild = await getSavedTodayActivityBuild({
-    organizationId: params.organizationId,
-    learnerId: params.learnerId,
-    date: params.date,
-    sourceId: selectedSource.id,
-    routeFingerprint,
-  });
-  const savedLessonRegenerationNote = await getSavedTodayLessonRegenerationNote({
-    organizationId: params.organizationId,
-    learnerId: params.learnerId,
-    date: params.date,
-    sourceId: selectedSource.id,
-    routeFingerprint,
-  });
-  const savedExpansionIntent = await getSavedTodayExpansionIntent({
-    organizationId: params.organizationId,
-    learnerId: params.learnerId,
-    date: params.date,
-    sourceId: selectedSource.id,
-    routeFingerprint,
-  });
-  const alternateItems = getAlternateItems(board, selectedRouteItems.map((item) => item.id));
+  const alternateItems = getAlternateItems(
+    context.board,
+    context.selectedRouteItems.map((item) => item.id),
+  );
   const alternatesByPlanItemId = Object.fromEntries(
     selectedPlansWithWorkflow.map((planItem) => [
       planItem.id,
       alternateItems
         .slice(0, 2)
         .map((routeItem) =>
-          buildWeeklyRouteItem(routeItem, selectedSource.title, sessionBudgetMinutes, nodeById.get(routeItem.skillNodeId)),
+          buildWeeklyRouteItem(
+            routeItem,
+            context.sourceTitle,
+            context.sessionBudgetMinutes,
+            context.nodeById.get(routeItem.skillNodeId),
+          ),
         ),
     ]),
   );
 
   const workspace: DailyWorkspace = {
     date: params.date,
-    headline: `${selectedSource.title} route for ${params.learnerName}`,
+    headline: `${context.sourceTitle} route for ${params.learnerName}`,
     learner: {
       id: params.learnerId,
       name: params.learnerName,
@@ -1655,128 +2030,54 @@ export async function getTodayWorkspace(params: {
     },
     leadItem: selectedPlansWithWorkflow[0],
     items: selectedPlansWithWorkflow,
-    prepChecklist: buildPrepChecklist(params.learnerName, selectedSource.title, selectedPlansWithWorkflow),
+    prepChecklist: buildPrepChecklist(
+      params.learnerName,
+      context.sourceTitle,
+      selectedPlansWithWorkflow,
+    ),
     sessionTargets: buildSessionTargets(selectedPlansWithWorkflow),
-    artifactSlots: buildArtifactSlots(selectedSource.title, selectedPlansWithWorkflow),
-    copilotInsertions: buildCopilotInsertions(params.learnerName, selectedSource.title, selectedPlansWithWorkflow),
+    artifactSlots: buildArtifactSlots(context.sourceTitle, selectedPlansWithWorkflow),
+    copilotInsertions: buildCopilotInsertions(
+      params.learnerName,
+      context.sourceTitle,
+      selectedPlansWithWorkflow,
+    ),
     completionPrompts: [
       "What did the learner complete today?",
       "What changed in pacing or support?",
       "Which route item should stay in view tomorrow?",
     ],
-    familyNotes: buildFamilyNotes(selectedSource.title, selectedPlansWithWorkflow),
+    familyNotes: buildFamilyNotes(context.sourceTitle, selectedPlansWithWorkflow),
     recoveryOptions: [],
     alternatesByPlanItemId,
-    lessonDraft: savedLessonDraft,
-    lessonBuild: savedLessonBuild,
-    activityBuild: savedActivityBuild,
+    lessonDraft: metadataState.lessonDraft,
+    lessonBuild: metadataState.lessonBuild,
+    activityBuild: metadataState.activityBuild,
     activityState: null,
-    lessonRegenerationNote: savedLessonRegenerationNote,
-    expansionIntent: savedExpansionIntent,
+    lessonRegenerationNote: metadataState.lessonRegenerationNote,
+    expansionIntent: metadataState.expansionIntent,
   };
-  const syncedRecords = await syncDailyWorkspaceSessionRecords({
-    organizationId: params.organizationId,
-    learnerId: params.learnerId,
-    date: params.date,
-    items: workspace.items,
-  });
-
-  const syncedItems = workspace.items.map((item, index) => {
-    const synced = syncedRecords.itemsByWeeklyRouteItemId[item.id];
-
-    return {
-      ...item,
-      ordering: index,
-      planRecordId: synced?.planItemId,
-      sessionRecordId: synced?.lessonSessionId,
-      reviewState: synced?.reviewState,
-      completionStatus: synced?.completionStatus,
-    };
-  });
-
-  workspace.items = syncedItems;
-  workspace.leadItem = syncedItems[0] ?? workspace.leadItem;
-
-  const syncedSessionIds = syncedItems
-    .map((item) => item.sessionRecordId)
-    .filter((value): value is string => Boolean(value));
-  const syncedPlanItemIds = syncedItems
-    .map((item) => item.planRecordId)
-    .filter((value): value is string => Boolean(value));
-
-  if (syncedSessionIds.length > 0 && syncedPlanItemIds.length > 0) {
-    const db = getDb();
-    const latestFeedbackRows = await db.query.feedbackEntries.findMany({
-      where: and(
-        inArray(feedbackEntries.lessonSessionId, syncedSessionIds),
-        inArray(feedbackEntries.planItemId, syncedPlanItemIds),
-      ),
-      orderBy: [desc(feedbackEntries.createdAt)],
-    });
-
-    const latestEvaluationByPlanItemId = new Map<
-      string,
-      {
-        level: LessonEvaluationLevel;
-        label: string;
-        note?: string;
-        createdAt: string;
-      }
-    >();
-
-    for (const entry of latestFeedbackRows) {
-      if (!entry.planItemId || latestEvaluationByPlanItemId.has(entry.planItemId)) {
-        continue;
-      }
-
-      const metadata = isRecord(entry.metadata) ? entry.metadata : null;
-      if (!metadata || metadata.source !== "lesson_evaluation") {
-        continue;
-      }
-
-      const level = isLessonEvaluationLevel(metadata.evaluationLevel)
-        ? metadata.evaluationLevel
-        : getLessonEvaluationLevelFromRating(entry.rating) ?? "successful";
-
-      latestEvaluationByPlanItemId.set(entry.planItemId, {
-        level,
-        label:
-          typeof metadata.evaluationLabel === "string"
-            ? metadata.evaluationLabel
-            : getLessonEvaluationLabel(level),
-        note:
-          typeof metadata.note === "string" && metadata.note.trim().length > 0
-            ? metadata.note
-            : undefined,
-        createdAt: entry.createdAt.toISOString(),
-      });
-    }
-
-    workspace.items = workspace.items.map((item) => {
-      const latestEvaluation = item.planRecordId
-        ? latestEvaluationByPlanItemId.get(item.planRecordId)
-        : undefined;
-
-      return latestEvaluation ? { ...item, latestEvaluation } : item;
-    });
-    workspace.leadItem = workspace.items[0] ?? workspace.leadItem;
-  }
 
   workspace.activityState = await buildTodayActivityState(workspace);
 
   return {
     workspace,
-    sourceId: selectedSource.id,
-    sourceTitle: selectedSource.title,
-    sessionTiming,
-    planningContext: buildCopilotPlanningContext({
-      board,
-      learnerId: params.learnerId,
-      learnerName: params.learnerName,
-      sourceId: selectedSource.id,
-      selectedDate: params.date,
-    }),
+    sourceId: context.sourceId,
+    sourceTitle: context.sourceTitle,
+    sessionTiming: context.sessionTiming,
+    planningContext: context.planningContext,
+    routeFingerprint: context.routeFingerprint,
   };
+}
+
+export async function getTodayWorkspace(params: {
+  organizationId: string;
+  learnerId: string;
+  learnerName: string;
+  date: string;
+}) {
+  await materializeTodayWorkspace(params);
+  return getTodayWorkspaceView(params);
 }
 
 async function loadWeeklyRouteItem(learnerId: string, weeklyRouteItemId: string) {
@@ -1854,26 +2155,75 @@ async function findMaterializedPlanItemForRouteItem(weeklyRouteItemId: string) {
   return { link, planItem };
 }
 
+async function resolveTodayPlanItemContext(params: {
+  weeklyRouteItemId: string;
+  planParentId?: string | null;
+  planDayRecordId?: string | null;
+  planRecordId?: string | null;
+  sessionRecordId?: string | null;
+}) {
+  const db = getDb();
+
+  let planItem =
+    params.planRecordId
+      ? await db.query.planItems.findFirst({
+          where: eq(planItems.id, params.planRecordId),
+        })
+      : null;
+
+  if (!planItem) {
+    const materializedPlanItem = await findMaterializedPlanItemForRouteItem(params.weeklyRouteItemId);
+    planItem = materializedPlanItem?.planItem ?? null;
+  }
+
+  let session =
+    params.sessionRecordId
+      ? await db.query.lessonSessions.findFirst({
+          where: eq(lessonSessions.id, params.sessionRecordId),
+        })
+      : null;
+
+  if (!session && planItem) {
+    session = await db.query.lessonSessions.findFirst({
+      where: eq(lessonSessions.planItemId, planItem.id),
+      orderBy: [desc(lessonSessions.updatedAt), desc(lessonSessions.createdAt)],
+    });
+  }
+
+  return {
+    planId: params.planParentId ?? planItem?.planId ?? null,
+    planDayId: params.planDayRecordId ?? planItem?.planDayId ?? null,
+    planItemId: params.planRecordId ?? planItem?.id ?? null,
+    session,
+    planItem,
+  };
+}
+
 export async function completeTodayPlanItem(params: {
   organizationId: string;
   learnerId: string;
   weeklyRouteItemId: string;
   date: string;
+  planParentId?: string | null;
+  planDayRecordId?: string | null;
+  planRecordId?: string | null;
+  estimatedMinutes?: number | null;
+  title?: string | null;
 }) {
-  const materializedPlanItem = await findMaterializedPlanItemForRouteItem(params.weeklyRouteItemId);
+  const context = await resolveTodayPlanItemContext(params);
 
-  if (materializedPlanItem) {
+  if (context.planItemId) {
     await completeSessionWorkspace({
       organizationId: params.organizationId,
       learnerId: params.learnerId,
-      planId: materializedPlanItem.planItem.planId,
-      planDayId: materializedPlanItem.planItem.planDayId,
-      planItemId: materializedPlanItem.planItem.id,
+      planId: context.planId,
+      planDayId: context.planDayId,
+      planItemId: context.planItemId,
       sessionDate: params.date,
-      scheduledMinutes: materializedPlanItem.planItem.estimatedMinutes ?? null,
-      actualMinutes: materializedPlanItem.planItem.estimatedMinutes ?? null,
+      scheduledMinutes: params.estimatedMinutes ?? context.planItem?.estimatedMinutes ?? null,
+      actualMinutes: params.estimatedMinutes ?? context.planItem?.estimatedMinutes ?? null,
       completionStatus: "completed_as_planned",
-      summary: `Completed ${materializedPlanItem.planItem.title}.`,
+      summary: `Completed ${params.title ?? context.planItem?.title ?? "this lesson"}.`,
       notes: null,
       retrospective: null,
       nextAction: null,
@@ -1904,26 +2254,30 @@ export async function resetTodayPlanItem(params: {
   learnerId: string;
   weeklyRouteItemId: string;
   date: string;
+  sessionRecordId?: string | null;
+  planRecordId?: string | null;
 }) {
-  const materializedPlanItem = await findMaterializedPlanItemForRouteItem(params.weeklyRouteItemId);
+  const context = await resolveTodayPlanItemContext(params);
 
-  if (materializedPlanItem) {
+  if (context.planItemId) {
     const db = getDb();
-    const session = await db.query.lessonSessions.findFirst({
-      where: and(
-        eq(lessonSessions.organizationId, params.organizationId),
-        eq(lessonSessions.learnerId, params.learnerId),
-        eq(lessonSessions.planItemId, materializedPlanItem.planItem.id),
-        eq(lessonSessions.sessionDate, params.date),
-      ),
-      orderBy: [desc(lessonSessions.updatedAt)],
-    });
+    const session =
+      context.session ??
+      (await db.query.lessonSessions.findFirst({
+        where: and(
+          eq(lessonSessions.organizationId, params.organizationId),
+          eq(lessonSessions.learnerId, params.learnerId),
+          eq(lessonSessions.planItemId, context.planItemId),
+          eq(lessonSessions.sessionDate, params.date),
+        ),
+        orderBy: [desc(lessonSessions.updatedAt), desc(lessonSessions.createdAt)],
+      }));
 
     if (session) {
       const progress = await db.query.progressRecords.findMany({
         where: and(
           eq(progressRecords.lessonSessionId, session.id),
-          eq(progressRecords.planItemId, materializedPlanItem.planItem.id),
+          eq(progressRecords.planItemId, context.planItemId),
         ),
         orderBy: [desc(progressRecords.createdAt)],
       });
@@ -2024,22 +2378,28 @@ export async function partiallyCompleteTodayPlanItem(params: {
   learnerId: string;
   weeklyRouteItemId: string;
   date: string;
+  planParentId?: string | null;
+  planDayRecordId?: string | null;
+  planRecordId?: string | null;
+  estimatedMinutes?: number | null;
+  title?: string | null;
 }) {
-  const materializedPlanItem = await findMaterializedPlanItemForRouteItem(params.weeklyRouteItemId);
   const tomorrow = addDays(params.date, 1);
+  const context = await resolveTodayPlanItemContext(params);
 
-  if (materializedPlanItem) {
+  if (context.planItemId) {
+    const estimatedMinutes = params.estimatedMinutes ?? context.planItem?.estimatedMinutes ?? 30;
     await completeSessionWorkspace({
       organizationId: params.organizationId,
       learnerId: params.learnerId,
-      planId: materializedPlanItem.planItem.planId,
-      planDayId: materializedPlanItem.planItem.planDayId,
-      planItemId: materializedPlanItem.planItem.id,
+      planId: context.planId,
+      planDayId: context.planDayId,
+      planItemId: context.planItemId,
       sessionDate: params.date,
-      scheduledMinutes: materializedPlanItem.planItem.estimatedMinutes ?? null,
-      actualMinutes: Math.max(15, Math.round((materializedPlanItem.planItem.estimatedMinutes ?? 30) / 2)),
+      scheduledMinutes: estimatedMinutes,
+      actualMinutes: Math.max(15, Math.round(estimatedMinutes / 2)),
       completionStatus: "partially_completed",
-      summary: `Partially completed ${materializedPlanItem.planItem.title}.`,
+      summary: `Partially completed ${params.title ?? context.planItem?.title ?? "this lesson"}.`,
       notes: null,
       retrospective: "Stopped before finishing the full lesson.",
       nextAction: `Carry the remaining work into ${tomorrow}.`,
@@ -2135,21 +2495,26 @@ export async function skipTodayPlanItem(params: {
   learnerId: string;
   weeklyRouteItemId: string;
   date: string;
+  planParentId?: string | null;
+  planDayRecordId?: string | null;
+  planRecordId?: string | null;
+  estimatedMinutes?: number | null;
+  title?: string | null;
 }) {
-  const materializedPlanItem = await findMaterializedPlanItemForRouteItem(params.weeklyRouteItemId);
+  const context = await resolveTodayPlanItemContext(params);
 
-  if (materializedPlanItem) {
+  if (context.planItemId) {
     await completeSessionWorkspace({
       organizationId: params.organizationId,
       learnerId: params.learnerId,
-      planId: materializedPlanItem.planItem.planId,
-      planDayId: materializedPlanItem.planItem.planDayId,
-      planItemId: materializedPlanItem.planItem.id,
+      planId: context.planId,
+      planDayId: context.planDayId,
+      planItemId: context.planItemId,
       sessionDate: params.date,
-      scheduledMinutes: materializedPlanItem.planItem.estimatedMinutes ?? null,
+      scheduledMinutes: params.estimatedMinutes ?? context.planItem?.estimatedMinutes ?? null,
       actualMinutes: 0,
       completionStatus: "skipped",
-      summary: `Skipped ${materializedPlanItem.planItem.title}.`,
+      summary: `Skipped ${params.title ?? context.planItem?.title ?? "this lesson"}.`,
       notes: null,
       retrospective: "Life happened; this lesson was not run today.",
       nextAction: null,
