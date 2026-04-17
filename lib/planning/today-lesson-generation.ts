@@ -10,7 +10,8 @@ import type { DailyWorkspaceLessonBuildTrigger } from "@/lib/planning/types";
 import {
   buildTodayLessonDraftFingerprint,
   getSavedTodayLessonRegenerationNote,
-  getTodayWorkspace,
+  getTodayWorkspaceView,
+  materializeTodayWorkspace,
   markTodayLessonBuildFailed,
   markTodayLessonBuildGenerating,
   markTodayLessonBuildReady,
@@ -19,7 +20,7 @@ import {
 import { queueTodayActivityAfterLesson } from "@/lib/planning/today-activity-generation";
 
 type TodayLessonGenerationTrigger = DailyWorkspaceLessonBuildTrigger;
-type TodayWorkspaceResult = NonNullable<Awaited<ReturnType<typeof getTodayWorkspace>>>;
+type TodayWorkspaceResult = NonNullable<Awaited<ReturnType<typeof getTodayWorkspaceView>>>;
 
 function buildTodayLessonGenerationSummary(params: {
   workspaceResult: TodayWorkspaceResult;
@@ -78,7 +79,14 @@ async function buildTodayLessonGenerationContext(params: {
   const platformSettings = await repos.organizations.findPlatformSettings(params.organizationId);
   const workflowMode = platformSettings?.workflowMode ?? "family_guided";
 
-  const workspaceResult = await getTodayWorkspace({
+  await materializeTodayWorkspace({
+    organizationId: params.organizationId,
+    learnerId: params.learnerId,
+    learnerName: params.learnerName,
+    date: params.date,
+  });
+
+  const workspaceResult = await getTodayWorkspaceView({
     organizationId: params.organizationId,
     learnerId: params.learnerId,
     learnerName: params.learnerName,
@@ -244,7 +252,9 @@ export async function generateTodayLessonDraft(params: {
       structured: existingDraft.structured,
       promptVersion: existingDraft.promptVersion,
       artifactId: null,
+      sourceId: context.sourceId,
       sourceTitle: context.sourceTitle,
+      routeFingerprint: context.routeFingerprint,
       date: params.date,
       summary: buildTodayLessonGenerationSummary({ workspaceResult: context.workspaceResult }),
       lineage: null,
@@ -358,7 +368,9 @@ export async function generateTodayLessonDraft(params: {
       structured: savedDraft.structured as StructuredLessonDraft,
       promptVersion: savedDraft.promptVersion,
       artifactId: artifact.id,
+      sourceId: context.sourceId,
       sourceTitle: context.sourceTitle,
+      routeFingerprint: context.routeFingerprint,
       date: params.date,
       summary: buildTodayLessonGenerationSummary({ workspaceResult: context.workspaceResult }),
       lineage: result.lineage,

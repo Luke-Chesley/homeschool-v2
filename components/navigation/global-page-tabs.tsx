@@ -94,6 +94,11 @@ export function GlobalPageTabs() {
     return null;
   }
 
+  const hasMultipleLearners = session?.learners && session.learners.length > 1;
+  const hasWorkspaceLabel = !!workspaceLabel;
+  const hasActiveLearner = !!session?.activeLearner?.displayName;
+  const switchLabel = hasMultipleLearners ? "Switch learners" : "Switch learner";
+
   return (
     <div
       data-global-tabs
@@ -108,31 +113,31 @@ export function GlobalPageTabs() {
         <div className="flex min-w-0 items-center justify-center">
           {inWorkspace ? (
             <div className="hidden min-w-0 items-center gap-3 md:flex">
-              <div className="min-w-0 items-center gap-2 text-sm lg:flex">
+              <div className="min-w-0 items-center gap-2 truncate text-sm lg:flex">
                 <Link
                   href="/today"
                   className="shrink-0 font-medium text-muted-foreground transition-colors hover:text-foreground"
                 >
                   Workspace
                 </Link>
-                {workspaceLabel ? (
+                {hasWorkspaceLabel ? (
                   <>
                     <span className="text-muted-foreground/70">/</span>
                     <span className="truncate font-medium text-foreground">{workspaceLabel}</span>
                   </>
                 ) : null}
-                {session?.activeLearner?.displayName ? (
+                {hasActiveLearner && !hasMultipleLearners ? (
                   <>
                     <span className="text-muted-foreground/70">/</span>
                     <span className="truncate text-muted-foreground">{session.activeLearner.displayName}</span>
                   </>
                 ) : null}
               </div>
-              {session?.learners && session.learners.length > 1 ? (
+              {hasMultipleLearners ? (
                 <ActiveLearnerSwitcher
                   learners={session.learners}
                   activeLearnerId={session.activeLearner?.id ?? null}
-                  label="Switch learner"
+                  label={switchLabel}
                   className="min-w-[12rem]"
                   selectClassName="h-9"
                 />

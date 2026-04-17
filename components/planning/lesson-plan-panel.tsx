@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { Loader2, Sparkles } from "lucide-react";
 
 import { LearningCorePromptPreviewCard } from "@/components/debug/LearningCorePromptPreviewCard";
@@ -17,9 +16,12 @@ import { Card } from "@/components/ui/card";
 import { MarkdownContent } from "@/components/ui/markdown-content";
 import type { StructuredLessonDraft } from "@/lib/lesson-draft/types";
 import type {
+  DailyWorkspace,
+  DailyWorkspaceActivityBuild,
   DailyWorkspaceExpansionIntent,
   DailyWorkspaceExpansionScope,
   DailyWorkspaceLessonBuild,
+  DailyWorkspaceLessonDraft,
 } from "@/lib/planning/types";
 import { acquireAutoBuildLock, releaseAutoBuildLock } from "@/lib/planning/client-auto-build";
 import { cn } from "@/lib/utils";
@@ -40,6 +42,7 @@ type DraftState =
 interface LessonPlanPanelProps {
   date: string;
   sourceId?: string;
+  routeFingerprint: string;
   sourceTitle: string;
   routeItemCount: number;
   totalMinutes: number;
@@ -50,7 +53,17 @@ interface LessonPlanPanelProps {
   buildState?: DailyWorkspaceLessonBuild | null;
   regenerationNote?: string | null;
   expansionIntent?: DailyWorkspaceExpansionIntent | null;
-  onDraftChange?: (draft: StructuredLessonDraft | string | null) => void;
+  onLessonPatch?: (patch: {
+    lessonDraft?: DailyWorkspaceLessonDraft | null;
+    lessonBuild?: DailyWorkspaceLessonBuild | null;
+    activityBuild?: DailyWorkspaceActivityBuild | null;
+  }) => void;
+  onActivityPatch?: (patch: {
+    activityBuild?: DailyWorkspaceActivityBuild | null;
+  }) => void;
+  onRegenerationNoteChange?: (note: string | null) => void;
+  onExpansionIntentChange?: (intent: DailyWorkspaceExpansionIntent | null) => void;
+  onWorkspacePatch?: (workspace?: DailyWorkspace) => void;
   showDraftOutput?: boolean;
 }
 
@@ -80,6 +93,7 @@ type PromptDebugState =
 export function LessonPlanPanel({
   date,
   sourceId,
+  routeFingerprint,
   sourceTitle,
   routeItemCount,
   totalMinutes,
@@ -90,10 +104,13 @@ export function LessonPlanPanel({
   buildState,
   regenerationNote,
   expansionIntent,
-  onDraftChange,
+  onLessonPatch,
+  onActivityPatch,
+  onRegenerationNoteChange,
+  onExpansionIntentChange,
+  onWorkspacePatch,
   showDraftOutput = true,
 }: LessonPlanPanelProps) {
-  const router = useRouter();
   const [state, setState] = useState<LessonPlanState>({ status: "idle" });
   const [promptDebugState, setPromptDebugState] = useState<PromptDebugState>({ status: "idle" });
   const [activeTrigger, setActiveTrigger] = useState<
@@ -110,6 +127,7 @@ export function LessonPlanPanel({
       JSON.stringify({
         date,
         sourceId,
+        routeFingerprint,
         sourceTitle,
         routeItemCount,
         totalMinutes,
@@ -120,6 +138,7 @@ export function LessonPlanPanel({
     [
       date,
       sourceId,
+      routeFingerprint,
       sourceTitle,
       routeItemCount,
       totalMinutes,
@@ -175,7 +194,13 @@ export function LessonPlanPanel({
       });
 
       const data = (await response.json()) as
-        | { structured: StructuredLessonDraft; error?: string }
+        | {
+            structured: StructuredLessonDraft;
+            lessonDraft?: DailyWorkspaceLessonDraft | null;
+            lessonBuild?: DailyWorkspaceLessonBuild | null;
+            activityBuild?: DailyWorkspaceActivityBuild | null;
+            error?: string;
+          }
         | { error: string };
 
       if (!response.ok) {
@@ -187,8 +212,19 @@ export function LessonPlanPanel({
       }
 
       setState({ status: "ready", draft: data.structured });
-      onDraftChange?.(data.structured);
-      router.refresh();
+      onLessonPatch?.({
+        lessonDraft:
+          data.lessonDraft ??
+          ({
+            structured: data.structured,
+            sourceId: sourceId ?? "",
+            sourceTitle,
+            routeFingerprint,
+            savedAt: new Date().toISOString(),
+          } satisfies DailyWorkspaceLessonDraft),
+        lessonBuild: data.lessonBuild ?? buildState ?? null,
+        activityBuild: data.activityBuild,
+      });
     } catch (error) {
       if (autoBuildKey) {
         releaseAutoBuildLock("today-lesson-auto", autoBuildKey);
@@ -198,7 +234,6 @@ export function LessonPlanPanel({
         status: "error",
         message: error instanceof Error ? error.message : "Lesson plan generation failed.",
       });
-      router.refresh();
     }
   }
 
@@ -219,16 +254,70 @@ export function LessonPlanPanel({
   }, [isQueuedBuild, lessonAutoBuildKey]);
 
   useEffect(() => {
-    if (!hasDraft && buildState?.status === "generating" && state.status !== "loading") {
-      const timeout = window.setTimeout(() => {
-        router.refresh();
-      }, 2000);
-
-      return () => window.clearTimeout(timeout);
+    if (!sourceId || hasDraft) {
+      return;
     }
 
-    return undefined;
-  }, [buildState?.status, buildState?.updatedAt, hasDraft, router, state.status]);
+    if (buildState?.status !== "queued" && buildState?.status !== "generating") {
+      return;
+    }
+
+    let cancelled = false;
+    let timeoutId: number | null = null;
+    const activeSourceId = sourceId;
+
+    async function pollStatus() {
+      try {
+        const response = await fetch(
+          `/api/today/lesson-build-status?date=${encodeURIComponent(date)}&sourceId=${encodeURIComponent(
+            activeSourceId,
+          )}&routeFingerprint=${encodeURIComponent(routeFingerprint)}`,
+          { cache: "no-store" },
+        );
+        const payload = (await response.json()) as {
+          ok: boolean;
+          build?: DailyWorkspaceLessonBuild | null;
+          draft?: DailyWorkspaceLessonDraft | null;
+          activityBuild?: DailyWorkspaceActivityBuild | null;
+          error?: string;
+        };
+
+        if (cancelled || !payload.ok) {
+          return;
+        }
+
+        onLessonPatch?.({
+          lessonBuild: payload.build ?? null,
+          lessonDraft: payload.draft ?? null,
+          activityBuild: payload.activityBuild ?? undefined,
+        });
+
+        if (
+          payload.build?.status !== "queued" &&
+          payload.build?.status !== "generating"
+        ) {
+          return;
+        }
+      } catch (pollError) {
+        if (!cancelled) {
+          console.error("[LessonPlanPanel:pollStatus]", pollError);
+        }
+      }
+
+      if (!cancelled) {
+        timeoutId = window.setTimeout(pollStatus, 2000);
+      }
+    }
+
+    void pollStatus();
+
+    return () => {
+      cancelled = true;
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, [buildState?.status, buildState?.updatedAt, date, hasDraft, onLessonPatch, routeFingerprint, sourceId]);
 
   async function handlePromptPreview() {
     if (!canViewPromptPreview) {
@@ -275,11 +364,18 @@ export function LessonPlanPanel({
   }
 
   async function handleContextRegenerate() {
+    if (!sourceId) {
+      setSupportError("No curriculum source is available for this lesson.");
+      return;
+    }
+
     setSupportError(null);
     setSupportMessage(null);
 
     const saved = await saveLessonRegenerationNoteAction({
       date,
+      sourceId,
+      routeFingerprint,
       note: noteInput,
     });
 
@@ -288,17 +384,25 @@ export function LessonPlanPanel({
       return;
     }
 
+    onRegenerationNoteChange?.(saved.note ?? null);
     setSupportMessage(saved.message ?? "Saved note for regenerate.");
     void requestDraft("manual");
   }
 
   async function handleExpansionIntent(intent: DailyWorkspaceExpansionIntent) {
+    if (!sourceId) {
+      setSupportError("No curriculum source is available for this lesson.");
+      return;
+    }
+
     setSupportError(null);
     setSupportMessage(null);
     setSavingIntent(intent);
 
     const saved = await saveExpansionIntentAction({
       date,
+      sourceId,
+      routeFingerprint,
       intent,
     });
 
@@ -310,16 +414,22 @@ export function LessonPlanPanel({
     }
 
     setSupportMessage(saved.message ?? "Saved.");
-    router.refresh();
+    onExpansionIntentChange?.(saved.intent ?? intent);
   }
 
   async function handleRouteExpansion(scope: DailyWorkspaceExpansionScope) {
+    if (!sourceId) {
+      setSupportError("No curriculum source is available for this lesson.");
+      return;
+    }
+
     setSupportError(null);
     setSupportMessage(null);
     setExpandingScope(scope);
 
     const expanded = await expandTodayRouteAction({
       date,
+      sourceId,
       scope,
     });
 
@@ -331,7 +441,7 @@ export function LessonPlanPanel({
     }
 
     setSupportMessage(expanded.message ?? "Saved.");
-    router.refresh();
+    onWorkspacePatch?.(expanded.workspacePatch?.workspace);
   }
 
   function getExpansionButtonLabel(scope: DailyWorkspaceExpansionScope) {

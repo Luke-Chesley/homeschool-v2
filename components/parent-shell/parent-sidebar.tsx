@@ -23,7 +23,9 @@ export function ParentSidebar({
           <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
             Active {learnerLabel.toLowerCase()}
           </p>
-          <p className="text-sm font-medium text-foreground">{activeLearnerName}</p>
+          <p className="truncate text-sm font-medium text-foreground" title={activeLearnerName}>
+            {activeLearnerName}
+          </p>
         </div>
       </div>
 

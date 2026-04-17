@@ -73,6 +73,8 @@ export interface PlanItem {
   sourceLabel: string;
   lessonLabel: string;
   planOrigin?: PlanItemOrigin;
+  planParentId?: string;
+  planDayRecordId?: string;
   planRecordId?: string;
   sessionRecordId?: string;
   reviewState?: string;

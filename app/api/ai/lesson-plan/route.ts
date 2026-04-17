@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { requireAppSession } from "@/lib/app-session/server";
 import { generateTodayLessonDraft, previewTodayLessonDraft } from "@/lib/planning/today-lesson-generation";
+import { getTodayLessonBuildStatus } from "@/lib/planning/today-service";
 import type { DailyWorkspaceLessonBuildTrigger } from "@/lib/planning/types";
 
 const RequestSchema = z.object({
@@ -52,12 +53,24 @@ export async function POST(req: NextRequest) {
       trigger,
       forceRegenerate: trigger === "manual",
     });
+    const status = await getTodayLessonBuildStatus({
+      organizationId: session.organization.id,
+      learnerId: session.activeLearner.id,
+      date: result.date,
+      sourceId: result.sourceId,
+      routeFingerprint: result.routeFingerprint,
+    });
 
     return NextResponse.json({
       structured: result.structured,
       promptVersion: result.promptVersion,
       artifactId: result.artifactId,
+      lessonBuild: status.build,
+      lessonDraft: status.draft,
+      activityBuild: status.activityBuild,
+      sourceId: result.sourceId,
       sourceTitle: result.sourceTitle,
+      routeFingerprint: result.routeFingerprint,
       date: result.date,
       summary: result.summary,
       lineage: result.lineage,

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 
 import { PlanningShell } from "@/components/planning/planning-shell";
 import { TodayOpenTracker } from "@/components/planning/TodayOpenTracker";
@@ -10,22 +10,13 @@ import { requireAppSession } from "@/lib/app-session/server";
 import { getOrganizationTodayTrackerBaseline } from "@/lib/beta/service";
 import { getLiveCurriculumSource } from "@/lib/curriculum/service";
 import {
-  completeTodayPlanItem,
-  getTodayWorkspace,
-  partiallyCompleteTodayPlanItem,
-  repeatTodayPlanItemTomorrow,
-  pushTodayPlanItemToTomorrow,
-  removeTodayPlanItem,
-  skipTodayPlanItem,
-  swapTodayPlanItemWithAlternate,
+  getTodayWorkspaceView,
+  materializeTodayWorkspace,
 } from "@/lib/planning/today-service";
 
 interface TodayPageProps {
   searchParams: Promise<{
     date?: string | string[];
-    action?: string | string[];
-    planItemId?: string | string[];
-    alternateWeeklyRouteItemId?: string | string[];
   }>;
 }
 
@@ -42,80 +33,26 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
   const resolvedSearchParams = await searchParams;
   const date =
     typeof resolvedSearchParams.date === "string" ? resolvedSearchParams.date : undefined;
-  const action =
-    typeof resolvedSearchParams.action === "string" ? resolvedSearchParams.action : undefined;
-  const planItemId =
-    typeof resolvedSearchParams.planItemId === "string"
-      ? resolvedSearchParams.planItemId
-      : undefined;
-  const alternateWeeklyRouteItemId =
-    typeof resolvedSearchParams.alternateWeeklyRouteItemId === "string"
-      ? resolvedSearchParams.alternateWeeklyRouteItemId
-      : undefined;
   const todayDate = date ?? new Date().toISOString().slice(0, 10);
-
-  if (action && planItemId) {
-    if (action === "complete") {
-      await completeTodayPlanItem({
-        organizationId: session.organization.id,
-        learnerId: session.activeLearner.id,
-        weeklyRouteItemId: planItemId,
-        date: todayDate,
-      });
-    } else if (action === "partial") {
-      await partiallyCompleteTodayPlanItem({
-        organizationId: session.organization.id,
-        learnerId: session.activeLearner.id,
-        weeklyRouteItemId: planItemId,
-        date: todayDate,
-      });
-    } else if (action === "skip_today") {
-      await skipTodayPlanItem({
-        organizationId: session.organization.id,
-        learnerId: session.activeLearner.id,
-        weeklyRouteItemId: planItemId,
-        date: todayDate,
-      });
-    } else if (action === "push_to_tomorrow") {
-      await pushTodayPlanItemToTomorrow(
-        session.activeLearner.id,
-        planItemId,
-        todayDate,
-      );
-    } else if (action === "repeat_tomorrow") {
-      await repeatTodayPlanItemTomorrow(
-        session.activeLearner.id,
-        planItemId,
-        todayDate,
-      );
-    } else if (action === "remove_today") {
-      await removeTodayPlanItem(
-        session.activeLearner.id,
-        planItemId,
-        todayDate,
-      );
-    } else if (action === "swap_with_alternate" && alternateWeeklyRouteItemId) {
-      await swapTodayPlanItemWithAlternate(
-        session.activeLearner.id,
-        planItemId,
-        alternateWeeklyRouteItemId,
-        todayDate,
-      );
-    }
-
-    const redirectQuery = date ? `?date=${encodeURIComponent(date)}` : "";
-    redirect(`/today${redirectQuery}`);
-  }
 
   const [trackerBaseline, liveSource, workspaceResult] = await Promise.all([
     getOrganizationTodayTrackerBaseline(session.organization.id),
     getLiveCurriculumSource(session.organization.id),
-    getTodayWorkspace({
-      organizationId: session.organization.id,
-      learnerId: session.activeLearner.id,
-      learnerName: session.activeLearner.displayName,
-      date: todayDate,
-    }),
+    (async () => {
+      await materializeTodayWorkspace({
+        organizationId: session.organization.id,
+        learnerId: session.activeLearner.id,
+        learnerName: session.activeLearner.displayName,
+        date: todayDate,
+      });
+
+      return getTodayWorkspaceView({
+        organizationId: session.organization.id,
+        learnerId: session.activeLearner.id,
+        learnerName: session.activeLearner.displayName,
+        date: todayDate,
+      });
+    })(),
   ]);
 
   if (!liveSource) {

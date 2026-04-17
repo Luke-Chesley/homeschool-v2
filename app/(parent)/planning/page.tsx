@@ -11,8 +11,34 @@ import { getOrCreateWeeklyRouteBoardForLearner } from "@/lib/planning/weekly-rou
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+interface PlanningPageSearchParams {
+  weekStartDate?: string;
+  focusDate?: string;
+  day?: string;
+}
+
+function parseDateValue(value?: string) {
+  if (!value) {
+    return null;
+  }
+
+  const normalized = value.includes("T") ? value : `${value}T12:00:00.000Z`;
+  const parsed = new Date(normalized);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return parsed.toISOString().slice(0, 10);
+}
+
+function getWeekDate(weekStartDate: string, offset: number) {
+  const parsed = new Date(`${weekStartDate}T12:00:00.000Z`);
+  parsed.setUTCDate(parsed.getUTCDate() + offset);
+  return parsed.toISOString().slice(0, 10);
+}
+
 interface PlanningPageProps {
-  searchParams: Promise<{ weekStartDate?: string }>;
+  searchParams: Promise<PlanningPageSearchParams>;
 }
 
 export default async function PlanningPage({ searchParams }: PlanningPageProps) {
@@ -46,6 +72,12 @@ export default async function PlanningPage({ searchParams }: PlanningPageProps) 
   });
   const plannerPolicy = getHomeschoolPlannerPolicy();
   const plannerSummary = buildHomeschoolPlannerSummary(board);
+  const weekViewHref = `/planning${params.weekStartDate ? `?weekStartDate=${encodeURIComponent(params.weekStartDate)}` : ""}`;
+  const focusDate =
+    parseDateValue(params.focusDate) ??
+    parseDateValue(params.day) ??
+    getWeekDate(weekStartDate, 3);
+  const monthViewHref = `/planning/month?month=${encodeURIComponent(focusDate)}`;
 
   return (
     <PlanningShell>
@@ -54,6 +86,14 @@ export default async function PlanningPage({ searchParams }: PlanningPageProps) 
         <h1 className="page-title">Build a week you can actually run.</h1>
         <p className="page-subtitle">{plannerSummary.guidance}</p>
         <div className="toolbar-row">
+          <div className="flex flex-wrap gap-2">
+            <Link href={weekViewHref} className={buttonVariants({ variant: "default", size: "sm" })}>
+              Week view
+            </Link>
+            <Link href={monthViewHref} className={cn(buttonVariants({ variant: "outline", size: "sm" }), "min-w-fit")}>
+              Month view
+            </Link>
+          </div>
           <Link href="/curriculum" className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
             Change curriculum
           </Link>
