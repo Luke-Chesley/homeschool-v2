@@ -3,6 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -114,7 +115,7 @@ export function AuthCredentialsForm({ mode }: AuthCredentialsFormProps) {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <form className="space-y-4" onSubmit={handleSubmit} noValidate>
+        <form className="space-y-4" onSubmit={handleSubmit} noValidate aria-busy={submitting}>
           {mode === "sign_up" ? (
             <div className="space-y-1.5">
               <label htmlFor="full-name" className="text-sm font-medium">
@@ -175,7 +176,8 @@ export function AuthCredentialsForm({ mode }: AuthCredentialsFormProps) {
             <p className="rounded-md bg-primary/10 px-3 py-2 text-sm text-foreground">{notice}</p>
           ) : null}
 
-          <Button type="submit" className="w-full" disabled={submitting}>
+          <Button type="submit" className="w-full gap-2" disabled={submitting}>
+            {submitting ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
             {submitting
               ? mode === "login"
                 ? "Signing in..."
