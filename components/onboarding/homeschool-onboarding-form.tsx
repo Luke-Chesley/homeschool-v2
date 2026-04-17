@@ -131,7 +131,7 @@ function summarizePackageStatus(pkg: NormalizedIntakeSourcePackage) {
     return "Using the extracted text plus your note for this source.";
   }
   if (pkg.assetCount > 0) {
-    return "Uploaded source is stored and normalized for preview.";
+    return "Uploaded source is stored and ready to send to the model.";
   }
   return "Text source is normalized and ready for preview.";
 }
@@ -308,7 +308,7 @@ export function HomeschoolOnboardingForm(props: {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           learnerName,
-          sourcePackageId: preparedPackage.id,
+          sourcePackageIds: [preparedPackage.id],
           horizonIntent,
           confirmPreview,
           previewCorrections: confirmPreview

@@ -63,6 +63,7 @@ export type HomeschoolOnboardingInput = {
   curriculumTitle: string;
   curriculumSummary?: string;
   curriculumText?: string;
+  sourcePackageIds?: string[];
   curriculumSourceMetadata?: Record<string, unknown>;
 };
 
@@ -89,6 +90,8 @@ export type HomeschoolFastPathOnboardingInput = {
   intakeRoute?: FastPathIntakeRoute;
   intakeRouteExplicit?: boolean;
   sourceInput?: string;
+  sourcePackageIds?: string[];
+  /** Backward-compatible single-package entrypoint. */
   sourcePackageId?: string;
   horizonIntent?: FastPathHorizonIntent;
   confirmPreview?: boolean;

@@ -14,6 +14,10 @@ import {
   type CurriculumAiProgression,
   type CurriculumAiRevisionResult,
 } from "@/lib/curriculum/ai-draft";
+import type {
+  IntakeSourcePackageContext,
+  LearningCoreInputFile,
+} from "@/lib/homeschool/intake/types";
 import {
   executeCurriculumGenerate,
   executeCurriculumIntake,
@@ -211,6 +215,8 @@ export async function buildCurriculumRevisionPromptPreview(params: {
 export async function generateCurriculumArtifact(params: {
   learner: AppLearner;
   messages: CurriculumAiChatMessage[];
+  sourcePackages?: IntakeSourcePackageContext[];
+  sourceFiles?: LearningCoreInputFile[];
 },
 deps?: {
   execute?: typeof executeCurriculumGenerate;
@@ -222,6 +228,10 @@ deps?: {
       input: {
         learnerName: params.learner.displayName,
         messages: params.messages,
+        granularityGuidance: [],
+        correctionNotes: [],
+        sourcePackages: params.sourcePackages ?? [],
+        sourceFiles: params.sourceFiles ?? [],
       },
       organizationId: params.learner.organizationId,
       learnerId: params.learner.id,

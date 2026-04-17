@@ -14,7 +14,13 @@ import type {
   FastPathIntakeRoute,
   SourceInterpretSourceKind,
 } from "@/lib/homeschool/onboarding/types";
-import type { IntakeSourcePackageModality } from "@/lib/homeschool/intake/types";
+import {
+  IntakeSourcePackageContextSchema,
+  LearningCoreInputFileSchema,
+  type LearningCoreInputFile,
+  type IntakeSourcePackageContext,
+  type IntakeSourcePackageModality,
+} from "@/lib/homeschool/intake/types";
 
 import { buildLearningCoreEnvelope } from "./envelope";
 import { executeLearningCoreOperation } from "./operations";
@@ -29,6 +35,8 @@ const SourceInterpretInputSchema = z.object({
   extractedText: z.string().min(1),
   extractedStructure: z.record(z.string(), z.unknown()).optional().nullable(),
   assetRefs: z.array(z.string()).default([]),
+  sourcePackages: z.array(IntakeSourcePackageContextSchema).default([]),
+  sourceFiles: z.array(LearningCoreInputFileSchema).default([]),
   userHorizonIntent: z.enum(["today_only", "auto"]).default("auto"),
   titleCandidate: z.string().optional().nullable(),
 });
@@ -66,6 +74,8 @@ export async function executeSourceInterpret(params: {
     extractedText: string;
     extractedStructure?: Record<string, unknown> | null;
     assetRefs?: string[];
+    sourcePackages?: IntakeSourcePackageContext[];
+    sourceFiles?: LearningCoreInputFile[];
     userHorizonIntent?: "today_only" | "auto";
     titleCandidate?: string | null;
   };
