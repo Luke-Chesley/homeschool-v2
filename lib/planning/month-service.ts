@@ -183,7 +183,7 @@ export async function getMonthlyPlanningView(params: {
 
   return {
     monthStartDate,
-    monthLabel: formatMonthLabel(monthAnchorDate),
+    monthLabel: formatMonthLabel(monthStartDate),
     learner: {
       id: params.learnerId,
       name: params.learnerName,

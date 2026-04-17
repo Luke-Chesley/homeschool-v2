@@ -464,128 +464,126 @@ export function MonthPlanningBoard({ month }: MonthPlanningBoardProps) {
   const firstWeek = month.weeks[0];
 
   return (
-    <DndContext
-      id={`month-planning-board-${month.monthStartDate}`}
-      sensors={sensors}
-      collisionDetection={closestCorners}
-      onDragStart={onDragStart}
-      onDragOver={onDragOver}
-      onDragEnd={onDragEnd}
-    >
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <Card className="border-border/75 bg-background/90">
-          <CardHeader className="gap-4">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div className="space-y-2">
-                <CardDescription>Month planning board</CardDescription>
-                <CardTitle className="text-3xl sm:text-4xl">{month.monthLabel}</CardTitle>
-                <p className="max-w-2xl text-sm leading-7 text-muted-foreground">
-                  The month grid is the draft. Drag compact route cards across weekdays, keep the full
-                  month visible, and use the weekly board only when you need to tune order more tightly.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Badge variant="outline">{month.summary.daysInMonth} days</Badge>
-                <Badge variant="outline">{month.summary.scheduledCount} placed</Badge>
-                <Badge variant="secondary">{month.summary.unassignedCount} backlogged</Badge>
-                {month.summary.conflictCount > 0 ? (
-                  <Badge variant="outline" className="text-destructive">
-                    {month.summary.conflictCount} conflicts
-                  </Badge>
-                ) : null}
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <CalendarDays className="size-3.5" />
-              <span>Weekends stay visible for context.</span>
+    <section className="space-y-5">
+      <div className="quiet-panel space-y-4 p-4">
+        <div className="space-y-1">
+          <p className="section-meta">Month planning board</p>
+          <h2 className="font-serif text-2xl font-semibold tracking-tight text-foreground">
+            {month.monthLabel}
+          </h2>
+          <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
+            The month grid is the draft. Drag compact route cards across weekdays, keep the full
+            month visible, and use the weekly board when you need tighter day-level control.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+          <CalendarDays className="size-3.5" />
+          <span>{month.summary.daysInMonth} days</span>
+          <span>•</span>
+          <span>{month.summary.weeksInView} weeks</span>
+          <span>•</span>
+          <span>{month.summary.scheduledCount} placed</span>
+          {month.summary.conflictCount > 0 ? (
+            <>
               <span>•</span>
-              <span>Route cards drop on weekdays and backlog buckets.</span>
-              {isSaving ? (
-                <>
-                  <span>•</span>
-                  <span>Saving changes...</span>
-                </>
-              ) : null}
-            </div>
-            {error ? (
-              <div className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-                <p>{error}</p>
-              </div>
-            ) : null}
-          </CardHeader>
+              <span className="text-destructive">{month.summary.conflictCount} conflicts</span>
+            </>
+          ) : null}
+          {isSaving ? (
+            <>
+              <span>•</span>
+              <span>Saving changes…</span>
+            </>
+          ) : null}
+        </div>
+      </div>
 
-          <CardContent>
-            <div className="overflow-x-auto pb-2">
-              <div className="min-w-0 space-y-3 xl:min-w-[980px]">
-                <div className="grid grid-cols-7 gap-3">
-                  {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((label) => (
-                    <div
-                      key={label}
-                      className="px-2 text-[11px] font-semibold tracking-[0.16em] text-muted-foreground uppercase"
-                    >
-                      {label}
+      {error ? (
+        <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {error}
+        </p>
+      ) : null}
+
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
+        <DndContext
+          id={`month-planning-board-${month.monthStartDate}`}
+          sensors={sensors}
+          collisionDetection={closestCorners}
+          onDragStart={onDragStart}
+          onDragOver={onDragOver}
+          onDragEnd={onDragEnd}
+        >
+          <Card className="border-border/75 bg-background/90">
+            <CardContent>
+              <div className="overflow-x-auto pb-2">
+                <div className="min-w-0 space-y-3 xl:min-w-[980px]">
+                  <div className="grid grid-cols-7 gap-3">
+                    {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((label) => (
+                      <div
+                        key={label}
+                        className="px-2 text-[11px] font-semibold tracking-[0.16em] text-muted-foreground uppercase"
+                      >
+                        {label}
+                      </div>
+                    ))}
+                  </div>
+
+                  {month.weeks.map((week) => (
+                    <div key={week.weekStartDate} className="grid grid-cols-7 gap-3">
+                      {week.days.map((day) => {
+                        const itemIds = day.isDroppable ? columns[day.date] ?? [] : day.items.map((item) => item.id);
+                        const items = itemIds
+                          .map((itemId) => itemsById.get(itemId))
+                          .filter((item): item is WeeklyRouteBoardItem => item != null);
+
+                        return <DayCell key={day.date} day={day} items={items} isSaving={isSaving} />;
+                      })}
                     </div>
                   ))}
                 </div>
-
-                {month.weeks.map((week) => (
-                  <div key={week.weekStartDate} className="grid grid-cols-7 gap-3">
-                    {week.days.map((day) => {
-                      const itemIds = day.isDroppable ? columns[day.date] ?? [] : day.items.map((item) => item.id);
-                      const items = itemIds
-                        .map((itemId) => itemsById.get(itemId))
-                        .filter((item): item is WeeklyRouteBoardItem => item != null);
-
-                      return <DayCell key={day.date} day={day} items={items} isSaving={isSaving} />;
-                    })}
-                  </div>
-                ))}
               </div>
-            </div>
-
-            {activeItemId ? (
-              <p className="mt-3 text-xs text-muted-foreground">Dragging item {activeItemId}…</p>
-            ) : null}
-          </CardContent>
-        </Card>
-
-        <div className="grid gap-6 self-start">
-          <Card className="border-primary/15 bg-background/88">
-            <CardHeader>
-              <CardDescription>Month posture</CardDescription>
-              <CardTitle>Calendar first</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4 text-sm leading-7 text-muted-foreground">
-              <div className="flex items-start gap-3 rounded-[1.4rem] border border-border/70 bg-card/75 p-4">
-                <Layers3 className="mt-1 size-4 text-primary" />
-                <div>
-                  <p className="font-semibold text-foreground">Compact daily cards</p>
-                  <p>Each day keeps just the route title so the full month stays readable at a glance.</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3 rounded-[1.4rem] border border-border/70 bg-card/75 p-4">
-                <AlertTriangle className="mt-1 size-4 text-primary" />
-                <div>
-                  <p className="font-semibold text-foreground">Current route limits</p>
-                  <p>
-                    Weekend boxes remain visible in the calendar, but scheduling still follows the
-                    weekday weekly-route model.
-                  </p>
-                </div>
-              </div>
-              {firstWeek ? (
-                <Link
-                  href={`/planning?weekStartDate=${firstWeek.weekStartDate}`}
-                  className={cn(buttonVariants({ variant: "default" }), "w-full")}
-                >
-                  Open the first week
-                  <ArrowRight className="size-4" />
-                </Link>
+              {activeItemId ? (
+                <p className="mt-3 text-xs text-muted-foreground">Dragging item {activeItemId}…</p>
               ) : null}
             </CardContent>
           </Card>
+        </DndContext>
 
+        <div className="grid gap-6 self-start">
+          <aside className="quiet-panel space-y-4 p-4">
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-foreground">Month posture</p>
+              <p className="text-sm leading-6 text-muted-foreground">
+                Keep weekdays interactive and keep weekends visible, so you can inspect the full month at a glance.
+              </p>
+            </div>
+            <div className="flex items-start gap-3 rounded-[1.4rem] border border-border/70 bg-card/75 p-4">
+              <Layers3 className="mt-1 size-4 text-primary" />
+              <div>
+                <p className="font-semibold text-foreground">Compact daily cards</p>
+                <p>Each day keeps just the route title, so the full month stays readable.</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3 rounded-[1.4rem] border border-border/70 bg-card/75 p-4">
+              <AlertTriangle className="mt-1 size-4 text-primary" />
+              <div>
+                <p className="font-semibold text-foreground">Weekend context</p>
+                <p>Weekend boxes are visible for context, but scheduling still follows weekdays.</p>
+              </div>
+            </div>
+            {firstWeek ? (
+              <Link
+                href={`/planning?weekStartDate=${firstWeek.weekStartDate}`}
+                className={cn(buttonVariants({ variant: "default" }), "w-full")}
+              >
+                Open the first week
+                <ArrowRight className="size-4" />
+              </Link>
+            ) : null}
+            {activeItemId ? (
+              <p className="text-xs text-muted-foreground">Dragging item {activeItemId}…</p>
+            ) : null}
+          </aside>
           <Card className="border-border/75 bg-card/90">
             <CardHeader>
               <CardDescription>Weekly backlog</CardDescription>
@@ -613,6 +611,6 @@ export function MonthPlanningBoard({ month }: MonthPlanningBoardProps) {
           </Card>
         </div>
       </div>
-    </DndContext>
+    </section>
   );
 }

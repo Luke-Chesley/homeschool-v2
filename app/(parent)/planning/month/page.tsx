@@ -10,8 +10,28 @@ import { getMonthlyPlanningView } from "@/lib/planning/month-service";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+interface PlanningMonthSearchParams {
+  month?: string;
+  focusDate?: string;
+  day?: string;
+}
+
+function parseDateValue(value?: string) {
+  if (!value) {
+    return null;
+  }
+
+  const normalized = value.includes("T") ? value : `${value}T12:00:00.000Z`;
+  const parsed = new Date(normalized);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return parsed.toISOString().slice(0, 10);
+}
+
 interface PlanningMonthPageProps {
-  searchParams: Promise<{ month?: string }>;
+  searchParams: Promise<PlanningMonthSearchParams>;
 }
 
 export default async function PlanningMonthPage({ searchParams }: PlanningMonthPageProps) {
@@ -39,7 +59,11 @@ export default async function PlanningMonthPage({ searchParams }: PlanningMonthP
     );
   }
 
-  const monthAnchorDate = params.month ?? new Date().toISOString().slice(0, 10);
+  const monthAnchorDate =
+    parseDateValue(params.month) ??
+    parseDateValue(params.focusDate) ??
+    parseDateValue(params.day) ??
+    new Date().toISOString().slice(0, 10);
 
   const month = await getMonthlyPlanningView({
     learnerId: session.activeLearner.id,
@@ -48,23 +72,61 @@ export default async function PlanningMonthPage({ searchParams }: PlanningMonthP
     sourceTitle: liveSource.title,
     monthDate: monthAnchorDate,
   });
+  const firstWeekStartDate = month.weeks[0]?.weekStartDate;
+  const weekViewHref = `/planning${firstWeekStartDate ? `?weekStartDate=${encodeURIComponent(firstWeekStartDate)}` : ""}`;
+  const monthViewHref = `/planning/month?month=${encodeURIComponent(monthAnchorDate)}`;
 
   return (
     <PlanningShell>
-      <div className="grid gap-6">
-        <Card>
-          <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="space-y-1">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                Live curriculum
-              </p>
-              <p className="font-medium text-foreground">{liveSource.title}</p>
-            </div>
-            <Link href="/curriculum" className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
-              Change on curriculum
+      <header className="page-header">
+        <p className="section-meta">Live curriculum · {liveSource.title}</p>
+        <h1 className="page-title">Plan the whole month from one screen.</h1>
+        <p className="page-subtitle">
+          Month view keeps the bigger picture visible while you still schedule by day.
+        </p>
+        <div className="toolbar-row">
+          <div className="flex flex-wrap gap-2">
+            <Link href={weekViewHref} className={buttonVariants({ variant: "outline", size: "sm" })}>
+              Week view
+            </Link>
+            <Link href={monthViewHref} className={cn(buttonVariants({ variant: "default", size: "sm" }), "min-w-fit")}>
+              Month view
             </Link>
           </div>
+          <Link href="/curriculum" className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
+            Change curriculum
+          </Link>
+        </div>
+      </header>
+
+      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <Card className="quiet-panel">
+          <div className="space-y-1 p-4">
+            <p className="text-sm text-muted-foreground">Scheduled</p>
+            <p className="text-2xl font-semibold text-foreground">{month.summary.scheduledCount}</p>
+          </div>
         </Card>
+        <Card className="quiet-panel">
+          <div className="space-y-1 p-4">
+            <p className="text-sm text-muted-foreground">Unscheduled</p>
+            <p className="text-2xl font-semibold text-foreground">{month.summary.unassignedCount}</p>
+          </div>
+        </Card>
+        <Card className="quiet-panel">
+          <div className="space-y-1 p-4">
+            <p className="text-sm text-muted-foreground">Conflicts</p>
+            <p className="text-2xl font-semibold text-foreground">{month.summary.conflictCount}</p>
+          </div>
+        </Card>
+        <Card className="quiet-panel">
+          <div className="space-y-1 p-4">
+            <p className="text-sm text-muted-foreground">Month view</p>
+            <p className="text-2xl font-semibold text-foreground">{month.summary.daysInMonth} days</p>
+          </div>
+        </Card>
+      </section>
+
+      <div className="grid gap-4">
         <MonthPlanningBoard month={month} />
       </div>
     </PlanningShell>
