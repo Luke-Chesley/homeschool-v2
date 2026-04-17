@@ -1,7 +1,10 @@
 import Link from "next/link";
 
+import { ProgramSetupCard } from "@/components/tracking/program-setup-card";
 import { ActiveLearnerSwitcher } from "@/components/users/active-learner-switcher";
 import { requireAppSession } from "@/lib/app-session/server";
+import { listRequirementProfiles } from "@/lib/compliance/profiles";
+import { getTrackingDashboard } from "@/lib/tracking/service";
 
 export const metadata = {
   title: "Account",
@@ -20,6 +23,14 @@ function ActionLink({ href, label }: { href: string; label: string }) {
 
 export default async function AccountPage() {
   const session = await requireAppSession();
+  const dashboard = session.activeLearner
+    ? await getTrackingDashboard({
+        organizationId: session.organization.id,
+        learnerId: session.activeLearner.id,
+        learnerName: session.activeLearner.displayName,
+      })
+    : null;
+  const profileOptions = listRequirementProfiles();
 
   return (
     <main className="page-shell page-stack">
@@ -118,6 +129,10 @@ export default async function AccountPage() {
             <ActionLink href="/today" label="Open Today" />
           </div>
         </section>
+
+        {dashboard ? (
+          <ProgramSetupCard program={dashboard.program} profileOptions={profileOptions} />
+        ) : null}
 
         <section className="quiet-panel space-y-3 p-6">
           <h2 className="text-lg font-semibold text-foreground">Billing</h2>

@@ -8,6 +8,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { activityAttempts, generatedArtifacts } from "@/lib/db/schema/activities";
+import { compliancePrograms } from "@/lib/db/schema/compliance";
 import { adultUsers, organizations } from "@/lib/db/schema/organizations";
 import { lessonSessions, planItems } from "@/lib/db/schema/planning";
 import { metadataColumn, prefixedId, timestamps } from "@/lib/db/schema/shared";
@@ -33,6 +34,25 @@ export const evidenceReviewStateEnum = pgEnum("evidence_review_state", [
   "approved",
   "revision_requested",
   "insufficient_evidence",
+]);
+
+export const portfolioEntryStatusEnum = pgEnum("portfolio_entry_status", [
+  "inbox",
+  "saved",
+  "archived",
+]);
+
+export const portfolioArtifactKindEnum = pgEnum("portfolio_artifact_kind", [
+  "work_sample",
+  "photo",
+  "pdf",
+  "test_result",
+  "evaluator_letter",
+  "report_card",
+  "reading_log_export",
+  "checklist_attachment",
+  "note",
+  "other",
 ]);
 
 export const feedbackScopeEnum = pgEnum("feedback_scope", [
@@ -76,6 +96,9 @@ export const evidenceRecords = pgTable("evidence_records", {
   learnerId: text("learner_id")
     .notNull()
     .references(() => learners.id, { onDelete: "cascade" }),
+  complianceProgramId: text("compliance_program_id").references(() => compliancePrograms.id, {
+    onDelete: "set null",
+  }),
   lessonSessionId: text("lesson_session_id").references(() => lessonSessions.id, {
     onDelete: "set null",
   }),
@@ -99,6 +122,10 @@ export const evidenceRecords = pgTable("evidence_records", {
   body: text("body"),
   storagePath: text("storage_path"),
   audience: text("audience").notNull().default("shared"),
+  portfolioStatus: portfolioEntryStatusEnum("portfolio_status").notNull().default("inbox"),
+  portfolioArtifactKind: portfolioArtifactKindEnum("portfolio_artifact_kind"),
+  portfolioSubjectKey: text("portfolio_subject_key"),
+  portfolioPeriodLabel: text("portfolio_period_label"),
   capturedAt: timestamp("captured_at", { withTimezone: true }).defaultNow().notNull(),
   createdByAdultUserId: text("created_by_adult_user_id").references(() => adultUsers.id, {
     onDelete: "set null",

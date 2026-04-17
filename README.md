@@ -30,7 +30,7 @@ This repo no longer owns extracted prompt templates or a generic AI gateway.
 | `/today` | `app/(parent)/today/page.tsx`, `app/(parent)/today/actions.ts`, `lib/planning/today-service.ts`, `lib/learning-core/activity.ts` |
 | `/planning` | `app/(parent)/planning/page.tsx`, `components/planning/`, `lib/planning/`, `app/api/ai/lesson-plan/route.ts`, `lib/learning-core/session.ts` |
 | `/curriculum` | `app/(parent)/curriculum/page.tsx`, `components/curriculum/`, `lib/curriculum/ai-draft-service.ts`, `lib/curriculum/progression-regeneration.ts`, `lib/learning-core/curriculum.ts` |
-| `/tracking` | `app/(parent)/tracking/page.tsx`, `components/tracking/`, `lib/tracking/`, `lib/homeschool/attendance/` |
+| `/tracking` | `app/(parent)/tracking/page.tsx`, `components/tracking/`, `lib/tracking/`, `lib/compliance/`, `lib/homeschool/attendance/` |
 | `/copilot` | `app/(parent)/copilot/page.tsx`, `components/copilot/`, `components/debug/`, `app/api/ai/chat/route.ts`, `lib/learning-core/copilot.ts`, `lib/ai/copilot-store.ts` |
 | `/activity/[sessionId]` | `app/(learner)/activity/[sessionId]/page.tsx`, `components/activities/`, `lib/activities/`, `app/api/activities/attempts/[attemptId]/feedback/route.ts`, `lib/learning-core/activity-feedback.ts` |
 | `/users` | `app/users/page.tsx`, `components/users/`, `lib/users/` |
@@ -105,9 +105,11 @@ What you should not look for here anymore:
 - `lib/activities/`
   Activity definitions, parsing, validation, and rendering support.
 - `lib/tracking/`
-  Tracking and reporting logic.
+  Tracking dashboard assembly, subject coverage, and export/report shaping.
+- `lib/compliance/`
+  Learner-year compliance programs, requirement profiles, attendance summaries, portfolio actions, deadlines, and report draft helpers.
 - `lib/homeschool/`
-  Onboarding, attendance, reporting, and homeschool-specific flows.
+  Onboarding, attendance APIs, reporting exports, and homeschool-specific flows layered around the generic compliance record.
 - `contracts/`
   Contracts for generated artifacts. Update these when artifact shape or lifecycle changes.
 - `docs/`

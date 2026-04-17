@@ -8,6 +8,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { DailyWorkspace } from "@/lib/planning/types";
 import {
+  saveTodayPlanItemPortfolioAction,
   saveTodayPlanItemEvaluationAction,
   type TodayPlanItemAction,
   updateTodayPlanItemAction,
@@ -58,10 +59,12 @@ export function TodayPlanItemActionButtons({
   const [pendingAction, setPendingAction] = useState<TodayPlanItemAction | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [portfolioMessage, setPortfolioMessage] = useState<string | null>(null);
 
   useEffect(() => {
     setPendingAction(null);
     setError(null);
+    setPortfolioMessage(null);
   }, [item.status, item.completionStatus, item.note]);
 
   const isDone =
@@ -101,6 +104,29 @@ export function TodayPlanItemActionButtons({
 
   const confirmationText = getCompletionDisplay(item, successMessage);
   const primaryButtonClassName = compact ? "w-full justify-center sm:w-auto" : "w-full sm:w-auto";
+
+  function saveToPortfolio() {
+    if (!item.sessionRecordId) {
+      setError("Save a lesson outcome first so there is evidence to add.");
+      return;
+    }
+
+    setError(null);
+    setPortfolioMessage(null);
+    startTransition(async () => {
+      const result = await saveTodayPlanItemPortfolioAction({
+        planItemId: item.id,
+        sessionRecordId: item.sessionRecordId ?? "",
+      });
+
+      if (!result.ok) {
+        setError(result.error ?? "Could not save this lesson to the portfolio.");
+        return;
+      }
+
+      setPortfolioMessage(result.message ?? "Saved to portfolio.");
+    });
+  }
 
   return (
     <div className="space-y-2">
@@ -275,10 +301,30 @@ export function TodayPlanItemActionButtons({
         onEvaluationSaved={onEvaluationSaved}
       />
 
+      {item.sessionRecordId ? (
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={isPending}
+          onClick={saveToPortfolio}
+          className={primaryButtonClassName}
+        >
+          {isPending && pendingAction === null ? <Loader2 className="size-3.5 animate-spin" /> : null}
+          Save to portfolio
+        </Button>
+      ) : null}
+
       {confirmationText ? (
         <div className="flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-foreground">
           <CheckCircle2 className="size-4 text-primary" />
           <span>{confirmationText}</span>
+        </div>
+      ) : null}
+
+      {portfolioMessage ? (
+        <div className="flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-foreground">
+          <CheckCircle2 className="size-4 text-primary" />
+          <span>{portfolioMessage}</span>
         </div>
       ) : null}
 

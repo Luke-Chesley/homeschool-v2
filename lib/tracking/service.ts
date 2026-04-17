@@ -1,10 +1,26 @@
 import "@/lib/server-only";
 
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
 
+import {
+  getLearnerComplianceProgram,
+  getRequirementProfileSummary,
+  listAttendanceLedger,
+  listComplianceReportDrafts,
+  listComplianceTasksForProgram,
+  listProgressSnapshotsForProgram,
+  summarizeAttendanceProgress,
+} from "@/lib/compliance/service";
+import type {
+  AttendanceLedgerEntry,
+  ProgressSnapshotSummary,
+  RequirementProfile,
+  SubjectCoverageSummary,
+} from "@/lib/compliance/types";
 import { getDb } from "@/lib/db/server";
 import { getLiveCurriculumSource } from "@/lib/curriculum/service";
 import {
+  complianceEvaluationRecords,
   curriculumNodes,
   curriculumSources,
   evidenceRecordObjectives,
@@ -12,6 +28,7 @@ import {
   feedbackEntries,
   goalMappings,
   learnerProfiles,
+  lessonSessions,
   learningGoals,
   observationNotes,
   planItems,
@@ -38,6 +55,8 @@ import type {
   TrackingDashboard,
   TrackingOutcome,
 } from "@/lib/tracking/types";
+
+type ComplianceEvaluationRow = typeof complianceEvaluationRecords.$inferSelect;
 
 function toDateOnly(value: Date) {
   return value.toISOString().slice(0, 10);
@@ -103,7 +122,9 @@ function mapEvidenceKind(value: string): EvidenceRecord["kind"] {
       return "photo";
     case "audio_video_metadata":
       return "audio";
+    case "file_upload":
     case "artifact_output":
+    case "external_assessment":
       return "worksheet";
     case "note":
     case "review_note":
@@ -141,6 +162,266 @@ function mapEvaluationLevel(
 function defaultReportingWindow() {
   const now = new Date();
   return `Week of ${now.toLocaleDateString("en-US", { month: "long", day: "numeric" })}`;
+}
+
+function mergeAttendanceRecords(
+  explicitRecords: AttendanceLedgerEntry[],
+  sessionRows: Array<{ id: string; sessionDate: string; actualMinutes: number | null }>,
+): AttendanceLedgerEntry[] {
+  const explicitByDate = new Map(explicitRecords.map((record) => [record.date, record]));
+  const grouped = new Map<
+    string,
+    { minutes: number; sessionIds: string[] }
+  >();
+
+  for (const session of sessionRows) {
+    const current = grouped.get(session.sessionDate) ?? { minutes: 0, sessionIds: [] };
+    current.minutes += session.actualMinutes ?? 0;
+    current.sessionIds.push(session.id);
+    grouped.set(session.sessionDate, current);
+  }
+
+  const merged = [...explicitRecords];
+  for (const [date, summary] of grouped.entries()) {
+    if (explicitByDate.has(date)) {
+      continue;
+    }
+
+    merged.push({
+      id: `derived-${date}`,
+      date,
+      status: summary.minutes > 0 ? "present" : "partial",
+      instructionalMinutes: summary.minutes,
+      source: "derived_from_sessions",
+      note: "Suggested from recorded session outcomes.",
+      derivedSessionIds: summary.sessionIds,
+      isSuggested: true,
+    });
+  }
+
+  return merged.sort((left, right) => right.date.localeCompare(left.date));
+}
+
+function buildSubjectCoverage(outcomes: TrackingOutcome[], profile: RequirementProfile | null) {
+  const coverage = new Map<
+    string,
+    { label: string; minutesLogged: number; days: Set<string>; unitsTouched: number; lastCoveredAt: string | null; supportingRefs: string[] }
+  >();
+
+  const requiredKeys = new Set(profile?.requiredSubjectGroups.map((group) => group.key) ?? []);
+  const labelByKey = new Map(
+    (profile?.requiredSubjectGroups ?? []).map((group) => [group.key, group.label]),
+  );
+
+  for (const outcome of outcomes) {
+    const subjectKey = outcome.subject.toLowerCase().replace(/[^a-z0-9]+/g, "_");
+    const current = coverage.get(subjectKey) ?? {
+      label: labelByKey.get(subjectKey) ?? outcome.subject,
+      minutesLogged: 0,
+      days: new Set<string>(),
+      unitsTouched: 0,
+      lastCoveredAt: null,
+      supportingRefs: [],
+    };
+
+    current.minutesLogged += outcome.actualMinutes;
+    current.days.add(outcome.date);
+    current.unitsTouched += 1;
+    current.lastCoveredAt = outcome.date;
+    current.supportingRefs.push(outcome.id);
+    coverage.set(subjectKey, current);
+  }
+
+  for (const group of profile?.requiredSubjectGroups ?? []) {
+    if (!coverage.has(group.key)) {
+      coverage.set(group.key, {
+        label: group.label,
+        minutesLogged: 0,
+        days: new Set<string>(),
+        unitsTouched: 0,
+        lastCoveredAt: null,
+        supportingRefs: [],
+      });
+    }
+  }
+
+  return Array.from(coverage.entries()).map<SubjectCoverageSummary>(([subjectKey, value]) => {
+    const daysTouched = value.days.size;
+    const hasStarted = value.minutesLogged > 0 || value.unitsTouched > 0;
+    const coverageStatus =
+      !hasStarted
+        ? "not_started"
+        : daysTouched >= 5 && value.minutesLogged >= 240
+          ? "satisfied"
+          : requiredKeys.has(subjectKey)
+            ? "in_progress"
+            : "unknown";
+
+    return {
+      subjectKey,
+      label: value.label,
+      minutesLogged: value.minutesLogged,
+      daysTouched,
+      unitsTouched: value.unitsTouched,
+      lastCoveredAt: value.lastCoveredAt,
+      coverageStatus,
+      supportingRefs: value.supportingRefs,
+    };
+  });
+}
+
+function buildGeneratedSnapshots(params: {
+  learnerName: string;
+  outcomes: TrackingOutcome[];
+  coverage: SubjectCoverageSummary[];
+  evidence: EvidenceRecord[];
+}): ProgressSnapshotSummary[] {
+  if (params.outcomes.length === 0) {
+    return [];
+  }
+
+  const completedCount = params.outcomes.filter((outcome) => outcome.status === "completed").length;
+  const attentionSubjects = params.coverage
+    .filter((row) => row.coverageStatus === "not_started" || row.coverageStatus === "in_progress")
+    .slice(0, 3)
+    .map((row) => row.label);
+  const strengths = params.coverage
+    .filter((row) => row.coverageStatus === "satisfied")
+    .slice(0, 3)
+    .map((row) => row.label);
+  const subjectNotes = params.coverage.slice(0, 4).map((row) => ({
+    subject: row.label,
+    note:
+      row.coverageStatus === "satisfied"
+        ? `Coverage looks stronger here with ${row.daysTouched} logged days and ${row.minutesLogged} minutes.`
+        : row.coverageStatus === "not_started"
+          ? "No clear work has been captured for this subject yet."
+          : `Work is underway here, but the record still needs more depth and evidence.`,
+  }));
+
+  const latestOutcomeDate = params.outcomes[0]?.date ?? new Date().toISOString().slice(0, 10);
+  const yearLabel = latestOutcomeDate.slice(0, 4);
+
+  return [
+    {
+      id: "generated-quarter",
+      periodType: "quarter",
+      periodLabel: `Quarter draft · ${yearLabel}`,
+      summaryText: `${params.learnerName} completed ${completedCount} recorded lessons this period. Coverage is strongest where work has been repeated and evidence has been saved, while lighter subjects still need more durable proof.`,
+      strengths: strengths.join(", ") || "Consistent follow-through in the main subjects.",
+      struggles:
+        attentionSubjects.join(", ") ||
+        "A few lighter subjects still need more explicit work samples and minutes.",
+      nextSteps:
+        attentionSubjects.length > 0
+          ? `Add one saved portfolio item or short narrative note for ${attentionSubjects.join(", ")} next.`
+          : "Keep building the portfolio and quarterly narrative while the details are still fresh.",
+      subjectNotes,
+      evidenceRefs: params.evidence.slice(0, 6).map((record) => record.id),
+      status: "draft",
+    },
+    {
+      id: "generated-year",
+      periodType: "year",
+      periodLabel: `Annual draft · ${yearLabel}`,
+      summaryText: `${params.learnerName}'s year record shows a usable attendance and portfolio trail tied back to actual work completed. The annual pack should focus on the strongest coverage areas, representative portfolio items, and any remaining subject gaps.`,
+      strengths: strengths.join(", ") || "Attendance and evidence records stayed usable through the year.",
+      struggles:
+        attentionSubjects.join(", ") ||
+        "No major subject gaps are visible in the current record.",
+      nextSteps: "Finalize the annual summary and attach evaluation or testing evidence if the selected profile requires it.",
+      subjectNotes,
+      evidenceRefs: params.evidence.slice(0, 8).map((record) => record.id),
+      status: "draft",
+    },
+  ];
+}
+
+function buildGeneratedReportDrafts(params: {
+  learnerName: string;
+  gradeLabel: string;
+  programLabel: string;
+  profile: RequirementProfile | null;
+  attendanceSummary: TrackingDashboard["attendance"]["summary"];
+  snapshots: ProgressSnapshotSummary[];
+  tasks: TrackingDashboard["complianceTasks"];
+  evidence: EvidenceRecord[];
+}): TrackingDashboard["reportDrafts"] {
+  const quarterlySnapshot = params.snapshots.find((snapshot) => snapshot.periodType === "quarter");
+  const annualSnapshot = params.snapshots.find((snapshot) => snapshot.periodType === "year");
+  const outstandingTasks = params.tasks.filter((task) => task.status !== "completed").slice(0, 6);
+
+  return [
+    {
+      id: "generated-quarterly-report",
+      reportKind: "quarterly_report",
+      title: "Quarterly report draft",
+      periodLabel: quarterlySnapshot?.periodLabel ?? params.programLabel,
+      status: "draft",
+      exportFileName: "quarterly-report-draft",
+      content: [
+        `${params.learnerName} · ${params.gradeLabel}`,
+        "",
+        quarterlySnapshot?.summaryText ?? "Add a quarter summary here.",
+        "",
+        `Attendance progress: ${params.attendanceSummary.progressLabel}`,
+        quarterlySnapshot?.strengths ? `Strengths: ${quarterlySnapshot.strengths}` : null,
+        quarterlySnapshot?.struggles ? `Needs more proof: ${quarterlySnapshot.struggles}` : null,
+        quarterlySnapshot?.nextSteps ? `Next steps: ${quarterlySnapshot.nextSteps}` : null,
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    },
+    {
+      id: "generated-annual-summary",
+      reportKind: "annual_summary",
+      title: "Annual summary draft",
+      periodLabel: annualSnapshot?.periodLabel ?? params.programLabel,
+      status: "draft",
+      exportFileName: "annual-summary-draft",
+      content: [
+        `${params.learnerName} · ${params.gradeLabel}`,
+        "",
+        annualSnapshot?.summaryText ?? "Add a year-end summary here.",
+        "",
+        `Attendance progress: ${params.attendanceSummary.progressLabel}`,
+        `Readiness signal: ${params.attendanceSummary.readinessLabel}`,
+        annualSnapshot?.strengths ? `Stronger areas: ${annualSnapshot.strengths}` : null,
+        annualSnapshot?.struggles ? `Items still to shore up: ${annualSnapshot.struggles}` : null,
+        annualSnapshot?.nextSteps ? `Final pack note: ${annualSnapshot.nextSteps}` : null,
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    },
+    {
+      id: "generated-evaluation-packet",
+      reportKind: "evaluation_packet",
+      title: "Evaluation packet shell",
+      periodLabel: params.programLabel,
+      status: "draft",
+      exportFileName: "evaluation-packet-shell",
+      content: [
+        "Attach the annual summary, saved portfolio items, and any evaluator or test evidence required by the selected profile.",
+        "",
+        params.profile?.framingNote ?? "This is a working evidence packet, not an automated legal filing.",
+      ].join("\n"),
+    },
+    {
+      id: "generated-portfolio-checklist",
+      reportKind: "portfolio_checklist",
+      title: "Portfolio checklist",
+      periodLabel: params.programLabel,
+      status: "draft",
+      exportFileName: "portfolio-checklist",
+      content: [
+        `Saved portfolio items: ${params.evidence.filter((item) => item.portfolioStatus === "saved").length}`,
+        "",
+        outstandingTasks.length > 0
+          ? `Outstanding tasks:\n${outstandingTasks.map((task) => `- ${task.title} (${task.dueDate})`).join("\n")}`
+          : "No open compliance tasks.",
+      ].join("\n"),
+    },
+  ];
 }
 
 async function buildCurriculumContext(args: {
@@ -224,6 +505,7 @@ export async function getTrackingDashboard(params: {
 
   const [
     profile,
+    complianceProgram,
     curriculum,
     progressCandidates,
     noteCandidates,
@@ -235,6 +517,10 @@ export async function getTrackingDashboard(params: {
   ] = await Promise.all([
     db.query.learnerProfiles.findFirst({
       where: eq(learnerProfiles.learnerId, params.learnerId),
+    }),
+    getLearnerComplianceProgram({
+      organizationId: params.organizationId,
+      learnerId: params.learnerId,
     }),
     resolveActiveCurriculumContext({
       organizationId: params.organizationId,
@@ -323,7 +609,9 @@ export async function getTrackingDashboard(params: {
     ]),
   );
 
-  const progress = curriculum
+  const useProgramScopedRecord = Boolean(complianceProgram);
+
+  const progress = !useProgramScopedRecord && curriculum
     ? progressCandidates
         .filter((row) => progressSourceIdByRecordId.get(row.id) === curriculum.sourceId)
         .slice(0, 25)
@@ -333,7 +621,7 @@ export async function getTrackingDashboard(params: {
   const evaluationCandidates = feedbackCandidates.filter(
     (row) => getMetadataString(row.metadata, "source") === "lesson_evaluation",
   );
-  const evaluations = curriculum
+  const evaluations = !useProgramScopedRecord && curriculum
     ? evaluationCandidates
         .filter((row) => {
           const linkedSourceId =
@@ -345,7 +633,7 @@ export async function getTrackingDashboard(params: {
         .slice(0, 25)
     : evaluationCandidates.slice(0, 25);
 
-  const notes = curriculum
+  const notes = !useProgramScopedRecord && curriculum
     ? noteCandidates
         .filter((note) => {
           const linkedProgressId = getMetadataString(note.metadata, "progressRecordId");
@@ -363,7 +651,7 @@ export async function getTrackingDashboard(params: {
         .slice(0, 25)
     : noteCandidates.slice(0, 25);
 
-  const evidence = curriculum
+  const evidence = !useProgramScopedRecord && curriculum
     ? evidenceCandidates
         .filter((record) => {
           const linkedSourceId =
@@ -496,6 +784,11 @@ export async function getTrackingDashboard(params: {
       minute: "2-digit",
     }),
     note: safeText(record.body, safeText(record.metadata?.summary, "Evidence captured.")),
+    portfolioStatus: record.portfolioStatus,
+    portfolioArtifactKind: record.portfolioArtifactKind ?? null,
+    portfolioSubjectKey: record.portfolioSubjectKey ?? null,
+    portfolioPeriodLabel: record.portfolioPeriodLabel ?? null,
+    storagePath: record.storagePath ?? null,
   }));
 
   const standardStats = new Map<
@@ -608,6 +901,115 @@ export async function getTrackingDashboard(params: {
   const completedCount = outcomes.filter((item) => item.status === "completed").length;
   const secureCount = outcomes.filter((item) => item.mastery === "secure").length;
   const needsAttentionCount = outcomes.filter((item) => item.mastery === "needs_review").length;
+  const requirementProfile = getRequirementProfileSummary(complianceProgram);
+  const subjectCoverage = buildSubjectCoverage(outcomes, requirementProfile);
+
+  const [
+    attendanceRecords,
+    savedSnapshots,
+    rawEvaluationRecords,
+    complianceTasks,
+    savedReportDrafts,
+    attendanceSessionRows,
+  ] =
+    complianceProgram
+      ? await Promise.all([
+          listAttendanceLedger({
+            organizationId: params.organizationId,
+            learnerId: params.learnerId,
+            startDate: complianceProgram.startDate,
+            endDate: complianceProgram.endDate,
+          }),
+          listProgressSnapshotsForProgram(complianceProgram.id),
+          db.query.complianceEvaluationRecords.findMany({
+            where: eq(complianceEvaluationRecords.complianceProgramId, complianceProgram.id),
+            orderBy: [
+              desc(complianceEvaluationRecords.completedAt),
+              desc(complianceEvaluationRecords.createdAt),
+            ],
+          }),
+          listComplianceTasksForProgram(complianceProgram.id),
+          listComplianceReportDrafts(complianceProgram.id),
+          db.query.lessonSessions.findMany({
+            where: and(
+              eq(lessonSessions.organizationId, params.organizationId),
+              eq(lessonSessions.learnerId, params.learnerId),
+              gte(lessonSessions.sessionDate, complianceProgram.startDate),
+              lte(lessonSessions.sessionDate, complianceProgram.endDate),
+            ),
+            columns: {
+              id: true,
+              sessionDate: true,
+              actualMinutes: true,
+            },
+            orderBy: [desc(lessonSessions.sessionDate)],
+          }),
+        ])
+      : await Promise.all([
+          Promise.resolve([] as AttendanceLedgerEntry[]),
+          Promise.resolve([]),
+          Promise.resolve([] as ComplianceEvaluationRow[]),
+          Promise.resolve([] as TrackingDashboard["complianceTasks"]),
+          Promise.resolve([] as TrackingDashboard["reportDrafts"]),
+          Promise.resolve([] as Array<{ id: string; sessionDate: string; actualMinutes: number | null }>),
+        ]);
+
+  const mergedAttendance = mergeAttendanceRecords(attendanceRecords, attendanceSessionRows);
+  const attendanceSummary = summarizeAttendanceProgress({
+    profile: requirementProfile,
+    gradeBand: complianceProgram?.gradeBand ?? "elementary",
+    records: mergedAttendance,
+  });
+  const evaluationRecords = rawEvaluationRecords.map((record) => ({
+    id: record.id,
+    evaluationType: record.evaluationType,
+    completedAt: record.completedAt?.toISOString() ?? null,
+    resultSummary: record.resultSummary,
+    evaluatorName: record.evaluatorName ?? null,
+    evaluatorRole: record.evaluatorRole ?? null,
+    status: record.status,
+  }));
+  const generatedSnapshots = buildGeneratedSnapshots({
+    learnerName: params.learnerName,
+    outcomes,
+    coverage: subjectCoverage,
+    evidence: mappedEvidence,
+  });
+  const progressSnapshots = [
+    ...savedSnapshots,
+    ...generatedSnapshots.filter(
+      (generated) =>
+        !savedSnapshots.some(
+          (snapshot) =>
+            snapshot.periodType === generated.periodType &&
+            snapshot.periodLabel === generated.periodLabel,
+        ),
+    ),
+  ];
+  const generatedReportDrafts = buildGeneratedReportDrafts({
+    learnerName: params.learnerName,
+    gradeLabel: profile?.gradeLevel ? `Grade ${profile.gradeLevel}` : "Grade level not set",
+    programLabel:
+      complianceProgram?.schoolYearLabel ??
+      requirementProfile?.jurisdictionLabel ??
+      "Current record pack",
+    profile: requirementProfile,
+    attendanceSummary,
+    snapshots: progressSnapshots,
+    tasks: complianceTasks,
+    evidence: mappedEvidence,
+  });
+  const reportDrafts = [
+    ...savedReportDrafts,
+    ...generatedReportDrafts.filter(
+      (generated) =>
+        !savedReportDrafts.some(
+          (draft) =>
+            draft.reportKind === generated.reportKind &&
+            draft.periodLabel === generated.periodLabel,
+        ),
+    ),
+  ];
 
   return {
     learner: {
@@ -617,6 +1019,25 @@ export async function getTrackingDashboard(params: {
       reportingWindow: defaultReportingWindow(),
     },
     curriculum,
+    program: complianceProgram
+      ? {
+          id: complianceProgram.id,
+          schoolYearLabel: complianceProgram.schoolYearLabel,
+          startDate: complianceProgram.startDate,
+          endDate: complianceProgram.endDate,
+          jurisdictionCode: complianceProgram.jurisdictionCode,
+          jurisdictionLabel:
+            requirementProfile?.jurisdictionLabel ?? complianceProgram.jurisdictionCode,
+          pathwayCode: complianceProgram.pathwayCode,
+          pathwayLabel: requirementProfile?.pathwayLabel ?? complianceProgram.pathwayCode,
+          gradeBand: complianceProgram.gradeBand,
+          status: complianceProgram.status,
+          framingNote:
+            requirementProfile?.framingNote ??
+            "Use this record pack to stay organized, not as legal advice.",
+        }
+      : null,
+    requirementProfile,
     summary: {
       plannedMinutes,
       actualMinutes,
@@ -624,12 +1045,22 @@ export async function getTrackingDashboard(params: {
       secureCount,
       needsAttentionCount,
     },
+    attendance: {
+      summary: attendanceSummary,
+      records: mergedAttendance,
+    },
     outcomes,
     observations,
     evaluations: evaluationRows,
+    progressSnapshots,
+    evaluationRecords,
     evidence: mappedEvidence,
+    portfolioSavedCount: mappedEvidence.filter((record) => record.portfolioStatus === "saved").length,
+    subjectCoverage,
     standards,
     goals: goalRows,
+    complianceTasks,
+    reportDrafts,
     reviewQueue,
     recommendations: mappedRecommendations,
   };

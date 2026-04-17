@@ -73,6 +73,10 @@ const learnerA = `learner_${runId}_a`;
 const learnerB = `learner_${runId}_b`;
 const recommendationA = `recommendation_${runId}_a`;
 const recommendationB = `recommendation_${runId}_b`;
+const complianceProgramA = `program_${runId}_a`;
+const complianceProgramB = `program_${runId}_b`;
+const complianceTaskA = `ctask_${runId}_a`;
+const complianceTaskB = `ctask_${runId}_b`;
 
 const emailA = `${runId}.parent.a@example.com`;
 const emailB = `${runId}.parent.b@example.com`;
@@ -144,6 +148,39 @@ try {
         (${recommendationA}, ${orgA}, ${learnerA}, 'schedule_adjustment', 'proposed', 'Rec A', 'Org A recommendation'),
         (${recommendationB}, ${orgB}, ${learnerB}, 'schedule_adjustment', 'proposed', 'Rec B', 'Org B recommendation')
     `;
+
+    await tx`
+      insert into public.compliance_programs (
+        id,
+        organization_id,
+        learner_id,
+        school_year_label,
+        start_date,
+        end_date,
+        jurisdiction_code,
+        pathway_code,
+        requirement_profile_version,
+        grade_band,
+        status
+      )
+      values
+        (${complianceProgramA}, ${orgA}, ${learnerA}, '2025-2026', '2025-08-15', '2026-05-30', 'US-TX', 'homeschool_record_pack', '2026-04', 'elementary', 'active'),
+        (${complianceProgramB}, ${orgB}, ${learnerB}, '2025-2026', '2025-08-15', '2026-05-30', 'US-FL', 'home_education', '2026-04', 'elementary', 'active')
+    `;
+
+    await tx`
+      insert into public.compliance_tasks (
+        id,
+        compliance_program_id,
+        task_type,
+        title,
+        due_date,
+        status
+      )
+      values
+        (${complianceTaskA}, ${complianceProgramA}, 'attendance_summary', 'Attendance summary ready', '2026-05-30', 'ready'),
+        (${complianceTaskB}, ${complianceProgramB}, 'attendance_summary', 'Attendance summary ready', '2026-05-30', 'ready')
+    `;
   });
 
   const clientA = await signIn(url, anonKey, emailA, password);
@@ -169,6 +206,28 @@ try {
     'client B learners select',
     clientB.from('learners').select('id'),
     [learnerB],
+  );
+
+  await expectQueryIds(
+    'client A compliance programs select',
+    clientA.from('compliance_programs').select('id'),
+    [complianceProgramA],
+  );
+  await expectQueryIds(
+    'client B compliance programs select',
+    clientB.from('compliance_programs').select('id'),
+    [complianceProgramB],
+  );
+
+  await expectQueryIds(
+    'client A compliance tasks select',
+    clientA.from('compliance_tasks').select('id'),
+    [complianceTaskA],
+  );
+  await expectQueryIds(
+    'client B compliance tasks select',
+    clientB.from('compliance_tasks').select('id'),
+    [complianceTaskB],
   );
 
   const ownOrgSelect = await clientA.from('organizations').select('id');
@@ -200,6 +259,67 @@ try {
       last_name: 'Org',
       display_name: 'Cross Org',
       date_of_birth: '2016-01-01',
+    }),
+  );
+
+  await expectError('client A cross-org compliance program insert', () =>
+    clientA.from('compliance_programs').insert({
+      id: `program_${runId}_forbidden`,
+      organization_id: orgB,
+      learner_id: learnerB,
+      school_year_label: '2025-2026',
+      start_date: '2025-08-15',
+      end_date: '2026-05-30',
+      jurisdiction_code: 'US-PA',
+      pathway_code: 'home_education',
+      requirement_profile_version: '2026-04',
+      grade_band: 'elementary',
+      status: 'active',
+    }),
+  );
+
+  const ownSnapshotInsert = await clientA.from('compliance_progress_snapshots').insert({
+    id: `snapshot_${runId}_own`,
+    compliance_program_id: complianceProgramA,
+    period_type: 'quarter',
+    period_label: 'Q1',
+    summary_text: 'Own compliance snapshot',
+  });
+  if (ownSnapshotInsert.error) {
+    throw new Error(`client A own compliance snapshot insert failed: ${ownSnapshotInsert.error.message}`);
+  }
+
+  await expectError('client A cross-org compliance snapshot insert', () =>
+    clientA.from('compliance_progress_snapshots').insert({
+      id: `snapshot_${runId}_forbidden`,
+      compliance_program_id: complianceProgramB,
+      period_type: 'quarter',
+      period_label: 'Q1',
+      summary_text: 'Forbidden snapshot',
+    }),
+  );
+
+  await expectError('client A cross-program attendance insert', () =>
+    clientA.from('homeschool_attendance_records').insert({
+      id: `attendance_${runId}_forbidden`,
+      organization_id: orgA,
+      learner_id: learnerA,
+      compliance_program_id: complianceProgramB,
+      attendance_date: '2026-01-15',
+      status: 'present',
+      source: 'manual',
+      minutes: 240,
+    }),
+  );
+
+  await expectError('client A cross-program evidence insert', () =>
+    clientA.from('evidence_records').insert({
+      id: `evidence_${runId}_forbidden`,
+      organization_id: orgA,
+      learner_id: learnerA,
+      compliance_program_id: complianceProgramB,
+      evidence_type: 'note',
+      title: 'Forbidden evidence link',
     }),
   );
 
@@ -269,9 +389,16 @@ try {
     checks: [
       'recommendation select isolation',
       'learner select isolation',
+      'compliance program select isolation',
+      'compliance task select isolation',
       'organization visibility isolation',
       'cross-org recommendation insert denied',
       'cross-org learner insert denied',
+      'cross-org compliance program insert denied',
+      'own compliance snapshot insert allowed',
+      'cross-org compliance snapshot insert denied',
+      'cross-program attendance insert denied',
+      'cross-program evidence insert denied',
       'generated-artifacts storage isolation',
       'learner-uploads storage isolation',
     ],

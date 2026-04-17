@@ -1,4 +1,15 @@
 import type { LessonEvaluationLevel } from "@/lib/session-workspace/evaluation";
+import type {
+  AttendanceLedgerEntry,
+  AttendanceProgressSummary,
+  ComplianceGradeBand,
+  ComplianceReportDraftSummary,
+  ComplianceTaskSummary,
+  EvaluationRecordSummary,
+  ProgressSnapshotSummary,
+  RequirementProfile,
+  SubjectCoverageSummary,
+} from "@/lib/compliance/types";
 
 export type OutcomeStatus = "completed" | "partial" | "skipped";
 export type MasterySignal = "secure" | "developing" | "emerging" | "needs_review";
@@ -17,6 +28,20 @@ export interface TrackingLearnerSummary {
   name: string;
   gradeLabel: string;
   reportingWindow: string;
+}
+
+export interface TrackingComplianceProgram {
+  id: string;
+  schoolYearLabel: string;
+  startDate: string;
+  endDate: string;
+  jurisdictionCode: string;
+  jurisdictionLabel: string;
+  pathwayCode: string;
+  pathwayLabel: string;
+  gradeBand: ComplianceGradeBand;
+  status: string;
+  framingNote: string;
 }
 
 export interface TrackingOutcome {
@@ -58,6 +83,11 @@ export interface EvidenceRecord {
   linkedTo: string;
   capturedAt: string;
   note: string;
+  portfolioStatus: string;
+  portfolioArtifactKind: string | null;
+  portfolioSubjectKey?: string | null;
+  portfolioPeriodLabel?: string | null;
+  storagePath?: string | null;
 }
 
 export interface StandardCoverageRow {
@@ -116,13 +146,25 @@ export interface TrackingCurriculumContext {
 export interface TrackingDashboard {
   learner: TrackingLearnerSummary;
   curriculum: TrackingCurriculumContext | null;
+  program: TrackingComplianceProgram | null;
+  requirementProfile: RequirementProfile | null;
   summary: TrackingSummary;
+  attendance: {
+    summary: AttendanceProgressSummary;
+    records: AttendanceLedgerEntry[];
+  };
   outcomes: TrackingOutcome[];
   observations: ObservationEntry[];
   evaluations: EvaluationEntry[];
+  progressSnapshots: ProgressSnapshotSummary[];
+  evaluationRecords: EvaluationRecordSummary[];
   evidence: EvidenceRecord[];
+  portfolioSavedCount: number;
+  subjectCoverage: SubjectCoverageSummary[];
   standards: StandardCoverageRow[];
   goals: GoalProgressRow[];
+  complianceTasks: ComplianceTaskSummary[];
+  reportDrafts: ComplianceReportDraftSummary[];
   reviewQueue: ReviewQueueEntry[];
   recommendations: AdaptationRecommendation[];
 }

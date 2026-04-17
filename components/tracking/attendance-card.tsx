@@ -5,26 +5,33 @@ import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import type { HomeschoolAttendanceRecord, HomeschoolAttendanceStatus } from "@/lib/homeschool/attendance/types";
+import type { AttendanceLedgerEntry, AttendanceProgressSummary } from "@/lib/compliance/types";
 
-const attendanceOptions: Array<{ value: HomeschoolAttendanceStatus; label: string }> = [
+const attendanceOptions = [
   { value: "present", label: "Present" },
   { value: "partial", label: "Partial" },
-  { value: "absent", label: "Absent" },
-  { value: "field_trip", label: "Field trip" },
-  { value: "holiday", label: "Holiday" },
-];
+  { value: "excused", label: "Excused" },
+  { value: "non_instructional", label: "Non-instructional" },
+] as const;
+
+function inputClassName() {
+  return "rounded-md border border-input bg-background/90 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring";
+}
 
 export function AttendanceCard(props: {
   todayDate: string;
-  records: HomeschoolAttendanceRecord[];
+  complianceProgramId: string | null;
+  summary: AttendanceProgressSummary;
+  records: AttendanceLedgerEntry[];
 }) {
   const router = useRouter();
-  const [selectedStatus, setSelectedStatus] = React.useState<HomeschoolAttendanceStatus>("present");
+  const [selectedStatus, setSelectedStatus] = React.useState<(typeof attendanceOptions)[number]["value"]>("present");
+  const [minutes, setMinutes] = React.useState("240");
+  const [note, setNote] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  async function saveAttendance(status: HomeschoolAttendanceStatus) {
+  async function saveAttendance() {
     setSubmitting(true);
     setError(null);
 
@@ -33,7 +40,10 @@ export function AttendanceCard(props: {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         date: props.todayDate,
-        status,
+        complianceProgramId: props.complianceProgramId ?? undefined,
+        status: selectedStatus,
+        minutes: selectedStatus === "present" || selectedStatus === "partial" ? Number(minutes) || 0 : 0,
+        note: note.trim() || undefined,
       }),
     });
 
@@ -46,6 +56,7 @@ export function AttendanceCard(props: {
 
     router.refresh();
     setSubmitting(false);
+    setNote("");
   }
 
   return (
@@ -53,55 +64,113 @@ export function AttendanceCard(props: {
       <CardHeader>
         <CardTitle>Attendance</CardTitle>
         <CardDescription>
-          Mark today quickly, then keep the recent log visible for records and exports.
+          Keep one daily ledger for days, hours, and explicit non-instructional days.
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex flex-wrap gap-2">
-          {attendanceOptions.map((option) => {
-            const active = selectedStatus === option.value;
-            return (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => setSelectedStatus(option.value)}
-                className={`rounded-lg border px-3 py-1.5 text-sm ${
-                  active
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-border bg-background text-muted-foreground hover:border-border/80 hover:text-foreground"
-                }`}
-              >
-                {option.label}
-              </button>
-            );
-          })}
+      <CardContent className="space-y-5">
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="rounded-xl border border-border/60 bg-background/75 p-4">
+            <p className="text-xs text-muted-foreground">Progress</p>
+            <p className="mt-2 text-lg font-semibold text-foreground">{props.summary.progressLabel}</p>
+          </div>
+          <div className="rounded-xl border border-border/60 bg-background/75 p-4">
+            <p className="text-xs text-muted-foreground">Readiness</p>
+            <p className="mt-2 text-lg font-semibold text-foreground">{props.summary.readinessLabel}</p>
+          </div>
+          <div className="rounded-xl border border-border/60 bg-background/75 p-4">
+            <p className="text-xs text-muted-foreground">Non-instructional days</p>
+            <p className="mt-2 text-lg font-semibold text-foreground">{props.summary.nonInstructionalDays}</p>
+          </div>
         </div>
 
-        <Button onClick={() => saveAttendance(selectedStatus)} disabled={submitting}>
-          {submitting ? "Saving attendance..." : `Mark ${selectedStatus.replace("_", " ")}`}
-        </Button>
+        <div className="grid gap-4 rounded-xl border border-border/60 bg-background/75 p-4 lg:grid-cols-[minmax(0,0.75fr)_minmax(0,1fr)]">
+          <div className="space-y-3">
+            <div className="flex flex-wrap gap-2">
+              {attendanceOptions.map((option) => {
+                const active = selectedStatus === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setSelectedStatus(option.value)}
+                    className={`rounded-lg border px-3 py-1.5 text-sm ${
+                      active
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border bg-background text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-foreground" htmlFor="attendance-minutes">
+                  Instructional minutes
+                </label>
+                <input
+                  id="attendance-minutes"
+                  value={minutes}
+                  onChange={(event) => setMinutes(event.target.value)}
+                  disabled={selectedStatus === "non_instructional" || selectedStatus === "excused"}
+                  className={inputClassName()}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-foreground" htmlFor="attendance-note">
+                  Note
+                </label>
+                <input
+                  id="attendance-note"
+                  value={note}
+                  onChange={(event) => setNote(event.target.value)}
+                  placeholder="Optional context"
+                  className={inputClassName()}
+                />
+              </div>
+            </div>
+
+            <Button onClick={saveAttendance} disabled={submitting || !props.complianceProgramId}>
+              {submitting ? "Saving attendance..." : "Save today"}
+            </Button>
+            {!props.complianceProgramId ? (
+              <p className="text-sm text-muted-foreground">
+                Save the tracking setup first so attendance is tied to the right learner-year profile.
+              </p>
+            ) : null}
+          </div>
+
+          <div className="space-y-2">
+            {props.records.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No attendance records yet.</p>
+            ) : (
+              props.records.slice(0, 21).map((record) => (
+                <div
+                  key={record.id}
+                  className="rounded-xl border border-border/60 bg-background px-3 py-3 text-sm"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-medium text-foreground">{record.date}</span>
+                    <span className="capitalize text-muted-foreground">
+                      {record.status.replaceAll("_", " ")}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {record.instructionalMinutes} minutes · {record.source.replaceAll("_", " ")}
+                    {record.isSuggested ? " suggestion" : ""}
+                  </p>
+                  {record.note ? <p className="mt-2 text-sm text-muted-foreground">{record.note}</p> : null}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
 
         {error ? (
           <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>
         ) : null}
-
-        <div className="space-y-2">
-          {props.records.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No attendance records yet.</p>
-          ) : (
-            props.records.map((record) => (
-              <div
-                key={record.id}
-                className="flex items-center justify-between rounded-lg border border-border/70 bg-background/70 px-3 py-2 text-sm"
-              >
-                <span>{record.date}</span>
-                <span className="capitalize text-muted-foreground">
-                  {record.status.replace("_", " ")}
-                </span>
-              </div>
-            ))
-          )}
-        </div>
       </CardContent>
     </Card>
   );

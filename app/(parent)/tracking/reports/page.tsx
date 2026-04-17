@@ -1,10 +1,5 @@
 import { ReportsView, TrackingShell } from "@/components/tracking";
 import { requireAppSession } from "@/lib/app-session/server";
-import {
-  buildHomeschoolMonthlySummary,
-  buildHomeschoolTranscriptSkeleton,
-  buildHomeschoolWeeklySummary,
-} from "@/lib/homeschool/reporting/service";
 import { getTrackingDashboard } from "@/lib/tracking/service";
 
 export const metadata = {
@@ -18,37 +13,14 @@ export default async function TrackingReportsPage() {
     learnerId: session.activeLearner.id,
     learnerName: session.activeLearner.displayName,
   });
-  const [weeklySummary, monthlySummary, transcript] = await Promise.all([
-    buildHomeschoolWeeklySummary({
-      organizationId: session.organization.id,
-      learnerId: session.activeLearner.id,
-      dashboard,
-    }),
-    buildHomeschoolMonthlySummary({
-      organizationId: session.organization.id,
-      learnerId: session.activeLearner.id,
-      dashboard,
-    }),
-    buildHomeschoolTranscriptSkeleton({
-      organizationId: session.organization.id,
-      learnerId: session.activeLearner.id,
-      learnerName: session.activeLearner.displayName,
-      dashboard,
-    }),
-  ]);
 
   return (
     <TrackingShell
       currentView="reports"
-      title="Reports that surface coverage, evidence, and next moves."
-      description="Use the reporting view to connect objective coverage, evidence, and progress in one export-friendly record set."
+      title="Editable report drafts and export shells"
+      description="Draft the quarterly, annual, evaluation, and portfolio outputs directly from the tracking record, then export them when they are ready."
     >
-      <ReportsView
-        dashboard={dashboard}
-        weeklySummary={weeklySummary}
-        monthlySummary={monthlySummary}
-        transcript={transcript}
-      />
+      <ReportsView dashboard={dashboard} />
     </TrackingShell>
   );
 }

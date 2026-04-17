@@ -1,6 +1,6 @@
 import { TrackingOverview, TrackingShell } from "@/components/tracking";
 import { requireAppSession } from "@/lib/app-session/server";
-import { getRecentHomeschoolAttendance } from "@/lib/homeschool/attendance/service";
+import { listRequirementProfiles } from "@/lib/compliance/profiles";
 import { getTrackingDashboard } from "@/lib/tracking/service";
 
 export const metadata = {
@@ -15,20 +15,17 @@ export default async function TrackingPage() {
     learnerId: session.activeLearner.id,
     learnerName: session.activeLearner.displayName,
   });
-  const attendanceRecords = await getRecentHomeschoolAttendance({
-    organizationId: session.organization.id,
-    learnerId: session.activeLearner.id,
-  });
+  const profileOptions = listRequirementProfiles();
 
   return (
     <TrackingShell
       currentView="overview"
-      title="Progress and records"
-      description="See what was planned, what happened, and what was recorded."
+      title="Attendance, progress, portfolio, and deadlines"
+      description="Keep one operational record, then shape it into the summaries and export packs your learner-year profile needs."
     >
       <TrackingOverview
         dashboard={dashboard}
-        attendanceRecords={attendanceRecords}
+        profileOptions={profileOptions}
         todayDate={new Date().toISOString().slice(0, 10)}
       />
     </TrackingShell>
