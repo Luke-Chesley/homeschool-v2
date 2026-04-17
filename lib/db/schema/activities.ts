@@ -162,28 +162,45 @@ export const activityStandards = pgTable(
   }),
 );
 
-export const activityAttempts = pgTable("activity_attempts", {
-  id: text("id").primaryKey().$defaultFn(() => prefixedId("attempt")),
-  activityId: text("activity_id")
-    .notNull()
-    .references(() => interactiveActivities.id, { onDelete: "cascade" }),
-  learnerId: text("learner_id")
-    .notNull()
-    .references(() => learners.id, { onDelete: "cascade" }),
-  lessonSessionId: text("lesson_session_id").references(() => lessonSessions.id, {
-    onDelete: "set null",
+export const activityAttempts = pgTable(
+  "activity_attempts",
+  {
+    id: text("id").primaryKey().$defaultFn(() => prefixedId("attempt")),
+    activityId: text("activity_id")
+      .notNull()
+      .references(() => interactiveActivities.id, { onDelete: "cascade" }),
+    learnerId: text("learner_id")
+      .notNull()
+      .references(() => learners.id, { onDelete: "cascade" }),
+    lessonSessionId: text("lesson_session_id").references(() => lessonSessions.id, {
+      onDelete: "set null",
+    }),
+    status: activityAttemptStatusEnum("status").notNull().default("in_progress"),
+    attemptNumber: integer("attempt_number").notNull().default(1),
+    scorePercent: integer("score_percent"),
+    reviewState: text("review_state").notNull().default("not_required"),
+    responses: metadataColumn("responses"),
+    startedAt: text("started_at"),
+    submittedAt: text("submitted_at"),
+    completedAt: text("completed_at"),
+    metadata: metadataColumn(),
+    ...timestamps(),
+  },
+  (table) => ({
+    activityAttemptsActivityLearnerAttemptIdx: index(
+      "activity_attempts_activity_learner_attempt_idx",
+    ).on(table.activityId, table.learnerId, table.attemptNumber, table.createdAt),
+    activityAttemptsLearnerSessionStatusAttemptIdx: index(
+      "activity_attempts_learner_session_status_attempt_idx",
+    ).on(
+      table.learnerId,
+      table.lessonSessionId,
+      table.status,
+      table.attemptNumber,
+      table.createdAt,
+    ),
   }),
-  status: activityAttemptStatusEnum("status").notNull().default("in_progress"),
-  attemptNumber: integer("attempt_number").notNull().default(1),
-  scorePercent: integer("score_percent"),
-  reviewState: text("review_state").notNull().default("not_required"),
-  responses: metadataColumn("responses"),
-  startedAt: text("started_at"),
-  submittedAt: text("submitted_at"),
-  completedAt: text("completed_at"),
-  metadata: metadataColumn(),
-  ...timestamps(),
-});
+);
 
 // ---------------------------------------------------------------------------
 // Activity evidence — structured evidence records captured during activities

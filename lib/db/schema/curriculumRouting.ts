@@ -1,4 +1,4 @@
-import { type AnyPgColumn, boolean, date, integer, pgEnum, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { type AnyPgColumn, boolean, date, index, integer, pgEnum, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 
 import { activityAttempts } from "@/lib/db/schema/activities";
 import { curriculumSources } from "@/lib/db/schema/curriculum";
@@ -278,6 +278,11 @@ export const weeklyRouteItems = pgTable(
       table.weeklyRouteId,
       table.skillNodeId,
       table.scheduledDate,
+    ),
+    weeklyRouteItemPositionIdx: index("weekly_route_items_route_position_idx").on(
+      table.weeklyRouteId,
+      table.currentPosition,
+      table.createdAt,
     ),
   }),
 );

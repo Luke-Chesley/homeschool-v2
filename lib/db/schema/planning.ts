@@ -1,4 +1,4 @@
-import { boolean, date, integer, pgEnum, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { boolean, date, index, integer, pgEnum, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 
 import { curriculumItems } from "@/lib/db/schema/curriculum";
 import { learners } from "@/lib/db/schema/learners";
@@ -60,23 +60,34 @@ export const sessionReviewStateEnum = pgEnum("session_review_state", [
   "insufficient_evidence",
 ]);
 
-export const plans = pgTable("plans", {
-  id: text("id").primaryKey().$defaultFn(() => prefixedId("plan")),
-  organizationId: text("organization_id")
-    .notNull()
-    .references(() => organizations.id, { onDelete: "cascade" }),
-  learnerId: text("learner_id")
-    .notNull()
-    .references(() => learners.id, { onDelete: "cascade" }),
-  title: text("title").notNull(),
-  status: planStatusEnum("status").notNull().default("draft"),
-  startDate: date("start_date"),
-  endDate: date("end_date"),
-  versionLabel: text("version_label"),
-  notes: text("notes"),
-  metadata: metadataColumn(),
-  ...timestamps(),
-});
+export const plans = pgTable(
+  "plans",
+  {
+    id: text("id").primaryKey().$defaultFn(() => prefixedId("plan")),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    learnerId: text("learner_id")
+      .notNull()
+      .references(() => learners.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    status: planStatusEnum("status").notNull().default("draft"),
+    startDate: date("start_date"),
+    endDate: date("end_date"),
+    versionLabel: text("version_label"),
+    notes: text("notes"),
+    metadata: metadataColumn(),
+    ...timestamps(),
+  },
+  (table) => ({
+    planOrganizationLearnerUpdatedIdx: index("plans_org_learner_updated_idx").on(
+      table.organizationId,
+      table.learnerId,
+      table.updatedAt,
+      table.createdAt,
+    ),
+  }),
+);
 
 export const planWeeks = pgTable(
   "plan_weeks",
@@ -116,27 +127,38 @@ export const planDays = pgTable(
   }),
 );
 
-export const planItems = pgTable("plan_items", {
-  id: text("id").primaryKey().$defaultFn(() => prefixedId("planitem")),
-  planId: text("plan_id")
-    .notNull()
-    .references(() => plans.id, { onDelete: "cascade" }),
-  planDayId: text("plan_day_id")
-    .notNull()
-    .references(() => planDays.id, { onDelete: "cascade" }),
-  curriculumItemId: text("curriculum_item_id").references(() => curriculumItems.id, {
-    onDelete: "set null",
+export const planItems = pgTable(
+  "plan_items",
+  {
+    id: text("id").primaryKey().$defaultFn(() => prefixedId("planitem")),
+    planId: text("plan_id")
+      .notNull()
+      .references(() => plans.id, { onDelete: "cascade" }),
+    planDayId: text("plan_day_id")
+      .notNull()
+      .references(() => planDays.id, { onDelete: "cascade" }),
+    curriculumItemId: text("curriculum_item_id").references(() => curriculumItems.id, {
+      onDelete: "set null",
+    }),
+    title: text("title").notNull(),
+    description: text("description"),
+    subject: text("subject"),
+    status: planItemStatusEnum("status").notNull().default("planned"),
+    scheduledDate: date("scheduled_date"),
+    estimatedMinutes: integer("estimated_minutes"),
+    ordering: orderingColumn(),
+    metadata: metadataColumn(),
+    ...timestamps(),
+  },
+  (table) => ({
+    planItemsPlanIdx: index("plan_items_plan_idx").on(table.planId),
+    planItemsPlanDayOrderIdx: index("plan_items_plan_day_order_idx").on(
+      table.planDayId,
+      table.ordering,
+      table.createdAt,
+    ),
   }),
-  title: text("title").notNull(),
-  description: text("description"),
-  subject: text("subject"),
-  status: planItemStatusEnum("status").notNull().default("planned"),
-  scheduledDate: date("scheduled_date"),
-  estimatedMinutes: integer("estimated_minutes"),
-  ordering: orderingColumn(),
-  metadata: metadataColumn(),
-  ...timestamps(),
-});
+);
 
 export const planItemStandards = pgTable(
   "plan_item_standards",

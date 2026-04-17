@@ -39,11 +39,7 @@ function formatLongDate(date: string) {
 
 export default async function TodayPage({ searchParams }: TodayPageProps) {
   const session = await requireAppSession();
-  const [trackerBaseline, resolvedSearchParams, liveSource] = await Promise.all([
-    getOrganizationTodayTrackerBaseline(session.organization.id),
-    searchParams,
-    getLiveCurriculumSource(session.organization.id),
-  ]);
+  const resolvedSearchParams = await searchParams;
   const date =
     typeof resolvedSearchParams.date === "string" ? resolvedSearchParams.date : undefined;
   const action =
@@ -56,6 +52,71 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
     typeof resolvedSearchParams.alternateWeeklyRouteItemId === "string"
       ? resolvedSearchParams.alternateWeeklyRouteItemId
       : undefined;
+  const todayDate = date ?? new Date().toISOString().slice(0, 10);
+
+  if (action && planItemId) {
+    if (action === "complete") {
+      await completeTodayPlanItem({
+        organizationId: session.organization.id,
+        learnerId: session.activeLearner.id,
+        weeklyRouteItemId: planItemId,
+        date: todayDate,
+      });
+    } else if (action === "partial") {
+      await partiallyCompleteTodayPlanItem({
+        organizationId: session.organization.id,
+        learnerId: session.activeLearner.id,
+        weeklyRouteItemId: planItemId,
+        date: todayDate,
+      });
+    } else if (action === "skip_today") {
+      await skipTodayPlanItem({
+        organizationId: session.organization.id,
+        learnerId: session.activeLearner.id,
+        weeklyRouteItemId: planItemId,
+        date: todayDate,
+      });
+    } else if (action === "push_to_tomorrow") {
+      await pushTodayPlanItemToTomorrow(
+        session.activeLearner.id,
+        planItemId,
+        todayDate,
+      );
+    } else if (action === "repeat_tomorrow") {
+      await repeatTodayPlanItemTomorrow(
+        session.activeLearner.id,
+        planItemId,
+        todayDate,
+      );
+    } else if (action === "remove_today") {
+      await removeTodayPlanItem(
+        session.activeLearner.id,
+        planItemId,
+        todayDate,
+      );
+    } else if (action === "swap_with_alternate" && alternateWeeklyRouteItemId) {
+      await swapTodayPlanItemWithAlternate(
+        session.activeLearner.id,
+        planItemId,
+        alternateWeeklyRouteItemId,
+        todayDate,
+      );
+    }
+
+    const redirectQuery = date ? `?date=${encodeURIComponent(date)}` : "";
+    redirect(`/today${redirectQuery}`);
+  }
+
+  const [trackerBaseline, liveSource, workspaceResult] = await Promise.all([
+    getOrganizationTodayTrackerBaseline(session.organization.id),
+    getLiveCurriculumSource(session.organization.id),
+    getTodayWorkspace({
+      organizationId: session.organization.id,
+      learnerId: session.activeLearner.id,
+      learnerName: session.activeLearner.displayName,
+      date: todayDate,
+    }),
+  ]);
 
   if (!liveSource) {
     return (
@@ -76,67 +137,6 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
       </PlanningShell>
     );
   }
-
-  if (action && planItemId) {
-    if (action === "complete") {
-      await completeTodayPlanItem({
-        organizationId: session.organization.id,
-        learnerId: session.activeLearner.id,
-        weeklyRouteItemId: planItemId,
-        date: date ?? new Date().toISOString().slice(0, 10),
-      });
-    } else if (action === "partial") {
-      await partiallyCompleteTodayPlanItem({
-        organizationId: session.organization.id,
-        learnerId: session.activeLearner.id,
-        weeklyRouteItemId: planItemId,
-        date: date ?? new Date().toISOString().slice(0, 10),
-      });
-    } else if (action === "skip_today") {
-      await skipTodayPlanItem({
-        organizationId: session.organization.id,
-        learnerId: session.activeLearner.id,
-        weeklyRouteItemId: planItemId,
-        date: date ?? new Date().toISOString().slice(0, 10),
-      });
-    } else if (action === "push_to_tomorrow") {
-      await pushTodayPlanItemToTomorrow(
-        session.activeLearner.id,
-        planItemId,
-        date ?? new Date().toISOString().slice(0, 10),
-      );
-    } else if (action === "repeat_tomorrow") {
-      await repeatTodayPlanItemTomorrow(
-        session.activeLearner.id,
-        planItemId,
-        date ?? new Date().toISOString().slice(0, 10),
-      );
-    } else if (action === "remove_today") {
-      await removeTodayPlanItem(
-        session.activeLearner.id,
-        planItemId,
-        date ?? new Date().toISOString().slice(0, 10),
-      );
-    } else if (action === "swap_with_alternate" && alternateWeeklyRouteItemId) {
-      await swapTodayPlanItemWithAlternate(
-        session.activeLearner.id,
-        planItemId,
-        alternateWeeklyRouteItemId,
-        date ?? new Date().toISOString().slice(0, 10),
-      );
-    }
-
-    const redirectQuery = date ? `?date=${encodeURIComponent(date)}` : "";
-    redirect(`/today${redirectQuery}`);
-  }
-
-  const todayDate = date ?? new Date().toISOString().slice(0, 10);
-  const workspaceResult = await getTodayWorkspace({
-    organizationId: session.organization.id,
-    learnerId: session.activeLearner.id,
-    learnerName: session.activeLearner.displayName,
-    date: todayDate,
-  });
 
   if (!workspaceResult) {
     notFound();
