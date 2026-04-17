@@ -94,9 +94,12 @@ export function GlobalPageTabs() {
     return null;
   }
 
-  const hasMultipleLearners = session?.learners && session.learners.length > 1;
+  const learners = session?.learners ?? [];
+  const activeLearnerId = session?.activeLearner?.id ?? null;
+  const activeLearnerName = session?.activeLearner?.displayName ?? null;
+  const hasMultipleLearners = learners.length > 1;
   const hasWorkspaceLabel = !!workspaceLabel;
-  const hasActiveLearner = !!session?.activeLearner?.displayName;
+  const hasActiveLearner = !!activeLearnerName;
   const switchLabel = hasMultipleLearners ? "Switch learners" : "Switch learner";
 
   return (
@@ -129,14 +132,14 @@ export function GlobalPageTabs() {
                 {hasActiveLearner && !hasMultipleLearners ? (
                   <>
                     <span className="text-muted-foreground/70">/</span>
-                    <span className="truncate text-muted-foreground">{session.activeLearner.displayName}</span>
+                    <span className="truncate text-muted-foreground">{activeLearnerName}</span>
                   </>
                 ) : null}
               </div>
               {hasMultipleLearners ? (
                 <ActiveLearnerSwitcher
-                  learners={session.learners}
-                  activeLearnerId={session.activeLearner?.id ?? null}
+                  learners={learners}
+                  activeLearnerId={activeLearnerId}
                   label={switchLabel}
                   className="min-w-[12rem]"
                   selectClassName="h-9"
