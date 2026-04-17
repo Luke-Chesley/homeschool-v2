@@ -9,7 +9,8 @@ import { trackProductEvent } from "@/lib/platform/observability";
 import type { DailyWorkspaceActivityBuildTrigger } from "@/lib/planning/types";
 import {
   buildTodayLessonDraftFingerprint,
-  getTodayWorkspace,
+  getTodayWorkspaceView,
+  materializeTodayWorkspace,
   markTodayActivityBuildFailed,
   markTodayActivityBuildGenerating,
   markTodayActivityBuildReady,
@@ -23,7 +24,14 @@ export async function queueTodayActivityAfterLesson(params: {
   date: string;
   trigger: DailyWorkspaceActivityBuildTrigger;
 }) {
-  const workspaceResult = await getTodayWorkspace({
+  await materializeTodayWorkspace({
+    organizationId: params.organizationId,
+    learnerId: params.learnerId,
+    learnerName: params.learnerName,
+    date: params.date,
+  });
+
+  const workspaceResult = await getTodayWorkspaceView({
     organizationId: params.organizationId,
     learnerId: params.learnerId,
     learnerName: params.learnerName,
@@ -79,7 +87,14 @@ export async function generateTodayActivity(params: {
   const platformSettings = await repos.organizations.findPlatformSettings(params.organizationId);
   const workflowMode = platformSettings?.workflowMode ?? "family_guided";
 
-  const workspaceResult = await getTodayWorkspace({
+  await materializeTodayWorkspace({
+    organizationId: params.organizationId,
+    learnerId: params.learnerId,
+    learnerName: params.learnerName,
+    date: params.date,
+  });
+
+  const workspaceResult = await getTodayWorkspaceView({
     organizationId: params.organizationId,
     learnerId: params.learnerId,
     learnerName: params.learnerName,

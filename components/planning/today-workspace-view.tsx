@@ -3,7 +3,6 @@
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useEffect, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { AlertTriangle, CheckCircle2, Loader2, Sparkles } from "lucide-react";
 
 import { LessonEvaluationPopover } from "@/components/planning/lesson-evaluation-popover";
@@ -25,11 +24,16 @@ import type {
   DailyWorkspaceLessonDraft,
 } from "@/lib/planning/types";
 import { acquireAutoBuildLock, releaseAutoBuildLock } from "@/lib/planning/client-auto-build";
+import {
+  applyTodayActivityPatch,
+  applyTodayLessonPatch,
+  applyTodayPlanItemActionPatch,
+  applyTodayPlanItemEvaluationPatch,
+} from "@/lib/planning/today-workspace-patches";
 import { cn } from "@/lib/utils";
 import {
   generateLessonDraftActivityAction,
   saveTodayPlanItemEvaluationAction,
-  type LessonDraftActivityStatus,
   type TodayPlanItemAction,
   updateTodayPlanItemAction,
 } from "@/app/(parent)/today/actions";
@@ -59,8 +63,9 @@ interface TodayWorkspaceViewProps {
 
 interface TodayRouteItemsSectionProps {
   workspace: DailyWorkspace;
-  sourceId?: string;
   repeatTomorrowAllowed?: boolean;
+  onActionSaved: (result: Awaited<ReturnType<typeof updateTodayPlanItemAction>>) => void;
+  onEvaluationSaved: (result: Awaited<ReturnType<typeof saveTodayPlanItemEvaluationAction>>) => void;
 }
 
 function formatMinutes(minutes: number) {
@@ -138,32 +143,33 @@ function initialDraftState(lessonDraft: DailyWorkspaceLessonDraft | null): Draft
 
 function LessonDraftActivityControl({
   date,
+  sourceId,
+  routeFingerprint,
   activityState,
   sessionId,
   buildState,
+  onActivityPatch,
 }: {
   date: string;
+  sourceId?: string;
+  routeFingerprint: string;
   activityState: DailyWorkspaceActivityState | null;
   sessionId?: string;
   buildState?: DailyWorkspace["activityBuild"];
+  onActivityPatch: (patch: {
+    activityBuild?: DailyWorkspace["activityBuild"] | null;
+    activityState?: DailyWorkspaceActivityState | null;
+  }) => void;
 }) {
-  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [localStatus, setLocalStatus] = useState<LessonDraftActivityStatus | null>(
-    activityState?.status ?? null,
-  );
-  const [localSessionId, setLocalSessionId] = useState<string | undefined>(
-    activityState?.sessionId ?? sessionId,
-  );
   const [pendingTrigger, setPendingTrigger] = useState<DailyWorkspaceActivityBuildTrigger | null>(
     null,
   );
 
   useEffect(() => {
-    setLocalStatus(activityState?.status ?? null);
-    setLocalSessionId(activityState?.sessionId ?? sessionId);
-  }, [activityState?.sessionId, activityState?.status, sessionId]);
+    setError(null);
+  }, [activityState?.activityId, activityState?.status, buildState?.status, buildState?.updatedAt]);
 
   const autoBuildKey =
     buildState?.status === "queued"
@@ -177,20 +183,27 @@ function LessonDraftActivityControl({
     setError(null);
     setPendingTrigger(trigger);
     startTransition(async () => {
-      const result = await generateLessonDraftActivityAction({ date, trigger });
+      const result = await generateLessonDraftActivityAction({
+        date,
+        sourceId: sourceId ?? "",
+        routeFingerprint,
+        lessonSessionId: activityState?.sessionId ?? sessionId ?? null,
+        trigger,
+      });
       setPendingTrigger(null);
 
-      if (result.ok) {
-        setLocalStatus("ready");
-        setLocalSessionId(activityState?.sessionId ?? sessionId);
-        router.refresh();
-      } else {
+      if (!result.ok) {
         if (autoBuildLockKey) {
           releaseAutoBuildLock("today-activity-auto", autoBuildLockKey);
         }
         setError(result.error ?? "Generation failed");
-        router.refresh();
+        return;
       }
+
+      onActivityPatch({
+        activityBuild: result.build ?? buildState ?? null,
+        activityState: result.activityState ?? activityState,
+      });
     });
   }
 
@@ -207,17 +220,73 @@ function LessonDraftActivityControl({
   }, [autoBuildKey]);
 
   useEffect(() => {
-    if (buildState?.status === "generating") {
-      const timeout = window.setTimeout(() => {
-        router.refresh();
-      }, 2000);
-
-      return () => window.clearTimeout(timeout);
+    if (!sourceId) {
+      return;
     }
 
-    return undefined;
-  }, [buildState?.status, buildState?.updatedAt, router]);
+    if (buildState?.status !== "queued" && buildState?.status !== "generating") {
+      return;
+    }
 
+    let cancelled = false;
+    let timeoutId: number | null = null;
+    const activeSourceId = sourceId;
+
+    async function pollStatus() {
+      try {
+        const response = await fetch(
+          `/api/today/activity-build-status?date=${encodeURIComponent(date)}&sourceId=${encodeURIComponent(
+            activeSourceId,
+          )}&routeFingerprint=${encodeURIComponent(routeFingerprint)}${
+            sessionId ? `&lessonSessionId=${encodeURIComponent(sessionId)}` : ""
+          }`,
+          { cache: "no-store" },
+        );
+        const payload = (await response.json()) as {
+          ok: boolean;
+          build?: DailyWorkspace["activityBuild"] | null;
+          activityState?: DailyWorkspaceActivityState;
+          error?: string;
+        };
+
+        if (cancelled || !payload.ok) {
+          return;
+        }
+
+        onActivityPatch({
+          activityBuild: payload.build ?? null,
+          activityState: payload.activityState ?? null,
+        });
+
+        if (
+          payload.build?.status !== "queued" &&
+          payload.build?.status !== "generating"
+        ) {
+          return;
+        }
+      } catch (pollError) {
+        if (!cancelled) {
+          console.error("[LessonDraftActivityControl:pollStatus]", pollError);
+        }
+      }
+
+      if (!cancelled) {
+        timeoutId = window.setTimeout(pollStatus, 2000);
+      }
+    }
+
+    void pollStatus();
+
+    return () => {
+      cancelled = true;
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, [buildState?.status, buildState?.updatedAt, date, routeFingerprint, sessionId, sourceId, onActivityPatch]);
+
+  const localStatus = activityState?.status ?? null;
+  const localSessionId = activityState?.sessionId ?? sessionId;
   const isPendingAutoBuild = pendingTrigger === "after_lesson_auto";
   const isBuildingActivity =
     buildState?.status === "queued" || buildState?.status === "generating" || isPendingAutoBuild;
@@ -324,9 +393,18 @@ function LessonDraftActivityControl({
 function TodayLearnerActivityBridge({
   workspace,
   draftState,
+  sourceId,
+  routeFingerprint,
+  onActivityPatch,
 }: {
   workspace: DailyWorkspace;
   draftState: DraftState;
+  sourceId?: string;
+  routeFingerprint: string;
+  onActivityPatch: (patch: {
+    activityBuild?: DailyWorkspace["activityBuild"] | null;
+    activityState?: DailyWorkspaceActivityState | null;
+  }) => void;
 }) {
   const leadSessionId =
     workspace.leadItem.sessionRecordId ?? workspace.leadItem.workflow?.lessonSessionId ?? undefined;
@@ -389,9 +467,12 @@ function TodayLearnerActivityBridge({
           {draftState?.kind === "structured" ? (
             <LessonDraftActivityControl
               date={workspace.date}
+              sourceId={sourceId}
+              routeFingerprint={routeFingerprint}
               activityState={workspace.activityState}
               sessionId={workspace.activityState?.sessionId ?? leadSessionId}
               buildState={workspace.activityBuild}
+              onActivityPatch={onActivityPatch}
             />
           ) : null}
         </div>
@@ -427,14 +508,17 @@ function TodayPlanItemActionButtons({
   alternateWeeklyRouteItemId,
   repeatTomorrowAllowed,
   compact = false,
+  onActionSaved,
+  onEvaluationSaved,
 }: {
   item: DailyWorkspace["items"][number];
   date: string;
   alternateWeeklyRouteItemId?: string;
   repeatTomorrowAllowed?: boolean;
   compact?: boolean;
+  onActionSaved: (result: Awaited<ReturnType<typeof updateTodayPlanItemAction>>) => void;
+  onEvaluationSaved: (result: Awaited<ReturnType<typeof saveTodayPlanItemEvaluationAction>>) => void;
 }) {
-  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [pendingAction, setPendingAction] = useState<TodayPlanItemAction | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -460,6 +544,12 @@ function TodayPlanItemActionButtons({
         planItemId: item.id,
         action,
         alternateWeeklyRouteItemId,
+        planParentId: item.planParentId,
+        planDayRecordId: item.planDayRecordId,
+        planRecordId: item.planRecordId,
+        sessionRecordId: item.sessionRecordId,
+        estimatedMinutes: item.estimatedMinutes,
+        title: item.title,
       });
 
       if (!result.ok) {
@@ -470,7 +560,7 @@ function TodayPlanItemActionButtons({
 
       setSuccessMessage(result.message ?? "Saved.");
       setPendingAction(null);
-      router.refresh();
+      onActionSaved(result);
     });
   }
 
@@ -643,7 +733,11 @@ function TodayPlanItemActionButtons({
         </>
       ) : null}
 
-      <TodayPlanItemEvaluationControl item={item} date={date} />
+      <TodayPlanItemEvaluationControl
+        item={item}
+        date={date}
+        onEvaluationSaved={onEvaluationSaved}
+      />
 
       {confirmationText ? (
         <div className="flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-foreground">
@@ -671,24 +765,44 @@ type SavedEvaluation = {
 function TodayPlanItemEvaluationControl({
   item,
   date,
+  onEvaluationSaved,
 }: {
   item: DailyWorkspace["items"][number];
   date: string;
+  onEvaluationSaved: (result: Awaited<ReturnType<typeof saveTodayPlanItemEvaluationAction>>) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [selectedLevel, setSelectedLevel] = useState<LessonEvaluationLevel | null>(null);
   const [note, setNote] = useState("");
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [savedEvaluation, setSavedEvaluation] = useState<SavedEvaluation | null>(null);
+  const [savedEvaluation, setSavedEvaluation] = useState<SavedEvaluation | null>(
+    item.latestEvaluation
+      ? {
+          level: item.latestEvaluation.level,
+          label: item.latestEvaluation.label,
+          note: item.latestEvaluation.note ?? null,
+          createdAt: item.latestEvaluation.createdAt,
+        }
+      : null,
+  );
 
   useEffect(() => {
     setOpen(false);
     setSelectedLevel(null);
     setNote("");
     setError(null);
-    setSavedEvaluation(null);
-  }, [item.id]);
+    setSavedEvaluation(
+      item.latestEvaluation
+        ? {
+            level: item.latestEvaluation.level,
+            label: item.latestEvaluation.label,
+            note: item.latestEvaluation.note ?? null,
+            createdAt: item.latestEvaluation.createdAt,
+          }
+        : null,
+    );
+  }, [item.id, item.latestEvaluation]);
 
   function handleOpenChange(nextOpen: boolean) {
     setOpen(nextOpen);
@@ -703,11 +817,19 @@ function TodayPlanItemEvaluationControl({
       return;
     }
 
+    if (!item.planRecordId || !item.sessionRecordId) {
+      setError("This lesson card is still syncing. Try again in a moment.");
+      return;
+    }
+
     setError(null);
     startTransition(async () => {
       const result = await saveTodayPlanItemEvaluationAction({
         date,
         planItemId: item.id,
+        weeklyRouteItemId: item.id,
+        planRecordId: item.planRecordId ?? "",
+        sessionRecordId: item.sessionRecordId ?? "",
         level: selectedLevel,
         note,
       });
@@ -718,6 +840,7 @@ function TodayPlanItemEvaluationControl({
       }
 
       setSavedEvaluation(result.evaluation);
+      onEvaluationSaved(result);
       setOpen(false);
       setSelectedLevel(null);
       setNote("");
@@ -762,9 +885,11 @@ function TodayPlanItemEvaluationControl({
 function LessonDraftOutcomeControl({
   item,
   date,
+  onEvaluationSaved,
 }: {
   item: DailyWorkspace["items"][number];
   date: string;
+  onEvaluationSaved: (result: Awaited<ReturnType<typeof saveTodayPlanItemEvaluationAction>>) => void;
 }) {
   type SavedLessonOutcome = {
     level: LessonEvaluationLevel;
@@ -787,6 +912,13 @@ function LessonDraftOutcomeControl({
   }, [item.id, item.latestEvaluation]);
 
   function saveOutcome(level: LessonEvaluationLevel) {
+    if (!item.planRecordId || !item.sessionRecordId) {
+      setError("This lesson card is still syncing. Try again in a moment.");
+      return;
+    }
+
+    const planRecordId = item.planRecordId;
+    const sessionRecordId = item.sessionRecordId;
     setError(null);
     setPendingLevel(level);
 
@@ -794,6 +926,9 @@ function LessonDraftOutcomeControl({
       const result = await saveTodayPlanItemEvaluationAction({
         date,
         planItemId: item.id,
+        weeklyRouteItemId: item.id,
+        planRecordId,
+        sessionRecordId,
         level,
       });
 
@@ -804,6 +939,7 @@ function LessonDraftOutcomeControl({
       }
 
       setSavedEvaluation(result.evaluation);
+      onEvaluationSaved(result);
       setPendingLevel(null);
       setOpen(false);
     });
@@ -918,26 +1054,63 @@ function LessonDraftOutcomeControl({
 // ---------------------------------------------------------------------------
 
 export function TodayWorkspaceView({ workspace, sourceId }: TodayWorkspaceViewProps) {
-  const [draftState, setDraftState] = useState<DraftState>(
-    () => initialDraftState(workspace.lessonDraft),
-  );
-  const repeatTomorrowAllowed = canRepeatToTomorrow(workspace.date);
+  const [workspaceState, setWorkspaceState] = useState(workspace);
+  const repeatTomorrowAllowed = canRepeatToTomorrow(workspaceState.date);
+  const routeFingerprint = workspaceState.items.map((item) => item.id).join("::");
+  const draftState = initialDraftState(workspaceState.lessonDraft);
 
   useEffect(() => {
-    setDraftState(initialDraftState(workspace.lessonDraft));
-  }, [workspace.date, workspace.leadItem.id, workspace.lessonDraft, sourceId]);
+    setWorkspaceState(workspace);
+  }, [workspace]);
 
-  function handleDraftChange(incoming: StructuredLessonDraft | string | null) {
-    if (incoming === null) {
-      setDraftState(null);
-    } else if (typeof incoming === "string") {
-      setDraftState({ kind: "markdown", markdown: incoming });
-    } else {
-      setDraftState({ kind: "structured", draft: incoming });
-    }
+  function handleItemActionSaved(result: Awaited<ReturnType<typeof updateTodayPlanItemAction>>) {
+    setWorkspaceState((current) => applyTodayPlanItemActionPatch(current, result));
   }
 
-  if (workspace.items.length === 0) {
+  function handleEvaluationSaved(
+    result: Awaited<ReturnType<typeof saveTodayPlanItemEvaluationAction>>,
+  ) {
+    setWorkspaceState((current) => applyTodayPlanItemEvaluationPatch(current, result));
+  }
+
+  function handleLessonPatch(patch: {
+    lessonDraft?: DailyWorkspaceLessonDraft | null;
+    lessonBuild?: DailyWorkspaceLessonBuild | null;
+    activityBuild?: DailyWorkspace["activityBuild"] | null;
+  }) {
+    setWorkspaceState((current) => applyTodayLessonPatch(current, patch));
+  }
+
+  function handleActivityPatch(patch: {
+    activityBuild?: DailyWorkspace["activityBuild"] | null;
+    activityState?: DailyWorkspaceActivityState | null;
+  }) {
+    setWorkspaceState((current) => applyTodayActivityPatch(current, patch));
+  }
+
+  function handleRegenerationNoteChange(note: string | null) {
+    setWorkspaceState((current) => ({
+      ...current,
+      lessonRegenerationNote: note,
+    }));
+  }
+
+  function handleExpansionIntentChange(intent: DailyWorkspace["expansionIntent"]) {
+    setWorkspaceState((current) => ({
+      ...current,
+      expansionIntent: intent,
+    }));
+  }
+
+  function handleWorkspacePatch(workspacePatch?: DailyWorkspace) {
+    if (!workspacePatch) {
+      return;
+    }
+
+    setWorkspaceState(workspacePatch);
+  }
+
+  if (workspaceState.items.length === 0) {
     return (
       <Card className="quiet-panel max-w-4xl border-dashed">
         <div className="flex flex-col gap-4 p-6">
@@ -945,7 +1118,7 @@ export function TodayWorkspaceView({ workspace, sourceId }: TodayWorkspaceViewPr
             <h2 className="mt-1 font-serif text-2xl">Nothing is queued for today.</h2>
           </div>
           <p className="max-w-2xl text-sm leading-7 text-muted-foreground">
-            No route items are ready for {workspace.learner.name} today. Open curriculum or planning to
+            No route items are ready for {workspaceState.learner.name} today. Open curriculum or planning to
             shape the next workable day.
           </p>
           <div className="flex flex-wrap gap-2">
@@ -964,21 +1137,37 @@ export function TodayWorkspaceView({ workspace, sourceId }: TodayWorkspaceViewPr
   if (draftState) {
     return (
       <div className="space-y-6">
-        <TodayLearnerActivityBridge workspace={workspace} draftState={draftState} />
+        <TodayLearnerActivityBridge
+          workspace={workspaceState}
+          draftState={draftState}
+          sourceId={sourceId}
+          routeFingerprint={routeFingerprint}
+          onActivityPatch={handleActivityPatch}
+        />
         <div className="grid gap-6 xl:grid-cols-[18rem_minmax(0,1fr)_20rem] xl:items-start">
           <TodayRouteItemsSection
-            workspace={workspace}
-            sourceId={sourceId}
+            workspace={workspaceState}
             repeatTomorrowAllowed={repeatTomorrowAllowed}
             compact
+            onActionSaved={handleItemActionSaved}
+            onEvaluationSaved={handleEvaluationSaved}
           />
-          <TodayLessonDraftArticle workspace={workspace} draftState={draftState} />
-          <TodayLessonPlanSection
-            workspace={workspace}
-            sourceId={sourceId}
+          <TodayLessonDraftArticle
+            workspace={workspaceState}
             draftState={draftState}
-            buildState={workspace.lessonBuild}
-            onDraftChange={handleDraftChange}
+            onEvaluationSaved={handleEvaluationSaved}
+          />
+          <TodayLessonPlanSection
+            workspace={workspaceState}
+            sourceId={sourceId}
+            routeFingerprint={routeFingerprint}
+            draftState={draftState}
+            buildState={workspaceState.lessonBuild}
+            onLessonPatch={handleLessonPatch}
+            onActivityPatch={handleActivityPatch}
+            onRegenerationNoteChange={handleRegenerationNoteChange}
+            onExpansionIntentChange={handleExpansionIntentChange}
+            onWorkspacePatch={handleWorkspacePatch}
             showDraftOutput={false}
             compact
           />
@@ -989,19 +1178,31 @@ export function TodayWorkspaceView({ workspace, sourceId }: TodayWorkspaceViewPr
 
   return (
     <div className="space-y-6">
-      <TodayLearnerActivityBridge workspace={workspace} draftState={draftState} />
+      <TodayLearnerActivityBridge
+        workspace={workspaceState}
+        draftState={draftState}
+        sourceId={sourceId}
+        routeFingerprint={routeFingerprint}
+        onActivityPatch={handleActivityPatch}
+      />
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(340px,0.85fr)] xl:items-start">
         <TodayRouteItemsSection
-          workspace={workspace}
-          sourceId={sourceId}
+          workspace={workspaceState}
           repeatTomorrowAllowed={repeatTomorrowAllowed}
+          onActionSaved={handleItemActionSaved}
+          onEvaluationSaved={handleEvaluationSaved}
         />
         <TodayLessonPlanSection
-          workspace={workspace}
+          workspace={workspaceState}
           sourceId={sourceId}
+          routeFingerprint={routeFingerprint}
           draftState={null}
-          buildState={workspace.lessonBuild}
-          onDraftChange={handleDraftChange}
+          buildState={workspaceState.lessonBuild}
+          onLessonPatch={handleLessonPatch}
+          onActivityPatch={handleActivityPatch}
+          onRegenerationNoteChange={handleRegenerationNoteChange}
+          onExpansionIntentChange={handleExpansionIntentChange}
+          onWorkspacePatch={handleWorkspacePatch}
         />
       </div>
     </div>
@@ -1010,8 +1211,9 @@ export function TodayWorkspaceView({ workspace, sourceId }: TodayWorkspaceViewPr
 
 export function TodayRouteItemsSection({
   workspace,
-  sourceId,
   repeatTomorrowAllowed = false,
+  onActionSaved,
+  onEvaluationSaved,
   compact = false,
 }: TodayRouteItemsSectionProps & { compact?: boolean }) {
   const totalMinutes = workspace.items.reduce((sum, item) => sum + item.estimatedMinutes, 0);
@@ -1058,6 +1260,8 @@ export function TodayRouteItemsSection({
                     alternateWeeklyRouteItemId={alternate?.id}
                     repeatTomorrowAllowed={repeatTomorrowAllowed}
                     compact
+                    onActionSaved={onActionSaved}
+                    onEvaluationSaved={onEvaluationSaved}
                   />
                 </div>
               </Card>
@@ -1132,6 +1336,8 @@ export function TodayRouteItemsSection({
                     date={workspace.date}
                     alternateWeeklyRouteItemId={alternate?.id}
                     repeatTomorrowAllowed={repeatTomorrowAllowed}
+                    onActionSaved={onActionSaved}
+                    onEvaluationSaved={onEvaluationSaved}
                   />
                 </div>
               </div>
@@ -1146,9 +1352,11 @@ export function TodayRouteItemsSection({
 function TodayLessonDraftArticle({
   workspace,
   draftState,
+  onEvaluationSaved,
 }: {
   workspace: DailyWorkspace;
   draftState: DraftState & { kind: string };
+  onEvaluationSaved: (result: Awaited<ReturnType<typeof saveTodayPlanItemEvaluationAction>>) => void;
 }) {
   const draftContent =
     draftState.kind === "structured" ? (
@@ -1158,6 +1366,7 @@ function TodayLessonDraftArticle({
           <LessonDraftOutcomeControl
             item={workspace.leadItem}
             date={workspace.date}
+            onEvaluationSaved={onEvaluationSaved}
             key={`${workspace.leadItem.id}-${index}`}
           />
         )}
@@ -1196,15 +1405,32 @@ function TodayLessonDraftArticle({
 export function TodayLessonPlanSection({
   workspace,
   sourceId,
+  routeFingerprint,
   draftState,
   buildState,
-  onDraftChange,
+  onLessonPatch,
+  onActivityPatch,
+  onRegenerationNoteChange,
+  onExpansionIntentChange,
+  onWorkspacePatch,
   showDraftOutput = true,
   compact = false,
 }: TodayWorkspaceViewProps & {
+  routeFingerprint: string;
   draftState?: DraftState;
   buildState?: DailyWorkspaceLessonBuild | null;
-  onDraftChange?: (draft: StructuredLessonDraft | string | null) => void;
+  onLessonPatch?: (patch: {
+    lessonDraft?: DailyWorkspaceLessonDraft | null;
+    lessonBuild?: DailyWorkspaceLessonBuild | null;
+    activityBuild?: DailyWorkspace["activityBuild"] | null;
+  }) => void;
+  onActivityPatch?: (patch: {
+    activityBuild?: DailyWorkspace["activityBuild"] | null;
+    activityState?: DailyWorkspaceActivityState | null;
+  }) => void;
+  onRegenerationNoteChange?: (note: string | null) => void;
+  onExpansionIntentChange?: (intent: DailyWorkspace["expansionIntent"]) => void;
+  onWorkspacePatch?: (workspace?: DailyWorkspace) => void;
   showDraftOutput?: boolean;
   compact?: boolean;
 }) {
@@ -1228,6 +1454,7 @@ export function TodayLessonPlanSection({
         key={contextKey}
         date={workspace.date}
         sourceId={sourceId}
+        routeFingerprint={routeFingerprint}
         sourceTitle={workspace.leadItem.sourceLabel}
         routeItemCount={workspace.items.length}
         totalMinutes={totalMinutes}
@@ -1238,7 +1465,11 @@ export function TodayLessonPlanSection({
         buildState={buildState ?? null}
         regenerationNote={workspace.lessonRegenerationNote}
         expansionIntent={workspace.expansionIntent}
-        onDraftChange={onDraftChange}
+        onLessonPatch={onLessonPatch}
+        onActivityPatch={onActivityPatch}
+        onRegenerationNoteChange={onRegenerationNoteChange}
+        onExpansionIntentChange={onExpansionIntentChange}
+        onWorkspacePatch={onWorkspacePatch}
         showDraftOutput={showDraftOutput}
       />
     </div>
