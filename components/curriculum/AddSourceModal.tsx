@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { BookOpen, FileJson2, Upload, Sparkles } from "lucide-react";
+import { BookOpen, Upload, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -20,27 +20,21 @@ const entryPoints: {
 }[] = [
   {
     kind: "manual",
-    label: "Manual entry",
-    description: "Type in your curriculum structure by hand.",
+    label: "Start from a topic",
+    description: "Set up a simple source around the subjects and goals you want to cover.",
     Icon: BookOpen,
   },
   {
     kind: "upload",
     label: "Upload document",
-    description: "Import a PDF or document for AI-assisted parsing.",
+    description: "Bring a PDF or document into the source-add flow.",
     Icon: Upload,
   },
   {
     kind: "ai_draft",
-    label: "AI draft",
-    description: "Talk through the plan and let the AI generate the curriculum tree and lessons.",
+    label: "Build from source",
+    description: "Talk through what you already have and turn it into a usable source.",
     Icon: Sparkles,
-  },
-  {
-    kind: "external",
-    label: "Load curriculum.json",
-    description: "Import the local curriculum.json file from the project root.",
-    Icon: FileJson2,
   },
 ];
 
@@ -136,7 +130,7 @@ function ManualEntryForm({
           Cancel
         </Button>
         <Button type="submit" size="sm" disabled={!title.trim()}>
-          Create curriculum
+          Add source
         </Button>
       </div>
     </form>
@@ -144,7 +138,7 @@ function ManualEntryForm({
 }
 
 // ---------------------------------------------------------------------------
-// Upload form (stub — integration point for storage and ingestion)
+// Upload form
 // ---------------------------------------------------------------------------
 
 function UploadForm({ onCancel }: { onCancel: () => void }) {
@@ -152,11 +146,8 @@ function UploadForm({ onCancel }: { onCancel: () => void }) {
     <div className="flex flex-col items-center gap-4 py-6 text-center">
       <Upload className="size-10 text-muted-foreground" />
       <p className="text-sm text-muted-foreground">
-        Document upload intake is connected to the storage and ingestion pipeline.
-        <br />
-        <span className="text-xs">
-          Integration point: wire to Supabase Storage + Inngest ingestion job.
-        </span>
+        Document upload is not available in this surface yet. Use the source form for text you can
+        paste today.
       </p>
       <Button variant="outline" size="sm" onClick={onCancel}>
         Back
@@ -190,45 +181,6 @@ function AiDraftForm({
   );
 }
 
-function LocalJsonImportForm({
-  householdId,
-  onSubmit,
-  onCancel,
-}: {
-  householdId: string;
-  onSubmit: (data: { householdId: string; importPreset: "local_curriculum_json" }) => void;
-  onCancel: () => void;
-}) {
-  return (
-    <div className="flex flex-col gap-4">
-      <div className="rounded-xl border border-border/70 bg-muted/30 p-4">
-        <p className="text-sm font-medium">Import local curriculum file</p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          This loads <code>curriculum.json</code> from the project root and creates a curriculum
-          source from its contents.
-        </p>
-      </div>
-      <div className="flex justify-end gap-2">
-        <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
-          Back
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          onClick={() =>
-            onSubmit({
-              householdId,
-              importPreset: "local_curriculum_json",
-            })
-          }
-        >
-          Load curriculum.json
-        </Button>
-      </div>
-    </div>
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Main modal content
 // ---------------------------------------------------------------------------
@@ -241,20 +193,15 @@ export interface AddSourceModalContentProps {
   };
   onCreatedSourceId: (sourceId: string) => void;
   onCreated: (
-    data:
-      | {
-          title: string;
-          description: string;
-          kind: CurriculumSourceKind;
-          subjects: string[];
-          gradeLevels: string[];
-          householdId: string;
-          academicYear?: string;
-        }
-      | {
-          householdId: string;
-          importPreset: "local_curriculum_json";
-        }
+    data: {
+      title: string;
+      description: string;
+      kind: CurriculumSourceKind;
+      subjects: string[];
+      gradeLevels: string[];
+      householdId: string;
+      academicYear?: string;
+    }
   ) => void;
   onClose: () => void;
 }
@@ -293,20 +240,10 @@ export function AddSourceModalContent({
     );
   }
 
-  if (selectedKind === "external") {
-    return (
-      <LocalJsonImportForm
-        householdId={householdId}
-        onCancel={() => setSelectedKind(null)}
-        onSubmit={onCreated}
-      />
-    );
-  }
-
   return (
     <div className="flex flex-col gap-3">
       <p className="text-sm text-muted-foreground">
-        Choose how you&apos;d like to add curriculum content.
+        Choose how you&apos;d like to add a source.
       </p>
       <div className="grid gap-3 sm:grid-cols-3">
         {entryPoints.map(({ kind, label, description, Icon }) => (

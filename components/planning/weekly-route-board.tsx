@@ -550,7 +550,7 @@ export function WeeklyRouteBoard({ initialBoard, weekStartDate }: WeeklyRouteBoa
     <section className="space-y-5">
       <div className="quiet-panel space-y-4 p-4">
         <div className="space-y-1">
-          <p className="section-meta">Weekly route board</p>
+          <p className="section-meta">Weekly plan</p>
           <h2 className="font-serif text-2xl font-semibold tracking-tight text-foreground">
             Shape the week without rebuilding it.
           </h2>
@@ -562,7 +562,7 @@ export function WeeklyRouteBoard({ initialBoard, weekStartDate }: WeeklyRouteBoa
         <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
           <span>Week of {weekStartDate}</span>
           <span>•</span>
-          <span>{board.items.length} route items</span>
+          <span>{board.items.length} items</span>
           {board.conflicts.length > 0 ? (
             <>
               <span>•</span>

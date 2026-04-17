@@ -119,22 +119,15 @@ export default async function CopilotPage({ searchParams }: Props) {
           {previewError ? (
             <Card className="quiet-panel">
               <div className="space-y-2 p-4 text-sm leading-6">
-                <p className="font-medium text-foreground">Copilot preview unavailable</p>
+                <p className="font-medium text-foreground">Copilot is temporarily unavailable</p>
                 <p className="text-muted-foreground">
-                  The app could not reach <code className="font-mono text-[11px]">learning-core</code>.
-                  This is usually a local service issue, not a UI issue.
+                  Try again in a moment. Your learner and planning context are still intact.
                 </p>
-                <p className="text-xs text-muted-foreground/80">{previewError}</p>
               </div>
             </Card>
           ) : null}
 
           <CopilotPromptPreview promptPreview={promptPreview} />
-
-          <p className="px-1 text-xs text-muted-foreground/60">
-            Copilot provider and model routing are managed by the external{" "}
-            <code className="font-mono text-[10px]">learning-core</code> service.
-          </p>
         </div>
       </div>
     </main>

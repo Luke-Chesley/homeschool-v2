@@ -58,24 +58,24 @@ export function CurriculumOverview({
             <div>
               <h2 className="font-serif text-2xl">{tree.source.title}</h2>
               <p className="text-sm leading-7 text-muted-foreground">
-                Browse the normalized structure, then move into the graph workspace when you need to
-                inspect branch relationships more deeply.
+                Browse the structure here, then open the visual map when you want to inspect
+                branch relationships more closely.
               </p>
             </div>
             <div className="rounded-xl border border-border/70 bg-background/70 p-4">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div className="space-y-1">
-                  <p className="text-sm font-semibold text-foreground">Graph workspace</p>
+                  <p className="text-sm font-semibold text-foreground">Visual map</p>
                   <p className="text-sm text-muted-foreground">
-                    Open the dedicated graph view to inspect connected nodes, hierarchy, and branch
-                    flow in a visual canvas.
+                    Open the visual map to inspect connected nodes, hierarchy, and branch flow in
+                    one place.
                   </p>
                 </div>
                 <Link
                   href={`/curriculum/graph?sourceId=${activeSourceId}`}
                   className={cn(buttonVariants({ size: "sm" }), "w-full justify-center lg:w-auto")}
                 >
-                  Open graph view
+                  Open visual map
                   <ArrowRight className="size-4" />
                 </Link>
               </div>

@@ -44,11 +44,11 @@ export default async function CurriculumGraphPage({ searchParams }: CurriculumGr
           <div>
             <h1 className="font-serif text-4xl leading-tight tracking-tight">Progression graph</h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              Start with one source and build a connected map the planner can route.
+              Start with one source and build a connected map you can inspect visually.
             </p>
           </div>
         </header>
-        <CurriculumEmptyState householdId={session.organization.id} />
+        <CurriculumEmptyState />
       </main>
     );
   }

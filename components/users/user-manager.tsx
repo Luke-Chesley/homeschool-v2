@@ -9,7 +9,6 @@ import { cn } from "@/lib/utils";
 
 type UserManagerProps = {
   organization: {
-    id: string;
     name: string;
   };
   learners: Array<{
@@ -94,8 +93,8 @@ export function UserManager({
           <p className="section-meta">Learners</p>
           <h1 className="page-title">Set the active learner, then keep moving.</h1>
           <p className="page-subtitle max-w-2xl">
-            Learners stay lightweight here. Choose who the workspace is acting on, add another
-            profile when you need one, and leave richer profile setup for later.
+            Choose the active learner, then keep moving. Add another learner when the household
+            needs one.
           </p>
         </div>
       </header>
@@ -107,13 +106,9 @@ export function UserManager({
             {organization.name}
           </p>
           <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-            Selecting a learner changes the active child inside this household. Curriculum,
-            activity, and Copilot all follow that selection.
+            Selecting a learner changes the active child inside this household. Today, Curriculum,
+            Tracking, and Copilot all follow that selection.
           </p>
-        </div>
-        <div className="rounded-xl border border-border/60 bg-background/80 px-4 py-3 text-sm text-muted-foreground">
-          <p className="font-medium text-foreground">Workspace ID</p>
-          <p className="font-mono text-xs">{organization.id}</p>
         </div>
       </section>
 
@@ -173,7 +168,7 @@ export function UserManager({
           <div className="space-y-1">
             <p className="text-base font-semibold text-foreground">Add learner</p>
             <p className="text-sm leading-6 text-muted-foreground">
-              Start with a display name. You can enrich the profile later once the household is underway.
+              Start with a display name. Add another learner only when the household needs one.
             </p>
           </div>
           <form className="flex flex-col gap-4" onSubmit={createLearner}>
