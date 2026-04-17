@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import type { StructuredLessonDraft } from "@/lib/lesson-draft/types";
 import { isStructuredLessonDraft } from "@/lib/lesson-draft/types";
@@ -355,19 +355,20 @@ function readExpansionIntentFromMetadata(
 
 async function getTodayWorkspacePlan(organizationId: string, learnerId: string) {
   const db = getDb();
-  const learnerPlans = await db
+  const [workspacePlan] = await db
     .select()
     .from(plans)
-    .where(and(eq(plans.organizationId, organizationId), eq(plans.learnerId, learnerId)))
-    .orderBy(desc(plans.updatedAt), desc(plans.createdAt));
+    .where(
+      and(
+        eq(plans.organizationId, organizationId),
+        eq(plans.learnerId, learnerId),
+        sql`${plans.metadata}->>'purpose' = ${TODAY_WORKSPACE_PLAN_PURPOSE}`,
+      ),
+    )
+    .orderBy(desc(plans.updatedAt), desc(plans.createdAt))
+    .limit(1);
 
-  return (
-    learnerPlans.find(
-      (plan) =>
-        isRecord(plan.metadata) &&
-        plan.metadata.purpose === TODAY_WORKSPACE_PLAN_PURPOSE,
-    ) ?? null
-  );
+  return workspacePlan ?? null;
 }
 
 async function getOrCreateTodayWorkspacePlan(organizationId: string, learnerId: string) {
