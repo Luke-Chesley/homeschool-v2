@@ -5,7 +5,7 @@ import { getAppSession } from "@/lib/app-session/server";
 import { getHomeschoolOnboardingStatus } from "@/lib/homeschool/onboarding/service";
 
 export const metadata = {
-  title: "Users",
+  title: "Learners",
 };
 
 export default async function UsersPage() {

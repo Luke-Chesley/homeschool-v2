@@ -23,7 +23,7 @@ export function HomeschoolCurriculumIntakeForm(props: {
   const [error, setError] = React.useState<string | null>(null);
 
   async function waitForJob(jobId: string) {
-    setJobStatus("Generating curriculum...");
+    setJobStatus("Building the source...");
 
     for (let attempt = 0; attempt < 60; attempt += 1) {
       const response = await fetch(`/api/ai/jobs/${jobId}`, { cache: "no-store" });
@@ -38,13 +38,13 @@ export function HomeschoolCurriculumIntakeForm(props: {
       }
 
       if (payload?.status === "failed") {
-        throw new Error(payload?.errorMessage ?? "Curriculum generation failed.");
+        throw new Error(payload?.errorMessage ?? "Could not finish building this source.");
       }
 
       await new Promise((resolve) => setTimeout(resolve, 1500));
     }
 
-    throw new Error("Curriculum generation timed out.");
+    throw new Error("Building this source took too long. Please try again.");
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -71,7 +71,7 @@ export function HomeschoolCurriculumIntakeForm(props: {
 
     const payload = await response.json().catch(() => null);
     if (!response.ok) {
-      setError(payload?.error ?? "Could not create curriculum.");
+      setError(payload?.error ?? "Could not add this source.");
       setSubmitting(false);
       return;
     }
@@ -81,7 +81,7 @@ export function HomeschoolCurriculumIntakeForm(props: {
         const result = await waitForJob(payload.jobId);
         router.push(result?.output?.redirectTo ?? "/curriculum");
       } catch (jobError) {
-        setError(jobError instanceof Error ? jobError.message : "Curriculum generation failed.");
+        setError(jobError instanceof Error ? jobError.message : "Could not finish adding this source.");
         setSubmitting(false);
         setJobStatus(null);
         return;
@@ -98,19 +98,19 @@ export function HomeschoolCurriculumIntakeForm(props: {
     <form className="grid gap-6" onSubmit={handleSubmit}>
       <Card>
         <CardHeader>
-          <CardTitle>Homeschool curriculum intake</CardTitle>
+          <CardTitle>Add a curriculum source</CardTitle>
           <CardDescription>
-            Keep curriculum entry simple: start with a shell, paste an outline, or let AI decompose source material into an editable tree.
+            Start with a topic, paste an outline, or build from source material you already have.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
           <fieldset className="grid gap-2">
-            <legend className="text-sm font-medium">Curriculum mode</legend>
+            <legend className="text-sm font-medium">How do you want to start?</legend>
             <div className="flex flex-wrap gap-2">
               {[
-                { value: "manual_shell", label: "Starter shell" },
+                { value: "manual_shell", label: "Start from a topic" },
                 { value: "paste_outline", label: "Paste outline" },
-                { value: "ai_decompose", label: "AI decompose" },
+                { value: "ai_decompose", label: "Build from source" },
               ].map((option) => {
                 const active = curriculumMode === option.value;
                 const inputId = `curriculum-intake-mode-${option.value}`;
@@ -143,7 +143,7 @@ export function HomeschoolCurriculumIntakeForm(props: {
 
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="grid gap-1.5 text-sm font-medium">
-              Curriculum title
+              Source title
               <input
                 value={curriculumTitle}
                 onChange={(event) => setCurriculumTitle(event.target.value)}
@@ -171,11 +171,11 @@ export function HomeschoolCurriculumIntakeForm(props: {
           </label>
 
           <label className="grid gap-1.5 text-sm font-medium">
-            Parent summary
+            Notes
             <input
               value={curriculumSummary}
               onChange={(event) => setCurriculumSummary(event.target.value)}
-              placeholder="What this curriculum is meant to accomplish"
+              placeholder="What this source is meant to cover"
               className="rounded-xl border border-input bg-background px-3 py-2 font-normal"
             />
           </label>
@@ -192,14 +192,14 @@ export function HomeschoolCurriculumIntakeForm(props: {
 
           {curriculumMode !== "manual_shell" ? (
             <label className="grid gap-1.5 text-sm font-medium">
-              {curriculumMode === "ai_decompose" ? "Source material" : "Structured outline"}
+              {curriculumMode === "ai_decompose" ? "Source material" : "Outline"}
               <textarea
                 value={curriculumText}
                 onChange={(event) => setCurriculumText(event.target.value)}
                 rows={12}
                 placeholder={
                   curriculumMode === "ai_decompose"
-                    ? "Paste a syllabus, table of contents, lesson notes, or curriculum overview."
+                    ? "Paste a chapter, lesson notes, table of contents, or plan text from what you already have."
                     : "# Unit 1\n- Lesson 1\n- Lesson 2"
                 }
                 className="rounded-2xl border border-input bg-background px-3 py-3 font-normal"
@@ -218,7 +218,7 @@ export function HomeschoolCurriculumIntakeForm(props: {
 
       <div className="flex justify-end">
         <Button type="submit" disabled={submitting}>
-          {submitting ? "Creating curriculum..." : "Create curriculum"}
+          {submitting ? "Adding source..." : "Add source"}
         </Button>
       </div>
     </form>

@@ -1,5 +1,10 @@
 # Repository Guidelines
 
+## Required Startup Read
+- At the start of every new session in this repo, read [docs/engineering-conventions.md](/home/luke/Desktop/learning/homeschool-v2/docs/engineering-conventions.md) before changing Today/runtime code.
+- Treat that file as required, not optional, for any task touching `app/(parent)/today/*`, `components/planning/today/*`, `lib/planning/today-service.ts`, `lib/planning/weekly-route-service.ts`, `lib/app-session/server.ts`, or `lib/auth/server.ts`.
+- Do not start editing those files until you have reread that conventions document in the current session.
+
 ## Shared Skill Activation
 - Use the global Codex skill `learning-cross-repo-workflow` when a task touches `learning-core`, `codex-agent-loop-harness`, activity generation, widget/runtime changes, learner activity QA, onboarding execution, or cross-repo debugging.
 - The canonical skill lives at `/home/luke/.codex/skills/learning-cross-repo-workflow/SKILL.md`. Do not create a repo-local copy of that skill.

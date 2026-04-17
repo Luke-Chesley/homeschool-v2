@@ -26,7 +26,7 @@ export default async function CurriculumPage() {
   if (sources.length === 0) {
     return (
       <main className="page-shell page-stack">
-        <CurriculumEmptyState householdId={session.organization.id} />
+        <CurriculumEmptyState />
       </main>
     );
   }

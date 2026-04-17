@@ -1,48 +1,14 @@
-import { redirect } from "next/navigation";
-
 import { TrackingOverview, TrackingShell } from "@/components/tracking";
 import { requireAppSession } from "@/lib/app-session/server";
 import { getRecentHomeschoolAttendance } from "@/lib/homeschool/attendance/service";
-import {
-  getTrackingDashboard,
-  updateRecommendationDecision,
-} from "@/lib/tracking/service";
+import { getTrackingDashboard } from "@/lib/tracking/service";
 
 export const metadata = {
   title: "Tracking",
 };
 
-interface TrackingPageProps {
-  searchParams: Promise<{
-    action?: string | string[];
-    recommendationId?: string | string[];
-  }>;
-}
-
-export default async function TrackingPage({ searchParams }: TrackingPageProps) {
+export default async function TrackingPage() {
   const session = await requireAppSession();
-  const resolvedSearchParams = await searchParams;
-  const action =
-    typeof resolvedSearchParams.action === "string"
-      ? resolvedSearchParams.action
-      : undefined;
-  const recommendationId =
-    typeof resolvedSearchParams.recommendationId === "string"
-      ? resolvedSearchParams.recommendationId
-      : undefined;
-
-  if (
-    recommendationId &&
-    (action === "accept" || action === "override")
-  ) {
-    await updateRecommendationDecision({
-      organizationId: session.organization.id,
-      learnerId: session.activeLearner.id,
-      recommendationId,
-      action,
-    });
-    redirect("/tracking");
-  }
 
   const dashboard = await getTrackingDashboard({
     organizationId: session.organization.id,
@@ -58,7 +24,7 @@ export default async function TrackingPage({ searchParams }: TrackingPageProps) 
     <TrackingShell
       currentView="overview"
       title="Progress and records"
-      description="Review progress, evidence, attendance, and follow-up items without leaving the working context."
+      description="See what was planned, what happened, and what was recorded."
     >
       <TrackingOverview
         dashboard={dashboard}

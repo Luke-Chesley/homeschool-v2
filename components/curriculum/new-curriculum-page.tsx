@@ -28,11 +28,11 @@ export function NewCurriculumClientPage({
           </Link>
           <div className="space-y-1">
             <h1 className="font-serif text-3xl font-semibold tracking-tight sm:text-4xl">
-              Add Curriculum
+              Add a source
             </h1>
             <p className="max-w-3xl text-sm text-muted-foreground sm:text-base">
-              Start from a source you already have, or let the AI shape a curriculum tree and
-              teachable lesson flow from a live planning conversation.
+              Bring what you already have, then turn it into a teachable day and a sane week for{" "}
+              {activeLearner.firstName}.
             </p>
           </div>
         </div>

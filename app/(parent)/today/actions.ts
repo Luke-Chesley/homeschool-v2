@@ -7,9 +7,8 @@ import { createRepositories } from "@/lib/db";
 import { getDb } from "@/lib/db/server";
 import { ACTIVATION_EVENT_NAMES } from "@/lib/homeschool/onboarding/activation-contracts";
 import {
-  getTodayActivityBuildStatus,
-  getTodayWorkspaceView,
-  materializeTodayWorkspace,
+  getTodayBuildStatus,
+  getTodayWorkspaceViewForRender,
   saveTodayExpansionIntent,
   saveTodayLessonRegenerationNote,
 } from "@/lib/planning/today-service";
@@ -68,6 +67,11 @@ export interface TodayPlanItemActionResult {
   action: TodayPlanItemAction;
   planItemId: string;
   itemPatch?: Partial<Pick<DailyWorkspace["items"][number], "status" | "completionStatus" | "reviewState">>;
+  optimisticPatch?: {
+    removePlanItemIds?: string[];
+  };
+  needsWorkspacePatch?: boolean;
+  requiresWorkspaceRefresh?: boolean;
   workspacePatch?: TodayWorkspacePatch;
   message?: string;
   error?: string;
@@ -131,7 +135,7 @@ export async function getLessonDraftActivityStatusAction(
 ): Promise<LessonDraftActivityState> {
   try {
     const session = await requireAppSession();
-    const status = await getTodayActivityBuildStatus({
+    const status = await getTodayBuildStatus({
       organizationId: session.organization.id,
       learnerId: session.activeLearner.id,
       date: input.date,
@@ -157,13 +161,8 @@ async function loadTodayWorkspacePatch(input: {
   learnerId: string;
   learnerName: string;
   date: string;
-  materialize?: boolean;
 }) {
-  if (input.materialize) {
-    await materializeTodayWorkspace(input);
-  }
-
-  const workspaceResult = await getTodayWorkspaceView(input);
+  const workspaceResult = await getTodayWorkspaceViewForRender(input);
   if (!workspaceResult) {
     return null;
   }
@@ -272,18 +271,6 @@ export async function updateTodayPlanItemAction(input: {
       input.action === "skip_today" ||
       input.action === "swap_with_alternate";
 
-    const workspacePatch = structuralAction
-      ? await loadTodayWorkspacePatch({
-          organizationId: session.organization.id,
-          learnerId: session.activeLearner.id,
-          learnerName: session.activeLearner.displayName,
-          date: input.date,
-          materialize: true,
-        })
-      : null;
-
-    revalidatePath("/today");
-
     const messageByAction: Record<TodayPlanItemAction, string> = {
       complete: "Marked done and saved to today's record.",
       reset: "Returned to today's plan and cleared the saved completion.",
@@ -312,7 +299,15 @@ export async function updateTodayPlanItemAction(input: {
                 reviewState: "not_required",
               }
             : undefined,
-      workspacePatch: workspacePatch ?? undefined,
+      optimisticPatch: structuralAction
+        ? {
+            removePlanItemIds: [input.planItemId],
+          }
+        : undefined,
+      needsWorkspacePatch: structuralAction,
+      // Back-compat for existing client code while the Today runtime finishes converging on the
+      // narrower "workspace patch" terminology.
+      requiresWorkspaceRefresh: structuralAction,
       message: messageByAction[input.action],
     };
   } catch (err) {
@@ -350,8 +345,6 @@ export async function saveTodayPlanItemEvaluationAction(input: {
         date: input.date,
       },
     });
-
-    revalidatePath("/today");
 
     return {
       ok: true,
@@ -406,7 +399,7 @@ export async function generateLessonDraftActivityAction(
       trigger: input.trigger ?? "manual",
     });
 
-    const status = await getTodayActivityBuildStatus({
+    const status = await getTodayBuildStatus({
       organizationId: session.organization.id,
       learnerId: session.activeLearner.id,
       date: input.date,
@@ -415,7 +408,7 @@ export async function generateLessonDraftActivityAction(
       lessonSessionId: input.lessonSessionId,
     });
 
-    return { ok: true, build: status.build, activityState: status.activityState };
+    return { ok: true, build: status.activityBuild, activityState: status.activityState };
   } catch (err) {
     console.error("[generateLessonDraftActivityAction]", err);
     return { ok: false, error: err instanceof Error ? err.message : "Generation failed" };
@@ -443,14 +436,7 @@ export async function getLessonDraftPromptPreviewAction(
     );
     const workflowMode = platformSettings?.workflowMode ?? "family_guided";
 
-    await materializeTodayWorkspace({
-      organizationId: session.organization.id,
-      learnerId: session.activeLearner.id,
-      learnerName: session.activeLearner.displayName,
-      date,
-    });
-
-    const workspaceResult = await getTodayWorkspaceView({
+    const workspaceResult = await getTodayWorkspaceViewForRender({
       organizationId: session.organization.id,
       learnerId: session.activeLearner.id,
       learnerName: session.activeLearner.displayName,
@@ -494,8 +480,6 @@ export async function saveLessonRegenerationNoteAction(input: {
       note,
     });
 
-    revalidatePath("/today");
-
     return { ok: true, note, message: "Saved note for the next regenerate." };
   } catch (error) {
     console.error("[saveLessonRegenerationNoteAction]", error);
@@ -523,8 +507,6 @@ export async function saveExpansionIntentAction(input: {
       routeFingerprint: input.routeFingerprint,
       intent: input.intent,
     });
-
-    revalidatePath("/today");
 
     return {
       ok: true,
@@ -561,9 +543,6 @@ export async function expandTodayRouteAction(input: {
       scope: input.scope,
     });
 
-    revalidatePath("/today");
-    revalidatePath("/planning");
-
     const metadata = {
       sourceId: input.sourceId,
       date: input.date,
@@ -575,6 +554,11 @@ export async function expandTodayRouteAction(input: {
     };
 
     if (result.status === "expanded") {
+      // This is the one Today action that changes the surrounding schedule structure enough to
+      // matter to other server-rendered surfaces beyond the local client patch.
+      revalidatePath("/today");
+      revalidatePath("/planning");
+
       await trackProductEvent({
         name: ACTIVATION_EVENT_NAMES.routeExpansionApplied,
         organizationId: session.organization.id,
@@ -589,7 +573,6 @@ export async function expandTodayRouteAction(input: {
         learnerId: session.activeLearner.id,
         learnerName: session.activeLearner.displayName,
         date: input.date,
-        materialize: true,
       });
 
       return {

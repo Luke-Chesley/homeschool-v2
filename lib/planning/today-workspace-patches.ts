@@ -34,15 +34,25 @@ export function applyTodayPlanItemActionPatch(
     return result.workspacePatch.workspace;
   }
 
-  if (!result.itemPatch) {
-    return current;
+  let nextWorkspace = current;
+
+  if (result.optimisticPatch?.removePlanItemIds?.length) {
+    const removePlanItemIds = new Set(result.optimisticPatch.removePlanItemIds);
+    nextWorkspace = withLeadItem(
+      nextWorkspace,
+      nextWorkspace.items.filter((item) => !removePlanItemIds.has(item.id)),
+    );
   }
 
-  const items = current.items.map((item) =>
+  if (!result.itemPatch) {
+    return nextWorkspace;
+  }
+
+  const items = nextWorkspace.items.map((item) =>
     item.id === result.planItemId ? { ...item, ...result.itemPatch } : item,
   );
 
-  return withLeadItem(current, items);
+  return withLeadItem(nextWorkspace, items);
 }
 
 export function applyTodayPlanItemEvaluationPatch(
@@ -100,6 +110,28 @@ export function applyTodayActivityPatch(
 ) {
   return {
     ...current,
+    activityBuild:
+      patch.activityBuild === undefined ? current.activityBuild : patch.activityBuild,
+    activityState:
+      patch.activityState === undefined ? current.activityState : patch.activityState,
+  };
+}
+
+export function applyTodayBuildStatusPatch(
+  current: DailyWorkspace,
+  patch: {
+    lessonBuild?: DailyWorkspaceLessonBuild | null;
+    lessonDraft?: DailyWorkspaceLessonDraft | null;
+    activityBuild?: DailyWorkspaceActivityBuild | null;
+    activityState?: DailyWorkspaceActivityState | null;
+  },
+) {
+  return {
+    ...current,
+    lessonBuild:
+      patch.lessonBuild === undefined ? current.lessonBuild : patch.lessonBuild,
+    lessonDraft:
+      patch.lessonDraft === undefined ? current.lessonDraft : patch.lessonDraft,
     activityBuild:
       patch.activityBuild === undefined ? current.activityBuild : patch.activityBuild,
     activityState:

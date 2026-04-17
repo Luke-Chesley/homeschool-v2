@@ -1,5 +1,4 @@
-import Link from "next/link";
-
+import { applyTrackingRecommendationAction } from "@/app/(parent)/tracking/actions";
 import { AttendanceCard } from "@/components/tracking/attendance-card";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
@@ -60,16 +59,16 @@ export function TrackingOverview({
                 <p className="text-sm leading-6">
                   {dashboard.curriculum.selectionReason}
                   {dashboard.curriculum.weekStartDate
-                    ? ` · route week of ${dashboard.curriculum.weekStartDate}`
+                    ? ` · week of ${dashboard.curriculum.weekStartDate}`
                     : ""}
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <Badge variant="outline">{dashboard.curriculum.totalSkillCount} skills</Badge>
-                  <Badge variant="outline">{dashboard.curriculum.scheduledItemCount} route items</Badge>
+                  <Badge variant="outline">{dashboard.curriculum.scheduledItemCount} planned items</Badge>
                 </div>
               </div>
             ) : null}
-            <p>Use this view to keep recorded work, evidence, and review decisions anchored to actual daily progress.</p>
+            <p>Use this view to keep progress, evidence, and review decisions anchored to real work.</p>
           </CardContent>
         </Card>
 
@@ -82,7 +81,7 @@ export function TrackingOverview({
         <Card className="quiet-panel">
           <CardHeader>
             <CardTitle>Progress history</CardTitle>
-            <CardDescription>Each outcome keeps time, status, standards, and evidence in one readable row.</CardDescription>
+            <CardDescription>See what was planned, what happened, and what was recorded.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {dashboard.outcomes.length === 0 ? (
@@ -90,8 +89,8 @@ export function TrackingOverview({
                 title="No curriculum-linked outcomes yet"
                 body={
                   dashboard.curriculum
-                    ? `${dashboard.curriculum.sourceTitle} is the active curriculum for this learner, but no tracked progress has been recorded against it yet.`
-                    : "No tracked progress has been recorded for this learner yet."
+                    ? `${dashboard.curriculum.sourceTitle} is active for this learner, but no progress has been recorded yet.`
+                    : "No progress has been recorded for this learner yet."
                 }
               />
             ) : (
@@ -146,14 +145,14 @@ export function TrackingOverview({
         <div className="grid gap-6">
           <Card className="quiet-panel">
             <CardHeader>
-              <CardTitle>Observation feed</CardTitle>
+              <CardTitle>Observations</CardTitle>
               <CardDescription>Short notes tied to real work and progress events.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               {dashboard.observations.length === 0 ? (
                 <TrackingEmptyState
                   title="No observation notes yet"
-                  body="Observation notes will appear here once they are attached to this learner's active curriculum work."
+                  body="Observation notes will appear here once they are attached to this learner's work."
                 />
               ) : (
                 dashboard.observations.map((observation) => (
@@ -181,7 +180,7 @@ export function TrackingOverview({
               {dashboard.evaluations.length === 0 ? (
                 <TrackingEmptyState
                   title="No lesson evaluations yet"
-                  body="Evaluation records will appear here once a lesson card is rated from the Today workspace."
+                  body="Lesson evaluations will appear here once a lesson card is rated from Today."
                 />
               ) : (
                 dashboard.evaluations.map((evaluation) => (
@@ -204,7 +203,7 @@ export function TrackingOverview({
 
           <Card className="quiet-panel">
             <CardHeader>
-              <CardTitle>Evidence ledger</CardTitle>
+              <CardTitle>Evidence</CardTitle>
               <CardDescription>Work samples, notes, and activity outcomes in one record stream.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -213,8 +212,8 @@ export function TrackingOverview({
                   title="No evidence linked yet"
                   body={
                     dashboard.curriculum
-                      ? `${dashboard.curriculum.scheduledItemCount} items are currently in scope for ${dashboard.curriculum.sourceTitle}. Evidence will show up here once work is recorded.`
-                      : "Evidence records will show up here once work samples, notes, or outcomes are captured."
+                      ? `${dashboard.curriculum.scheduledItemCount} planned items are currently in scope for ${dashboard.curriculum.sourceTitle}. Evidence will appear here once work is recorded.`
+                      : "Evidence will appear here once work samples, notes, or outcomes are captured."
                   }
                 />
               ) : (
@@ -243,7 +242,7 @@ export function TrackingOverview({
               {dashboard.reviewQueue.length === 0 ? (
                 <TrackingEmptyState
                   title="Nothing is waiting for review"
-                  body="Session, evidence, and activity review requests will collect here when work needs another adult decision."
+                  body="Review requests will collect here when work needs another adult decision."
                 />
               ) : (
                 dashboard.reviewQueue.map((item) => (
@@ -278,13 +277,13 @@ export function TrackingOverview({
           <Card className="quiet-panel">
             <CardHeader>
               <CardTitle>Recommendations</CardTitle>
-              <CardDescription>Proposed changes can be accepted or overridden without losing the record.</CardDescription>
+              <CardDescription>Suggested next moves stay reviewable before they change the plan.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               {dashboard.recommendations.length === 0 ? (
                 <TrackingEmptyState
-                  title="No proposals yet"
-                  body="Proposals appear here after adaptation jobs or structured review flows create a next-step change."
+                  title="No recommendations yet"
+                  body="Suggested next moves will appear here when the learner's recent work points to one."
                 />
               ) : (
                 dashboard.recommendations.map((recommendation) => (
@@ -303,20 +302,17 @@ export function TrackingOverview({
                     </p>
                     {recommendation.status === "proposed" ? (
                       <div className="mt-4 flex flex-wrap gap-2">
-                        <Link
-                          href={`/tracking?action=accept&recommendationId=${encodeURIComponent(recommendation.id)}`}
-                          className={buttonVariants({ size: "sm" })}
-                        >
-                          Accept
-                        </Link>
-                        <Link
-                          href={`/tracking?action=override&recommendationId=${encodeURIComponent(recommendation.id)}`}
-                          className={cn(
-                            buttonVariants({ variant: "outline", size: "sm" }),
-                          )}
-                        >
-                          Override
-                        </Link>
+                        <RecommendationDecisionButton
+                          recommendationId={recommendation.id}
+                          action="accept"
+                          label="Accept"
+                        />
+                        <RecommendationDecisionButton
+                          recommendationId={recommendation.id}
+                          action="override"
+                          label="Keep current plan"
+                          variant="outline"
+                        />
                       </div>
                     ) : null}
                   </div>
@@ -327,6 +323,31 @@ export function TrackingOverview({
         </div>
       </section>
     </div>
+  );
+}
+
+function RecommendationDecisionButton({
+  recommendationId,
+  action,
+  label,
+  variant,
+}: {
+  recommendationId: string;
+  action: "accept" | "override";
+  label: string;
+  variant?: "default" | "outline";
+}) {
+  return (
+    <form action={applyTrackingRecommendationAction}>
+      <input type="hidden" name="recommendationId" value={recommendationId} />
+      <input type="hidden" name="action" value={action} />
+      <button
+        type="submit"
+        className={cn(buttonVariants({ size: "sm", variant }))}
+      >
+        {label}
+      </button>
+    </form>
   );
 }
 
