@@ -1,183 +1,176 @@
-import { Badge } from "@/components/ui/badge";
-import { buttonVariants } from "@/components/ui/button";
+"use client";
+
+import * as React from "react";
+import { useRouter } from "next/navigation";
+
+import { saveComplianceReportDraftAction } from "@/app/(parent)/tracking/actions";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import type {
-  HomeschoolMonthlySummary,
-  HomeschoolTranscriptSkeleton,
-  HomeschoolWeeklySummary,
-} from "@/lib/homeschool/reporting/types";
-import { getTrackingExportPreview } from "@/lib/tracking/service";
 import type { TrackingDashboard } from "@/lib/tracking/types";
 import { cn } from "@/lib/utils";
 
-export function ReportsView({
-  dashboard,
-  weeklySummary,
-  monthlySummary,
-  transcript,
-}: {
-  dashboard: TrackingDashboard;
-  weeklySummary: HomeschoolWeeklySummary;
-  monthlySummary: HomeschoolMonthlySummary;
-  transcript: HomeschoolTranscriptSkeleton;
-}) {
-  const exports = getTrackingExportPreview(dashboard);
-  const objectiveCount = dashboard.standards.length;
-  const evidenceCount = dashboard.evidence.length;
-  const openReviews = dashboard.reviewQueue.length;
+function textareaClassName() {
+  return "min-h-48 rounded-md border border-input bg-background/90 px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-ring";
+}
+
+export function ReportsView({ dashboard }: { dashboard: TrackingDashboard }) {
+  const router = useRouter();
+  const [pendingId, setPendingId] = React.useState<string | null>(null);
+  const [message, setMessage] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+  const openTaskCount = dashboard.complianceTasks.filter(
+    (task) => task.status !== "completed" && task.status !== "not_applicable",
+  ).length;
+
+  async function saveDraft(formData: FormData) {
+    const id = String(formData.get("id") ?? "");
+    const reportKind = formData.get("reportKind");
+    const periodLabel = formData.get("periodLabel");
+    const title = formData.get("title");
+    const content = formData.get("content");
+
+    if (
+      reportKind !== "attendance_summary" &&
+      reportKind !== "quarterly_report" &&
+      reportKind !== "annual_summary" &&
+      reportKind !== "evaluation_packet" &&
+      reportKind !== "portfolio_checklist" &&
+      reportKind !== "transcript_skeleton"
+    ) {
+      setError("Unknown report draft kind.");
+      return;
+    }
+
+    setPendingId(id);
+    setMessage(null);
+    setError(null);
+
+    const result = await saveComplianceReportDraftAction({
+      reportKind,
+      periodLabel: typeof periodLabel === "string" ? periodLabel : "",
+      title: typeof title === "string" ? title : "",
+      content: typeof content === "string" ? content : "",
+      status: "draft",
+    });
+
+    setPendingId(null);
+    if (!result.ok) {
+      setError(result.error ?? "Could not save that draft.");
+      return;
+    }
+
+    setMessage("Draft saved.");
+    router.refresh();
+  }
 
   return (
     <div className="grid gap-6">
-      <section className="grid gap-4 md:grid-cols-3">
+      <section className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(260px,0.9fr)]">
         <Card className="quiet-panel shadow-none">
           <CardHeader>
-            <CardDescription>Objective rows</CardDescription>
-            <CardTitle className="text-3xl">{objectiveCount}</CardTitle>
+            <CardTitle>Report drafts</CardTitle>
+            <CardDescription>
+              These drafts stay editable and exportable. The app helps assemble the packet but does not file anything for you.
+            </CardDescription>
           </CardHeader>
-        </Card>
-        <Card className="quiet-panel shadow-none">
-          <CardHeader>
-            <CardDescription>Evidence records</CardDescription>
-            <CardTitle className="text-3xl">{evidenceCount}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card className="quiet-panel shadow-none">
-          <CardHeader>
-            <CardDescription>Open reviews</CardDescription>
-            <CardTitle className="text-3xl">{openReviews}</CardTitle>
-          </CardHeader>
-        </Card>
-      </section>
-
-      <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
-        <Card className="quiet-panel shadow-none">
-          <CardHeader>
-            <CardTitle>Weekly summary</CardTitle>
-            <CardDescription>What moved, what slipped, and whether the week stayed workable.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="grid gap-3 sm:grid-cols-4">
-              <div className="rounded-xl border border-border/60 bg-background/80 px-4 py-3">
-                <p className="text-xs text-muted-foreground">Completed</p>
-                <p className="mt-2 text-sm font-semibold">{weeklySummary.completedCount}</p>
-              </div>
-              <div className="rounded-xl border border-border/60 bg-background/80 px-4 py-3">
-                <p className="text-xs text-muted-foreground">Partial</p>
-                <p className="mt-2 text-sm font-semibold">{weeklySummary.partialCount}</p>
-              </div>
-              <div className="rounded-xl border border-border/60 bg-background/80 px-4 py-3">
-                <p className="text-xs text-muted-foreground">Skipped</p>
-                <p className="mt-2 text-sm font-semibold">{weeklySummary.skippedCount}</p>
-              </div>
-              <div className="rounded-xl border border-border/60 bg-background/80 px-4 py-3">
-                <p className="text-xs text-muted-foreground">Attendance days</p>
-                <p className="mt-2 text-sm font-semibold">{weeklySummary.attendanceCount}</p>
-              </div>
-            </div>
-            <p className="rounded-xl border border-border/70 bg-background/70 p-4 text-sm leading-6 text-muted-foreground">
-              {weeklySummary.narrative}
+          <CardContent className="space-y-3 text-sm leading-6 text-muted-foreground">
+            <p>
+              {dashboard.program
+                ? `${dashboard.program.jurisdictionLabel} · ${dashboard.program.pathwayLabel}`
+                : "Generic record pack"}
+            </p>
+            <p>
+              Attendance: {dashboard.attendance.summary.progressLabel} · {dashboard.attendance.summary.readinessLabel}
+            </p>
+            <p>
+              Saved portfolio items: {dashboard.portfolioSavedCount} · Open tasks:{" "}
+              {openTaskCount}
             </p>
           </CardContent>
         </Card>
 
         <Card className="quiet-panel shadow-none">
           <CardHeader>
-            <CardTitle>Monthly summary</CardTitle>
-            <CardDescription>Attendance and completed work across the last month.</CardDescription>
+            <CardTitle>Exports</CardTitle>
+            <CardDescription>Download summary views and packet shells directly from this record set.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="rounded-xl border border-border/70 bg-background/70 p-4">
-              <p className="text-xs text-muted-foreground">Attendance rate</p>
-              <p className="mt-2 text-3xl font-semibold">{monthlySummary.attendanceRate}%</p>
-            </div>
-            <div className="rounded-xl border border-border/70 bg-background/70 p-4">
-              <p className="text-xs text-muted-foreground">Lessons completed</p>
-              <p className="mt-2 text-3xl font-semibold">
-                {monthlySummary.completedLessonCount}/{monthlySummary.totalLessonCount}
-              </p>
-            </div>
-            <div className="space-y-2">
-              {monthlySummary.subjectBreakdown.map((entry) => (
-                <div key={entry.subject} className="flex items-center justify-between rounded-xl border border-border/70 bg-background/70 px-3 py-2 text-sm">
-                  <span>{entry.subject}</span>
-                  <Badge variant="outline">{entry.count} lessons</Badge>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </section>
-
-      <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        <Card className="quiet-panel shadow-none">
-          <CardHeader>
-            <CardTitle>Progress export preview</CardTitle>
-            <CardDescription>Preview the rows that records exports will generate.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {exports.lessonRows.map((row) => (
-              <div key={`${row.date}-${row.lesson}`} className="rounded-xl border border-border/70 bg-background/70 p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="font-semibold">{row.lesson}</p>
-                  <Badge variant="outline">{row.status}</Badge>
-                </div>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {row.date} · {row.subject} · {row.actualMinutes}/{row.plannedMinutes} minutes
-                </p>
-                <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                  {row.standards || "No objectives linked"} · {row.goals || "No goals linked"}
-                </p>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        <Card className="quiet-panel shadow-none">
-          <CardHeader>
-            <CardTitle>Transcript skeleton</CardTitle>
-            <CardDescription>Start from a legible subject-level record instead of a blank document.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="rounded-xl border border-border/70 bg-background/70 p-4">
-              <p className="text-xs text-muted-foreground">
-                {transcript.learnerName} · {transcript.gradeLabel}
-              </p>
-            </div>
-            {transcript.entries.map((entry) => (
-              <div key={entry.subject} className="rounded-xl border border-border/70 bg-background/70 p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="font-semibold">{entry.courseTitle}</p>
-                  <Badge variant="outline">{entry.status}</Badge>
-                </div>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {entry.subject} · {entry.evidenceCount} lesson records
-                </p>
-              </div>
+          <CardContent className="flex flex-col gap-2">
+            {dashboard.reportDrafts.map((draft) => (
+              <a
+                key={`export-${draft.id}`}
+                href={`/api/homeschool/reports/export?kind=${draft.reportKind}`}
+                className={cn(buttonVariants({ variant: "outline", size: "sm" }), "justify-start")}
+              >
+                Export {draft.title.toLowerCase()}
+              </a>
             ))}
           </CardContent>
         </Card>
       </section>
 
-      <section className="flex flex-wrap gap-2">
-        <a
-          href="/api/homeschool/reports/export?kind=progress_report"
-          className={cn(buttonVariants({ size: "sm" }))}
-        >
-          Export progress report
-        </a>
-        <a
-          href="/api/homeschool/reports/export?kind=attendance_log"
-          className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
-        >
-          Export attendance log
-        </a>
-        <a
-          href="/api/homeschool/reports/export?kind=transcript_skeleton"
-          className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
-        >
-          Export transcript skeleton
-        </a>
+      <section className="grid gap-6">
+        {dashboard.reportDrafts.map((draft) => (
+          <Card key={draft.id} className="quiet-panel shadow-none">
+            <CardHeader>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <CardTitle>{draft.title}</CardTitle>
+                  <CardDescription>
+                    {draft.periodLabel} · {draft.status}
+                  </CardDescription>
+                </div>
+                <a
+                  href={`/api/homeschool/reports/export?kind=${draft.reportKind}`}
+                  className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+                >
+                  Export draft
+                </a>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <form
+                className="space-y-3"
+                onSubmit={async (event) => {
+                  event.preventDefault();
+                  await saveDraft(new FormData(event.currentTarget));
+                }}
+              >
+                <input type="hidden" name="id" value={draft.id} />
+                <input type="hidden" name="reportKind" value={draft.reportKind} />
+                <input type="hidden" name="periodLabel" value={draft.periodLabel} />
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-sm font-medium text-foreground" htmlFor={`title-${draft.id}`}>
+                    Title
+                  </label>
+                  <input
+                    id={`title-${draft.id}`}
+                    name="title"
+                    defaultValue={draft.title}
+                    className="rounded-md border border-input bg-background/90 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-sm font-medium text-foreground" htmlFor={`content-${draft.id}`}>
+                    Draft content
+                  </label>
+                  <textarea
+                    id={`content-${draft.id}`}
+                    name="content"
+                    defaultValue={draft.content}
+                    className={textareaClassName()}
+                  />
+                </div>
+                <Button type="submit" disabled={pendingId === draft.id}>
+                  {pendingId === draft.id ? "Saving draft..." : "Save draft"}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        ))}
       </section>
+
+      {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
+      {error ? <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p> : null}
     </div>
   );
 }

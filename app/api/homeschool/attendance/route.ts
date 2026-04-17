@@ -2,13 +2,23 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 import { requireAppSession } from "@/lib/app-session/server";
+import { getLearnerComplianceProgram } from "@/lib/compliance/service";
 import { upsertHomeschoolAttendanceRecord } from "@/lib/homeschool/attendance/service";
 import { recordHomeschoolAuditEvent } from "@/lib/homeschool/reporting/service";
 import { trackOperationalError, trackProductEvent } from "@/lib/platform/observability";
 
 const AttendanceSchema = z.object({
   date: z.string().min(1),
-  status: z.enum(["present", "partial", "absent", "field_trip", "holiday"]),
+  status: z.enum([
+    "present",
+    "partial",
+    "absent",
+    "excused",
+    "non_instructional",
+    "field_trip",
+    "holiday",
+  ]),
+  complianceProgramId: z.string().optional(),
   minutes: z.number().int().min(0).max(480).optional(),
   note: z.string().max(300).optional(),
 });
@@ -23,13 +33,23 @@ export async function POST(req: NextRequest) {
 
   try {
     const session = await requireAppSession();
+    const program =
+      typeof parsed.data.complianceProgramId === "string" && parsed.data.complianceProgramId.length > 0
+        ? { id: parsed.data.complianceProgramId }
+        : await getLearnerComplianceProgram({
+            organizationId: session.organization.id,
+            learnerId: session.activeLearner.id,
+          });
     const record = await upsertHomeschoolAttendanceRecord({
       organizationId: session.organization.id,
       learnerId: session.activeLearner.id,
+      complianceProgramId: program.id,
       date: parsed.data.date,
       status: parsed.data.status,
+      source: "manual",
       minutes: parsed.data.minutes ?? null,
       note: parsed.data.note ?? null,
+      derivedSessionIds: [],
     });
 
     await recordHomeschoolAuditEvent({

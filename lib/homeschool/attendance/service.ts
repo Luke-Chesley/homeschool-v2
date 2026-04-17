@@ -10,16 +10,20 @@ import type { HomeschoolAttendanceRecord, HomeschoolAttendanceStatus } from "@/l
 export function getHomeschoolAttendanceDefaults() {
   return {
     status: "present" as const,
+    minutes: 240,
   };
 }
 
 export async function upsertHomeschoolAttendanceRecord(params: {
   organizationId: string;
   learnerId: string;
+  complianceProgramId?: string | null;
   date: string;
   status: HomeschoolAttendanceStatus;
+  source?: "manual" | "derived_from_sessions" | "imported";
   minutes?: number | null;
   note?: string | null;
+  derivedSessionIds?: string[];
 }) {
   const db = getDb();
   const existing = await db.query.homeschoolAttendanceRecords.findFirst({
@@ -31,12 +35,26 @@ export async function upsertHomeschoolAttendanceRecord(params: {
   });
 
   if (existing) {
+    if (
+      existing.status === params.status &&
+      (existing.minutes ?? null) === (params.minutes ?? null) &&
+      (existing.note ?? null) === (params.note ?? null) &&
+      (existing.source ?? "manual") === (params.source ?? "manual") &&
+      JSON.stringify(existing.derivedSessionIds ?? []) ===
+        JSON.stringify(params.derivedSessionIds ?? [])
+    ) {
+      return existing;
+    }
+
     const [updated] = await db
       .update(homeschoolAttendanceRecords)
       .set({
+        complianceProgramId: params.complianceProgramId ?? existing.complianceProgramId ?? null,
         status: params.status,
+        source: params.source ?? "manual",
         minutes: params.minutes ?? null,
         note: params.note ?? null,
+        derivedSessionIds: params.derivedSessionIds ?? [],
         updatedAt: new Date(),
       })
       .where(eq(homeschoolAttendanceRecords.id, existing.id))
@@ -50,10 +68,13 @@ export async function upsertHomeschoolAttendanceRecord(params: {
     .values({
       organizationId: params.organizationId,
       learnerId: params.learnerId,
+      complianceProgramId: params.complianceProgramId ?? null,
       attendanceDate: params.date,
       status: params.status,
+      source: params.source ?? "manual",
       minutes: params.minutes ?? null,
       note: params.note ?? null,
+      derivedSessionIds: params.derivedSessionIds ?? [],
       metadata: {},
     })
     .returning();
@@ -86,6 +107,8 @@ export async function listHomeschoolAttendanceRecords(params: {
     status: row.status,
     minutes: row.minutes ?? null,
     note: row.note ?? null,
+    source: row.source,
+    derivedSessionIds: Array.isArray(row.derivedSessionIds) ? row.derivedSessionIds : [],
   }));
 }
 

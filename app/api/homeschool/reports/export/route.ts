@@ -15,6 +15,12 @@ function toCsvRow(values: Array<string | number>) {
     .join(",");
 }
 
+function titleCase(value: string) {
+  return value
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
 export async function GET(req: NextRequest) {
   const session = await requireAppSession();
   const kind = req.nextUrl.searchParams.get("kind") ?? "progress_report";
@@ -26,6 +32,7 @@ export async function GET(req: NextRequest) {
 
   let filename = "progress-report.csv";
   let csv = "";
+  let contentType = "text/csv; charset=utf-8";
 
   if (kind === "attendance_log") {
     filename = "attendance-log.csv";
@@ -58,6 +65,30 @@ export async function GET(req: NextRequest) {
           entry.evidenceCount,
         ]),
       ),
+    ].join("\n");
+  } else if (
+    kind === "attendance_summary" ||
+    kind === "quarterly_report" ||
+    kind === "annual_summary" ||
+    kind === "evaluation_packet" ||
+    kind === "portfolio_checklist"
+  ) {
+    filename = `${kind.replaceAll("_", "-")}.md`;
+    contentType = "text/markdown; charset=utf-8";
+    const draft = dashboard.reportDrafts.find((entry) => entry.reportKind === kind);
+    const attendanceOverview = [
+      `Attendance progress: ${dashboard.attendance.summary.progressLabel}`,
+      `Readiness: ${dashboard.attendance.summary.readinessLabel}`,
+      `Saved portfolio items: ${dashboard.portfolioSavedCount}`,
+    ].join("\n");
+
+    csv = [
+      `# ${draft?.title ?? titleCase(kind)}`,
+      "",
+      draft?.content ?? "No saved report draft exists for this export kind yet.",
+      "",
+      "## Record summary",
+      attendanceOverview,
     ].join("\n");
   } else {
     const rows = buildTrackingExportRows(dashboard);
@@ -108,7 +139,7 @@ export async function GET(req: NextRequest) {
 
   return new NextResponse(csv, {
     headers: {
-      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Type": contentType,
       "Content-Disposition": `attachment; filename="${filename}"`,
     },
   });

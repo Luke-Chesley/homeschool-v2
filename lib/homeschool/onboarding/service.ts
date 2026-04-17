@@ -4,6 +4,7 @@ import { and, eq, ne } from "drizzle-orm";
 import { z } from "zod";
 
 import { homeschoolTemplate } from "@/config/templates/homeschool";
+import { ensureComplianceProgramForLearner } from "@/lib/compliance/service";
 import {
   createCurriculumSourceFromAiDraftArtifact,
   importStructuredCurriculumDocument,
@@ -783,7 +784,11 @@ async function persistHomeschoolSetupBase(input: HomeschoolOnboardingPayload) {
       .where(eq(organizationPlatformSettings.organizationId, input.organizationId));
   }
 
-  const createdLearners = await upsertLearnersForOnboarding(input.organizationId, input.learners);
+  const createdLearners = await upsertLearnersForOnboarding(input.organizationId, input.learners, {
+    schoolYearLabel: input.schoolYearLabel ?? null,
+    startDate: input.termStartDate ?? null,
+    endDate: input.termEndDate ?? null,
+  });
   const primaryLearner = createdLearners[0];
 
   if (!primaryLearner) {
@@ -812,6 +817,11 @@ export async function prepareHomeschoolOnboarding(rawInput: unknown) {
 async function upsertLearnersForOnboarding(
   organizationId: string,
   learnersInput: HomeschoolOnboardingInput["learners"],
+  programDefaults: {
+    schoolYearLabel: string | null;
+    startDate: string | null;
+    endDate: string | null;
+  },
 ) {
   const db = getDb();
   const createdLearners: Array<typeof learners.$inferSelect> = [];
@@ -883,6 +893,16 @@ async function upsertLearnersForOnboarding(
           updatedAt: new Date(),
         },
       });
+
+    await ensureComplianceProgramForLearner({
+      organizationId,
+      learnerId: learnerRecord.id,
+      gradeLevel: learnerInput.gradeLevel ?? null,
+      schoolYearLabel: programDefaults.schoolYearLabel,
+      startDate: programDefaults.startDate,
+      endDate: programDefaults.endDate,
+      status: "active",
+    });
 
     createdLearners.push(learnerRecord);
   }

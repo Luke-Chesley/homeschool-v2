@@ -4,9 +4,10 @@ import { and, eq } from "drizzle-orm";
 
 import { ensurePublishedActivitiesForLearner } from "@/lib/activities/assignment-service";
 import { assertLearnerCreationAllowed } from "@/lib/billing/service";
+import { ensureComplianceProgramFromHouseholdDefaults } from "@/lib/compliance/service";
 import { createRepositories } from "@/lib/db";
 import { ensureDatabaseReady, getDb } from "@/lib/db/server";
-import { learners, organizations } from "@/lib/db/schema";
+import { learnerProfiles, learners, organizations } from "@/lib/db/schema";
 import { ensureOrganizationPlatformSettings } from "@/lib/platform/settings";
 
 export type AppLearner = {
@@ -132,6 +133,14 @@ export async function createLearnerForOrganization(
     organizationId,
     learnerId: learner.id,
     learnerName: learner.displayName,
+  });
+  const learnerProfile = await getDb().query.learnerProfiles.findFirst({
+    where: eq(learnerProfiles.learnerId, learner.id),
+  });
+  await ensureComplianceProgramFromHouseholdDefaults({
+    organizationId,
+    learnerId: learner.id,
+    gradeLevel: learnerProfile?.gradeLevel ?? null,
   });
   return mapLearnerRecord(learner);
 }

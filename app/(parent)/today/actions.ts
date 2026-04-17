@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { requireAppSession } from "@/lib/app-session/server";
+import { getLearnerComplianceProgram, saveSessionEvidenceToPortfolio } from "@/lib/compliance/service";
 import { createRepositories } from "@/lib/db";
 import { getDb } from "@/lib/db/server";
 import { ACTIVATION_EVENT_NAMES } from "@/lib/homeschool/onboarding/activation-contracts";
@@ -86,6 +87,13 @@ export interface TodayPlanItemEvaluationResult {
     note: string | null;
     createdAt: string;
   };
+  error?: string;
+}
+
+export interface TodayPlanItemPortfolioResult {
+  ok: boolean;
+  planItemId: string;
+  message?: string;
   error?: string;
 }
 
@@ -362,6 +370,39 @@ export async function saveTodayPlanItemEvaluationAction(input: {
       ok: false,
       planItemId: input.planItemId,
       error: err instanceof Error ? err.message : "Could not save this evaluation.",
+    };
+  }
+}
+
+export async function saveTodayPlanItemPortfolioAction(input: {
+  planItemId: string;
+  sessionRecordId: string;
+}): Promise<TodayPlanItemPortfolioResult> {
+  try {
+    const session = await requireAppSession();
+    const program = await getLearnerComplianceProgram({
+      organizationId: session.organization.id,
+      learnerId: session.activeLearner.id,
+    });
+
+    await saveSessionEvidenceToPortfolio({
+      organizationId: session.organization.id,
+      learnerId: session.activeLearner.id,
+      lessonSessionId: input.sessionRecordId,
+      complianceProgramId: program.id,
+    });
+
+    return {
+      ok: true,
+      planItemId: input.planItemId,
+      message: "Saved to portfolio.",
+    };
+  } catch (err) {
+    console.error("[saveTodayPlanItemPortfolioAction]", err);
+    return {
+      ok: false,
+      planItemId: input.planItemId,
+      error: err instanceof Error ? err.message : "Could not save this lesson to the portfolio.",
     };
   }
 }

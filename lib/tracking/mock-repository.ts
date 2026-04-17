@@ -124,6 +124,8 @@ const evidence: EvidenceRecord[] = [
     linkedTo: "Fractions on a Number Line",
     capturedAt: "2026-03-30 10:18",
     note: "Shows correct placement for halves, fourths, and eighths.",
+    portfolioStatus: "saved",
+    portfolioArtifactKind: "work_sample",
   },
   {
     id: "evidence-2",
@@ -132,6 +134,8 @@ const evidence: EvidenceRecord[] = [
     linkedTo: "Essay Revision Conference",
     capturedAt: "2026-03-30 11:04",
     note: "Parent notes from conference plus next revision steps.",
+    portfolioStatus: "inbox",
+    portfolioArtifactKind: "note",
   },
   {
     id: "evidence-3",
@@ -140,6 +144,8 @@ const evidence: EvidenceRecord[] = [
     linkedTo: "Biome Card Sort",
     capturedAt: "2026-03-31 11:42",
     note: "Final sort with labels before cleanup.",
+    portfolioStatus: "saved",
+    portfolioArtifactKind: "photo",
   },
   {
     id: "evidence-4",
@@ -148,6 +154,8 @@ const evidence: EvidenceRecord[] = [
     linkedTo: "Biome Card Sort",
     capturedAt: "2026-03-31 11:49",
     note: "4/5 correct with one habitat mismatch.",
+    portfolioStatus: "saved",
+    portfolioArtifactKind: "work_sample",
   },
 ];
 
@@ -231,6 +239,20 @@ export function getTrackingRepository() {
       return {
         learner,
         curriculum: null,
+        program: {
+          id: "program-demo-1",
+          schoolYearLabel: "2025-2026",
+          startDate: "2025-07-01",
+          endDate: "2026-06-30",
+          jurisdictionCode: "US-GENERIC",
+          jurisdictionLabel: "Generic US record pack",
+          pathwayCode: "independent_recordkeeping",
+          pathwayLabel: "Independent recordkeeping",
+          gradeBand: "elementary",
+          status: "active",
+          framingNote: "Use this as a record pack, not a legal filing tool.",
+        },
+        requirementProfile: null,
         summary: {
           plannedMinutes,
           actualMinutes,
@@ -238,12 +260,30 @@ export function getTrackingRepository() {
           secureCount,
           needsAttentionCount,
         },
+        attendance: {
+          summary: {
+            loggedInstructionalDays: 2,
+            instructionalHours: 2.7,
+            nonInstructionalDays: 0,
+            targetDays: 180,
+            targetHours: null,
+            progressLabel: "2/180 instructional days",
+            readinessLabel: "Still building",
+          },
+          records: [],
+        },
         outcomes,
         observations,
         evaluations,
+        progressSnapshots: [],
+        evaluationRecords: [],
         evidence,
+        portfolioSavedCount: evidence.filter((item) => item.portfolioStatus === "saved").length,
+        subjectCoverage: [],
         standards,
         goals,
+        complianceTasks: [],
+        reportDrafts: [],
         reviewQueue: [],
         recommendations: [],
       };
