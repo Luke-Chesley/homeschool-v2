@@ -12,6 +12,12 @@ import type {
   FastPathIntakeRoute,
   SourceInterpretSourceKind,
 } from "@/lib/homeschool/onboarding/types";
+import {
+  IntakeSourcePackageContextSchema,
+  LearningCoreInputFileSchema,
+  type LearningCoreInputFile,
+  type IntakeSourcePackageContext,
+} from "@/lib/homeschool/intake/types";
 
 import { buildLearningCoreEnvelope } from "./envelope";
 import { executeLearningCoreOperation } from "./operations";
@@ -58,6 +64,8 @@ const BoundedPlanInputSchema = z.object({
   sourceKind: z.enum(SOURCE_INTERPRET_SOURCE_KINDS),
   chosenHorizon: z.enum(CURRICULUM_GENERATION_HORIZONS),
   sourceText: z.string().min(1),
+  sourcePackages: z.array(IntakeSourcePackageContextSchema).default([]),
+  sourceFiles: z.array(LearningCoreInputFileSchema).default([]),
   titleCandidate: z.string().optional().nullable(),
   detectedChunks: z.array(z.string()).default([]),
   assumptions: z.array(z.string()).default([]),
@@ -122,6 +130,8 @@ export async function executeBoundedPlanGenerate(params: {
     sourceKind: SourceInterpretSourceKind;
     chosenHorizon: CurriculumGenerationHorizon;
     sourceText: string;
+    sourcePackages?: IntakeSourcePackageContext[];
+    sourceFiles?: LearningCoreInputFile[];
     titleCandidate?: string | null;
     detectedChunks?: string[];
     assumptions?: string[];

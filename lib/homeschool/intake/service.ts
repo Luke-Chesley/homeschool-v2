@@ -11,12 +11,16 @@ import {
   type CreateTextIntakeSourcePackageRequest,
   type IntakeSourceAsset,
   type IntakeSourceAssetExtractionStatus,
+  type LearningCoreInputFile,
+  type IntakeSourcePackageContext,
   type IntakeSourcePackageModality,
   type NormalizedIntakeSourcePackage,
+  LearningCoreInputFileSchema,
   NormalizedIntakeSourcePackageSchema,
 } from "./types";
 
 const NORMALIZED_TEXT_LIMIT = 12_000;
+const LEARNING_CORE_SIGNED_URL_TTL_SECONDS = 60 * 60;
 
 function sanitizeFileName(fileName: string) {
   return fileName
@@ -169,15 +173,44 @@ function mapPackage(
   });
 }
 
-async function extractPdfText(buffer: Buffer) {
-  const pdfParseModule = await import("pdf-parse");
-  const parser = new pdfParseModule.PDFParse({ data: buffer });
-  try {
-    const result = await parser.getText();
-    return normalizeWhitespace(result.text ?? "");
-  } finally {
-    await parser.destroy();
+export function toIntakeSourcePackageContext(
+  pkg: NormalizedIntakeSourcePackage,
+): IntakeSourcePackageContext {
+  return {
+    id: pkg.id,
+    title: pkg.title,
+    modality: pkg.modality,
+    summary: pkg.summary,
+    extractionStatus: pkg.extractionStatus,
+    assetCount: pkg.assetCount,
+    assetIds: pkg.assets.map((asset) => asset.id),
+    detectedChunks: pkg.detectedChunks,
+    sourceFingerprint: pkg.sourceFingerprint ?? null,
+  };
+}
+
+function assetSupportsDirectModelFileInput(params: {
+  modality: IntakeSourcePackageModality;
+  mimeType: string;
+}) {
+  return params.modality !== "photo" && params.modality !== "image" && !params.mimeType.startsWith("image/");
+}
+
+function buildDirectFileContext(params: {
+  modality: IntakeSourcePackageModality;
+  fileName: string;
+  note?: string | null;
+}) {
+  const note = params.note?.trim();
+  if (note) {
+    return note;
   }
+
+  if (params.modality === "pdf") {
+    return `Uploaded PDF: ${params.fileName}`;
+  }
+
+  return `Uploaded file: ${params.fileName}`;
 }
 
 async function extractAssetText(params: {
@@ -185,7 +218,6 @@ async function extractAssetText(params: {
   mimeType: string;
   fileName: string;
   note?: string | null;
-  buffer: Buffer;
 }): Promise<{
   extractedText: string;
   extractionStatus: IntakeSourceAssetExtractionStatus;
@@ -193,7 +225,6 @@ async function extractAssetText(params: {
 }> {
   const note = params.note?.trim() ?? "";
   const mimeType = params.mimeType.toLowerCase();
-  const fileName = params.fileName.toLowerCase();
 
   if (params.modality === "photo" || params.modality === "image" || mimeType.startsWith("image/")) {
     if (!note) {
@@ -207,49 +238,20 @@ async function extractAssetText(params: {
     };
   }
 
-  if (params.modality === "pdf" || mimeType === "application/pdf" || fileName.endsWith(".pdf")) {
-    try {
-      const text = await extractPdfText(params.buffer);
-      if (text) {
-        return {
-          extractedText: text,
-          extractionStatus: "ready",
-          extractionMethod: "pdf_parse",
-        };
-      }
-    } catch {
-      // fall through to note-backed review path below
-    }
-
-    if (!note) {
-      throw new Error("PDF extraction failed. Add a short note so this source can still be used.");
-    }
-
+  if (
+    assetSupportsDirectModelFileInput({
+      modality: params.modality,
+      mimeType,
+    })
+  ) {
     return {
-      extractedText: note,
-      extractionStatus: "requires_review",
-      extractionMethod: "pdf_note_fallback",
-    };
-  }
-
-  const isTextLike =
-    mimeType.startsWith("text/") ||
-    mimeType === "application/json" ||
-    mimeType === "text/csv" ||
-    mimeType === "application/xml" ||
-    mimeType === "text/html" ||
-    fileName.endsWith(".txt") ||
-    fileName.endsWith(".md") ||
-    fileName.endsWith(".csv") ||
-    fileName.endsWith(".json") ||
-    fileName.endsWith(".html") ||
-    fileName.endsWith(".htm");
-
-  if (isTextLike) {
-    return {
-      extractedText: normalizeWhitespace(params.buffer.toString("utf8")),
+      extractedText: buildDirectFileContext({
+        modality: params.modality,
+        fileName: params.fileName,
+        note: params.note,
+      }),
       extractionStatus: "ready",
-      extractionMethod: "utf8_direct",
+      extractionMethod: "direct_model_file_input",
     };
   }
 
@@ -269,6 +271,58 @@ export async function getNormalizedIntakeSourcePackage(packageId: string) {
   const record = await repos.aiIntake.getPackage(packageId);
   const assets = (await repos.aiIntake.listAssetsForPackage(packageId)).map(mapAsset);
   return mapPackage(record, assets);
+}
+
+export async function getNormalizedIntakeSourcePackages(packageIds: string[]) {
+  const dedupedIds = [...new Set(packageIds.map((value) => value.trim()).filter(Boolean))];
+  return Promise.all(dedupedIds.map((packageId) => getNormalizedIntakeSourcePackage(packageId)));
+}
+
+export async function createLearningCoreInputFilesFromSourcePackages(
+  packages: NormalizedIntakeSourcePackage[],
+) {
+  const storage = getAdminStorageClient();
+  const files: LearningCoreInputFile[] = [];
+
+  for (const pkg of packages) {
+    for (const asset of pkg.assets) {
+      if (
+        !assetSupportsDirectModelFileInput({
+          modality: pkg.modality,
+          mimeType: asset.mimeType.toLowerCase(),
+        })
+      ) {
+        continue;
+      }
+
+      const bucket = storage.from(asset.storageBucket);
+      const signed = await bucket.createSignedUrl(
+        asset.storagePath,
+        LEARNING_CORE_SIGNED_URL_TTL_SECONDS,
+      );
+
+      if (signed.error || !signed.data?.signedUrl) {
+        throw new Error(
+          signed.error?.message ??
+            `Could not create a signed URL for ${asset.fileName}.`,
+        );
+      }
+
+      files.push(
+        LearningCoreInputFileSchema.parse({
+          assetId: asset.id,
+          packageId: pkg.id,
+          title: pkg.title,
+          modality: pkg.modality,
+          fileName: asset.fileName,
+          mimeType: asset.mimeType,
+          fileUrl: signed.data.signedUrl,
+        }),
+      );
+    }
+  }
+
+  return files;
 }
 
 export async function createTextIntakeSourcePackage(params: {
@@ -358,7 +412,6 @@ export async function createAssetBackedIntakeSourcePackage(params: {
       mimeType: params.mimeType,
       fileName: params.fileName,
       note: params.note,
-      buffer: params.buffer,
     });
     const normalizedText = combineNormalizedText([
       extracted.extractedText,

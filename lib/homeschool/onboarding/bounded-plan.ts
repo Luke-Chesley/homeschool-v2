@@ -1,6 +1,10 @@
 import "@/lib/server-only";
 
 import type { ImportedCurriculumDocument } from "@/lib/curriculum/local-json-import";
+import type {
+  IntakeSourcePackageContext,
+  LearningCoreInputFile,
+} from "@/lib/homeschool/intake/types";
 import { importStructuredCurriculumDocument } from "@/lib/curriculum/service";
 import { executeBoundedPlanGenerate } from "@/lib/learning-core/bounded-plan";
 import type { HomeschoolFastPathPreview } from "@/lib/homeschool/onboarding/types";
@@ -105,6 +109,8 @@ export async function createFastPathBoundedCurriculum(params: {
   organizationId: string;
   learnerName: string;
   sourceText: string;
+  sourcePackages?: IntakeSourcePackageContext[];
+  sourceFiles?: LearningCoreInputFile[];
   preview: HomeschoolFastPathPreview;
   intakeMetadata: Record<string, unknown>;
 }) {
@@ -116,6 +122,8 @@ export async function createFastPathBoundedCurriculum(params: {
       sourceKind: params.preview.sourceKind,
       chosenHorizon: params.preview.chosenHorizon,
       sourceText: params.sourceText,
+      sourcePackages: params.sourcePackages ?? [],
+      sourceFiles: params.sourceFiles ?? [],
       titleCandidate: params.preview.title,
       detectedChunks: params.preview.detectedChunks,
       assumptions: params.preview.assumptions,

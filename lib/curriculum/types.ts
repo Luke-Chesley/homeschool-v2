@@ -1,5 +1,10 @@
 import { z } from "zod";
 
+import {
+  IntakeSourcePackageContextSchema,
+  IntakeSourcePackageModalitySchema,
+} from "@/lib/homeschool/intake/types";
+
 export type CurriculumSourceKind =
   | "manual"
   | "upload"
@@ -107,10 +112,11 @@ export const CurriculumSourceIntakeSchema = z.object({
   detectedChunks: z.array(z.string()).default([]),
   followUpQuestion: z.string().nullable().optional(),
   needsConfirmation: z.boolean().optional(),
+  sourcePackageIds: z.array(z.string()).default([]),
+  sourcePackages: z.array(IntakeSourcePackageContextSchema).default([]),
+  sourceModalities: z.array(IntakeSourcePackageModalitySchema).default([]),
   sourcePackageId: z.string().nullable().optional(),
-  sourceModality: z
-    .enum(["text", "outline", "photo", "image", "pdf", "file"])
-    .optional(),
+  sourceModality: IntakeSourcePackageModalitySchema.optional(),
   curriculumMode: z.enum(["manual_shell", "paste_outline", "ai_decompose"]).optional(),
   learningCoreLineage: JsonRecordSchema.optional(),
   sourceFingerprint: z.string().optional(),
