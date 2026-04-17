@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
 
 import { PlanningShell } from "@/components/planning/planning-shell";
 import { TodayOpenTracker } from "@/components/planning/TodayOpenTracker";
@@ -8,11 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireAppSession } from "@/lib/app-session/server";
 import { getOrganizationTodayTrackerBaseline } from "@/lib/beta/service";
-import { getLiveCurriculumSource } from "@/lib/curriculum/service";
-import {
-  getTodayWorkspaceView,
-  materializeTodayWorkspace,
-} from "@/lib/planning/today-service";
+import { getTodayWorkspaceViewForRender } from "@/lib/planning/today-service";
 
 interface TodayPageProps {
   searchParams: Promise<{
@@ -35,27 +30,17 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
     typeof resolvedSearchParams.date === "string" ? resolvedSearchParams.date : undefined;
   const todayDate = date ?? new Date().toISOString().slice(0, 10);
 
-  const [trackerBaseline, liveSource, workspaceResult] = await Promise.all([
+  const [trackerBaseline, workspaceResult] = await Promise.all([
     getOrganizationTodayTrackerBaseline(session.organization.id),
-    getLiveCurriculumSource(session.organization.id),
-    (async () => {
-      await materializeTodayWorkspace({
-        organizationId: session.organization.id,
-        learnerId: session.activeLearner.id,
-        learnerName: session.activeLearner.displayName,
-        date: todayDate,
-      });
-
-      return getTodayWorkspaceView({
-        organizationId: session.organization.id,
-        learnerId: session.activeLearner.id,
-        learnerName: session.activeLearner.displayName,
-        date: todayDate,
-      });
-    })(),
+    getTodayWorkspaceViewForRender({
+      organizationId: session.organization.id,
+      learnerId: session.activeLearner.id,
+      learnerName: session.activeLearner.displayName,
+      date: todayDate,
+    }),
   ]);
 
-  if (!liveSource) {
+  if (!workspaceResult) {
     return (
       <PlanningShell>
         <Card>
@@ -75,11 +60,7 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
     );
   }
 
-  if (!workspaceResult) {
-    notFound();
-  }
-
-  const { workspace, sessionTiming } = workspaceResult;
+  const { workspace, sessionTiming, sourceId } = workspaceResult;
 
   return (
     <PlanningShell>
@@ -97,7 +78,7 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
           <span>{sessionTiming.resolvedTotalMinutes} min</span>
         </div>
       </header>
-      <TodayWorkspaceView workspace={workspace} sourceId={liveSource.id} />
+      <TodayWorkspaceView workspace={workspace} sourceId={sourceId} />
     </PlanningShell>
   );
 }

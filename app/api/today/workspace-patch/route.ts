@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { requireAppSession } from "@/lib/app-session/server";
-import { getTodayBuildStatus } from "@/lib/planning/today-service";
+import { getTodayWorkspaceViewForRender } from "@/lib/planning/today-service";
 
 function buildHeaders(durationMs: number) {
   return {
     "Cache-Control": "no-store",
-    "Server-Timing": `today-activity-build-status;dur=${durationMs.toFixed(1)}`,
+    "Server-Timing": `today-workspace-patch;dur=${durationMs.toFixed(1)}`,
   };
 }
 
@@ -16,41 +16,44 @@ export async function GET(request: NextRequest) {
   try {
     const session = await requireAppSession();
     const date = request.nextUrl.searchParams.get("date");
-    const sourceId = request.nextUrl.searchParams.get("sourceId");
-    const routeFingerprint = request.nextUrl.searchParams.get("routeFingerprint");
-    const lessonSessionId = request.nextUrl.searchParams.get("lessonSessionId");
 
-    if (!date || !sourceId || !routeFingerprint) {
+    if (!date) {
       const durationMs = performance.now() - startedAt;
       return NextResponse.json(
-        { ok: false, error: "Missing date, sourceId, or routeFingerprint." },
+        { ok: false, error: "Missing date." },
         { status: 400, headers: buildHeaders(durationMs) },
       );
     }
 
-    const status = await getTodayBuildStatus({
+    const workspaceResult = await getTodayWorkspaceViewForRender({
       organizationId: session.organization.id,
       learnerId: session.activeLearner.id,
+      learnerName: session.activeLearner.displayName,
       date,
-      sourceId,
-      routeFingerprint,
-      lessonSessionId,
     });
     const durationMs = performance.now() - startedAt;
+
+    if (!workspaceResult) {
+      return NextResponse.json(
+        { ok: false, error: "Workspace not found." },
+        { status: 404, headers: buildHeaders(durationMs) },
+      );
+    }
 
     return NextResponse.json(
       {
         ok: true,
-        build: status.activityBuild,
-        activityState: status.activityState,
+        workspace: workspaceResult.workspace,
+        sourceId: workspaceResult.sourceId,
+        routeFingerprint: workspaceResult.routeFingerprint,
       },
       { headers: buildHeaders(durationMs) },
     );
   } catch (error) {
     const durationMs = performance.now() - startedAt;
-    console.error("[GET /api/today/activity-build-status]", error);
+    console.error("[GET /api/today/workspace-patch]", error);
     return NextResponse.json(
-      { ok: false, error: error instanceof Error ? error.message : "Status check failed." },
+      { ok: false, error: error instanceof Error ? error.message : "Workspace refresh failed." },
       { status: 500, headers: buildHeaders(durationMs) },
     );
   }

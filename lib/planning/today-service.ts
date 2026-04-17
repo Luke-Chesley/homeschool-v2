@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { cache } from "react";
 
 import type { StructuredLessonDraft } from "@/lib/lesson-draft/types";
 import { isStructuredLessonDraft } from "@/lib/lesson-draft/types";
@@ -50,7 +51,11 @@ import {
   type LessonEvaluationLevel,
 } from "@/lib/session-workspace/evaluation";
 import type { AppWorkspace } from "@/lib/users/service";
-import { duplicateWeeklyRouteItem, getOrCreateWeeklyRouteBoardForLearner } from "@/lib/planning/weekly-route-service";
+import {
+  duplicateWeeklyRouteItem,
+  getOrCreateWeeklyRouteBoardForLearner,
+  getReadOptimizedWeeklyRouteBoardForToday,
+} from "@/lib/planning/weekly-route-service";
 import type { WeeklyRouteBoard } from "@/lib/curriculum-routing";
 import { toWeekStartDate } from "@/lib/curriculum-routing";
 import { buildCopilotPlanningContext } from "@/lib/planning/copilot-snapshot";
@@ -67,6 +72,7 @@ const TODAY_LESSON_BUILDS_KEY = "todayLessonBuilds";
 const TODAY_ACTIVITY_BUILDS_KEY = "todayActivityBuilds";
 const TODAY_LESSON_REGEN_NOTES_KEY = "todayLessonRegenerationNotes";
 const TODAY_EXPANSION_INTENTS_KEY = "todayExpansionIntents";
+const TODAY_WORKSPACE_FRESHNESS_KEY = "todayWorkspaceFreshness";
 
 type TodayMaterializedWorkflowEntry = {
   planParentId: string;
@@ -98,6 +104,42 @@ type TodayWorkspaceMetadataState = {
   activityBuild: DailyWorkspaceActivityBuild | null;
   lessonRegenerationNote: string | null;
   expansionIntent: DailyWorkspaceExpansionIntent | null;
+};
+
+type TodayWorkspaceFreshnessRecord = {
+  sourceId: string;
+  routeFingerprint: string;
+  itemCount: number;
+  syncedAt: string;
+};
+
+type TodayWorkspaceStoredState = {
+  metadataState: TodayWorkspaceMetadataState;
+  freshness: TodayWorkspaceFreshnessRecord | null;
+};
+
+type TodayWorkspaceFreshnessState = {
+  status: "fresh" | "stale" | "missing";
+  storedState: TodayWorkspaceStoredState;
+};
+
+type TodayPlanItemPayload = {
+  planId: string;
+  planDayId: string;
+  curriculumItemId: null;
+  title: string;
+  description: string;
+  subject: string;
+  status: typeof planItems.$inferInsert.status;
+  scheduledDate: string;
+  estimatedMinutes: number;
+  ordering: number;
+  metadata: {
+    sourceLabel: string;
+    lessonLabel: string;
+    weeklyRouteItemId: string;
+    skillNodeId: string;
+  };
 };
 
 function addDays(baseDate: string, days: number) {
@@ -159,16 +201,44 @@ function isExpansionIntent(value: unknown): value is DailyWorkspaceExpansionInte
   return value === "keep_today" || value === "expand_from_here";
 }
 
+async function withTodayTiming<T>(
+  label: string,
+  meta: Record<string, unknown>,
+  operation: () => Promise<T>,
+) {
+  const startedAt = performance.now();
+
+  try {
+    return await operation();
+  } finally {
+    const durationMs = Number((performance.now() - startedAt).toFixed(1));
+    console.info(`[today-runtime] ${label}`, {
+      durationMs,
+      ...meta,
+    });
+  }
+}
+
 async function buildTodayActivityState(
   workspace: Pick<DailyWorkspace, "leadItem" | "lessonDraft">,
 ): Promise<DailyWorkspaceActivityState> {
-  const lessonDraft = workspace.lessonDraft?.structured;
+  return buildTodayActivityStateFromDraft({
+    lessonDraft: workspace.lessonDraft,
+    lessonSessionId:
+      workspace.leadItem.sessionRecordId ?? workspace.leadItem.workflow?.lessonSessionId ?? null,
+  });
+}
+
+async function buildTodayActivityStateFromDraft(params: {
+  lessonDraft: DailyWorkspaceLessonDraft | null;
+  lessonSessionId?: string | null;
+}): Promise<DailyWorkspaceActivityState> {
+  const lessonDraft = params.lessonDraft?.structured;
   if (!lessonDraft) {
     return { status: "no_draft" };
   }
 
-  const leadSessionId =
-    workspace.leadItem.sessionRecordId ?? workspace.leadItem.workflow?.lessonSessionId ?? null;
+  const leadSessionId = params.lessonSessionId ?? null;
   if (!leadSessionId) {
     return { status: "no_activity" };
   }
@@ -392,6 +462,41 @@ function readExpansionIntentFromMetadata(
   return isExpansionIntent(candidate) ? candidate : null;
 }
 
+function readTodayWorkspaceFreshnessFromMetadata(
+  metadata: Record<string, unknown> | null | undefined,
+  sourceId: string,
+  routeFingerprint: string,
+): TodayWorkspaceFreshnessRecord | null {
+  if (!isRecord(metadata)) {
+    return null;
+  }
+
+  const freshnessSources = metadata[TODAY_WORKSPACE_FRESHNESS_KEY];
+  if (!isRecord(freshnessSources)) {
+    return null;
+  }
+
+  const sourceFreshness = freshnessSources[sourceId];
+  if (!isRecord(sourceFreshness)) {
+    return null;
+  }
+
+  const candidate = sourceFreshness[routeFingerprint];
+  if (!isRecord(candidate)) {
+    return null;
+  }
+
+  return {
+    sourceId: typeof candidate.sourceId === "string" ? candidate.sourceId : sourceId,
+    routeFingerprint:
+      typeof candidate.routeFingerprint === "string"
+        ? candidate.routeFingerprint
+        : routeFingerprint,
+    itemCount: typeof candidate.itemCount === "number" ? candidate.itemCount : 0,
+    syncedAt: typeof candidate.syncedAt === "string" ? candidate.syncedAt : new Date().toISOString(),
+  };
+}
+
 async function getTodayWorkspacePlan(organizationId: string, learnerId: string) {
   const db = getDb();
   const [workspacePlan] = await db
@@ -479,6 +584,215 @@ async function getOrCreateTodayWorkspaceDay(params: {
   return createdDay;
 }
 
+async function writeTodayWorkspaceFreshness(params: {
+  organizationId: string;
+  learnerId: string;
+  date: string;
+  sourceId: string;
+  routeFingerprint: string;
+  itemCount: number;
+}) {
+  const day = await getOrCreateTodayWorkspaceDay(params);
+  const db = getDb();
+  const metadata = isRecord(day.metadata) ? day.metadata : {};
+  const freshnessSources = isRecord(metadata[TODAY_WORKSPACE_FRESHNESS_KEY])
+    ? (metadata[TODAY_WORKSPACE_FRESHNESS_KEY] as Record<string, unknown>)
+    : {};
+  const sourceFreshness = isRecord(freshnessSources[params.sourceId])
+    ? (freshnessSources[params.sourceId] as Record<string, unknown>)
+    : {};
+  const syncedAt = new Date().toISOString();
+
+  await db
+    .update(planDays)
+    .set({
+      metadata: {
+        ...metadata,
+        [TODAY_WORKSPACE_FRESHNESS_KEY]: {
+          ...freshnessSources,
+          [params.sourceId]: {
+            ...sourceFreshness,
+            [params.routeFingerprint]: {
+              sourceId: params.sourceId,
+              routeFingerprint: params.routeFingerprint,
+              itemCount: params.itemCount,
+              syncedAt,
+            },
+          },
+        },
+      },
+      updatedAt: new Date(syncedAt),
+    })
+    .where(eq(planDays.id, day.id));
+}
+
+async function readTodayWorkspaceStoredState(params: {
+  organizationId: string;
+  learnerId: string;
+  date: string;
+  sourceId: string;
+  routeFingerprint: string;
+}): Promise<TodayWorkspaceStoredState> {
+  if (!params.routeFingerprint) {
+    return {
+      metadataState: {
+        lessonDraft: null,
+        lessonBuild: null,
+        activityBuild: null,
+        lessonRegenerationNote: null,
+        expansionIntent: null,
+      },
+      freshness: null,
+    };
+  }
+
+  const day = await getTodayWorkspaceDay(params);
+  if (!day) {
+    return {
+      metadataState: {
+        lessonDraft: null,
+        lessonBuild: null,
+        activityBuild: null,
+        lessonRegenerationNote: null,
+        expansionIntent: null,
+      },
+      freshness: null,
+    };
+  }
+
+  return {
+    metadataState: {
+      lessonDraft: readLessonDraftFromMetadata(day.metadata, params.sourceId, params.routeFingerprint),
+      lessonBuild: readLessonBuildFromMetadata(day.metadata, params.sourceId, params.routeFingerprint),
+      activityBuild: readActivityBuildFromMetadata(day.metadata, params.sourceId, params.routeFingerprint),
+      lessonRegenerationNote: readLessonRegenerationNoteFromMetadata(
+        day.metadata,
+        params.sourceId,
+        params.routeFingerprint,
+      ),
+      expansionIntent: readExpansionIntentFromMetadata(
+        day.metadata,
+        params.sourceId,
+        params.routeFingerprint,
+      ),
+    },
+    freshness: readTodayWorkspaceFreshnessFromMetadata(
+      day.metadata,
+      params.sourceId,
+      params.routeFingerprint,
+    ),
+  };
+}
+
+async function readTodayWorkspaceFreshnessState(params: {
+  organizationId: string;
+  learnerId: string;
+  date: string;
+  sourceId: string;
+  routeFingerprint: string;
+  selectedRouteItemCount: number;
+}) {
+  return withTodayTiming(
+    "readTodayWorkspaceFreshnessState",
+    {
+      organizationId: params.organizationId,
+      learnerId: params.learnerId,
+      date: params.date,
+      sourceId: params.sourceId,
+      routeFingerprint: params.routeFingerprint,
+      selectedRouteItemCount: params.selectedRouteItemCount,
+    },
+    async (): Promise<TodayWorkspaceFreshnessState> => {
+      const storedState = await readTodayWorkspaceStoredState(params);
+      const isFresh = isTodayWorkspaceFresh({
+        freshness: storedState.freshness,
+        routeFingerprint: params.routeFingerprint,
+        selectedRouteItemCount: params.selectedRouteItemCount,
+      });
+
+      return {
+        status:
+          isFresh
+            ? "fresh"
+            : storedState.freshness === null
+              ? "missing"
+              : "stale",
+        storedState,
+      };
+    },
+  );
+}
+
+function isTodayWorkspaceFresh(params: {
+  freshness: TodayWorkspaceFreshnessRecord | null;
+  routeFingerprint: string;
+  selectedRouteItemCount: number;
+}) {
+  return (
+    params.selectedRouteItemCount === 0 ||
+    (params.freshness?.routeFingerprint === params.routeFingerprint &&
+      params.freshness.itemCount === params.selectedRouteItemCount)
+  );
+}
+
+function readTodayPlanItemSyncMetadata(metadata: unknown) {
+  if (!isRecord(metadata)) {
+    return {
+      sourceLabel: null,
+      lessonLabel: null,
+      weeklyRouteItemId: null,
+      skillNodeId: null,
+    };
+  }
+
+  return {
+    sourceLabel: typeof metadata.sourceLabel === "string" ? metadata.sourceLabel : null,
+    lessonLabel: typeof metadata.lessonLabel === "string" ? metadata.lessonLabel : null,
+    weeklyRouteItemId:
+      typeof metadata.weeklyRouteItemId === "string" ? metadata.weeklyRouteItemId : null,
+    skillNodeId: typeof metadata.skillNodeId === "string" ? metadata.skillNodeId : null,
+  };
+}
+
+function buildTodayPlanItemUpdatePatch(
+  existingPlanItem: typeof planItems.$inferSelect,
+  nextValues: TodayPlanItemPayload,
+) {
+  // A route-backed plan item is dirty only when the persisted Today-facing fields diverge from
+  // the desired canonical route projection. No-op rows intentionally skip updatedAt churn.
+  const mergedMetadata = {
+    ...(isRecord(existingPlanItem.metadata) ? existingPlanItem.metadata : {}),
+    ...nextValues.metadata,
+  };
+  const currentMetadata = readTodayPlanItemSyncMetadata(existingPlanItem.metadata);
+  const nextMetadata = readTodayPlanItemSyncMetadata(mergedMetadata);
+  const isDirty =
+    existingPlanItem.planId !== nextValues.planId ||
+    existingPlanItem.planDayId !== nextValues.planDayId ||
+    existingPlanItem.curriculumItemId !== nextValues.curriculumItemId ||
+    existingPlanItem.title !== nextValues.title ||
+    (existingPlanItem.description ?? null) !== (nextValues.description ?? null) ||
+    (existingPlanItem.subject ?? null) !== (nextValues.subject ?? null) ||
+    existingPlanItem.status !== nextValues.status ||
+    (existingPlanItem.scheduledDate ?? null) !== nextValues.scheduledDate ||
+    (existingPlanItem.estimatedMinutes ?? null) !== nextValues.estimatedMinutes ||
+    (existingPlanItem.ordering ?? null) !== nextValues.ordering ||
+    currentMetadata.sourceLabel !== nextMetadata.sourceLabel ||
+    currentMetadata.lessonLabel !== nextMetadata.lessonLabel ||
+    currentMetadata.weeklyRouteItemId !== nextMetadata.weeklyRouteItemId ||
+    currentMetadata.skillNodeId !== nextMetadata.skillNodeId;
+
+  if (!isDirty) {
+    return null;
+  }
+
+  return {
+    ...nextValues,
+    metadata: mergedMetadata,
+    updatedAt: new Date(),
+  };
+}
+
 async function syncTodayPlanItems(params: {
   organizationId: string;
   learnerId: string;
@@ -490,227 +804,296 @@ async function syncTodayPlanItems(params: {
   selectedRouteItems: WeeklyRouteBoard["items"];
   nodeById: Map<string, Awaited<ReturnType<typeof listCurriculumNodes>>[number]>;
 }) {
-  const db = getDb();
-  const workspacePlan = await getOrCreateTodayWorkspacePlan(params.organizationId, params.learnerId);
-  const workspaceDay = await getOrCreateTodayWorkspaceDay(params);
-  const routeItemIds = params.selectedRouteItems.map((item) => item.id);
+  return withTodayTiming(
+    "syncTodayPlanItems",
+    {
+      organizationId: params.organizationId,
+      learnerId: params.learnerId,
+      date: params.date,
+      selectedRouteItemCount: params.selectedRouteItems.length,
+    },
+    async () => {
+      const db = getDb();
+      const workspacePlan = await getOrCreateTodayWorkspacePlan(
+        params.organizationId,
+        params.learnerId,
+      );
+      const workspaceDay = await getOrCreateTodayWorkspaceDay(params);
+      const routeItemIds = params.selectedRouteItems.map((item) => item.id);
 
-  if (routeItemIds.length === 0) {
-    return new Map<string, TodayMaterializedWorkflowEntry>();
-  }
-
-  const existingLinks = await db.query.planItemCurriculumLinks.findMany({
-    where: inArray(planItemCurriculumLinks.weeklyRouteItemId, routeItemIds),
-  });
-  const existingPlanItems = existingLinks.length > 0
-    ? await db.query.planItems.findMany({
-        where: inArray(
-          planItems.id,
-          [...new Set(existingLinks.map((link) => link.planItemId))],
-        ),
-      })
-    : [];
-  const existingPlanItemById = new Map(existingPlanItems.map((item) => [item.id, item]));
-  const existingPlanItemByRouteItemId = new Map<string, typeof planItems.$inferSelect>();
-
-  for (const link of existingLinks) {
-    if (typeof link.weeklyRouteItemId !== "string") {
-      continue;
-    }
-
-    const planItem = existingPlanItemById.get(link.planItemId);
-    if (planItem) {
-      existingPlanItemByRouteItemId.set(link.weeklyRouteItemId, planItem);
-    }
-  }
-
-  const routeItemPayloads = params.selectedRouteItems.map((routeItem, index) => {
-    const node = params.nodeById.get(routeItem.skillNodeId);
-    const scheduledDate = routeItem.scheduledDate ?? params.date;
-    const itemEffortMinutes = node?.estimatedMinutes ?? params.sessionBudgetMinutes;
-    const subject = node?.normalizedPath.split("/")[0] ?? params.sourceTitle;
-    const lessonLabel = getSkillPathLabel(routeItem.skillPath);
-    const planItemStatus: typeof planItems.$inferInsert.status =
-      mapRouteStateToPlanStatus(routeItem.state) === "blocked" ? "skipped" : "ready";
-
-    return {
-      index,
-      node,
-      routeItem,
-      scheduledDate,
-      itemEffortMinutes,
-      values: {
-        planId: workspacePlan.id,
-        planDayId: workspaceDay.id,
-        curriculumItemId: null,
-        title: routeItem.skillTitle,
-        description: node?.description ?? routeItem.skillTitle,
-        subject,
-        status: planItemStatus,
-        scheduledDate,
-        estimatedMinutes: itemEffortMinutes,
-        ordering: index,
-        metadata: {
-          sourceLabel: params.sourceTitle,
-          lessonLabel,
-          weeklyRouteItemId: routeItem.id,
-          skillNodeId: routeItem.skillNodeId,
-        },
-      },
-    };
-  });
-
-  const itemsToCreate = routeItemPayloads.filter(
-    ({ routeItem }) => !existingPlanItemByRouteItemId.has(routeItem.id),
-  );
-  const itemsToUpdate = routeItemPayloads.filter(({ routeItem }) =>
-    existingPlanItemByRouteItemId.has(routeItem.id),
-  );
-
-  const createdPlanItems =
-    itemsToCreate.length > 0
-      ? await db.insert(planItems).values(itemsToCreate.map(({ values }) => values)).returning()
-      : [];
-
-  if (itemsToUpdate.length > 0) {
-    await Promise.all(
-      itemsToUpdate.map(async ({ routeItem, values }) => {
-        const existingPlanItem = existingPlanItemByRouteItemId.get(routeItem.id);
-        if (!existingPlanItem) {
-          return;
-        }
-
-        await db
-          .update(planItems)
-          .set({
-            ...values,
-            metadata: {
-              ...(existingPlanItem.metadata ?? {}),
-              ...(values.metadata ?? {}),
-            },
-            updatedAt: new Date(),
-          })
-          .where(eq(planItems.id, existingPlanItem.id));
-      }),
-    );
-  }
-
-  const provisionalPlanItemByRouteItemId = new Map(existingPlanItemByRouteItemId);
-  for (const planItem of createdPlanItems) {
-    const routeItemId = readWeeklyRouteItemIdFromMetadata(planItem.metadata);
-    if (routeItemId) {
-      provisionalPlanItemByRouteItemId.set(routeItemId, planItem);
-    }
-  }
-
-  const existingLinkedRouteItemIds = new Set(
-    existingLinks
-      .map((link) => link.weeklyRouteItemId)
-      .filter((value): value is string => typeof value === "string"),
-  );
-  const missingLinks = routeItemPayloads.flatMap(({ routeItem }) => {
-    if (existingLinkedRouteItemIds.has(routeItem.id)) {
-      return [];
-    }
-
-    const planItem = provisionalPlanItemByRouteItemId.get(routeItem.id);
-    if (!planItem) {
-      return [];
-    }
-
-    return [
-      {
-        planItemId: planItem.id,
-        sourceId: routeItem.sourceId,
-        skillNodeId: routeItem.skillNodeId,
-        weeklyRouteItemId: routeItem.id,
-        origin: "curriculum_route" as const,
-        metadata: {},
-      },
-    ];
-  });
-
-  if (missingLinks.length > 0) {
-    await db.insert(planItemCurriculumLinks).values(missingLinks).onConflictDoNothing({
-      target: planItemCurriculumLinks.weeklyRouteItemId,
-    });
-  }
-
-  const canonicalLinks = await db.query.planItemCurriculumLinks.findMany({
-    where: inArray(planItemCurriculumLinks.weeklyRouteItemId, routeItemIds),
-  });
-  const canonicalPlanItemIds = [...new Set(canonicalLinks.map((link) => link.planItemId))];
-  const canonicalPlanItems = canonicalPlanItemIds.length > 0
-    ? await db.query.planItems.findMany({
-        where: inArray(planItems.id, canonicalPlanItemIds),
-      })
-    : [];
-  const canonicalPlanItemById = new Map(canonicalPlanItems.map((item) => [item.id, item]));
-  const canonicalPlanItemByRouteItemId = new Map<string, typeof planItems.$inferSelect>();
-
-  for (const link of canonicalLinks) {
-    if (typeof link.weeklyRouteItemId !== "string") {
-      continue;
-    }
-
-    const planItem = canonicalPlanItemById.get(link.planItemId);
-    if (planItem) {
-      canonicalPlanItemByRouteItemId.set(link.weeklyRouteItemId, planItem);
-    }
-  }
-
-  const materializedByRouteItemId = new Map<string, TodayMaterializedWorkflowEntry>();
-  const ensuredSessions = await Promise.all(
-    routeItemPayloads.map(async ({ routeItem, scheduledDate }) => {
-      const planItemRecord =
-        canonicalPlanItemByRouteItemId.get(routeItem.id) ??
-        provisionalPlanItemByRouteItemId.get(routeItem.id);
-      if (!planItemRecord) {
-        return null;
+      if (routeItemIds.length === 0) {
+        return new Map<string, TodayMaterializedWorkflowEntry>();
       }
 
-      const session = await ensureSessionWorkspace({
-        organizationId: params.organizationId,
-        learnerId: params.learnerId,
-        planId: workspacePlan.id,
-        planDayId: workspaceDay.id,
-        planItemId: planItemRecord.id,
-        sessionDate: scheduledDate,
-        scheduledMinutes: params.sessionBudgetMinutes,
-        metadata: {
-          weeklyRouteItemId: routeItem.id,
-          sourceId: routeItem.sourceId,
-          skillNodeId: routeItem.skillNodeId,
-        },
+      const existingLinks = await db.query.planItemCurriculumLinks.findMany({
+        where: inArray(planItemCurriculumLinks.weeklyRouteItemId, routeItemIds),
+      });
+      const existingPlanItemIds = [...new Set(existingLinks.map((link) => link.planItemId))];
+      const existingPlanItems =
+        existingPlanItemIds.length > 0
+          ? await db.query.planItems.findMany({
+              where: inArray(planItems.id, existingPlanItemIds),
+            })
+          : [];
+      const existingPlanItemById = new Map(existingPlanItems.map((item) => [item.id, item]));
+      const existingPlanItemByRouteItemId = new Map<string, typeof planItems.$inferSelect>();
+
+      for (const link of existingLinks) {
+        if (typeof link.weeklyRouteItemId !== "string") {
+          continue;
+        }
+
+        const planItem = existingPlanItemById.get(link.planItemId);
+        if (planItem) {
+          existingPlanItemByRouteItemId.set(link.weeklyRouteItemId, planItem);
+        }
+      }
+
+      const routeItemPayloads = params.selectedRouteItems.map((routeItem, index) => {
+        const node = params.nodeById.get(routeItem.skillNodeId);
+        const scheduledDate = routeItem.scheduledDate ?? params.date;
+        const itemEffortMinutes = node?.estimatedMinutes ?? params.sessionBudgetMinutes;
+        const subject = node?.normalizedPath.split("/")[0] ?? params.sourceTitle;
+        const lessonLabel = getSkillPathLabel(routeItem.skillPath);
+        const planItemStatus: typeof planItems.$inferInsert.status =
+          mapRouteStateToPlanStatus(routeItem.state) === "blocked" ? "skipped" : "ready";
+
+        return {
+          routeItem,
+          scheduledDate,
+          values: {
+            planId: workspacePlan.id,
+            planDayId: workspaceDay.id,
+            curriculumItemId: null,
+            title: routeItem.skillTitle,
+            description: node?.description ?? routeItem.skillTitle,
+            subject,
+            status: planItemStatus,
+            scheduledDate,
+            estimatedMinutes: itemEffortMinutes,
+            ordering: index,
+            metadata: {
+              sourceLabel: params.sourceTitle,
+              lessonLabel,
+              weeklyRouteItemId: routeItem.id,
+              skillNodeId: routeItem.skillNodeId,
+            },
+          } satisfies TodayPlanItemPayload,
+        };
       });
 
-      return {
-        routeItemId: routeItem.id,
-        entry: {
+      const itemsToCreate = routeItemPayloads.filter(
+        ({ routeItem }) => !existingPlanItemByRouteItemId.has(routeItem.id),
+      );
+      const dirtyUpdates = routeItemPayloads.flatMap(({ routeItem, values }) => {
+        const existingPlanItem = existingPlanItemByRouteItemId.get(routeItem.id);
+        if (!existingPlanItem) {
+          return [];
+        }
+
+        const patch = buildTodayPlanItemUpdatePatch(existingPlanItem, values);
+        return patch
+          ? [{ planItemId: existingPlanItem.id, routeItemId: routeItem.id, patch }]
+          : [];
+      });
+
+      const createdPlanItems =
+        itemsToCreate.length > 0
+          ? await db.insert(planItems).values(itemsToCreate.map(({ values }) => values)).returning()
+          : [];
+
+      if (dirtyUpdates.length > 0) {
+        await Promise.all(
+          dirtyUpdates.map(({ planItemId, patch }) =>
+            db.update(planItems).set(patch).where(eq(planItems.id, planItemId)),
+          ),
+        );
+      }
+
+      const provisionalPlanItemByRouteItemId = new Map(existingPlanItemByRouteItemId);
+      for (const planItem of createdPlanItems) {
+        const routeItemId = readWeeklyRouteItemIdFromMetadata(planItem.metadata);
+        if (routeItemId) {
+          provisionalPlanItemByRouteItemId.set(routeItemId, planItem);
+        }
+      }
+
+      const existingLinkedRouteItemIds = new Set(
+        existingLinks
+          .map((link) => link.weeklyRouteItemId)
+          .filter((value): value is string => typeof value === "string"),
+      );
+      const missingLinks = routeItemPayloads.flatMap(({ routeItem }) => {
+        if (existingLinkedRouteItemIds.has(routeItem.id)) {
+          return [];
+        }
+
+        const planItem = provisionalPlanItemByRouteItemId.get(routeItem.id);
+        if (!planItem) {
+          return [];
+        }
+
+        return [
+          {
+            planItemId: planItem.id,
+            sourceId: routeItem.sourceId,
+            skillNodeId: routeItem.skillNodeId,
+            weeklyRouteItemId: routeItem.id,
+            origin: "curriculum_route" as const,
+            metadata: {},
+          },
+        ];
+      });
+
+      if (missingLinks.length > 0) {
+        await db.insert(planItemCurriculumLinks).values(missingLinks).onConflictDoNothing({
+          target: planItemCurriculumLinks.weeklyRouteItemId,
+        });
+      }
+
+      let resolvedPlanItemByRouteItemId = provisionalPlanItemByRouteItemId;
+      if (createdPlanItems.length > 0 || missingLinks.length > 0) {
+        const canonicalLinks = await db.query.planItemCurriculumLinks.findMany({
+          where: inArray(planItemCurriculumLinks.weeklyRouteItemId, routeItemIds),
+        });
+        const canonicalPlanItemIds = [...new Set(canonicalLinks.map((link) => link.planItemId))];
+        const canonicalPlanItems =
+          canonicalPlanItemIds.length > 0
+            ? await db.query.planItems.findMany({
+                where: inArray(planItems.id, canonicalPlanItemIds),
+              })
+            : [];
+        const canonicalPlanItemById = new Map(canonicalPlanItems.map((item) => [item.id, item]));
+        resolvedPlanItemByRouteItemId = new Map<string, typeof planItems.$inferSelect>();
+
+        for (const link of canonicalLinks) {
+          if (typeof link.weeklyRouteItemId !== "string") {
+            continue;
+          }
+
+          const planItem = canonicalPlanItemById.get(link.planItemId);
+          if (planItem) {
+            resolvedPlanItemByRouteItemId.set(link.weeklyRouteItemId, planItem);
+          }
+        }
+      }
+
+      const resolvedPlanItemIds = [
+        ...new Set(
+          routeItemPayloads
+            .map(({ routeItem }) => resolvedPlanItemByRouteItemId.get(routeItem.id)?.id ?? null)
+            .filter((value): value is string => Boolean(value)),
+        ),
+      ];
+      const existingSessionRows =
+        resolvedPlanItemIds.length > 0
+          ? await db
+              .select()
+              .from(lessonSessions)
+              .where(
+                and(
+                  eq(lessonSessions.organizationId, params.organizationId),
+                  eq(lessonSessions.learnerId, params.learnerId),
+                  eq(lessonSessions.sessionDate, params.date),
+                  inArray(lessonSessions.planItemId, resolvedPlanItemIds),
+                ),
+              )
+              .orderBy(desc(lessonSessions.updatedAt), desc(lessonSessions.createdAt))
+          : [];
+      const latestSessionByPlanItemId = new Map<string, typeof lessonSessions.$inferSelect>();
+      for (const session of existingSessionRows) {
+        if (!latestSessionByPlanItemId.has(session.planItemId)) {
+          latestSessionByPlanItemId.set(session.planItemId, session);
+        }
+      }
+
+      const materializedByRouteItemId = new Map<string, TodayMaterializedWorkflowEntry>();
+      const preloadedSessionById = new Map<string, typeof lessonSessions.$inferSelect>();
+      const sessionEnsures = routeItemPayloads.flatMap(({ routeItem }) => {
+        const planItemRecord = resolvedPlanItemByRouteItemId.get(routeItem.id);
+        if (!planItemRecord) {
+          return [];
+        }
+
+        const existingSession = latestSessionByPlanItemId.get(planItemRecord.id) ?? null;
+        if (existingSession) {
+          preloadedSessionById.set(existingSession.id, existingSession);
+          materializedByRouteItemId.set(routeItem.id, {
+            planParentId: workspacePlan.id,
+            planDayRecordId: workspaceDay.id,
+            planItemId: planItemRecord.id,
+            lessonSessionId: existingSession.id,
+            completionStatus: existingSession.completionStatus,
+            reviewState: existingSession.reviewState,
+            evidenceCount: 0,
+            activityCount: 0,
+          });
+          return [];
+        }
+
+        return [{ routeItem, planItemRecord }];
+      });
+
+      const ensuredSessions = await Promise.all(
+        sessionEnsures.map(async ({ routeItem, planItemRecord }) => {
+          const session = await ensureSessionWorkspace({
+            organizationId: params.organizationId,
+            learnerId: params.learnerId,
+            planId: workspacePlan.id,
+            planDayId: workspaceDay.id,
+            planItemId: planItemRecord.id,
+            sessionDate: params.date,
+            scheduledMinutes: params.sessionBudgetMinutes,
+            metadata: {
+              weeklyRouteItemId: routeItem.id,
+              sourceId: routeItem.sourceId,
+              skillNodeId: routeItem.skillNodeId,
+            },
+          });
+
+          return {
+            routeItemId: routeItem.id,
+            session,
+            planItemId: planItemRecord.id,
+          };
+        }),
+      );
+
+      for (const ensured of ensuredSessions) {
+        preloadedSessionById.set(ensured.session.id, ensured.session);
+        materializedByRouteItemId.set(ensured.routeItemId, {
           planParentId: workspacePlan.id,
           planDayRecordId: workspaceDay.id,
-          planItemId: planItemRecord.id,
-          lessonSessionId: session.id,
-          completionStatus: session.completionStatus,
-          reviewState: session.reviewState,
+          planItemId: ensured.planItemId,
+          lessonSessionId: ensured.session.id,
+          completionStatus: ensured.session.completionStatus,
+          reviewState: ensured.session.reviewState,
           evidenceCount: 0,
           activityCount: 0,
-        } satisfies TodayMaterializedWorkflowEntry,
-      };
-    }),
+        });
+      }
+
+      console.info("[today-runtime] syncTodayPlanItems:summary", {
+        date: params.date,
+        selectedRouteItemCount: routeItemPayloads.length,
+        createdItemCount: createdPlanItems.length,
+        updatedItemCount: dirtyUpdates.length,
+        ensuredSessionCount: ensuredSessions.length,
+        canonicalReload: createdPlanItems.length > 0 || missingLinks.length > 0,
+      });
+
+      return hydrateTodayMaterializedWorkflow(materializedByRouteItemId, {
+        preloadedSessionById,
+      });
+    },
   );
-
-  for (const ensured of ensuredSessions) {
-    if (ensured) {
-      materializedByRouteItemId.set(ensured.routeItemId, ensured.entry);
-    }
-  }
-
-  return hydrateTodayMaterializedWorkflow(materializedByRouteItemId);
 }
 
 async function hydrateTodayMaterializedWorkflow(
   entries: Map<string, TodayMaterializedWorkflowEntry>,
+  options?: {
+    preloadedSessionById?: Map<string, typeof lessonSessions.$inferSelect>;
+  },
 ) {
   const db = getDb();
   const hydratedEntries = new Map(entries);
@@ -719,12 +1102,19 @@ async function hydrateTodayMaterializedWorkflow(
     .map((entry) => entry.lessonSessionId)
     .filter((value): value is string => Boolean(value));
 
-  const sessions = lessonSessionIds.length > 0
-    ? await db.query.lessonSessions.findMany({
-        where: inArray(lessonSessions.id, lessonSessionIds),
-      })
-    : [];
-  const sessionById = new Map(sessions.map((session) => [session.id, session]));
+  const missingSessionIds = lessonSessionIds.filter(
+    (sessionId) => !options?.preloadedSessionById?.has(sessionId),
+  );
+  const sessions =
+    missingSessionIds.length > 0
+      ? await db.query.lessonSessions.findMany({
+          where: inArray(lessonSessions.id, missingSessionIds),
+        })
+      : [];
+  const sessionById = new Map(options?.preloadedSessionById ?? []);
+  for (const session of sessions) {
+    sessionById.set(session.id, session);
+  }
 
   const activityRows = planItemIds.length > 0
     ? await db.query.interactiveActivities.findMany({
@@ -954,6 +1344,41 @@ export async function getSavedTodayExpansionIntent(params: {
   return readExpansionIntentFromMetadata(day.metadata, params.sourceId, params.routeFingerprint);
 }
 
+export async function getTodayBuildStatus(params: {
+  organizationId: string;
+  learnerId: string;
+  date: string;
+  sourceId: string;
+  routeFingerprint: string;
+  lessonSessionId?: string | null;
+}) {
+  return withTodayTiming(
+    "getTodayBuildStatus",
+    {
+      organizationId: params.organizationId,
+      learnerId: params.learnerId,
+      date: params.date,
+      sourceId: params.sourceId,
+      routeFingerprint: params.routeFingerprint,
+    },
+    async () => {
+      const metadataState = await readTodayWorkspaceMetadataState(params);
+      const lessonSessionId =
+        params.lessonSessionId ?? metadataState.activityBuild?.lessonSessionId ?? null;
+
+      return {
+        lessonBuild: metadataState.lessonBuild,
+        lessonDraft: metadataState.lessonDraft,
+        activityBuild: metadataState.activityBuild,
+        activityState: await buildTodayActivityStateFromDraft({
+          lessonDraft: metadataState.lessonDraft,
+          lessonSessionId,
+        }),
+      };
+    },
+  );
+}
+
 export async function getTodayLessonBuildStatus(params: {
   organizationId: string;
   learnerId: string;
@@ -961,7 +1386,7 @@ export async function getTodayLessonBuildStatus(params: {
   sourceId: string;
   routeFingerprint: string;
 }) {
-  const state = await readTodayWorkspaceMetadataState(params);
+  const state = await getTodayBuildStatus(params);
 
   return {
     build: state.lessonBuild,
@@ -978,43 +1403,11 @@ export async function getTodayActivityBuildStatus(params: {
   routeFingerprint: string;
   lessonSessionId?: string | null;
 }) {
-  const metadataState = await readTodayWorkspaceMetadataState(params);
-  const lessonDraft = metadataState.lessonDraft?.structured;
-  const leadSessionId = params.lessonSessionId ?? metadataState.activityBuild?.lessonSessionId ?? null;
-
-  if (!lessonDraft) {
-    return {
-      build: metadataState.activityBuild,
-      activityState: { status: "no_draft" } satisfies DailyWorkspaceActivityState,
-    };
-  }
-
-  if (!leadSessionId) {
-    return {
-      build: metadataState.activityBuild,
-      activityState: { status: "no_activity" } satisfies DailyWorkspaceActivityState,
-    };
-  }
-
-  const repos = createRepositories(getDb());
-  const currentFingerprint = computeLessonDraftFingerprint(lessonDraft);
-  const existingActivity = await repos.activities.findPublishedActivityForSession(leadSessionId);
-
-  if (!existingActivity) {
-    return {
-      build: metadataState.activityBuild,
-      activityState: { status: "no_activity", sessionId: leadSessionId } satisfies DailyWorkspaceActivityState,
-    };
-  }
+  const state = await getTodayBuildStatus(params);
 
   return {
-    build: metadataState.activityBuild,
-    activityState: {
-      status:
-        existingActivity.lessonDraftFingerprint === currentFingerprint ? "ready" : "stale",
-      sessionId: leadSessionId,
-      activityId: existingActivity.id,
-    } satisfies DailyWorkspaceActivityState,
+    build: state.activityBuild,
+    activityState: state.activityState,
   };
 }
 
@@ -1654,68 +2047,125 @@ function buildArtifactSlots(sourceTitle: string, selectedItems: PlanItem[]) {
   ];
 }
 
-async function resolveSourceContext(params: {
-  organizationId: string;
-}) {
-  const sources = await listCurriculumSources(params.organizationId);
-  if (sources.length === 0) {
-    return { sources, selectedSource: null };
-  }
+const resolveSourceContext = cache(async (organizationId: string) => ({
+  selectedSource: await getLiveCurriculumSource(organizationId),
+}));
 
-  return {
-    sources,
-    selectedSource: await getLiveCurriculumSource(params.organizationId),
-  };
-}
+const resolveTodayWorkspaceContext = cache(
+  async (
+    organizationId: string,
+    learnerId: string,
+    learnerName: string,
+    date: string,
+  ): Promise<TodayWorkspaceContext | null> =>
+    withTodayTiming(
+      "resolveTodayWorkspaceContext",
+      {
+        organizationId,
+        learnerId,
+        date,
+      },
+      async () => {
+        const { selectedSource } = await resolveSourceContext(organizationId);
 
-async function resolveTodayWorkspaceContext(params: {
-  organizationId: string;
-  learnerId: string;
-  learnerName: string;
-  date: string;
-}): Promise<TodayWorkspaceContext | null> {
-  const { selectedSource } = await resolveSourceContext({
-    organizationId: params.organizationId,
-  });
+        if (!selectedSource) {
+          return null;
+        }
 
-  if (!selectedSource) {
-    return null;
-  }
+        const sessionTiming = resolveLessonSessionMinutes({
+          sourceSessionMinutes: selectedSource.pacing?.sessionMinutes,
+        });
+        const sessionBudgetMinutes = sessionTiming.resolvedTotalMinutes;
+        const weekStartDate = toWeekStartDate(date);
+        const [{ board }, nodes] = await Promise.all([
+          withTodayTiming(
+            "resolveTodayWeeklyRouteBoard",
+            {
+              organizationId,
+              learnerId,
+              date,
+              sourceId: selectedSource.id,
+              weekStartDate,
+            },
+            async () => {
+              const readResult = await getReadOptimizedWeeklyRouteBoardForToday({
+                learnerId,
+                sourceId: selectedSource.id,
+                weekStartDate,
+              });
 
-  const sessionTiming = resolveLessonSessionMinutes({
-    sourceSessionMinutes: selectedSource.pacing?.sessionMinutes,
-  });
-  const sessionBudgetMinutes = sessionTiming.resolvedTotalMinutes;
-  const weekStartDate = toWeekStartDate(params.date);
-  const { board } = await getOrCreateWeeklyRouteBoardForLearner({
-    learnerId: params.learnerId,
-    sourceId: selectedSource.id,
-    weekStartDate,
-  });
-  const nodes = await listCurriculumNodes(selectedSource.id);
-  const nodeById = new Map(nodes.map((node) => [node.id, node]));
-  const selectedRouteItems = getVisibleRouteItems(board, params.date);
-  const planningContext = buildCopilotPlanningContext({
-    board,
-    learnerId: params.learnerId,
-    learnerName: params.learnerName,
-    sourceId: selectedSource.id,
-    selectedDate: params.date,
-  });
+              if (readResult.board) {
+                console.info("[today-runtime] resolveTodayWeeklyRouteBoard:mode", {
+                  organizationId,
+                  learnerId,
+                  date,
+                  sourceId: selectedSource.id,
+                  weekStartDate,
+                  mode: readResult.mode,
+                  maintenanceReason: readResult.maintenanceReason,
+                });
 
-  return {
-    selectedSource,
-    sourceId: selectedSource.id,
-    sourceTitle: selectedSource.title,
-    sessionTiming,
-    sessionBudgetMinutes,
-    board,
-    selectedRouteItems,
-    nodeById,
-    planningContext,
-    routeFingerprint: buildTodayLessonDraftFingerprint(selectedRouteItems.map((item) => item.id)),
-  };
-}
+                return {
+                  weekStartDate: readResult.weekStartDate,
+                  board: readResult.board,
+                };
+              }
+
+              console.info("[today-runtime] resolveTodayWeeklyRouteBoard:mode", {
+                organizationId,
+                learnerId,
+                date,
+                sourceId: selectedSource.id,
+                weekStartDate,
+                mode: readResult.mode,
+                maintenanceReason: readResult.maintenanceReason,
+              });
+
+              return getOrCreateWeeklyRouteBoardForLearner({
+                learnerId,
+                sourceId: selectedSource.id,
+                weekStartDate,
+              });
+            },
+          ),
+          withTodayTiming(
+            "resolveTodayCurriculumNodes",
+            {
+              organizationId,
+              learnerId,
+              date,
+              sourceId: selectedSource.id,
+            },
+            () => listCurriculumNodes(selectedSource.id),
+          ),
+        ]);
+        const nodeById = new Map(nodes.map((node) => [node.id, node]));
+        const selectedRouteItems = getVisibleRouteItems(board, date);
+        const planningContext = buildCopilotPlanningContext({
+          board,
+          learnerId,
+          learnerName,
+          sourceId: selectedSource.id,
+          selectedDate: date,
+        });
+
+        return {
+          selectedSource,
+          sourceId: selectedSource.id,
+          sourceTitle: selectedSource.title,
+          sessionTiming,
+          sessionBudgetMinutes,
+          board,
+          selectedRouteItems,
+          nodeById,
+          planningContext,
+          routeFingerprint: buildTodayLessonDraftFingerprint(
+            selectedRouteItems.map((item) => item.id),
+          ),
+        };
+      },
+    ),
+);
 
 async function readTodayWorkspaceMetadataState(params: {
   organizationId: string;
@@ -1724,42 +2174,7 @@ async function readTodayWorkspaceMetadataState(params: {
   sourceId: string;
   routeFingerprint: string;
 }): Promise<TodayWorkspaceMetadataState> {
-  if (!params.routeFingerprint) {
-    return {
-      lessonDraft: null,
-      lessonBuild: null,
-      activityBuild: null,
-      lessonRegenerationNote: null,
-      expansionIntent: null,
-    };
-  }
-
-  const day = await getTodayWorkspaceDay(params);
-  if (!day) {
-    return {
-      lessonDraft: null,
-      lessonBuild: null,
-      activityBuild: null,
-      lessonRegenerationNote: null,
-      expansionIntent: null,
-    };
-  }
-
-  return {
-    lessonDraft: readLessonDraftFromMetadata(day.metadata, params.sourceId, params.routeFingerprint),
-    lessonBuild: readLessonBuildFromMetadata(day.metadata, params.sourceId, params.routeFingerprint),
-    activityBuild: readActivityBuildFromMetadata(day.metadata, params.sourceId, params.routeFingerprint),
-    lessonRegenerationNote: readLessonRegenerationNoteFromMetadata(
-      day.metadata,
-      params.sourceId,
-      params.routeFingerprint,
-    ),
-    expansionIntent: readExpansionIntentFromMetadata(
-      day.metadata,
-      params.sourceId,
-      params.routeFingerprint,
-    ),
-  };
+  return (await readTodayWorkspaceStoredState(params)).metadataState;
 }
 
 async function loadLatestEvaluationsForPlanItems(items: PlanItem[]) {
@@ -1836,23 +2251,301 @@ export async function materializeTodayWorkspace(params: {
   learnerName: string;
   date: string;
 }) {
-  const context = await resolveTodayWorkspaceContext(params);
-  if (!context || context.selectedRouteItems.length === 0) {
-    return context;
-  }
+  const context = await resolveTodayWorkspaceContext(
+    params.organizationId,
+    params.learnerId,
+    params.learnerName,
+    params.date,
+  );
 
-  await syncTodayPlanItems({
+  return materializeTodayWorkspaceFromContext({
     organizationId: params.organizationId,
     learnerId: params.learnerId,
     date: params.date,
-    sourceId: context.sourceId,
-    sourceTitle: context.sourceTitle,
-    sessionBudgetMinutes: context.sessionBudgetMinutes,
-    selectedRouteItems: context.selectedRouteItems,
-    nodeById: context.nodeById,
+    context,
   });
+}
+
+type TodayWorkspaceViewResult = {
+  workspace: DailyWorkspace;
+  sourceId: string;
+  sourceTitle: string;
+  sessionTiming: LessonTimingContract;
+  planningContext: ReturnType<typeof buildCopilotPlanningContext> | null;
+  routeFingerprint: string;
+};
+
+async function materializeTodayWorkspaceFromContext(params: {
+  organizationId: string;
+  learnerId: string;
+  date: string;
+  context: TodayWorkspaceContext | null;
+}) {
+  if (!params.context || params.context.selectedRouteItems.length === 0) {
+    return params.context;
+  }
+
+  const context = params.context;
+
+  await withTodayTiming(
+    "materializeTodayWorkspace",
+    {
+      organizationId: params.organizationId,
+      learnerId: params.learnerId,
+      date: params.date,
+      sourceId: context.sourceId,
+      routeFingerprint: context.routeFingerprint,
+      selectedRouteItemCount: context.selectedRouteItems.length,
+    },
+    async () => {
+      await syncTodayPlanItems({
+        organizationId: params.organizationId,
+        learnerId: params.learnerId,
+        date: params.date,
+        sourceId: context.sourceId,
+        sourceTitle: context.sourceTitle,
+        sessionBudgetMinutes: context.sessionBudgetMinutes,
+        selectedRouteItems: context.selectedRouteItems,
+        nodeById: context.nodeById,
+      });
+
+      await writeTodayWorkspaceFreshness({
+        organizationId: params.organizationId,
+        learnerId: params.learnerId,
+        date: params.date,
+        sourceId: context.sourceId,
+        routeFingerprint: context.routeFingerprint,
+        itemCount: context.selectedRouteItems.length,
+      });
+    },
+  );
 
   return context;
+}
+
+export async function getTodayWorkspaceViewFromContext(params: {
+  organizationId: string;
+  learnerId: string;
+  learnerName: string;
+  date: string;
+  context: TodayWorkspaceContext;
+  metadataState?: TodayWorkspaceMetadataState;
+}): Promise<TodayWorkspaceViewResult> {
+  return withTodayTiming(
+    "getTodayWorkspaceView",
+    {
+      organizationId: params.organizationId,
+      learnerId: params.learnerId,
+      date: params.date,
+      sourceId: params.context.sourceId,
+      routeFingerprint: params.context.routeFingerprint,
+      selectedRouteItemCount: params.context.selectedRouteItems.length,
+    },
+    async () => {
+      const context = params.context;
+      const metadataState =
+        params.metadataState ??
+        (await readTodayWorkspaceMetadataState({
+          organizationId: params.organizationId,
+          learnerId: params.learnerId,
+          date: params.date,
+          sourceId: context.sourceId,
+          routeFingerprint: context.routeFingerprint,
+        }));
+
+      if (context.board.items.length === 0) {
+        return {
+          sourceId: context.sourceId,
+          sourceTitle: context.sourceTitle,
+          sessionTiming: context.sessionTiming,
+          planningContext: null,
+          routeFingerprint: context.routeFingerprint,
+          workspace: {
+            date: params.date,
+            headline: `${context.sourceTitle} route for ${params.learnerName}`,
+            learner: {
+              id: params.learnerId,
+              name: params.learnerName,
+              gradeLabel: "",
+              pacingPreference: "Current weekly route",
+              currentSeason: formatPlannerDate(params.date),
+            },
+            leadItem: {
+              id: "today-empty",
+              date: params.date,
+              title: "No route items yet",
+              subject: "Curriculum",
+              kind: "review",
+              objective:
+                "Import curriculum or generate a weekly route to populate today's workspace.",
+              estimatedMinutes: 0,
+              status: "blocked",
+              standards: [],
+              goals: [],
+              materials: [],
+              artifactSlots: [],
+              copilotPrompts: [],
+              sourceLabel: context.sourceTitle,
+              lessonLabel: "Empty route",
+              planOrigin: "manual",
+            },
+            items: [],
+            prepChecklist: [],
+            sessionTargets: [],
+            artifactSlots: buildArtifactSlots(context.sourceTitle, []),
+            copilotInsertions: [],
+            completionPrompts: [],
+            familyNotes: [],
+            recoveryOptions: [],
+            alternatesByPlanItemId: {},
+            lessonDraft: null,
+            lessonBuild: null,
+            activityBuild: null,
+            activityState: { status: "no_draft" },
+            lessonRegenerationNote: null,
+            expansionIntent: null,
+          },
+        };
+      }
+
+      if (context.selectedRouteItems.length === 0) {
+        return {
+          sourceId: context.sourceId,
+          sourceTitle: context.sourceTitle,
+          sessionTiming: context.sessionTiming,
+          planningContext: context.planningContext,
+          routeFingerprint: context.routeFingerprint,
+          workspace: {
+            date: params.date,
+            headline: `${context.sourceTitle} route for ${params.learnerName}`,
+            learner: {
+              id: params.learnerId,
+              name: params.learnerName,
+              gradeLabel: "",
+              pacingPreference: "Active route queue",
+              currentSeason: "Current week",
+            },
+            leadItem: buildPlanItem(
+              {
+                ...context.board.items[0]!,
+                scheduledDate: params.date,
+              },
+              context.sourceTitle,
+              params.date,
+              context.sessionBudgetMinutes,
+              context.nodeById.get(context.board.items[0]!.skillNodeId),
+            ),
+            items: [],
+            prepChecklist: [],
+            sessionTargets: [],
+            artifactSlots: buildArtifactSlots(context.sourceTitle, []),
+            copilotInsertions: [],
+            completionPrompts: [],
+            familyNotes: [],
+            recoveryOptions: [],
+            alternatesByPlanItemId: {},
+            lessonDraft: null,
+            lessonBuild: null,
+            activityBuild: null,
+            activityState: { status: "no_draft" },
+            lessonRegenerationNote: null,
+            expansionIntent: null,
+          },
+        };
+      }
+
+      const materializedWorkflow = await loadTodayMaterializedWorkflow({
+        organizationId: params.organizationId,
+        learnerId: params.learnerId,
+        date: params.date,
+        selectedRouteItems: context.selectedRouteItems,
+      });
+      let selectedPlansWithWorkflow = context.selectedRouteItems.map((item) =>
+        buildPlanItem(
+          item,
+          context.sourceTitle,
+          item.scheduledDate ?? params.date,
+          context.sessionBudgetMinutes,
+          context.nodeById.get(item.skillNodeId),
+          materializedWorkflow.get(item.id),
+        ),
+      );
+      selectedPlansWithWorkflow = await loadLatestEvaluationsForPlanItems(
+        selectedPlansWithWorkflow,
+      );
+
+      const alternateItems = getAlternateItems(
+        context.board,
+        context.selectedRouteItems.map((item) => item.id),
+      );
+      const alternatesByPlanItemId = Object.fromEntries(
+        selectedPlansWithWorkflow.map((planItem) => [
+          planItem.id,
+          alternateItems
+            .slice(0, 2)
+            .map((routeItem) =>
+              buildWeeklyRouteItem(
+                routeItem,
+                context.sourceTitle,
+                context.sessionBudgetMinutes,
+                context.nodeById.get(routeItem.skillNodeId),
+              ),
+            ),
+        ]),
+      );
+
+      const workspace: DailyWorkspace = {
+        date: params.date,
+        headline: `${context.sourceTitle} route for ${params.learnerName}`,
+        learner: {
+          id: params.learnerId,
+          name: params.learnerName,
+          gradeLabel: `${selectedPlansWithWorkflow.length} active item${selectedPlansWithWorkflow.length === 1 ? "" : "s"}`,
+          pacingPreference: "Current weekly route",
+          currentSeason: formatPlannerDate(params.date),
+        },
+        leadItem: selectedPlansWithWorkflow[0],
+        items: selectedPlansWithWorkflow,
+        prepChecklist: buildPrepChecklist(
+          params.learnerName,
+          context.sourceTitle,
+          selectedPlansWithWorkflow,
+        ),
+        sessionTargets: buildSessionTargets(selectedPlansWithWorkflow),
+        artifactSlots: buildArtifactSlots(context.sourceTitle, selectedPlansWithWorkflow),
+        copilotInsertions: buildCopilotInsertions(
+          params.learnerName,
+          context.sourceTitle,
+          selectedPlansWithWorkflow,
+        ),
+        completionPrompts: [
+          "What did the learner complete today?",
+          "What changed in pacing or support?",
+          "Which route item should stay in view tomorrow?",
+        ],
+        familyNotes: buildFamilyNotes(context.sourceTitle, selectedPlansWithWorkflow),
+        recoveryOptions: [],
+        alternatesByPlanItemId,
+        lessonDraft: metadataState.lessonDraft,
+        lessonBuild: metadataState.lessonBuild,
+        activityBuild: metadataState.activityBuild,
+        activityState: null,
+        lessonRegenerationNote: metadataState.lessonRegenerationNote,
+        expansionIntent: metadataState.expansionIntent,
+      };
+
+      workspace.activityState = await buildTodayActivityState(workspace);
+
+      return {
+        workspace,
+        sourceId: context.sourceId,
+        sourceTitle: context.sourceTitle,
+        sessionTiming: context.sessionTiming,
+        planningContext: context.planningContext,
+        routeFingerprint: context.routeFingerprint,
+      };
+    },
+  );
 }
 
 export async function getTodayWorkspaceView(params: {
@@ -1860,214 +2553,78 @@ export async function getTodayWorkspaceView(params: {
   learnerId: string;
   learnerName: string;
   date: string;
-}): Promise<{
-  workspace: DailyWorkspace;
-  sourceId: string;
-  sourceTitle: string;
-  sessionTiming: LessonTimingContract;
-  planningContext: ReturnType<typeof buildCopilotPlanningContext>;
-  routeFingerprint: string;
-} | null> {
-  const context = await resolveTodayWorkspaceContext(params);
+}): Promise<TodayWorkspaceViewResult | null> {
+  const context = await resolveTodayWorkspaceContext(
+    params.organizationId,
+    params.learnerId,
+    params.learnerName,
+    params.date,
+  );
   if (!context) {
     return null;
   }
 
-  if (context.board.items.length === 0) {
-    return {
-      sourceId: context.sourceId,
-      sourceTitle: context.sourceTitle,
-      sessionTiming: context.sessionTiming,
-      planningContext: null,
-      routeFingerprint: context.routeFingerprint,
-      workspace: {
-        date: params.date,
-        headline: `${context.sourceTitle} route for ${params.learnerName}`,
-        learner: {
-          id: params.learnerId,
-          name: params.learnerName,
-          gradeLabel: "",
-          pacingPreference: "Current weekly route",
-          currentSeason: formatPlannerDate(params.date),
-        },
-        leadItem: {
-          id: "today-empty",
-          date: params.date,
-          title: "No route items yet",
-          subject: "Curriculum",
-          kind: "review",
-          objective: "Import curriculum or generate a weekly route to populate today's workspace.",
-          estimatedMinutes: 0,
-          status: "blocked",
-          standards: [],
-          goals: [],
-          materials: [],
-          artifactSlots: [],
-          copilotPrompts: [],
-          sourceLabel: context.sourceTitle,
-          lessonLabel: "Empty route",
-          planOrigin: "manual",
-        },
-        items: [],
-        prepChecklist: [],
-        sessionTargets: [],
-        artifactSlots: buildArtifactSlots(context.sourceTitle, []),
-        copilotInsertions: [],
-        completionPrompts: [],
-        familyNotes: [],
-        recoveryOptions: [],
-        alternatesByPlanItemId: {},
-        lessonDraft: null,
-        lessonBuild: null,
-        activityBuild: null,
-        activityState: { status: "no_draft" },
-        lessonRegenerationNote: null,
-        expansionIntent: null,
-      },
-    };
-  }
-
-  if (context.selectedRouteItems.length === 0) {
-    return {
-      sourceId: context.sourceId,
-      sourceTitle: context.sourceTitle,
-      sessionTiming: context.sessionTiming,
-      planningContext: context.planningContext,
-      routeFingerprint: context.routeFingerprint,
-      workspace: {
-        date: params.date,
-        headline: `${context.sourceTitle} route for ${params.learnerName}`,
-        learner: {
-          id: params.learnerId,
-          name: params.learnerName,
-          gradeLabel: "",
-          pacingPreference: "Active route queue",
-          currentSeason: "Current week",
-        },
-        leadItem: buildPlanItem(
-          {
-            ...context.board.items[0]!,
-            scheduledDate: params.date,
-          },
-          context.sourceTitle,
-          params.date,
-          context.sessionBudgetMinutes,
-          context.nodeById.get(context.board.items[0]!.skillNodeId),
-        ),
-        items: [],
-        prepChecklist: [],
-        sessionTargets: [],
-        artifactSlots: buildArtifactSlots(context.sourceTitle, []),
-        copilotInsertions: [],
-        completionPrompts: [],
-        familyNotes: [],
-        recoveryOptions: [],
-        alternatesByPlanItemId: {},
-        lessonDraft: null,
-        lessonBuild: null,
-        activityBuild: null,
-        activityState: { status: "no_draft" },
-        lessonRegenerationNote: null,
-        expansionIntent: null,
-      },
-    };
-  }
-
-  const materializedWorkflow = await loadTodayMaterializedWorkflow({
+  return getTodayWorkspaceViewFromContext({
     organizationId: params.organizationId,
     learnerId: params.learnerId,
+    learnerName: params.learnerName,
     date: params.date,
-    selectedRouteItems: context.selectedRouteItems,
+    context,
   });
-  let selectedPlansWithWorkflow = context.selectedRouteItems.map((item) =>
-    buildPlanItem(
-      item,
-      context.sourceTitle,
-      item.scheduledDate ?? params.date,
-      context.sessionBudgetMinutes,
-      context.nodeById.get(item.skillNodeId),
-      materializedWorkflow.get(item.id),
-    ),
-  );
-  selectedPlansWithWorkflow = await loadLatestEvaluationsForPlanItems(selectedPlansWithWorkflow);
+}
 
-  const metadataState = await readTodayWorkspaceMetadataState({
-    organizationId: params.organizationId,
-    learnerId: params.learnerId,
-    date: params.date,
-    sourceId: context.sourceId,
-    routeFingerprint: context.routeFingerprint,
-  });
-  const alternateItems = getAlternateItems(
-    context.board,
-    context.selectedRouteItems.map((item) => item.id),
-  );
-  const alternatesByPlanItemId = Object.fromEntries(
-    selectedPlansWithWorkflow.map((planItem) => [
-      planItem.id,
-      alternateItems
-        .slice(0, 2)
-        .map((routeItem) =>
-          buildWeeklyRouteItem(
-            routeItem,
-            context.sourceTitle,
-            context.sessionBudgetMinutes,
-            context.nodeById.get(routeItem.skillNodeId),
-          ),
-        ),
-    ]),
-  );
-
-  const workspace: DailyWorkspace = {
-    date: params.date,
-    headline: `${context.sourceTitle} route for ${params.learnerName}`,
-    learner: {
-      id: params.learnerId,
-      name: params.learnerName,
-      gradeLabel: `${selectedPlansWithWorkflow.length} active item${selectedPlansWithWorkflow.length === 1 ? "" : "s"}`,
-      pacingPreference: "Current weekly route",
-      currentSeason: formatPlannerDate(params.date),
+export async function getTodayWorkspaceViewForRender(params: {
+  organizationId: string;
+  learnerId: string;
+  learnerName: string;
+  date: string;
+}): Promise<TodayWorkspaceViewResult | null> {
+  return withTodayTiming(
+    "getTodayWorkspaceViewForRender",
+    {
+      organizationId: params.organizationId,
+      learnerId: params.learnerId,
+      date: params.date,
     },
-    leadItem: selectedPlansWithWorkflow[0],
-    items: selectedPlansWithWorkflow,
-    prepChecklist: buildPrepChecklist(
-      params.learnerName,
-      context.sourceTitle,
-      selectedPlansWithWorkflow,
-    ),
-    sessionTargets: buildSessionTargets(selectedPlansWithWorkflow),
-    artifactSlots: buildArtifactSlots(context.sourceTitle, selectedPlansWithWorkflow),
-    copilotInsertions: buildCopilotInsertions(
-      params.learnerName,
-      context.sourceTitle,
-      selectedPlansWithWorkflow,
-    ),
-    completionPrompts: [
-      "What did the learner complete today?",
-      "What changed in pacing or support?",
-      "Which route item should stay in view tomorrow?",
-    ],
-    familyNotes: buildFamilyNotes(context.sourceTitle, selectedPlansWithWorkflow),
-    recoveryOptions: [],
-    alternatesByPlanItemId,
-    lessonDraft: metadataState.lessonDraft,
-    lessonBuild: metadataState.lessonBuild,
-    activityBuild: metadataState.activityBuild,
-    activityState: null,
-    lessonRegenerationNote: metadataState.lessonRegenerationNote,
-    expansionIntent: metadataState.expansionIntent,
-  };
+    async () => {
+      const context = await resolveTodayWorkspaceContext(
+        params.organizationId,
+        params.learnerId,
+        params.learnerName,
+        params.date,
+      );
+      if (!context) {
+        return null;
+      }
 
-  workspace.activityState = await buildTodayActivityState(workspace);
+      const freshnessState = await readTodayWorkspaceFreshnessState({
+        organizationId: params.organizationId,
+        learnerId: params.learnerId,
+        date: params.date,
+        sourceId: context.sourceId,
+        routeFingerprint: context.routeFingerprint,
+        selectedRouteItemCount: context.selectedRouteItems.length,
+      });
 
-  return {
-    workspace,
-    sourceId: context.sourceId,
-    sourceTitle: context.sourceTitle,
-    sessionTiming: context.sessionTiming,
-    planningContext: context.planningContext,
-    routeFingerprint: context.routeFingerprint,
-  };
+      if (freshnessState.status !== "fresh") {
+        await materializeTodayWorkspaceFromContext({
+          organizationId: params.organizationId,
+          learnerId: params.learnerId,
+          date: params.date,
+          context,
+        });
+      }
+
+      return getTodayWorkspaceViewFromContext({
+        organizationId: params.organizationId,
+        learnerId: params.learnerId,
+        learnerName: params.learnerName,
+        date: params.date,
+        context,
+        metadataState: freshnessState.storedState.metadataState,
+      });
+    },
+  );
 }
 
 export async function getTodayWorkspace(params: {
@@ -2076,8 +2633,7 @@ export async function getTodayWorkspace(params: {
   learnerName: string;
   date: string;
 }) {
-  await materializeTodayWorkspace(params);
-  return getTodayWorkspaceView(params);
+  return getTodayWorkspaceViewForRender(params);
 }
 
 async function loadWeeklyRouteItem(learnerId: string, weeklyRouteItemId: string) {

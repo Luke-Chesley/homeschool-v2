@@ -22,6 +22,12 @@ import type { DailyWorkspaceExpansionScope } from "@/lib/planning/types";
 type WeeklyRouteItemRow = typeof weeklyRouteItems.$inferSelect;
 type WeeklyRouteRecord = typeof weeklyRoutes.$inferSelect;
 type WeeklyRouteOverrideKind = WeeklyRouteItemRow["manualOverrideKind"];
+type WeeklyRouteBoardMaintenanceReason =
+  | "missing_route"
+  | "empty_board"
+  | "unscheduled_items"
+  | "prior_week_overlap"
+  | "read_safe";
 
 const WEEKDAY_COUNT = 7;
 
@@ -208,22 +214,11 @@ export async function getOrCreateWeeklyRouteBoardForLearner(params: {
   sourceId: string;
   weekStartDate?: string;
 }): Promise<{ weekStartDate: string; board: WeeklyRouteBoard }> {
-  const weekStartDate = toWeekStartDate(params.weekStartDate);
-  const route = await getDb().query.weeklyRoutes.findFirst({
-    where: and(
-      eq(weeklyRoutes.learnerId, params.learnerId),
-      eq(weeklyRoutes.sourceId, params.sourceId),
-      eq(weeklyRoutes.weekStartDate, weekStartDate),
-    ),
-  });
-  const existing = await getWeeklyRouteBoard({
-    learnerId: params.learnerId,
-    sourceId: params.sourceId,
-    weekStartDate,
-  });
+  const state = await inspectWeeklyRouteBoardMaintenanceState(params);
+  const { weekStartDate, route, existing } = state;
 
   if (existing) {
-    if (existing.items.length === 0) {
+    if (state.maintenanceReason === "empty_board") {
       const activated = await ensureDefaultBranchActivations({
         learnerId: params.learnerId,
         sourceId: params.sourceId,
@@ -239,7 +234,7 @@ export async function getOrCreateWeeklyRouteBoardForLearner(params: {
       }
     }
 
-    if (existing.items.some((item) => item.state !== "removed" && item.scheduledDate == null)) {
+    if (state.maintenanceReason === "unscheduled_items") {
       if (route && (await ensureSuggestedWeeklyRouteSchedule(route))) {
         const refreshed = await getWeeklyRouteBoardById({
           learnerId: params.learnerId,
@@ -252,7 +247,7 @@ export async function getOrCreateWeeklyRouteBoardForLearner(params: {
       }
     }
 
-    if (route && (await shouldRegenerateForPriorWeekOverlap(route, existing))) {
+    if (state.maintenanceReason === "prior_week_overlap") {
       const regenerated = await generateWeeklyRoute({
         learnerId: params.learnerId,
         sourceId: params.sourceId,
@@ -287,6 +282,68 @@ export async function getOrCreateWeeklyRouteBoardForLearner(params: {
   }
 
   return { weekStartDate, board: generated };
+}
+
+async function inspectWeeklyRouteBoardMaintenanceState(params: {
+  learnerId: string;
+  sourceId: string;
+  weekStartDate?: string;
+}) {
+  const weekStartDate = toWeekStartDate(params.weekStartDate);
+  const route = await getDb().query.weeklyRoutes.findFirst({
+    where: and(
+      eq(weeklyRoutes.learnerId, params.learnerId),
+      eq(weeklyRoutes.sourceId, params.sourceId),
+      eq(weeklyRoutes.weekStartDate, weekStartDate),
+    ),
+  });
+  const existing = await getWeeklyRouteBoard({
+    learnerId: params.learnerId,
+    sourceId: params.sourceId,
+    weekStartDate,
+  });
+
+  let maintenanceReason: WeeklyRouteBoardMaintenanceReason;
+  if (!existing) {
+    maintenanceReason = "missing_route";
+  } else if (existing.items.length === 0) {
+    maintenanceReason = "empty_board";
+  } else if (existing.items.some((item) => item.state !== "removed" && item.scheduledDate == null)) {
+    maintenanceReason = "unscheduled_items";
+  } else if (route && (await shouldRegenerateForPriorWeekOverlap(route, existing))) {
+    maintenanceReason = "prior_week_overlap";
+  } else {
+    maintenanceReason = "read_safe";
+  }
+
+  return {
+    weekStartDate,
+    route,
+    existing,
+    maintenanceReason,
+  };
+}
+
+export async function getReadOptimizedWeeklyRouteBoardForToday(params: {
+  learnerId: string;
+  sourceId: string;
+  weekStartDate?: string;
+}) {
+  const state = await inspectWeeklyRouteBoardMaintenanceState(params);
+
+  return state.maintenanceReason === "read_safe" && state.existing
+    ? {
+        weekStartDate: state.weekStartDate,
+        board: state.existing,
+        mode: "read" as const,
+        maintenanceReason: state.maintenanceReason,
+      }
+    : {
+        weekStartDate: state.weekStartDate,
+        board: null,
+        mode: "repair" as const,
+        maintenanceReason: state.maintenanceReason,
+      };
 }
 
 function getLaunchAnchorItem(board: WeeklyRouteBoard, date: string) {

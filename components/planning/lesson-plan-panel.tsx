@@ -16,7 +16,6 @@ import { Card } from "@/components/ui/card";
 import { MarkdownContent } from "@/components/ui/markdown-content";
 import type { StructuredLessonDraft } from "@/lib/lesson-draft/types";
 import type {
-  DailyWorkspace,
   DailyWorkspaceActivityBuild,
   DailyWorkspaceExpansionIntent,
   DailyWorkspaceExpansionScope,
@@ -29,6 +28,7 @@ import {
   expandTodayRouteAction,
   saveExpansionIntentAction,
   saveLessonRegenerationNoteAction,
+  type TodayWorkspacePatch,
 } from "@/app/(parent)/today/actions";
 
 const LESSON_PLAN_PROMPT_PANEL_ID = "lesson-plan-prompt-preview";
@@ -58,12 +58,9 @@ interface LessonPlanPanelProps {
     lessonBuild?: DailyWorkspaceLessonBuild | null;
     activityBuild?: DailyWorkspaceActivityBuild | null;
   }) => void;
-  onActivityPatch?: (patch: {
-    activityBuild?: DailyWorkspaceActivityBuild | null;
-  }) => void;
   onRegenerationNoteChange?: (note: string | null) => void;
   onExpansionIntentChange?: (intent: DailyWorkspaceExpansionIntent | null) => void;
-  onWorkspacePatch?: (workspace?: DailyWorkspace) => void;
+  onWorkspacePatch?: (patch?: TodayWorkspacePatch) => void;
   showDraftOutput?: boolean;
 }
 
@@ -105,7 +102,6 @@ export function LessonPlanPanel({
   regenerationNote,
   expansionIntent,
   onLessonPatch,
-  onActivityPatch,
   onRegenerationNoteChange,
   onExpansionIntentChange,
   onWorkspacePatch,
@@ -253,72 +249,6 @@ export function LessonPlanPanel({
     void requestDraft("onboarding_auto", lessonAutoBuildKey);
   }, [isQueuedBuild, lessonAutoBuildKey]);
 
-  useEffect(() => {
-    if (!sourceId || hasDraft) {
-      return;
-    }
-
-    if (buildState?.status !== "queued" && buildState?.status !== "generating") {
-      return;
-    }
-
-    let cancelled = false;
-    let timeoutId: number | null = null;
-    const activeSourceId = sourceId;
-
-    async function pollStatus() {
-      try {
-        const response = await fetch(
-          `/api/today/lesson-build-status?date=${encodeURIComponent(date)}&sourceId=${encodeURIComponent(
-            activeSourceId,
-          )}&routeFingerprint=${encodeURIComponent(routeFingerprint)}`,
-          { cache: "no-store" },
-        );
-        const payload = (await response.json()) as {
-          ok: boolean;
-          build?: DailyWorkspaceLessonBuild | null;
-          draft?: DailyWorkspaceLessonDraft | null;
-          activityBuild?: DailyWorkspaceActivityBuild | null;
-          error?: string;
-        };
-
-        if (cancelled || !payload.ok) {
-          return;
-        }
-
-        onLessonPatch?.({
-          lessonBuild: payload.build ?? null,
-          lessonDraft: payload.draft ?? null,
-          activityBuild: payload.activityBuild ?? undefined,
-        });
-
-        if (
-          payload.build?.status !== "queued" &&
-          payload.build?.status !== "generating"
-        ) {
-          return;
-        }
-      } catch (pollError) {
-        if (!cancelled) {
-          console.error("[LessonPlanPanel:pollStatus]", pollError);
-        }
-      }
-
-      if (!cancelled) {
-        timeoutId = window.setTimeout(pollStatus, 2000);
-      }
-    }
-
-    void pollStatus();
-
-    return () => {
-      cancelled = true;
-      if (timeoutId !== null) {
-        window.clearTimeout(timeoutId);
-      }
-    };
-  }, [buildState?.status, buildState?.updatedAt, date, hasDraft, onLessonPatch, routeFingerprint, sourceId]);
-
   async function handlePromptPreview() {
     if (!canViewPromptPreview) {
       return;
@@ -441,7 +371,7 @@ export function LessonPlanPanel({
     }
 
     setSupportMessage(expanded.message ?? "Saved.");
-    onWorkspacePatch?.(expanded.workspacePatch?.workspace);
+    onWorkspacePatch?.(expanded.workspacePatch);
   }
 
   function getExpansionButtonLabel(scope: DailyWorkspaceExpansionScope) {
