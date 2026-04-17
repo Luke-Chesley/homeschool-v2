@@ -44,8 +44,12 @@ export const LearningCoreInputFileSchema = z.object({
   modality: IntakeSourcePackageModalitySchema,
   fileName: z.string().min(1),
   mimeType: z.string().min(1),
-  fileUrl: z.string().url(),
-});
+  fileUrl: z.string().url().optional(),
+  fileData: z.string().min(1).optional(),
+}).refine(
+  (value) => Boolean(value.fileUrl) !== Boolean(value.fileData),
+  "Provide exactly one of fileUrl or fileData.",
+);
 
 export const NormalizedIntakeSourcePackageSchema = z.object({
   id: z.string().min(1),

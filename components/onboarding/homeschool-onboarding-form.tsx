@@ -148,6 +148,58 @@ function formatFileSize(bytes: number) {
   return `${Math.round(bytes / 1024 / 102.4) / 10} MB`;
 }
 
+function truncateErrorCopy(value: string, maxLength = 220) {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+  return `${normalized.slice(0, maxLength - 1).trimEnd()}…`;
+}
+
+function extractProviderErrorMessage(raw: string) {
+  const singleQuoted = raw.match(/'message':\s*'([^']+)'/);
+  if (singleQuoted?.[1]) {
+    return singleQuoted[1];
+  }
+
+  const doubleQuoted = raw.match(/"message":\s*"([^"]+)"/);
+  if (doubleQuoted?.[1]) {
+    return doubleQuoted[1];
+  }
+
+  return raw.replace(/^Error code:\s*\d+\s*-\s*/, "").trim();
+}
+
+function describeOnboardingError(raw: string) {
+  const message = extractProviderErrorMessage(raw);
+  const normalized = message.toLowerCase();
+
+  if (
+    normalized.includes("error while downloading") ||
+    normalized.includes("upstream status code: 407") ||
+    (normalized.includes("invalid_value") && normalized.includes("param': 'url"))
+  ) {
+    return {
+      summary: "The model could not access that uploaded file.",
+      detail:
+        "That file was stored on a local-only URL. Retry with the same file and we’ll send it directly instead of asking the model to fetch it.",
+    };
+  }
+
+  if (normalized.includes("mutually exclusive parameters")) {
+    return {
+      summary: "The model rejected the uploaded file request.",
+      detail: "The file payload shape was invalid. Retry with the same file.",
+    };
+  }
+
+  const detail = truncateErrorCopy(message || raw);
+  return {
+    summary: detail.length <= 96 ? detail : "Could not finish onboarding.",
+    detail,
+  };
+}
+
 export function HomeschoolOnboardingForm(props: {
   organizationName: string;
   defaultLearnerName?: string | null;
@@ -348,11 +400,12 @@ export function HomeschoolOnboardingForm(props: {
     } catch (nextError) {
       const message =
         nextError instanceof Error ? nextError.message : "Could not finish onboarding.";
-      setError(message);
+      const describedError = describeOnboardingError(message);
+      setError(describedError.summary);
       setJobState({
         stage: "failed",
         title: "Could not finish this step",
-        detail: message,
+        detail: describedError.detail,
       });
       setSubmitting(false);
       return;
@@ -734,7 +787,11 @@ export function HomeschoolOnboardingForm(props: {
         </Card>
       ) : null}
 
-      {error ? <p className="rounded-xl bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p> : null}
+      {error ? (
+        <p className="rounded-xl bg-destructive/10 px-4 py-3 text-sm text-destructive break-words whitespace-pre-wrap">
+          {error}
+        </p>
+      ) : null}
       {jobState.stage !== "idle" ? (
         <div
           className={`rounded-xl border px-4 py-3 text-sm ${
@@ -749,7 +806,9 @@ export function HomeschoolOnboardingForm(props: {
               <div className="space-y-1">
                 <p className="font-medium text-foreground">{jobState.title}</p>
                 {jobState.detail ? (
-                  <p className="text-muted-foreground">{jobState.detail}</p>
+                  <p className="text-muted-foreground break-words whitespace-pre-wrap">
+                    {jobState.detail}
+                  </p>
                 ) : null}
               </div>
               <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-3">

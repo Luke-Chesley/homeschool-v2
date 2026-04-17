@@ -213,6 +213,60 @@ function buildDirectFileContext(params: {
   return `Uploaded file: ${params.fileName}`;
 }
 
+function isPrivateIpv4Hostname(hostname: string) {
+  const octets = hostname.split(".").map((value) => Number.parseInt(value, 10));
+  if (octets.length !== 4 || octets.some((value) => Number.isNaN(value))) {
+    return false;
+  }
+
+  return (
+    octets[0] === 10 ||
+    octets[0] === 127 ||
+    (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31) ||
+    (octets[0] === 192 && octets[1] === 168)
+  );
+}
+
+function shouldInlineLearningCoreFileData(fileUrl: string) {
+  try {
+    const url = new URL(fileUrl);
+    const hostname = url.hostname.toLowerCase();
+
+    if (url.protocol !== "https:") {
+      return true;
+    }
+
+    return (
+      hostname === "localhost" ||
+      hostname === "0.0.0.0" ||
+      hostname === "::1" ||
+      hostname === "[::1]" ||
+      hostname === "host.docker.internal" ||
+      hostname.endsWith(".local") ||
+      isPrivateIpv4Hostname(hostname)
+    );
+  } catch {
+    return true;
+  }
+}
+
+async function buildInlineLearningCoreFileData(params: {
+  bucket: ReturnType<ReturnType<typeof getAdminStorageClient>["from"]>;
+  asset: IntakeSourceAsset;
+}) {
+  const downloaded = await params.bucket.download(params.asset.storagePath);
+
+  if (downloaded.error || !downloaded.data) {
+    throw new Error(
+      downloaded.error?.message ??
+        `Could not load ${params.asset.fileName} from storage for model input.`,
+    );
+  }
+
+  const bytes = Buffer.from(await downloaded.data.arrayBuffer());
+  return `data:${params.asset.mimeType};base64,${bytes.toString("base64")}`;
+}
+
 async function extractAssetText(params: {
   modality: IntakeSourcePackageModality;
   mimeType: string;
@@ -308,6 +362,18 @@ export async function createLearningCoreInputFilesFromSourcePackages(
         );
       }
 
+      const signedUrl = signed.data.signedUrl;
+      const directFileInput = shouldInlineLearningCoreFileData(signedUrl)
+        ? {
+            fileData: await buildInlineLearningCoreFileData({
+              bucket,
+              asset,
+            }),
+          }
+        : {
+            fileUrl: signedUrl,
+          };
+
       files.push(
         LearningCoreInputFileSchema.parse({
           assetId: asset.id,
@@ -316,7 +382,7 @@ export async function createLearningCoreInputFilesFromSourcePackages(
           modality: pkg.modality,
           fileName: asset.fileName,
           mimeType: asset.mimeType,
-          fileUrl: signed.data.signedUrl,
+          ...directFileInput,
         }),
       );
     }
