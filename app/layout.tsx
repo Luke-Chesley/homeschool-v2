@@ -4,6 +4,7 @@ import type { Viewport } from "next";
 import { Fraunces, Source_Sans_3 } from "next/font/google";
 import Script from "next/script";
 import { ReactNode } from "react";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 import { GlobalPageTabs } from "@/components/navigation/global-page-tabs";
 import { StudioProvider } from "@/components/studio/studio-provider";
@@ -61,6 +62,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           <GlobalPageTabs />
           {children}
         </StudioProvider>
+        <SpeedInsights />
       </body>
     </html>
   );
