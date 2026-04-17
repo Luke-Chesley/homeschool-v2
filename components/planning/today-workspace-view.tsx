@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, CheckCircle2, Loader2, Sparkles } from "lucide-react";
 
-import { LessonPlanPanel } from "@/components/planning/lesson-plan-panel";
 import { LessonEvaluationPopover } from "@/components/planning/lesson-evaluation-popover";
 import {
   LessonDraftRenderer,
@@ -33,6 +33,24 @@ import {
   type TodayPlanItemAction,
   updateTodayPlanItemAction,
 } from "@/app/(parent)/today/actions";
+
+const DeferredLessonPlanPanel = dynamic(
+  () =>
+    import("@/components/planning/lesson-plan-panel").then(
+      (module) => module.LessonPlanPanel,
+    ),
+  {
+    loading: () => (
+      <Card className="quiet-panel">
+        <div className="space-y-4 p-5">
+          <div className="h-4 w-20 rounded bg-muted/80" />
+          <div className="h-8 w-full rounded bg-muted/60" />
+          <div className="h-44 w-full rounded bg-muted/40" />
+        </div>
+      </Card>
+    ),
+  },
+);
 
 interface TodayWorkspaceViewProps {
   workspace: DailyWorkspace;
@@ -1206,7 +1224,7 @@ export function TodayLessonPlanSection({
 
   return (
     <div className={cn(compact && "xl:sticky xl:top-24")}>
-      <LessonPlanPanel
+      <DeferredLessonPlanPanel
         key={contextKey}
         date={workspace.date}
         sourceId={sourceId}
