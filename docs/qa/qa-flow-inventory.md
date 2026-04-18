@@ -49,6 +49,8 @@ Run this exact sequence for each QA pass that touches onboarding:
 4. Step 3, enter source input and choose horizon intent.
    - Expected: `Use this for just today` and auto horizon options are both visible.
    - Report notes: capture source text length/scope (short topic, weekly outline, etc.).
+   - Hosted upload check: if testing file upload, include at least one PDF over 4 MB.
+   - Expected: the onboarding file uploads directly to storage and does not fail with a generic hosted body-limit error.
 5. Submit generation.
    - Expected: generation/loading state is visible and no blocking runtime errors occur.
    - Report notes: include request latency estimate and any retries required.

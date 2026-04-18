@@ -16,6 +16,9 @@ import type {
   IntakeSourcePackageModality,
   NormalizedIntakeSourcePackage,
 } from "@/lib/homeschool/intake/types";
+import { createBrowserSupabaseClient } from "@/lib/platform/supabase-browser";
+import { storageBuckets } from "@/lib/storage/buckets";
+import { buildOrganizationStoragePath } from "@/lib/storage/paths";
 
 type OnboardingJobStage =
   | "idle"
@@ -58,7 +61,6 @@ const intakeOptions: Array<{ value: FastPathIntakeRoute; label: string }> = [
 const DEFAULT_INTAKE_ROUTE: FastPathIntakeRoute = "single_lesson";
 const UPLOAD_ACCEPT =
   "image/*,application/pdf,.pdf,.txt,.md,.csv,.json,.html,.htm,application/json,text/plain,text/csv,text/markdown";
-const MAX_HOSTED_UPLOAD_BYTES = 4 * 1024 * 1024;
 
 const horizonLabels: Record<CurriculumGenerationHorizon, string> = {
   today: "Today",
@@ -149,6 +151,16 @@ function formatFileSize(bytes: number) {
   return `${Math.round(bytes / 1024 / 102.4) / 10} MB`;
 }
 
+function sanitizeUploadFileName(fileName: string) {
+  return (
+    fileName
+      .trim()
+      .replace(/[^a-zA-Z0-9._-]+/g, "-")
+      .replace(/-{2,}/g, "-")
+      .replace(/^-+|-+$/g, "") || "upload"
+  );
+}
+
 function truncateErrorCopy(value: string, maxLength = 220) {
   const normalized = value.replace(/\s+/g, " ").trim();
   if (normalized.length <= maxLength) {
@@ -202,6 +214,7 @@ function describeOnboardingError(raw: string) {
 }
 
 export function HomeschoolOnboardingForm(props: {
+  organizationId: string;
   organizationName: string;
   defaultLearnerName?: string | null;
 }) {
@@ -310,31 +323,44 @@ export function HomeschoolOnboardingForm(props: {
       throw new Error("Choose a file before continuing.");
     }
 
-    if (uploadedFile.size > MAX_HOSTED_UPLOAD_BYTES) {
-      throw new Error(
-        "This onboarding upload is too large for the hosted app right now. Keep the file under 4 MB, paste text here, or finish onboarding and add the PDF from Curriculum.",
-      );
-    }
-
     setWorkingState(
       "uploading_source",
       "Uploading your source",
-      "Keeping the selected file in place while we prepare the intake package.",
+      "Sending the selected file straight to storage before we prepare the intake package.",
     );
 
-    const formData = new FormData();
-    formData.set("modality", sourceMode);
-    formData.set("file", uploadedFile);
-    if (sourceNote.trim()) {
-      formData.set("note", sourceNote.trim());
+    const storagePath = buildOrganizationStoragePath(
+      props.organizationId,
+      "onboarding-intake",
+      crypto.randomUUID(),
+      sanitizeUploadFileName(uploadedFile.name),
+    );
+    const storage = createBrowserSupabaseClient().storage.from(storageBuckets.curriculum);
+    const upload = await storage.upload(storagePath, uploadedFile, {
+      contentType: uploadedFile.type || "application/octet-stream",
+      upsert: false,
+    });
+
+    if (upload.error) {
+      throw new Error(upload.error.message);
     }
 
     const response = await fetch("/api/homeschool/intake-package", {
       method: "POST",
-      body: formData,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        modality: sourceMode,
+        fileName: uploadedFile.name,
+        mimeType: uploadedFile.type || "application/octet-stream",
+        byteSize: uploadedFile.size,
+        storageBucket: storageBuckets.curriculum,
+        storagePath,
+        note: sourceNote.trim() || undefined,
+      }),
     });
     const payload = await response.json().catch(() => null);
     if (!response.ok) {
+      void storage.remove([storagePath]).catch(() => undefined);
       throw new Error(payload?.error ?? "Could not upload that source.");
     }
 

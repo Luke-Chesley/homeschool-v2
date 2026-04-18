@@ -17,9 +17,46 @@ import {
 import { ACTIVATION_EVENT_NAMES } from "@/lib/homeschool/onboarding/activation-contracts";
 import { trackOperationalError, trackProductEvent } from "@/lib/platform/observability";
 import { storageBuckets } from "@/lib/storage/buckets";
-import { buildLearnerStoragePath } from "@/lib/storage/paths";
+import { buildLearnerStoragePath, buildOrganizationStoragePath } from "@/lib/storage/paths";
 
 const AssetBackedModalitySchema = z.enum(["photo", "image", "pdf", "file"]);
+
+function resolveStoredAssetContext(params: {
+  organizationId: string;
+  activeLearnerId?: string | null;
+  storageBucket: string;
+  storagePath: string;
+}) {
+  const organizationScopedPrefix = `${buildOrganizationStoragePath(params.organizationId)}/`;
+  if (
+    params.storageBucket === storageBuckets.curriculum &&
+    params.storagePath.startsWith(organizationScopedPrefix)
+  ) {
+    return {
+      learnerId: params.activeLearnerId ?? null,
+    };
+  }
+
+  if (!params.activeLearnerId) {
+    return null;
+  }
+
+  const learnerScopedPrefix = `${buildLearnerStoragePath(
+    params.organizationId,
+    params.activeLearnerId,
+  )}/`;
+
+  if (
+    params.storageBucket === storageBuckets.learnerUploads &&
+    params.storagePath.startsWith(learnerScopedPrefix)
+  ) {
+    return {
+      learnerId: params.activeLearnerId,
+    };
+  }
+
+  return null;
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -62,31 +99,23 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      if (!session.activeLearner) {
-        return NextResponse.json(
-          { error: "Choose a learner before uploading a stored source." },
-          { status: 400 },
-        );
-      }
+      const storedAssetContext = resolveStoredAssetContext({
+        organizationId: session.organization.id,
+        activeLearnerId: session.activeLearner?.id ?? null,
+        storageBucket: storedAssetRequest.data.storageBucket,
+        storagePath: storedAssetRequest.data.storagePath,
+      });
 
-      const expectedStoragePrefix = `${buildLearnerStoragePath(
-        session.organization.id,
-        session.activeLearner.id,
-      )}/`;
-
-      if (
-        storedAssetRequest.data.storageBucket !== storageBuckets.learnerUploads ||
-        !storedAssetRequest.data.storagePath.startsWith(expectedStoragePrefix)
-      ) {
+      if (!storedAssetContext) {
         return NextResponse.json(
-          { error: "That uploaded file is not available for this learner." },
+          { error: "That uploaded file is not available in this workspace." },
           { status: 400 },
         );
       }
 
       const pkg = await createStoredAssetBackedIntakeSourcePackage({
         organizationId: session.organization.id,
-        learnerId: session.activeLearner.id,
+        learnerId: storedAssetContext.learnerId,
         modality: storedAssetRequest.data.modality,
         fileName: storedAssetRequest.data.fileName,
         mimeType: storedAssetRequest.data.mimeType,
@@ -99,7 +128,7 @@ export async function POST(request: NextRequest) {
       await trackProductEvent({
         name: ACTIVATION_EVENT_NAMES.intakePackageCreated,
         organizationId: session.organization.id,
-        learnerId: session.activeLearner.id,
+        learnerId: storedAssetContext.learnerId,
         metadata: {
           packageId: pkg.id,
           modality: pkg.modality,
@@ -111,7 +140,7 @@ export async function POST(request: NextRequest) {
       await trackProductEvent({
         name: ACTIVATION_EVENT_NAMES.intakeAssetUploaded,
         organizationId: session.organization.id,
-        learnerId: session.activeLearner.id,
+        learnerId: storedAssetContext.learnerId,
         metadata: {
           packageId: pkg.id,
           modality: pkg.modality,

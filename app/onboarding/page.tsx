@@ -41,6 +41,7 @@ export default async function OnboardingPage() {
       </section>
 
       <HomeschoolOnboardingForm
+        organizationId={session.organization.id}
         organizationName={session.organization.name}
         defaultLearnerName={session.activeLearner?.displayName ?? null}
       />
