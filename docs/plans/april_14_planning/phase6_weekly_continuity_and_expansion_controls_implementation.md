@@ -6,7 +6,7 @@ Turn the bounded route into an explicit parent-approved runway without losing th
 
 ## Current Fit With Repo
 
-- Phase 3 already creates bounded curriculum depth from `bounded_plan_generate`.
+- Phase 3 already creates bounded launch depth from `curriculum_generate`.
 - Phase 4 and Phase 5 already turn the first scheduled day into a lesson draft plus learner activity.
 - Fast-path onboarding currently creates the weekly route too early for stronger inputs: the route is already spread across the week before the parent chooses to expand.
 - Phase 5 already stores `keep_today` vs `expand_from_here`, but those controls do not yet change route scheduling.
@@ -26,7 +26,7 @@ Phase 6 will not regenerate source content. It will change scheduling behavior.
   - expand to current week
 - those actions will schedule already-generated queued route items into future dates without changing today’s current lesson or activity
 
-This keeps weak sources bounded and makes strong sources expandable without re-running `bounded_plan_generate` or swapping curriculum sources after the first lesson is already live.
+This keeps weak sources bounded and makes strong sources expandable without re-running curriculum creation or swapping curriculum sources after the first lesson is already live.
 
 ## Scope
 
@@ -41,7 +41,7 @@ This keeps weak sources bounded and makes strong sources expandable without re-r
 ### learning-core
 
 - no required change in this phase
-- Phase 6 uses the bounded depth already produced by `bounded_plan_generate`
+- Phase 6 uses the bounded launch depth already produced by `curriculum_generate`
 
 ## Scheduling Contract
 

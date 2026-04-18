@@ -318,20 +318,20 @@ Purpose:
 - produce assumptions
 - keep routing honest
 
-### 2. `bounded_plan_generate` or `curriculum_fragment_generate`
+### 2. `curriculum_generate`
 Second new priority.
 
 Purpose:
-- generate a minimal curriculum/route fragment from partial inputs
-- support today, tomorrow, next few days, current week, or starter module
-- avoid overusing `curriculum_generate`
+- generate the durable curriculum
+- support both source-first and conversation-first creation
+- keep the opening window bounded through `launchPlan`
 
 This operation should be used for:
 - single-day material
 - weekly assignment sets
 - sequence outlines
 
-It should **not** pretend to be a full curriculum builder.
+It should return a durable curriculum while keeping launch scope bounded through `launchPlan`.
 
 ### Keep existing operations
 
@@ -433,7 +433,7 @@ This onboarding flow should follow that rule.
 
 1. `extract_intake_assets`
 2. `interpret_source_package`
-3. `materialize_bounded_plan`
+3. `materialize_launch_window`
 4. `generate_today_lesson`
 5. `generate_today_activity`
 
@@ -523,7 +523,7 @@ Stop routing weak inputs into the wrong generation path.
 - `weekly_assignments` route distinctly from `topic_seed`
 - ambiguous cases can request confirmation
 
-## Phase 3 — Bounded plan generation
+## Phase 3 — Curriculum generation with bounded launch
 
 ### Goal
 
@@ -532,13 +532,8 @@ Generate the smallest durable planning object that supports Today.
 ### Scope
 
 #### learning-core
-- add `bounded_plan_generate` or `curriculum_fragment_generate`
-- support outputs for
-  - today
-  - tomorrow
-  - next few days
-  - current week
-  - starter module
+- route source-first creation through `curriculum_generate`
+- return one durable curriculum plus `launchPlan`
 
 #### homeschool-v2
 - persist provisional source / route records from bounded outputs

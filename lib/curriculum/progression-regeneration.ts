@@ -490,5 +490,15 @@ function buildMinimalArtifactForProgression(
     },
     document: { Skills: document } as Record<string, CurriculumJsonNode>,
     units: [],
+    launchPlan: {
+      recommendedHorizon: "starter_module",
+      openingLessonCount: Math.max(1, skillNodes.length || 1),
+      scopeSummary: "Use the existing skill map as the bounded opening window for progression work.",
+      initialSliceUsed: false,
+      initialSliceLabel: null,
+      entryStrategy: null,
+      entryLabel: null,
+      continuationMode: null,
+    },
   };
 }

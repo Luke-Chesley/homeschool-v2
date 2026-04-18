@@ -3,7 +3,6 @@
 import { z } from "zod";
 
 const SESSION_STORAGE_KEY = "homeschool-onboarding-launch-summary";
-
 export const OnboardingLaunchSummarySchema = z.object({
   chosenHorizon: z.enum([
     "single_day",
@@ -12,10 +11,10 @@ export const OnboardingLaunchSummarySchema = z.object({
     "two_weeks",
     "starter_module",
   ]),
-  lessonCount: z.number().int().positive(),
+  openingLessonCount: z.number().int().positive(),
   summaryText: z.string().min(1),
   scopeSummary: z.string().nullable().optional(),
-  usedSlice: z.boolean(),
+  initialSliceUsed: z.boolean().default(false),
   initialSliceLabel: z.string().nullable().optional(),
 });
 

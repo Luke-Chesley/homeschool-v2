@@ -83,6 +83,55 @@ test("launch contract keeps comprehensive sources bounded and removes user horiz
 
 test("durable intake metadata accepts only the canonical source model", () => {
   const parsed = CurriculumSourceIntakeSchema.parse({
+    routeVersion: 1,
+    rawText: "Whole workbook with chapter 1 selected.",
+    assetIds: ["asset-1"],
+    learnerId: "learner-1",
+    sourceModel: {
+      requestedRoute: "outline",
+      routedRoute: "outline",
+      confidence: "medium",
+      sourceKind: "comprehensive_source",
+      entryStrategy: "explicit_range",
+      entryLabel: "chapter 1",
+      continuationMode: "sequential",
+      recommendedHorizon: "one_week",
+      assumptions: ["Launch from chapter 1 and keep the rest for continuation."],
+      detectedChunks: ["Chapter 1", "Chapter 2", "Chapter 3"],
+      sourcePackageIds: ["ipkg-1"],
+      sourcePackages: [buildSourcePackage()],
+      sourceModalities: ["pdf"],
+      sourcePackageId: "ipkg-1",
+      sourceModality: "pdf",
+      lineage: { operation: "source_interpret" },
+    },
+    launchPlan: {
+      chosenHorizon: "one_week",
+      horizonDecisionSource: "model_inferred",
+      scopeSummary: "Start with chapter 1 and keep the rest available for later.",
+      initialSliceUsed: true,
+      initialSliceLabel: "chapter 1",
+      openingLessonCount: 4,
+    },
+    curriculumLineage: { operation: "curriculum_generate" },
+    createdFrom: "onboarding_fast_path",
+  });
+
+  assert.equal(parsed.route, "outline");
+  assert.equal(parsed.confidence, "medium");
+  assert.equal(parsed.sourceKind, "comprehensive_source");
+  assert.equal(parsed.entryStrategy, "explicit_range");
+  assert.equal(parsed.entryLabel, "chapter 1");
+  assert.equal(parsed.continuationMode, "sequential");
+  assert.equal(parsed.recommendedHorizon, "one_week");
+  assert.equal(parsed.chosenHorizon, "one_week");
+  assert.equal(parsed.sourceModel?.lineage?.operation, "source_interpret");
+  assert.equal(parsed.launchPlan?.openingLessonCount, 4);
+  assert.equal(parsed.curriculumLineage?.operation, "curriculum_generate");
+});
+
+test("canonical launch metadata no longer depends on bounded-plan aliases", () => {
+  const parsed = CurriculumSourceIntakeSchema.parse({
     route: "outline",
     requestedRoute: "outline",
     routeVersion: 1,
@@ -106,15 +155,40 @@ test("durable intake metadata accepts only the canonical source model", () => {
     sourceModalities: ["pdf"],
     sourcePackageId: "ipkg-1",
     sourceModality: "pdf",
+    sourceModel: {
+      requestedRoute: "outline",
+      routedRoute: "outline",
+      confidence: "medium",
+      sourceKind: "comprehensive_source",
+      entryStrategy: "explicit_range",
+      entryLabel: "chapter 1",
+      continuationMode: "sequential",
+      recommendedHorizon: "one_week",
+      assumptions: ["Launch from chapter 1 and keep the rest for continuation."],
+      detectedChunks: ["Chapter 1", "Chapter 2", "Chapter 3"],
+      sourcePackageIds: ["ipkg-1"],
+      sourcePackages: [buildSourcePackage()],
+      sourceModalities: ["pdf"],
+      sourcePackageId: "ipkg-1",
+      sourceModality: "pdf",
+      lineage: { operation: "source_interpret" },
+    },
+    launchPlan: {
+      chosenHorizon: "one_week",
+      horizonDecisionSource: "model_inferred",
+      scopeSummary: "Start with chapter 1 and keep the rest available for later.",
+      initialSliceUsed: true,
+      initialSliceLabel: "chapter 1",
+      openingLessonCount: 4,
+    },
+    curriculumLineage: { operation: "curriculum_generate" },
     createdFrom: "onboarding_fast_path",
   });
 
-  assert.equal(parsed.sourceKind, "comprehensive_source");
-  assert.equal(parsed.entryStrategy, "explicit_range");
-  assert.equal(parsed.entryLabel, "chapter 1");
-  assert.equal(parsed.continuationMode, "sequential");
-  assert.equal(parsed.recommendedHorizon, "one_week");
-  assert.equal(parsed.chosenHorizon, "one_week");
+  assert.equal(parsed.sourceModel?.lineage?.operation, "source_interpret");
+  assert.equal(parsed.launchPlan?.openingLessonCount, 4);
+  assert.equal(parsed.launchPlan?.initialSliceUsed, true);
+  assert.equal(parsed.curriculumLineage?.operation, "curriculum_generate");
 });
 
 test("case A: single bounded lesson stays on a single-day launch without preview", () => {
@@ -141,12 +215,13 @@ test("case B: weekly plan infers one week and produces a bounded launch summary"
   });
   const summary = buildFastPathLaunchSummary({
     preview,
-    lessonCount: 4,
+    openingLessonCount: 4,
   });
 
   assert.equal(preview.chosenHorizon, "one_week");
   assert.equal(preview.needsConfirmation, false);
-  assert.match(summary.summaryText, /next 4 lessons/i);
+  assert.match(summary.summaryText, /opening 4 lessons/i);
+  assert.equal(summary.openingLessonCount, 4);
 });
 
 test("case C: clean outline stays bounded to a few days", () => {
@@ -227,7 +302,7 @@ test("case F: comprehensive source stays bounded and preserves its entry slice",
   });
   const summary = buildFastPathLaunchSummary({
     preview,
-    lessonCount: 6,
+    openingLessonCount: 6,
     initialSliceLabel: "chapter 1",
   });
 
@@ -235,6 +310,7 @@ test("case F: comprehensive source stays bounded and preserves its entry slice",
   assert.equal(preview.initialSliceUsed, true);
   assert.match(preview.scopeSummary, /chapter 1/i);
   assert.match(summary.summaryText, /chapter 1/i);
+  assert.equal(summary.openingLessonCount, 6);
 });
 
 test("case G: large source with explicit narrow request stays anchored to that range", () => {
@@ -269,4 +345,39 @@ test("case H: chosen horizon clamps when the route ceiling is narrower", () => {
 
   assert.equal(resolved.chosenHorizon, "single_day");
   assert.equal(resolved.horizonDecisionSource, "internal_override");
+});
+
+test("preview carries canonical sourceModel and launchPlan blocks", () => {
+  const preview = buildPreview({
+    intakeRoute: "outline",
+    interpretation: {
+      sourceKind: "comprehensive_source",
+      entryStrategy: "explicit_range",
+      entryLabel: "chapter 1",
+      continuationMode: "sequential",
+      recommendedHorizon: "one_week",
+    },
+  });
+
+  assert.equal(preview.sourceModel.routedRoute, "outline");
+  assert.equal(preview.sourceModel.sourceKind, "comprehensive_source");
+  assert.equal(preview.launchPlan.chosenHorizon, "one_week");
+  assert.equal(preview.launchPlan.initialSliceUsed, true);
+  assert.equal(preview.launchPlan.initialSliceLabel, "chapter 1");
+});
+
+test("launch summary can be derived directly from launchPlan metadata", () => {
+  const summary = buildFastPathLaunchSummary({
+    launchPlan: {
+      chosenHorizon: "few_days",
+      scopeSummary: "Start with chapter 1 and keep the rest available for later.",
+      initialSliceUsed: true,
+      initialSliceLabel: "chapter 1",
+      openingLessonCount: 4,
+    },
+  });
+
+  assert.equal(summary.openingLessonCount, 4);
+  assert.equal(summary.initialSliceUsed, true);
+  assert.match(summary.summaryText, /chapter 1/i);
 });

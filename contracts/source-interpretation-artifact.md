@@ -5,7 +5,7 @@
 - **Current Version:** 1.0.0
 
 ## Purpose
-The Source Interpretation Artifact is the bounded classification result returned before onboarding creates a bounded plan. It identifies what kind of source the family supplied, how onboarding should enter that source safely, and how later continuation could resume without generating the whole curriculum immediately.
+The Source Interpretation Artifact is the bounded classification result returned before onboarding creates a durable curriculum. It identifies what kind of source the family supplied, how onboarding should enter that source safely, and how later continuation could resume without treating the whole source as immediate launch scope.
 
 ## Producers
 - **Entrypoints:**
@@ -21,11 +21,11 @@ The Source Interpretation Artifact is the bounded classification result returned
   - `app/api/homeschool/onboarding/route.ts`
   - `lib/homeschool/onboarding/service.ts`
   - `lib/homeschool/onboarding/fast-path.ts`
-  - `lib/homeschool/onboarding/bounded-plan.ts`
+  - `lib/homeschool/onboarding/curriculum.ts`
 - **Processing Logic:**
   - `buildFastPathPreview(...)` maps the interpretation into the bounded launch route, chosen horizon, and user-facing scope summary.
-  - `createFastPathBoundedCurriculum(...)` forwards the entry metadata into `bounded_plan_generate`.
-  - Selected fields are persisted into curriculum intake metadata so later continuation can resume from the same source entry point.
+  - `createFastPathCurriculumFromSource(...)` forwards the entry metadata into `curriculum_generate` with `requestMode: "source_entry"`.
+  - Selected fields are persisted into `sourceModel`, `launchPlan`, and `curriculumLineage` metadata so later continuation can resume from the same source entry point.
 
 ## Persistence
 - **Storage Location:**
@@ -33,7 +33,7 @@ The Source Interpretation Artifact is the bounded classification result returned
   - `curriculum_sources.intake`
 - **Storage Shape:**
   - The raw artifact is not stored verbatim as one JSON blob.
-  - Durable intake metadata stores the canonical interpretation fields plus downstream bounded-launch fields such as `chosenHorizon`, `initialSliceUsed`, and `initialSliceLabel`.
+  - Durable source metadata stores the canonical interpretation fields in `sourceModel` and the bounded opening window in `launchPlan`.
 
 ## Field Definitions
 
@@ -76,10 +76,10 @@ The Source Interpretation Artifact is the bounded classification result returned
 
 ## Ownership & Hierarchy
 - **Parent:** Organization / learner onboarding request
-- **Children:** Bounded plan request, persisted curriculum intake metadata
+- **Children:** `curriculum_generate` source-entry request, persisted curriculum metadata
 
 ## Change Impact
-- **Downstream Effects:** Changes affect onboarding preview gating, bounded-plan generation inputs, persisted intake metadata, and Today lesson-generation context.
+- **Downstream Effects:** Changes affect onboarding preview gating, `curriculum_generate` source-entry inputs, persisted source metadata, and Today lesson-generation context.
 - **Related Contracts:** `normalized-intake-source-package.md`, `curriculum-artifact.md`, `lesson-draft-artifact.md`
 
 ## Known Gaps / TODOs

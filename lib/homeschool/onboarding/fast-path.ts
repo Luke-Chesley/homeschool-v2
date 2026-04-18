@@ -5,9 +5,11 @@ import type {
   CurriculumHorizonDecisionSource,
   CurriculumIntakeConfidence,
   FastPathIntakeRoute,
+  HomeschoolFastPathLaunchPlan,
   HomeschoolFastPathLaunchSummary,
   HomeschoolFastPathOnboardingInput,
   HomeschoolFastPathPreview,
+  HomeschoolFastPathSourceModel,
   SourceContinuationMode,
   SourceEntryStrategy,
   SourceInterpretSourceKind,
@@ -284,6 +286,40 @@ export function buildFastPathPreview(params: {
     entryStrategy: params.interpretation.entryStrategy,
     entryLabel: params.interpretation.entryLabel,
   });
+  const sourceModel: HomeschoolFastPathSourceModel = {
+    requestedRoute: params.intakeRoute,
+    routedRoute: intakeRoute,
+    confidence: params.interpretation.confidence,
+    sourceKind: params.interpretation.sourceKind,
+    entryStrategy: params.interpretation.entryStrategy,
+    entryLabel: params.interpretation.entryLabel ?? null,
+    continuationMode: params.interpretation.continuationMode,
+    recommendedHorizon: params.interpretation.recommendedHorizon,
+    assumptions: params.interpretation.assumptions,
+    detectedChunks:
+      params.interpretation.detectedChunks.length > 0
+        ? params.interpretation.detectedChunks
+        : extractDetectedChunks(params.sourceInput),
+    followUpQuestion: params.interpretation.followUpQuestion ?? null,
+    needsConfirmation: shouldRequireFastPathPreview({
+      interpretation: params.interpretation,
+    }),
+  };
+  const launchPlan: HomeschoolFastPathLaunchPlan = {
+    chosenHorizon: resolvedHorizon.chosenHorizon,
+    horizonDecisionSource: resolvedHorizon.horizonDecisionSource,
+    scopeSummary: buildScopeSummary({
+      sourceKind: params.interpretation.sourceKind,
+      entryStrategy: params.interpretation.entryStrategy,
+      entryLabel: params.interpretation.entryLabel,
+      chosenHorizon: resolvedHorizon.chosenHorizon,
+    }),
+    initialSliceUsed: usesInitialSourceSlice({
+      sourceKind: params.interpretation.sourceKind,
+      entryStrategy: params.interpretation.entryStrategy,
+    }),
+    initialSliceLabel,
+  };
 
   return {
     learnerTarget: params.corrections?.learnerName?.trim() || params.learnerName,
@@ -299,29 +335,19 @@ export function buildFastPathPreview(params: {
       || params.interpretation.suggestedTitle
       || buildPreviewTitle({ intakeRoute, sourceInput: params.sourceInput }),
     detectedChunks:
-      params.interpretation.detectedChunks.length > 0
-        ? params.interpretation.detectedChunks
-        : extractDetectedChunks(params.sourceInput),
+      sourceModel.detectedChunks,
     assumptions: params.interpretation.assumptions,
     recommendedHorizon: params.interpretation.recommendedHorizon,
     chosenHorizon: resolvedHorizon.chosenHorizon,
     horizonDecisionSource: resolvedHorizon.horizonDecisionSource,
-    scopeSummary: buildScopeSummary({
-      sourceKind: params.interpretation.sourceKind,
-      entryStrategy: params.interpretation.entryStrategy,
-      entryLabel: params.interpretation.entryLabel,
-      chosenHorizon: resolvedHorizon.chosenHorizon,
-    }),
+    scopeSummary: launchPlan.scopeSummary ?? "",
     confidence: params.interpretation.confidence,
     followUpQuestion: params.interpretation.followUpQuestion ?? null,
-    needsConfirmation: shouldRequireFastPathPreview({
-      interpretation: params.interpretation,
-    }),
-    initialSliceUsed: usesInitialSourceSlice({
-      sourceKind: params.interpretation.sourceKind,
-      entryStrategy: params.interpretation.entryStrategy,
-    }),
+    needsConfirmation: sourceModel.needsConfirmation,
+    initialSliceUsed: launchPlan.initialSliceUsed,
     initialSliceLabel,
+    sourceModel,
+    launchPlan,
   };
 }
 
@@ -340,37 +366,110 @@ function describeChosenHorizon(horizon: CurriculumGenerationHorizon) {
   }
 }
 
-export function buildFastPathLaunchSummary(params: {
-  preview: Pick<
+function resolveSummaryLaunchPlan(params: {
+  preview?: Pick<
     HomeschoolFastPathPreview,
-    "chosenHorizon" | "scopeSummary" | "initialSliceUsed" | "initialSliceLabel"
+    | "chosenHorizon"
+    | "scopeSummary"
+    | "initialSliceUsed"
+    | "initialSliceLabel"
+    | "launchPlan"
   >;
-  lessonCount: number;
+  launchPlan?: Pick<
+    HomeschoolFastPathLaunchPlan,
+    | "chosenHorizon"
+    | "scopeSummary"
+    | "initialSliceUsed"
+    | "initialSliceLabel"
+    | "openingLessonCount"
+  >;
+  openingLessonCount?: number;
   initialSliceLabel?: string | null;
-}): HomeschoolFastPathLaunchSummary {
-  const sliceLabel = params.initialSliceLabel ?? params.preview.initialSliceLabel ?? null;
-  let summaryText: string;
+}) {
+  const previewLaunchPlan = params.preview?.launchPlan;
+  const chosenHorizon =
+    params.launchPlan?.chosenHorizon
+    ?? previewLaunchPlan?.chosenHorizon
+    ?? params.preview?.chosenHorizon;
 
-  if (params.preview.chosenHorizon === "single_day") {
-    summaryText = "We set this up for today.";
-  } else if (params.preview.initialSliceUsed && sliceLabel && params.preview.chosenHorizon === "two_weeks") {
-    summaryText = `We started with ${sliceLabel}, set up ${describeChosenHorizon(
-      params.preview.chosenHorizon,
-    )}, and opened day 1.`;
-  } else if (params.preview.initialSliceUsed && sliceLabel) {
-    summaryText = `We started with ${sliceLabel}, set up the next ${params.lessonCount} lessons, and opened day 1.`;
-  } else if (params.preview.chosenHorizon === "starter_module") {
-    summaryText = `We built a starter module with ${params.lessonCount} lessons and opened day 1.`;
-  } else {
-    summaryText = `We set up the next ${params.lessonCount} lessons and opened day 1.`;
+  if (!chosenHorizon) {
+    throw new Error("Launch summary requires a chosen horizon.");
+  }
+
+  const openingLessonCount =
+    params.openingLessonCount
+    ?? params.launchPlan?.openingLessonCount
+    ?? previewLaunchPlan?.openingLessonCount;
+
+  if (openingLessonCount == null || openingLessonCount < 1) {
+    throw new Error("Launch summary requires a positive opening lesson count.");
   }
 
   return {
-    chosenHorizon: params.preview.chosenHorizon,
-    lessonCount: params.lessonCount,
+    chosenHorizon,
+    openingLessonCount,
+    scopeSummary:
+      params.launchPlan?.scopeSummary
+      ?? previewLaunchPlan?.scopeSummary
+      ?? params.preview?.scopeSummary
+      ?? null,
+    initialSliceUsed:
+      params.launchPlan?.initialSliceUsed
+      ?? previewLaunchPlan?.initialSliceUsed
+      ?? params.preview?.initialSliceUsed
+      ?? false,
+    initialSliceLabel:
+      params.initialSliceLabel
+      ?? params.launchPlan?.initialSliceLabel
+      ?? previewLaunchPlan?.initialSliceLabel
+      ?? params.preview?.initialSliceLabel
+      ?? null,
+  };
+}
+
+export function buildFastPathLaunchSummary(params: {
+  preview?: Pick<
+    HomeschoolFastPathPreview,
+    | "chosenHorizon"
+    | "scopeSummary"
+    | "initialSliceUsed"
+    | "initialSliceLabel"
+    | "launchPlan"
+  >;
+  launchPlan?: Pick<
+    HomeschoolFastPathLaunchPlan,
+    | "chosenHorizon"
+    | "scopeSummary"
+    | "initialSliceUsed"
+    | "initialSliceLabel"
+    | "openingLessonCount"
+  >;
+  openingLessonCount?: number;
+  initialSliceLabel?: string | null;
+}): HomeschoolFastPathLaunchSummary {
+  const launchPlan = resolveSummaryLaunchPlan(params);
+  let summaryText: string;
+
+  if (launchPlan.chosenHorizon === "single_day") {
+    summaryText = "We set this up for today.";
+  } else if (launchPlan.initialSliceUsed && launchPlan.initialSliceLabel) {
+    summaryText = `We started with ${launchPlan.initialSliceLabel}, set up the opening ${launchPlan.openingLessonCount} lessons, and opened day 1.`;
+  } else if (launchPlan.chosenHorizon === "starter_module") {
+    summaryText = `We built a starter module with ${launchPlan.openingLessonCount} lessons and opened day 1.`;
+  } else if (launchPlan.chosenHorizon === "two_weeks") {
+    summaryText = `We set up the opening ${launchPlan.openingLessonCount} lessons across ${describeChosenHorizon(
+      launchPlan.chosenHorizon,
+    )} and opened day 1.`;
+  } else {
+    summaryText = `We set up the opening ${launchPlan.openingLessonCount} lessons and opened day 1.`;
+  }
+
+  return {
+    chosenHorizon: launchPlan.chosenHorizon,
+    openingLessonCount: launchPlan.openingLessonCount,
     summaryText,
-    scopeSummary: params.preview.scopeSummary,
-    usedSlice: params.preview.initialSliceUsed,
-    initialSliceLabel: sliceLabel,
+    scopeSummary: launchPlan.scopeSummary,
+    initialSliceUsed: launchPlan.initialSliceUsed,
+    initialSliceLabel: launchPlan.initialSliceLabel,
   };
 }

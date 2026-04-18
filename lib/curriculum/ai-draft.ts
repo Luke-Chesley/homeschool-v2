@@ -1,6 +1,11 @@
 import { z } from "zod";
 
-import { JsonRecordSchema } from "./types.ts";
+import {
+  CurriculumSourceContinuationModeSchema,
+  CurriculumSourceEntryStrategySchema,
+  CurriculumSourceRecommendedHorizonSchema,
+  JsonRecordSchema,
+} from "./types.ts";
 
 const CurriculumAiChatRoleSchema = z.enum(["user", "assistant"]);
 
@@ -143,12 +148,26 @@ export const CurriculumAiProgressionSchema = z.object({
 
 export type CurriculumAiProgression = z.infer<typeof CurriculumAiProgressionSchema>;
 
+export const CurriculumLaunchPlanSchema = z.object({
+  recommendedHorizon: CurriculumSourceRecommendedHorizonSchema,
+  openingLessonCount: z.number().int().positive(),
+  scopeSummary: z.string().trim().min(1).max(1_200),
+  initialSliceUsed: z.boolean(),
+  initialSliceLabel: z.string().trim().min(1).max(240).nullable().optional(),
+  entryStrategy: CurriculumSourceEntryStrategySchema.nullable().optional(),
+  entryLabel: z.string().trim().min(1).max(240).nullable().optional(),
+  continuationMode: CurriculumSourceContinuationModeSchema.nullable().optional(),
+});
+
+export type CurriculumLaunchPlan = z.infer<typeof CurriculumLaunchPlanSchema>;
+
 export const CurriculumAiGeneratedArtifactSchema = z.object({
   source: CurriculumAiDraftSummarySchema,
   intakeSummary: z.string().trim().min(1).max(1_500),
   pacing: CurriculumAiPacingSchema,
   document: z.record(z.string().trim().min(1).max(180), CurriculumAiDocumentNodeSchema),
   units: z.array(CurriculumAiUnitSchema).min(1).max(20),
+  launchPlan: CurriculumLaunchPlanSchema,
   progression: CurriculumAiProgressionSchema.optional(),
 });
 

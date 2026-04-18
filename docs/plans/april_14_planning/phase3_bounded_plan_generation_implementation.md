@@ -13,7 +13,7 @@ Generate the smallest durable planning artifact that the app can persist and sch
 
 ## Implementation Decision
 
-Phase 3 will add a new `bounded_plan_generate` operation in `learning-core` and make fast-path onboarding persist its result as a provisional curriculum source.
+Phase 3 uses `curriculum_generate` in source-entry mode and makes fast-path onboarding persist its result as a curriculum source.
 
 That means the app will not invent a separate temporary plan table for launch. Instead, it will:
 
@@ -26,9 +26,9 @@ That means the app will not invent a separate temporary plan table for launch. I
 
 ### learning-core
 
-- add `BoundedPlanGenerationRequest`
-- add `BoundedPlanArtifact`
-- add `bounded_plan_generate` to the skill registry
+- add the source-entry `CurriculumGenerationRequest`
+- add `launchPlan` to the curriculum artifact
+- route source-first creation through `curriculum_generate`
 - generate:
   - bounded `document`
   - bounded `units`
@@ -43,9 +43,9 @@ That means the app will not invent a separate temporary plan table for launch. I
 
 ### homeschool-v2
 
-- add a `lib/learning-core/bounded-plan.ts` client
-- convert bounded-plan artifacts into `ImportedCurriculumDocument`
-- replace fast-path curriculum initialization with bounded-plan import
+- call `curriculum_generate` through the curriculum client
+- convert curriculum artifacts into `ImportedCurriculumDocument`
+- replace fast-path curriculum initialization with curriculum import
 - persist source metadata that marks:
   - requested route
   - routed route
@@ -65,7 +65,7 @@ Use existing curriculum persistence rather than a separate launch-only plan stor
 
 ## Implementation Notes
 
-- fast-path onboarding should call `bounded_plan_generate` after learner creation and before weekly route generation
+- fast-path onboarding should call `curriculum_generate` after learner creation and before weekly route generation
 - the imported document should stay intentionally small; one weak source should not explode into a full tree
 - `single_day_material` should generally become one to two lessons
 - `weekly_assignments` should generate only the current week

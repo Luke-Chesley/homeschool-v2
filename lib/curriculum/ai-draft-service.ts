@@ -27,12 +27,11 @@ import {
 } from "@/lib/learning-core/curriculum";
 
 import {
-  applyAiDraftArtifactToCurriculumSource,
-  createCurriculumSourceFromAiDraftArtifact,
+  applyCurriculumArtifactToCurriculumSource,
+  createCurriculumSourceFromCurriculumArtifact,
   getCurriculumSource,
   getCurriculumTree,
   listCurriculumOutline,
-  type CreatedAiDraftCurriculumResult,
 } from "./service";
 import type { CurriculumTreeNode } from "./types";
 
@@ -98,11 +97,11 @@ export async function createCurriculumFromConversation(
   },
   deps?: {
     generate?: typeof generateCurriculumArtifact;
-    persist?: typeof createCurriculumSourceFromAiDraftArtifact;
+    persist?: typeof createCurriculumSourceFromCurriculumArtifact;
   },
 ): Promise<CurriculumAiCreateResult> {
   const generate = deps?.generate ?? generateCurriculumArtifact;
-  const persist = deps?.persist ?? createCurriculumSourceFromAiDraftArtifact;
+  const persist = deps?.persist ?? createCurriculumSourceFromCurriculumArtifact;
   const generation = await generate({
     learner: params.learner,
     messages: params.messages,
@@ -115,6 +114,7 @@ export async function createCurriculumFromConversation(
   const created = await persist({
     householdId: params.householdId,
     artifact: generation.artifact,
+    requestMode: "conversation_intake",
   });
 
   return {
@@ -130,9 +130,9 @@ export async function reviseCurriculumFromConversation(params: {
   messages: CurriculumAiChatMessage[];
 },
 deps?: {
-  persist?: typeof applyAiDraftArtifactToCurriculumSource;
+  persist?: typeof applyCurriculumArtifactToCurriculumSource;
 }): Promise<CurriculumAiRevisionResult> {
-  const persist = deps?.persist ?? applyAiDraftArtifactToCurriculumSource;
+  const persist = deps?.persist ?? applyCurriculumArtifactToCurriculumSource;
   const source = await getCurriculumSource(params.sourceId, params.householdId);
   if (!source) {
     return buildFailureResult({
@@ -227,11 +227,10 @@ deps?: {
     const response = await execute({
       input: {
         learnerName: params.learner.displayName,
+        requestMode: "conversation_intake",
         messages: params.messages,
         granularityGuidance: [],
         correctionNotes: [],
-        sourcePackages: params.sourcePackages ?? [],
-        sourceFiles: params.sourceFiles ?? [],
       },
       organizationId: params.learner.organizationId,
       learnerId: params.learner.id,

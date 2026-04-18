@@ -5,14 +5,7 @@ import { z } from "zod";
 
 import { homeschoolTemplate } from "@/config/templates/homeschool";
 import { ensureComplianceProgramForLearner } from "@/lib/compliance/service";
-import {
-  createCurriculumSourceFromAiDraftArtifact,
-  importStructuredCurriculumDocument,
-  setLiveCurriculumSource,
-} from "@/lib/curriculum/service";
-import type { CurriculumAiChatMessage } from "@/lib/curriculum/ai-draft";
-import { generateCurriculumArtifact } from "@/lib/curriculum/ai-draft-service";
-import type { ImportedCurriculumDocument } from "@/lib/curriculum/local-json-import";
+import { setLiveCurriculumSource } from "@/lib/curriculum/service";
 import { getDb } from "@/lib/db/server";
 import {
   curriculumSources,
@@ -38,7 +31,11 @@ import {
   ONBOARDING_MILESTONES,
   type OnboardingMilestone,
 } from "@/lib/homeschool/onboarding/activation-contracts";
-import { createFastPathBoundedCurriculum } from "@/lib/homeschool/onboarding/bounded-plan";
+import {
+  createCurriculumFromConversationIntake,
+  createCurriculumFromSourceEntry,
+  createFastPathCurriculumFromSource,
+} from "@/lib/homeschool/onboarding/curriculum";
 import {
   buildFastPathLaunchSummary,
   buildFastPathPreview,
@@ -50,21 +47,14 @@ import {
   getNormalizedIntakeSourcePackages,
   toIntakeSourcePackageContext,
 } from "@/lib/homeschool/intake/service";
-import type {
-  IntakeSourcePackageContext,
-  IntakeSourcePackageModality,
-} from "@/lib/homeschool/intake/types";
+import type { IntakeSourcePackageModality } from "@/lib/homeschool/intake/types";
 import { executeSourceInterpret } from "@/lib/learning-core/source-interpret";
 import { trackProductEvent } from "@/lib/platform/observability";
 
 import {
-  CURRICULUM_GENERATION_HORIZONS,
-  CURRICULUM_HORIZON_DECISION_SOURCES,
-  CURRICULUM_INTAKE_CONFIDENCE_LEVELS,
   FAST_PATH_INTAKE_ROUTES,
 } from "@/lib/homeschool/onboarding/types";
 import type {
-  CurriculumGenerationHorizon,
   FastPathIntakeRoute,
   HomeschoolFastPathOnboardingInput,
   HomeschoolOnboardingInput,
@@ -138,9 +128,6 @@ export type HomeschoolOnboardingPayload = z.infer<typeof HomeschoolOnboardingSch
 export type HomeschoolCurriculumIntakePayload = z.infer<typeof HomeschoolCurriculumIntakeSchema>;
 
 const FastPathIntakeRouteInputSchema = z.enum(FAST_PATH_INTAKE_ROUTES);
-const CurriculumGenerationHorizonSchema = z.enum(CURRICULUM_GENERATION_HORIZONS);
-const CurriculumHorizonDecisionSourceSchema = z.enum(CURRICULUM_HORIZON_DECISION_SOURCES);
-const CurriculumIntakeConfidenceSchema = z.enum(CURRICULUM_INTAKE_CONFIDENCE_LEVELS);
 const DEFAULT_FAST_PATH_INTAKE_ROUTE: FastPathIntakeRoute = "single_lesson";
 
 function normalizeSourcePackageIds(input: {
@@ -260,363 +247,24 @@ function mergeMilestone(existing: OnboardingMilestone[], milestone: OnboardingMi
   return [...existing, milestone];
 }
 
-function mergeSourceMetadata(
-  base: Record<string, unknown>,
-  extra: Record<string, unknown> | undefined,
-) {
-  return {
-    ...base,
-    ...(extra ?? {}),
-  };
-}
-
-function getFastPathIntakeMetadata(input: HomeschoolOnboardingInput) {
-  const metadata = asRecord(input.curriculumSourceMetadata);
-  const intake = asRecord(metadata.intake);
-  const detectedChunks = Array.isArray(intake.detectedChunks)
-    ? intake.detectedChunks.filter((entry): entry is string => typeof entry === "string")
-    : [];
-  const chosenHorizonParse =
-    typeof intake.chosenHorizon === "string"
-      ? CurriculumGenerationHorizonSchema.safeParse(intake.chosenHorizon)
-      : null;
-  const chosenHorizon = chosenHorizonParse?.success ? chosenHorizonParse.data : null;
-  const sourceKind =
-    typeof intake.sourceKind === "string" ? intake.sourceKind : null;
-
-  return {
-    detectedChunks,
-    chosenHorizon,
-    sourceKind,
-  };
-}
-
-function lessonCountForHorizon(horizon: CurriculumGenerationHorizon | null) {
-  switch (horizon) {
-    case "single_day":
-      return 1;
-    case "few_days":
-      return 3;
-    case "one_week":
-      return 5;
-    case "two_weeks":
-      return 8;
-    case "starter_module":
-      return 4;
-    default:
-      return 3;
+function requestedRouteForCurriculumMode(
+  curriculumMode: HomeschoolOnboardingInput["curriculumMode"],
+): FastPathIntakeRoute {
+  switch (curriculumMode) {
+    case "paste_outline":
+    case "ai_decompose":
+      return "outline";
+    case "manual_shell":
+      return "manual_shell";
   }
 }
 
-function buildStarterLessonsFromChunks(params: {
-  title: string;
-  subject: string;
-  chunks: string[];
-  horizon: CurriculumGenerationHorizon | null;
-  dailyTimeBudgetMinutes: number;
-}) {
-  const lessons = params.chunks
-    .slice(0, lessonCountForHorizon(params.horizon))
-    .map((chunk, index) => ({
-      title: chunk,
-      description:
-        index === 0
-          ? `Start with ${chunk}.`
-          : `Carry the plan forward with ${chunk}.`,
-      subject: params.subject,
-      estimatedMinutes: Math.max(20, Math.round(params.dailyTimeBudgetMinutes)),
-      materials: [],
-      objectives: [chunk],
-      linkedSkillTitles: [],
-    }));
-
-  if (lessons.length > 0) {
-    return lessons;
-  }
-
-  return [
-    {
-      title: params.title,
-      description: `Start a bounded plan for ${params.title}.`,
-      subject: params.subject,
-      estimatedMinutes: Math.max(20, Math.round(params.dailyTimeBudgetMinutes)),
-      materials: [],
-      objectives: [],
-      linkedSkillTitles: [],
-    },
-  ];
-}
-
-function buildStarterDocument(input: HomeschoolOnboardingInput) {
-  const lessonsPerSubject = ["Warm-up", "Core lesson", "Review and evidence"];
-  const intake = getFastPathIntakeMetadata(input);
-  const useSourceAwareShell = intake.detectedChunks.length > 0;
-
-  if (useSourceAwareShell) {
-    const subject = input.subjects[0] ?? "Integrated Studies";
-    const lessons = buildStarterLessonsFromChunks({
-      title: input.curriculumTitle,
-      subject,
-      chunks: intake.detectedChunks,
-      horizon: intake.chosenHorizon,
-      dailyTimeBudgetMinutes: Math.max(
-        20,
-        Math.round(input.dailyTimeBudgetMinutes / Math.max(input.subjects.length, 1)),
-      ),
-    });
-
-    return {
-      title: input.curriculumTitle,
-      description:
-        input.curriculumSummary ??
-        `Starter curriculum shell for ${input.householdName}.`,
-      kind: "manual" as const,
-      academicYear: input.schoolYearLabel,
-      subjects: input.subjects,
-      gradeLevels: uniqueStrings(
-        input.learners
-          .map((learner) => learner.gradeLevel)
-          .filter((value): value is string => Boolean(value)),
-      ),
-      document: {
-        [subject]: {
-          [input.curriculumTitle]: lessons.map((lesson) => lesson.title),
-        },
-      },
-      units: [
-        {
-          title: input.curriculumTitle,
-          description:
-            intake.sourceKind === "topic_seed"
-              ? `Starter module seeded from ${input.curriculumTitle}.`
-              : `Starter sequence derived from fast-path intake.`,
-          estimatedSessions: lessons.length,
-          lessons,
-        },
-      ],
-      metadata: {
-        ...mergeSourceMetadata(
-          {
-            lineage: {
-              mode: "manual_shell",
-              createdFromOnboarding: true,
-            },
-          },
-          input.curriculumSourceMetadata,
-        ),
-      },
-    };
-  }
-
-  return {
-    title: input.curriculumTitle,
-    description:
-      input.curriculumSummary ??
-      `Starter curriculum shell for ${input.householdName}.`,
-    kind: "manual" as const,
-    academicYear: input.schoolYearLabel,
-    subjects: input.subjects,
-    gradeLevels: uniqueStrings(
-      input.learners
-        .map((learner) => learner.gradeLevel)
-        .filter((value): value is string => Boolean(value)),
-    ),
-    document: Object.fromEntries(
-      input.subjects.map((subject) => [
-        subject,
-        {
-          Foundations: lessonsPerSubject.map((lesson) => `${subject}: ${lesson}`),
-        },
-      ]),
-    ),
-    units: input.subjects.map((subject) => ({
-      title: subject,
-      description: `Starter sequence for ${subject}.`,
-      estimatedSessions: lessonsPerSubject.length,
-      lessons: lessonsPerSubject.map((lesson, index) => ({
-        title: `${subject}: ${lesson}`,
-        description:
-          index === 0
-            ? `Open the week with a manageable ${subject.toLowerCase()} session.`
-            : index === 1
-              ? `Teach the next concrete ${subject.toLowerCase()} skill.`
-              : `Capture what was learned and what needs to carry forward.`,
-        subject,
-        estimatedMinutes: Math.max(
-          20,
-          Math.round(input.dailyTimeBudgetMinutes / Math.max(input.subjects.length, 1)),
-        ),
-        materials: [],
-        objectives: [],
-        linkedSkillTitles: [],
-      })),
-    })),
-    metadata: {
-      ...mergeSourceMetadata(
-        {
-          lineage: {
-            mode: "manual_shell",
-            createdFromOnboarding: true,
-          },
-        },
-        input.curriculumSourceMetadata,
-      ),
-    },
-  };
-}
-
-type OutlineNode = {
-  title: string;
-  children: OutlineNode[];
-};
-
-type CurriculumJsonNode =
-  | string
-  | string[]
-  | {
-      [key: string]: CurriculumJsonNode;
-    };
-
-function detectOutlineLevel(line: string) {
-  const headingMatch = line.match(/^(#{1,6})\s+(.*)$/);
-  if (headingMatch) {
-    return {
-      level: headingMatch[1].length,
-      title: headingMatch[2].trim(),
-    };
-  }
-
-  const bulletMatch = line.match(/^(\s*)([-*+]|\d+[.)])\s+(.*)$/);
-  if (bulletMatch) {
-    return {
-      level: 2 + Math.floor(bulletMatch[1].replace(/\t/g, "  ").length / 2),
-      title: bulletMatch[3].trim(),
-    };
-  }
-
-  return {
-    level: 1,
-    title: line.trim(),
-  };
-}
-
-function buildOutlineTree(text: string) {
-  const root: OutlineNode = { title: "__root__", children: [] };
-  const stack: Array<{ level: number; node: OutlineNode }> = [{ level: 0, node: root }];
-
-  for (const rawLine of text.split(/\r?\n/)) {
-    if (!rawLine.trim()) {
-      continue;
-    }
-
-    const entry = detectOutlineLevel(rawLine);
-    if (!entry.title) {
-      continue;
-    }
-
-    while (stack.length > 1 && stack[stack.length - 1]!.level >= entry.level) {
-      stack.pop();
-    }
-
-    const node: OutlineNode = {
-      title: entry.title,
-      children: [],
-    };
-    stack[stack.length - 1]!.node.children.push(node);
-    stack.push({ level: entry.level, node });
-  }
-
-  return root.children;
-}
-
-function nodeToDocument(node: OutlineNode): CurriculumJsonNode {
-  if (node.children.length === 0) {
-    return [node.title];
-  }
-
-  return Object.fromEntries(node.children.map((child) => [child.title, nodeToDocument(child)]));
-}
-
-function buildLessonsFromNode(subject: string, node: OutlineNode) {
-  if (node.children.length === 0) {
-    return [
-      {
-        title: node.title,
-        description: `Work through ${node.title}.`,
-        subject,
-        estimatedMinutes: 45,
-        materials: [],
-        objectives: [],
-        linkedSkillTitles: [],
-      },
-    ];
-  }
-
-  return node.children.map((child) => ({
-    title: child.title,
-    description: `Cover ${child.title} within ${node.title}.`,
-    subject,
-    estimatedMinutes: 45,
-    materials: [],
-    objectives: child.children.map((grandchild) => grandchild.title),
-    linkedSkillTitles: child.children.map((grandchild) => grandchild.title),
-  }));
-}
-
-function buildStructuredDocumentFromOutline(input: HomeschoolOnboardingInput) {
-  const outlineRoots = buildOutlineTree(input.curriculumText ?? "");
-  const roots = outlineRoots.length > 0
-    ? outlineRoots
-    : input.subjects.map((subject) => ({ title: subject, children: [] }));
-  const document: Record<string, CurriculumJsonNode> = Object.fromEntries(
-    roots.map((node) => [node.title, nodeToDocument(node)]),
-  );
-
-  return {
-    title: input.curriculumTitle,
-    description: input.curriculumSummary ?? "Imported from pasted outline.",
-    kind: "manual" as const,
-    academicYear: input.schoolYearLabel,
-    subjects: input.subjects,
-    gradeLevels: uniqueStrings(
-      input.learners
-        .map((learner) => learner.gradeLevel)
-        .filter((value): value is string => Boolean(value)),
-    ),
-    document,
-    units: roots.map((node) => ({
-      title: node.title,
-      description: `Imported from pasted outline for ${node.title}.`,
-      estimatedSessions: Math.max(node.children.length, 1),
-      lessons: buildLessonsFromNode(node.title, node),
-    })),
-    metadata: {
-      ...mergeSourceMetadata(
-        {
-          lineage: {
-            mode: "paste_outline",
-            createdFromOnboarding: true,
-            rawTextLength: (input.curriculumText ?? "").length,
-          },
-        },
-        input.curriculumSourceMetadata,
-      ),
-    },
-  };
-}
-
-function buildAiMessages(
+function buildConversationCurriculumMessages(
   input: HomeschoolOnboardingInput,
-  options?: {
-    sourceText?: string | null;
-    sourcePackages?: IntakeSourcePackageContext[];
-  },
-): CurriculumAiChatMessage[] {
+): Array<{ role: "user" | "assistant"; content: string }> {
   const learnerSummary = input.learners
     .map((learner) => `${learner.displayName}${learner.gradeLevel ? ` (${learner.gradeLevel})` : ""}`)
     .join(", ");
-  const sourceText = options?.sourceText ?? input.curriculumText;
-  const sourcePackages = options?.sourcePackages ?? [];
 
   return [
     {
@@ -629,12 +277,14 @@ function buildAiMessages(
         `Household: ${input.householdName}`,
         `Subjects: ${input.subjects.join(", ")}`,
         input.schoolYearLabel ? `School year: ${input.schoolYearLabel}` : null,
+        `Preferred school days per week: ${input.preferredSchoolDays.length}`,
+        `Daily time budget: ${input.dailyTimeBudgetMinutes} minutes`,
         input.teachingStyle ? `Teaching style: ${input.teachingStyle}` : null,
         input.curriculumSummary ? `Parent summary: ${input.curriculumSummary}` : null,
-        sourcePackages.length > 0
-          ? `Source packages:\n${JSON.stringify(sourcePackages, null, 2)}`
-          : null,
-        sourceText ? `Source material:\n${sourceText}` : null,
+        `Requested title: ${input.curriculumTitle}`,
+        input.curriculumMode === "manual_shell"
+          ? "This is a conversation-intake curriculum request without a source-first interpretation step."
+          : `Curriculum mode: ${input.curriculumMode}`,
       ]
         .filter(Boolean)
         .join("\n\n"),
@@ -741,7 +391,7 @@ export async function createHomeschoolCurriculumFromIntake(
     metadata: {},
   });
 
-  const sourceId = "sourceId" in curriculum ? curriculum.sourceId : curriculum.id;
+  const sourceId = curriculum.curriculum.id;
   await setLiveCurriculumSource(input.organizationId, sourceId);
   await recordHomeschoolAuditEvent({
     organizationId: input.organizationId,
@@ -961,10 +611,7 @@ async function upsertLearnersForOnboarding(
 }
 
 async function initializeCurriculum(input: HomeschoolOnboardingInput, learner: typeof learners.$inferSelect) {
-  if (
-    input.curriculumMode === "ai_decompose" &&
-    (input.curriculumText?.trim() || (input.sourcePackageIds?.length ?? 0) > 0)
-  ) {
+  if (input.curriculumText?.trim() || (input.sourcePackageIds?.length ?? 0) > 0) {
     const resolvedSource = await resolveFastPathSource({
       sourceInput: input.curriculumText,
       sourcePackageIds: input.sourcePackageIds,
@@ -972,50 +619,151 @@ async function initializeCurriculum(input: HomeschoolOnboardingInput, learner: t
     const sourceFiles = await createLearningCoreInputFilesFromSourcePackages(
       resolvedSource.sourcePackages,
     );
-    const generation = await generateCurriculumArtifact({
-      learner: {
-        id: learner.id,
-        organizationId: learner.organizationId,
-        displayName: learner.displayName,
-        firstName: learner.firstName,
-        lastName: learner.lastName,
-        status: learner.status,
-      },
-      messages: buildAiMessages(input, {
-        sourceText: resolvedSource.sourceInput,
+    const requestedRoute = requestedRouteForCurriculumMode(input.curriculumMode);
+    const sourceInterpretResult = await executeSourceInterpret({
+      input: {
+        learnerName: learner.displayName,
+        requestedRoute,
+        inputModalities: resolvedSource.sourceModalities,
+        rawText: resolvedSource.rawSourceInput ?? resolvedSource.sourceInput,
+        extractedText: resolvedSource.sourceInput,
+        extractedStructure:
+          resolvedSource.sourcePackageContexts.length > 0
+            ? {
+                sourceCount: resolvedSource.sourcePackageContexts.length,
+                packages: resolvedSource.sourcePackageContexts,
+                detectedChunks: resolvedSource.sourcePackageContexts.flatMap(
+                  (sourcePackage) => sourcePackage.detectedChunks,
+                ),
+              }
+            : {
+                detectedChunks: extractDetectedChunks(resolvedSource.sourceInput),
+              },
+        assetRefs: resolvedSource.assetIds,
         sourcePackages: resolvedSource.sourcePackageContexts,
-      }),
-      sourcePackages: resolvedSource.sourcePackageContexts,
-      sourceFiles,
+        sourceFiles,
+        titleCandidate: input.curriculumTitle,
+      },
+      surface: "curriculum",
+      organizationId: input.organizationId,
+      learnerId: learner.id,
+      workflowMode: "curriculum_creation",
     });
 
-    if (generation.kind === "failure") {
-      throw new Error(generation.userSafeMessage);
-    }
-
-    return createCurriculumSourceFromAiDraftArtifact({
-      householdId: input.organizationId,
-      artifact: generation.artifact,
-      sourceMetadata: {
+    return createCurriculumFromSourceEntry({
+      organizationId: input.organizationId,
+      learnerId: learner.id,
+      learnerName: learner.displayName,
+      titleCandidate: input.curriculumTitle,
+      requestedRoute,
+      routedRoute:
+        sourceInterpretResult.artifact.sourceKind === "bounded_material"
+          ? "single_lesson"
+          : sourceInterpretResult.artifact.sourceKind === "timeboxed_plan"
+            ? "weekly_plan"
+            : sourceInterpretResult.artifact.sourceKind === "topic_seed"
+              ? "topic"
+              : sourceInterpretResult.artifact.sourceKind === "shell_request" ||
+                  sourceInterpretResult.artifact.sourceKind === "ambiguous"
+                ? "manual_shell"
+                : "outline",
+      sourceKind: sourceInterpretResult.artifact.sourceKind,
+      entryStrategy: sourceInterpretResult.artifact.entryStrategy,
+      entryLabel: sourceInterpretResult.artifact.entryLabel ?? null,
+      continuationMode: sourceInterpretResult.artifact.continuationMode,
+      recommendedHorizon: sourceInterpretResult.artifact.recommendedHorizon,
+      sourceText: resolvedSource.sourceInput,
+      sourcePackages: resolvedSource.sourcePackageContexts,
+      sourceFiles,
+      detectedChunks: sourceInterpretResult.artifact.detectedChunks,
+      assumptions: sourceInterpretResult.artifact.assumptions,
+      surface: "curriculum",
+      workflowMode: "curriculum_creation",
+      metadataBuilder: ({ artifact, lineage }) => ({
         ...(input.curriculumSourceMetadata ?? {}),
-        sourcePackageIds: resolvedSource.sourcePackageIds,
-        sourcePackages: resolvedSource.sourcePackageContexts,
-        sourceModalities: resolvedSource.sourceModalities,
-        sourcePackageId: resolvedSource.sourcePackage?.id ?? null,
-        sourceModality: resolvedSource.sourcePackage?.modality ?? "text",
-        assetIds: resolvedSource.assetIds,
-      },
+        intake: {
+          route: requestedRoute,
+          requestedRoute,
+          routeVersion: 1,
+          rawText: resolvedSource.sourceInput,
+          assetIds: resolvedSource.assetIds,
+          learnerId: learner.id,
+          sourcePackageIds: resolvedSource.sourcePackageIds,
+          sourcePackages: resolvedSource.sourcePackageContexts,
+          sourceModalities: resolvedSource.sourceModalities,
+          sourcePackageId: resolvedSource.sourcePackage?.id ?? null,
+          sourceModality: resolvedSource.sourcePackage?.modality ?? "text",
+          createdFrom:
+            (input.curriculumSourceMetadata as Record<string, unknown> | undefined)
+              ?.createdFrom ?? "curriculum_add_flow",
+        },
+        sourceModel: {
+          sourceKind: sourceInterpretResult.artifact.sourceKind,
+          entryStrategy: sourceInterpretResult.artifact.entryStrategy,
+          entryLabel: sourceInterpretResult.artifact.entryLabel ?? null,
+          continuationMode: sourceInterpretResult.artifact.continuationMode,
+          detectedChunks: sourceInterpretResult.artifact.detectedChunks,
+          assumptions: sourceInterpretResult.artifact.assumptions,
+          sourcePackageIds: resolvedSource.sourcePackageIds,
+          sourceModalities: resolvedSource.sourceModalities,
+        },
+        launchPlan: artifact.launchPlan,
+        curriculumLineage: {
+          requestMode: "source_entry",
+          sourceInterpret: sourceInterpretResult.lineage,
+          curriculumGenerate: lineage,
+        },
+      }),
     });
   }
 
-  const imported: ImportedCurriculumDocument =
-    input.curriculumMode === "paste_outline"
-      ? buildStructuredDocumentFromOutline(input)
-      : buildStarterDocument(input);
-
-  return importStructuredCurriculumDocument({
-    householdId: input.organizationId,
-    imported,
+  return createCurriculumFromConversationIntake({
+    organizationId: input.organizationId,
+    learnerId: learner.id,
+    learnerName: learner.displayName,
+    titleCandidate: input.curriculumTitle,
+    messages: buildConversationCurriculumMessages(input),
+    requirementHints: {
+      topic: input.curriculumTitle,
+      goals: input.curriculumSummary ?? "",
+      learnerProfile: input.learners
+        .map((entry) =>
+          [entry.displayName, entry.gradeLevel, entry.ageBand].filter(Boolean).join(" · "),
+        )
+        .join("\n"),
+      constraints: input.teachingStyle ?? "",
+      structurePreferences:
+        input.curriculumMode === "manual_shell"
+          ? "Start with a bounded starter curriculum."
+          : "",
+    },
+    pacingExpectations: {
+      sessionsPerWeek: input.preferredSchoolDays.length,
+      sessionMinutes: input.dailyTimeBudgetMinutes,
+    },
+    granularityGuidance: [
+      "Keep the opening lessons immediately teachable.",
+      "Build a durable curriculum beyond the launch window.",
+    ],
+    correctionNotes: [],
+    surface: "curriculum",
+    workflowMode: "curriculum_creation",
+    metadata: {
+      ...(input.curriculumSourceMetadata ?? {}),
+      intake: {
+        route: requestedRouteForCurriculumMode(input.curriculumMode),
+        requestedRoute: requestedRouteForCurriculumMode(input.curriculumMode),
+        routeVersion: 1,
+        learnerId: learner.id,
+        createdFrom:
+          (input.curriculumSourceMetadata as Record<string, unknown> | undefined)?.createdFrom ??
+          "curriculum_add_flow",
+      },
+    },
+    userAuthoredContext: {
+      parentGoal: input.curriculumSummary ?? null,
+      teacherNote: input.teachingStyle ?? null,
+    },
   });
 }
 
@@ -1256,12 +1004,11 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
     detectedChunks: preview.detectedChunks,
     followUpQuestion: preview.followUpQuestion ?? null,
     needsConfirmation: preview.needsConfirmation,
-      sourcePackageIds: resolvedSource.sourcePackageIds,
-      sourcePackages: resolvedSource.sourcePackageContexts,
-      sourceModalities: resolvedSource.sourceModalities,
-      sourcePackageId: resolvedSource.sourcePackage?.id ?? null,
-      sourceModality: resolvedSource.sourcePackage?.modality ?? "text",
-    learningCoreLineage: sourceInterpretResult.lineage,
+    sourcePackageIds: resolvedSource.sourcePackageIds,
+    sourcePackages: resolvedSource.sourcePackageContexts,
+    sourceModalities: resolvedSource.sourceModalities,
+    sourcePackageId: resolvedSource.sourcePackage?.id ?? null,
+    sourceModality: resolvedSource.sourcePackage?.modality ?? "text",
     curriculumMode,
     createdFrom: "onboarding_fast_path" as const,
   };
@@ -1282,21 +1029,23 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
   });
 
   const { primaryLearner } = await persistHomeschoolSetupBase(setupInput);
-  const boundedCurriculum = await createFastPathBoundedCurriculum({
+  const curriculumGeneration = await createFastPathCurriculumFromSource({
     organizationId: input.organizationId,
+    learnerId: primaryLearner.id,
     learnerName: preview.learnerTarget,
     sourceText: sourceInput,
     sourcePackages: resolvedSource.sourcePackageContexts,
     sourceFiles,
     preview,
     intakeMetadata,
+    sourceInterpretLineage: sourceInterpretResult.lineage,
   });
-  const curriculum = boundedCurriculum.curriculum;
+  const curriculum = curriculumGeneration.curriculum;
   const sourceId = curriculum.id;
   const launchSummary = buildFastPathLaunchSummary({
     preview,
-    lessonCount: boundedCurriculum.launchContext.lessonCount,
-    initialSliceLabel: boundedCurriculum.launchContext.initialSliceLabel,
+    openingLessonCount: curriculumGeneration.launchContext.openingLessonCount,
+    initialSliceLabel: curriculumGeneration.launchContext.initialSliceLabel,
   });
   await setLiveCurriculumSource(input.organizationId, sourceId);
 
@@ -1340,7 +1089,7 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
         entryStrategy: preview.entryStrategy,
         entryLabel: preview.entryLabel ?? null,
         continuationMode: preview.continuationMode,
-        lessonCount: launchSummary.lessonCount,
+        openingLessonCount: curriculumGeneration.launchContext.openingLessonCount,
       },
     });
   }
@@ -1382,15 +1131,18 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
         chosenHorizon: preview.chosenHorizon,
         horizonDecisionSource: preview.horizonDecisionSource,
         followUpQuestion: preview.followUpQuestion ?? null,
-        initialSliceUsed: preview.initialSliceUsed,
-        initialSliceLabel:
-          boundedCurriculum.launchContext.initialSliceLabel ?? preview.initialSliceLabel ?? null,
-        initialLessonCount: boundedCurriculum.launchContext.lessonCount,
+        initialSliceUsed: curriculumGeneration.launchContext.initialSliceUsed,
+        initialSliceLabel: curriculumGeneration.launchContext.initialSliceLabel,
         scopeSummary: preview.scopeSummary,
         assumptions: preview.assumptions,
         detectedChunks: preview.detectedChunks,
-        launchSummary,
-        boundedPlanLineage: boundedCurriculum.lineage,
+        sourceModel: preview.sourceModel,
+        launchPlan: curriculumGeneration.launchContext,
+        curriculumLineage: {
+          requestMode: "source_entry",
+          sourceInterpret: sourceInterpretResult.lineage,
+          curriculumGenerate: curriculumGeneration.lineage,
+        },
       },
     },
   });
@@ -1410,7 +1162,7 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
       entryStrategy: preview.entryStrategy,
       entryLabel: preview.entryLabel ?? null,
       continuationMode: preview.continuationMode,
-      lessonCount: launchSummary.lessonCount,
+      openingLessonCount: launchSummary.openingLessonCount,
     },
   });
 
@@ -1433,7 +1185,7 @@ export async function completeHomeschoolOnboarding(rawInput: unknown) {
     primaryLearner,
   );
 
-  const sourceId = "sourceId" in curriculum ? curriculum.sourceId : curriculum.id;
+  const sourceId = curriculum.curriculum.id;
   await setLiveCurriculumSource(input.organizationId, sourceId);
 
   const { weekStartDate } = await getOrCreateWeeklyRouteBoardForLearner({

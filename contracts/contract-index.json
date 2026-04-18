@@ -39,7 +39,7 @@
       "consumerEntrypoints": [
         "app/api/homeschool/onboarding/route.ts",
         "lib/homeschool/onboarding/service.ts",
-        "lib/homeschool/onboarding/bounded-plan.ts",
+        "lib/homeschool/onboarding/curriculum.ts",
         "lib/planning/today-lesson-generation.ts"
       ],
       "versionFields": [

@@ -125,24 +125,15 @@ export type CurriculumSourceHorizonDecisionSource = z.infer<
   typeof CurriculumSourceHorizonDecisionSourceSchema
 >;
 
-export const CurriculumSourceIntakeSchema = z.object({
-  route: CurriculumSourceIntakeRouteSchema,
+export const CurriculumSourceModelSchema = z.object({
   requestedRoute: CurriculumSourceIntakeRouteSchema.optional(),
-  routeVersion: z.literal(1),
-  rawText: z.string().nullable().optional(),
-  assetIds: z.array(z.string()).default([]),
-  learnerId: z.string().nullable().optional(),
+  routedRoute: CurriculumSourceIntakeRouteSchema,
   confidence: CurriculumSourceIntakeConfidenceSchema,
   sourceKind: CurriculumSourceInterpretKindSchema.optional(),
   entryStrategy: CurriculumSourceEntryStrategySchema.optional(),
   entryLabel: z.string().nullable().optional(),
   continuationMode: CurriculumSourceContinuationModeSchema.optional(),
-  initialSliceUsed: z.boolean().optional(),
-  initialSliceLabel: z.string().nullable().optional(),
   recommendedHorizon: CurriculumSourceRecommendedHorizonSchema,
-  chosenHorizon: CurriculumSourceGenerationHorizonSchema,
-  horizonDecisionSource: CurriculumSourceHorizonDecisionSourceSchema,
-  scopeSummary: z.string().optional(),
   assumptions: z.array(z.string()).default([]),
   detectedChunks: z.array(z.string()).default([]),
   followUpQuestion: z.string().nullable().optional(),
@@ -152,23 +143,201 @@ export const CurriculumSourceIntakeSchema = z.object({
   sourceModalities: z.array(IntakeSourcePackageModalitySchema).default([]),
   sourcePackageId: z.string().nullable().optional(),
   sourceModality: IntakeSourcePackageModalitySchema.optional(),
-  learningCoreLineage: JsonRecordSchema.optional(),
-  boundedPlanLineage: JsonRecordSchema.optional(),
-  sourceFingerprint: z.string().optional(),
-  initialLessonCount: z.number().int().positive().optional(),
-  lastGeneratedLessonTitle: z.string().nullable().optional(),
-  launchSummary: z
-    .object({
-      chosenHorizon: CurriculumSourceGenerationHorizonSchema,
-      lessonCount: z.number().int().positive(),
-      summaryText: z.string().min(1),
-      scopeSummary: z.string().nullable().optional(),
-      usedSlice: z.boolean(),
-      initialSliceLabel: z.string().nullable().optional(),
-    })
-    .optional(),
-  createdFrom: z.enum(["onboarding_fast_path", "curriculum_add_flow", "curriculum_regeneration"]),
+  lineage: JsonRecordSchema.optional(),
 });
+
+export type CurriculumSourceModel = z.infer<typeof CurriculumSourceModelSchema>;
+
+export const CurriculumLaunchPlanSchema = z.object({
+  chosenHorizon: CurriculumSourceGenerationHorizonSchema,
+  horizonDecisionSource: CurriculumSourceHorizonDecisionSourceSchema,
+  scopeSummary: z.string().nullable().optional(),
+  initialSliceUsed: z.boolean().optional(),
+  initialSliceLabel: z.string().nullable().optional(),
+  openingLessonCount: z.number().int().positive().optional(),
+  lastGeneratedLessonTitle: z.string().nullable().optional(),
+});
+
+export type CurriculumLaunchPlan = z.infer<typeof CurriculumLaunchPlanSchema>;
+
+function isJsonRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function copyIfDefined(target: Record<string, unknown>, key: string, value: unknown) {
+  if (value !== undefined) {
+    target[key] = value;
+  }
+}
+
+function normalizeCurriculumSourceIntake(input: unknown) {
+  if (!isJsonRecord(input)) {
+    return input;
+  }
+
+  const record: Record<string, unknown> = { ...input };
+  const sourceModel: Record<string, unknown> = isJsonRecord(record.sourceModel)
+    ? { ...record.sourceModel }
+    : {};
+  const launchPlan: Record<string, unknown> = isJsonRecord(record.launchPlan)
+    ? { ...record.launchPlan }
+    : {};
+
+  copyIfDefined(sourceModel, "requestedRoute", sourceModel.requestedRoute ?? record.requestedRoute);
+  copyIfDefined(sourceModel, "routedRoute", sourceModel.routedRoute ?? record.route);
+  copyIfDefined(sourceModel, "confidence", sourceModel.confidence ?? record.confidence);
+  copyIfDefined(sourceModel, "sourceKind", sourceModel.sourceKind ?? record.sourceKind);
+  copyIfDefined(sourceModel, "entryStrategy", sourceModel.entryStrategy ?? record.entryStrategy);
+  copyIfDefined(sourceModel, "entryLabel", sourceModel.entryLabel ?? record.entryLabel);
+  copyIfDefined(
+    sourceModel,
+    "continuationMode",
+    sourceModel.continuationMode ?? record.continuationMode,
+  );
+  copyIfDefined(
+    sourceModel,
+    "recommendedHorizon",
+    sourceModel.recommendedHorizon ?? record.recommendedHorizon,
+  );
+  copyIfDefined(sourceModel, "assumptions", sourceModel.assumptions ?? record.assumptions);
+  copyIfDefined(sourceModel, "detectedChunks", sourceModel.detectedChunks ?? record.detectedChunks);
+  copyIfDefined(
+    sourceModel,
+    "followUpQuestion",
+    sourceModel.followUpQuestion ?? record.followUpQuestion,
+  );
+  copyIfDefined(
+    sourceModel,
+    "needsConfirmation",
+    sourceModel.needsConfirmation ?? record.needsConfirmation,
+  );
+  copyIfDefined(
+    sourceModel,
+    "sourcePackageIds",
+    sourceModel.sourcePackageIds ?? record.sourcePackageIds,
+  );
+  copyIfDefined(
+    sourceModel,
+    "sourcePackages",
+    sourceModel.sourcePackages ?? record.sourcePackages,
+  );
+  copyIfDefined(
+    sourceModel,
+    "sourceModalities",
+    sourceModel.sourceModalities ?? record.sourceModalities,
+  );
+  copyIfDefined(
+    sourceModel,
+    "sourcePackageId",
+    sourceModel.sourcePackageId ?? record.sourcePackageId,
+  );
+  copyIfDefined(
+    sourceModel,
+    "sourceModality",
+    sourceModel.sourceModality ?? record.sourceModality,
+  );
+
+  copyIfDefined(launchPlan, "chosenHorizon", launchPlan.chosenHorizon ?? record.chosenHorizon);
+  copyIfDefined(
+    launchPlan,
+    "horizonDecisionSource",
+    launchPlan.horizonDecisionSource ?? record.horizonDecisionSource,
+  );
+  copyIfDefined(
+    launchPlan,
+    "scopeSummary",
+    launchPlan.scopeSummary ?? record.scopeSummary,
+  );
+  copyIfDefined(
+    launchPlan,
+    "initialSliceUsed",
+    launchPlan.initialSliceUsed ?? record.initialSliceUsed,
+  );
+  copyIfDefined(
+    launchPlan,
+    "initialSliceLabel",
+    launchPlan.initialSliceLabel ?? record.initialSliceLabel,
+  );
+  copyIfDefined(
+    launchPlan,
+    "openingLessonCount",
+    launchPlan.openingLessonCount,
+  );
+  copyIfDefined(
+    launchPlan,
+    "lastGeneratedLessonTitle",
+    launchPlan.lastGeneratedLessonTitle ?? record.lastGeneratedLessonTitle,
+  );
+
+  record.sourceModel = Object.keys(sourceModel).length > 0 ? sourceModel : undefined;
+  record.launchPlan = Object.keys(launchPlan).length > 0 ? launchPlan : undefined;
+
+  record.route ??= sourceModel.routedRoute;
+  record.requestedRoute ??= sourceModel.requestedRoute;
+  record.confidence ??= sourceModel.confidence;
+  record.sourceKind ??= sourceModel.sourceKind;
+  record.entryStrategy ??= sourceModel.entryStrategy;
+  record.entryLabel ??= sourceModel.entryLabel;
+  record.continuationMode ??= sourceModel.continuationMode;
+  record.recommendedHorizon ??= sourceModel.recommendedHorizon;
+  record.assumptions ??= sourceModel.assumptions;
+  record.detectedChunks ??= sourceModel.detectedChunks;
+  record.followUpQuestion ??= sourceModel.followUpQuestion;
+  record.needsConfirmation ??= sourceModel.needsConfirmation;
+  record.sourcePackageIds ??= sourceModel.sourcePackageIds;
+  record.sourcePackages ??= sourceModel.sourcePackages;
+  record.sourceModalities ??= sourceModel.sourceModalities;
+  record.sourcePackageId ??= sourceModel.sourcePackageId;
+  record.sourceModality ??= sourceModel.sourceModality;
+  record.chosenHorizon ??= launchPlan.chosenHorizon;
+  record.horizonDecisionSource ??= launchPlan.horizonDecisionSource;
+  record.scopeSummary ??= launchPlan.scopeSummary;
+  record.initialSliceUsed ??= launchPlan.initialSliceUsed;
+  record.initialSliceLabel ??= launchPlan.initialSliceLabel;
+
+  return record;
+}
+
+export const CurriculumSourceIntakeSchema = z.preprocess(
+  normalizeCurriculumSourceIntake,
+  z.object({
+    route: CurriculumSourceIntakeRouteSchema,
+    requestedRoute: CurriculumSourceIntakeRouteSchema.optional(),
+    routeVersion: z.literal(1),
+    rawText: z.string().nullable().optional(),
+    assetIds: z.array(z.string()).default([]),
+    learnerId: z.string().nullable().optional(),
+    confidence: CurriculumSourceIntakeConfidenceSchema,
+    sourceKind: CurriculumSourceInterpretKindSchema.optional(),
+    entryStrategy: CurriculumSourceEntryStrategySchema.optional(),
+    entryLabel: z.string().nullable().optional(),
+    continuationMode: CurriculumSourceContinuationModeSchema.optional(),
+    initialSliceUsed: z.boolean().optional(),
+    initialSliceLabel: z.string().nullable().optional(),
+    recommendedHorizon: CurriculumSourceRecommendedHorizonSchema,
+    chosenHorizon: CurriculumSourceGenerationHorizonSchema,
+    horizonDecisionSource: CurriculumSourceHorizonDecisionSourceSchema,
+    scopeSummary: z.string().nullable().optional(),
+    assumptions: z.array(z.string()).default([]),
+    detectedChunks: z.array(z.string()).default([]),
+    followUpQuestion: z.string().nullable().optional(),
+    needsConfirmation: z.boolean().optional(),
+    sourcePackageIds: z.array(z.string()).default([]),
+    sourcePackages: z.array(IntakeSourcePackageContextSchema).default([]),
+    sourceModalities: z.array(IntakeSourcePackageModalitySchema).default([]),
+    sourcePackageId: z.string().nullable().optional(),
+    sourceModality: IntakeSourcePackageModalitySchema.optional(),
+    sourceModel: CurriculumSourceModelSchema.optional(),
+    launchPlan: CurriculumLaunchPlanSchema.optional(),
+    curriculumLineage: JsonRecordSchema.optional(),
+    sourceFingerprint: z.string().optional(),
+    createdFrom: z.enum([
+      "onboarding_fast_path",
+      "curriculum_add_flow",
+      "curriculum_regeneration",
+    ]),
+  }),
+);
 
 export type CurriculumSourceIntake = z.infer<typeof CurriculumSourceIntakeSchema>;
 
@@ -188,6 +357,9 @@ export const CurriculumSourceSchema = z.object({
   /** Pacing contract from curriculum generation. Use this as the session budget source. */
   pacing: CurriculumSourcePacingSchema.optional(),
   intake: CurriculumSourceIntakeSchema.optional(),
+  sourceModel: CurriculumSourceModelSchema.optional(),
+  launchPlan: CurriculumLaunchPlanSchema.optional(),
+  curriculumLineage: JsonRecordSchema.optional(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });

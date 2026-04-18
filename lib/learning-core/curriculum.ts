@@ -10,6 +10,13 @@ import {
   CurriculumAiRevisionTurnSchema,
 } from "@/lib/curriculum/ai-draft";
 import {
+  CurriculumSourceContinuationModeSchema,
+  CurriculumSourceEntryStrategySchema,
+  CurriculumSourceIntakeRouteSchema,
+  CurriculumSourceInterpretKindSchema,
+  CurriculumSourceRecommendedHorizonSchema,
+} from "@/lib/curriculum/types";
+import {
   IntakeSourcePackageContextSchema,
   LearningCoreInputFileSchema,
 } from "@/lib/homeschool/intake/types";
@@ -17,19 +24,83 @@ import {
 import { buildLearningCoreEnvelope } from "./envelope";
 import { executeLearningCoreOperation, previewLearningCoreOperation } from "./operations";
 
-const CurriculumGenerateInputSchema = z.object({
+export const CurriculumGenerateRequestModeSchema = z.enum([
+  "source_entry",
+  "conversation_intake",
+]);
+
+export type CurriculumGenerateRequestMode = z.infer<
+  typeof CurriculumGenerateRequestModeSchema
+>;
+
+export const CurriculumGeneratePacingExpectationsSchema = z.object({
+  totalWeeks: z.number().int().positive().optional(),
+  sessionsPerWeek: z.number().int().positive().optional(),
+  sessionMinutes: z.number().int().positive().optional(),
+  totalSessionsLowerBound: z.number().int().positive().optional(),
+  totalSessionsUpperBound: z.number().int().positive().optional(),
+});
+
+export type CurriculumGeneratePacingExpectations = z.infer<
+  typeof CurriculumGeneratePacingExpectationsSchema
+>;
+
+export const CurriculumGenerateConversationIntakeInputSchema = z
+  .object({
+    learnerName: z.string().trim().min(1),
+    titleCandidate: z.string().trim().min(1).max(160).nullable().optional(),
+    requestMode: z.literal("conversation_intake"),
+    messages: z.array(CurriculumAiChatMessageSchema).min(1),
+    requirementHints: z.record(z.string(), z.unknown()).nullable().optional(),
+    pacingExpectations: CurriculumGeneratePacingExpectationsSchema.nullable().optional(),
+    granularityGuidance: z.array(z.string()).optional(),
+    correctionNotes: z.array(z.string()).optional(),
+  })
+  .strict();
+
+export type CurriculumGenerateConversationIntakeInput = z.infer<
+  typeof CurriculumGenerateConversationIntakeInputSchema
+>;
+
+export const CurriculumGenerateSourceEntryInputSchema = z
+  .object({
+    learnerName: z.string().trim().min(1),
+    titleCandidate: z.string().trim().min(1).max(160).nullable().optional(),
+    requestMode: z.literal("source_entry"),
+    requestedRoute: CurriculumSourceIntakeRouteSchema,
+    routedRoute: CurriculumSourceIntakeRouteSchema,
+    sourceKind: CurriculumSourceInterpretKindSchema,
+    entryStrategy: CurriculumSourceEntryStrategySchema,
+    entryLabel: z.string().trim().min(1).max(240).nullable().optional(),
+    continuationMode: CurriculumSourceContinuationModeSchema,
+    recommendedHorizon: CurriculumSourceRecommendedHorizonSchema,
+    sourceText: z.string().trim().min(1),
+    sourcePackages: z.array(IntakeSourcePackageContextSchema),
+    sourceFiles: z.array(LearningCoreInputFileSchema),
+    detectedChunks: z.array(z.string()),
+    assumptions: z.array(z.string()),
+  })
+  .strict();
+
+export type CurriculumGenerateSourceEntryInput = z.infer<
+  typeof CurriculumGenerateSourceEntryInputSchema
+>;
+
+export const CurriculumGenerateInputSchema = z.discriminatedUnion("requestMode", [
+  CurriculumGenerateSourceEntryInputSchema,
+  CurriculumGenerateConversationIntakeInputSchema,
+]);
+
+export type CurriculumGenerateInput = z.infer<typeof CurriculumGenerateInputSchema>;
+
+const CurriculumIntakeInputSchema = z.object({
   learnerName: z.string().trim().min(1),
   messages: z.array(CurriculumAiChatMessageSchema).default([]),
   requirementHints: z.record(z.string(), z.unknown()).nullable().optional(),
-  pacingExpectations: z.record(z.string(), z.unknown()).nullable().optional(),
-  granularityGuidance: z.array(z.string()).default([]),
-  correctionNotes: z.array(z.string()).default([]),
-  sourcePackages: z.array(IntakeSourcePackageContextSchema).default([]),
-  sourceFiles: z.array(LearningCoreInputFileSchema).default([]),
 });
 
 export async function executeCurriculumIntake(params: {
-  input: Record<string, unknown>;
+  input: z.input<typeof CurriculumIntakeInputSchema>;
   surface?: string;
   organizationId?: string | null;
   learnerId?: string | null;
@@ -37,7 +108,7 @@ export async function executeCurriculumIntake(params: {
   return executeLearningCoreOperation(
     "curriculum_intake",
     buildLearningCoreEnvelope({
-      input: params.input,
+      input: CurriculumIntakeInputSchema.parse(params.input),
       surface: params.surface ?? "curriculum",
       organizationId: params.organizationId,
       learnerId: params.learnerId,
@@ -52,7 +123,7 @@ export async function executeCurriculumIntake(params: {
 }
 
 export async function executeCurriculumGenerate(params: {
-  input: z.infer<typeof CurriculumGenerateInputSchema>;
+  input: CurriculumGenerateInput;
   surface?: string;
   organizationId?: string | null;
   learnerId?: string | null;

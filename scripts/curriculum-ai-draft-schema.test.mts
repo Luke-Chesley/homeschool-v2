@@ -3,6 +3,17 @@ import assert from "node:assert/strict";
 
 import { CurriculumAiGeneratedArtifactSchema } from "@/lib/curriculum/ai-draft";
 
+const launchPlan = {
+  recommendedHorizon: "starter_module",
+  openingLessonCount: 8,
+  scopeSummary: "Open with the first stretch of lessons from the generated curriculum.",
+  initialSliceUsed: true,
+  initialSliceLabel: "Unit 1",
+  entryStrategy: "use_as_is",
+  entryLabel: "Unit 1",
+  continuationMode: "sequential",
+} as const;
+
 test("CurriculumAiGeneratedArtifactSchema truncates overflowing summary arrays", () => {
   const parsed = CurriculumAiGeneratedArtifactSchema.parse({
     source: {
@@ -50,6 +61,7 @@ test("CurriculumAiGeneratedArtifactSchema truncates overflowing summary arrays",
         ],
       },
     ],
+    launchPlan,
   });
 
   assert.equal(parsed.source.subjects.length, 6);
@@ -62,6 +74,7 @@ test("CurriculumAiGeneratedArtifactSchema truncates overflowing summary arrays",
   assert.equal(parsed.units[0]?.lessons[0]?.materials.length, 12);
   assert.equal(parsed.units[0]?.lessons[0]?.objectives.length, 8);
   assert.equal(parsed.units[0]?.lessons[0]?.linkedSkillTitles.length, 8);
+  assert.equal(parsed.launchPlan.openingLessonCount, 8);
 });
 
 test("CurriculumAiGeneratedArtifactSchema accepts long progression refs so unresolved progression can fall back later", () => {
@@ -115,6 +128,12 @@ test("CurriculumAiGeneratedArtifactSchema accepts long progression refs so unres
         ],
       },
     ],
+    launchPlan: {
+      ...launchPlan,
+      recommendedHorizon: "two_weeks",
+      openingLessonCount: 12,
+      scopeSummary: "Open with the first two weeks of the Virginia history sequence.",
+    },
     progression: {
       phases: [
         {

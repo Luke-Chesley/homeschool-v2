@@ -111,6 +111,21 @@ export function buildFallbackCurriculumArtifact(params: {
     },
     document,
     units,
+    launchPlan: {
+      recommendedHorizon:
+        totalWeeks >= 2
+          ? "two_weeks"
+          : totalWeeks >= 1
+            ? "one_week"
+            : "few_days",
+      openingLessonCount: Math.max(1, units[0]?.lessons.length ?? 1),
+      scopeSummary: `Start with the opening ${units[0]?.title ?? "unit"} and keep the rest available for continuation.`,
+      initialSliceUsed: true,
+      initialSliceLabel: units[0]?.title ?? null,
+      entryStrategy: null,
+      entryLabel: units[0]?.title ?? null,
+      continuationMode: totalWeeks > 1 || units.length > 1 ? "sequential" : "manual_review",
+    },
   };
 }
 

@@ -128,14 +128,41 @@ export type HomeschoolFastPathPreview = {
   needsConfirmation: boolean;
   initialSliceUsed: boolean;
   initialSliceLabel?: string | null;
+  sourceModel: HomeschoolFastPathSourceModel;
+  launchPlan: HomeschoolFastPathLaunchPlan;
+};
+
+export type HomeschoolFastPathSourceModel = {
+  requestedRoute: FastPathIntakeRoute;
+  routedRoute: FastPathIntakeRoute;
+  confidence: CurriculumIntakeConfidence;
+  sourceKind: SourceInterpretSourceKind;
+  entryStrategy: SourceEntryStrategy;
+  entryLabel?: string | null;
+  continuationMode: SourceContinuationMode;
+  recommendedHorizon: CurriculumGenerationHorizon;
+  assumptions: string[];
+  detectedChunks: string[];
+  followUpQuestion?: string | null;
+  needsConfirmation: boolean;
+};
+
+export type HomeschoolFastPathLaunchPlan = {
+  chosenHorizon: CurriculumGenerationHorizon;
+  horizonDecisionSource: CurriculumHorizonDecisionSource;
+  scopeSummary?: string | null;
+  initialSliceUsed: boolean;
+  initialSliceLabel?: string | null;
+  openingLessonCount?: number;
+  lastGeneratedLessonTitle?: string | null;
 };
 
 export type HomeschoolFastPathLaunchSummary = {
   chosenHorizon: CurriculumGenerationHorizon;
-  lessonCount: number;
+  openingLessonCount: number;
   summaryText: string;
   scopeSummary?: string | null;
-  usedSlice: boolean;
+  initialSliceUsed: boolean;
   initialSliceLabel?: string | null;
 };
 

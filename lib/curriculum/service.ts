@@ -12,12 +12,18 @@ import {
   organizationPlatformSettings,
   organizations,
 } from "@/lib/db/schema";
+import type { CurriculumGenerateRequestMode } from "@/lib/learning-core/curriculum";
 import { ensureOrganizationPlatformSettings } from "@/lib/platform/settings";
 
 import type { CurriculumAiGeneratedArtifact } from "./ai-draft";
 import { loadLocalCurriculumJson, type ImportedCurriculumDocument } from "./local-json-import";
 import { normalizeCurriculumDocument } from "./normalization";
-import { CurriculumSourceIntakeSchema } from "./types";
+import {
+  CurriculumLaunchPlanSchema,
+  CurriculumSourceIntakeSchema,
+  CurriculumSourceModelSchema,
+  JsonRecordSchema,
+} from "./types";
 import type {
   CurriculumNode,
   CurriculumSource,
@@ -70,6 +76,21 @@ function extractSourceIntake(metadata: Record<string, unknown>): CurriculumSourc
   return parsed.success ? parsed.data : undefined;
 }
 
+function extractSourceModel(metadata: Record<string, unknown>) {
+  const parsed = CurriculumSourceModelSchema.safeParse(metadata.sourceModel);
+  return parsed.success ? parsed.data : undefined;
+}
+
+function extractLaunchPlan(metadata: Record<string, unknown>) {
+  const parsed = CurriculumLaunchPlanSchema.safeParse(metadata.launchPlan);
+  return parsed.success ? parsed.data : undefined;
+}
+
+function extractCurriculumLineage(metadata: Record<string, unknown>) {
+  const parsed = JsonRecordSchema.safeParse(metadata.curriculumLineage);
+  return parsed.success ? parsed.data : undefined;
+}
+
 function mapSource(record: {
   id: string;
   organizationId: string;
@@ -104,6 +125,9 @@ function mapSource(record: {
     importVersion: record.importVersion,
     pacing: extractSourcePacing(record.metadata),
     intake: extractSourceIntake(record.metadata),
+    sourceModel: extractSourceModel(record.metadata),
+    launchPlan: extractLaunchPlan(record.metadata),
+    curriculumLineage: extractCurriculumLineage(record.metadata),
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
   };
@@ -199,7 +223,7 @@ function buildCurriculumTree(source: CurriculumSource, nodes: CurriculumNode[]):
   };
 }
 
-export interface CreatedAiDraftCurriculumResult {
+export interface CreatedCurriculumArtifactImportResult {
   sourceId: string;
   sourceTitle: string;
   nodeCount: number;
@@ -245,7 +269,26 @@ function countEstimatedSessions(units: ImportedCurriculumDocument["units"] = [])
   return units.reduce((total, unit) => total + (unit.estimatedSessions ?? unit.lessons.length), 0);
 }
 
-function toImportedCurriculumDocumentFromAiArtifact(
+function resolveCurriculumArtifactLaunchPlan(artifact: CurriculumAiGeneratedArtifact) {
+  return artifact.launchPlan;
+}
+
+function buildCurriculumArtifactMetadata(artifact: CurriculumAiGeneratedArtifact) {
+  return {
+    intakeSummary: artifact.intakeSummary,
+    teachingApproach: artifact.source.teachingApproach,
+    successSignals: artifact.source.successSignals,
+    parentNotes: artifact.source.parentNotes,
+    rationale: artifact.source.rationale,
+    pacing: artifact.pacing,
+    curriculumArtifactLaunchPlan: resolveCurriculumArtifactLaunchPlan(artifact),
+    generatedUnitCount: artifact.units.length,
+    generatedLessonCount: artifact.units.reduce((total, unit) => total + unit.lessons.length, 0),
+    generatedEstimatedSessionCount: countEstimatedSessions(artifact.units),
+  };
+}
+
+function toImportedCurriculumDocumentFromCurriculumArtifact(
   artifact: CurriculumAiGeneratedArtifact,
   kind: CreateCurriculumSourceInput["kind"] = "ai_draft",
 ): ImportedCurriculumDocument {
@@ -259,20 +302,31 @@ function toImportedCurriculumDocumentFromAiArtifact(
     document: artifact.document,
     progression: artifact.progression,
     units: artifact.units,
-    metadata: {
-      intakeSummary: artifact.intakeSummary,
-      teachingApproach: artifact.source.teachingApproach,
-      successSignals: artifact.source.successSignals,
-      parentNotes: artifact.source.parentNotes,
-      rationale: artifact.source.rationale,
-      pacing: artifact.pacing,
-      generatedUnitCount: artifact.units.length,
-      generatedLessonCount: artifact.units.reduce(
-        (total, unit) => total + unit.lessons.length,
-        0,
-      ),
-      generatedEstimatedSessionCount: countEstimatedSessions(artifact.units),
-    },
+    metadata: buildCurriculumArtifactMetadata(artifact),
+  };
+}
+
+async function buildCreatedCurriculumArtifactImportResult(params: {
+  sourceId: string;
+  householdId: string;
+  fallbackTitle: string;
+  imported: ImportedCurriculumDocument;
+}): Promise<CreatedCurriculumArtifactImportResult> {
+  const [updated, tree, outline] = await Promise.all([
+    getCurriculumSource(params.sourceId, params.householdId),
+    getCurriculumTree(params.sourceId, params.householdId),
+    listCurriculumOutline(params.sourceId),
+  ]);
+  const lessonCount = outline.reduce((total, unit) => total + unit.lessons.length, 0);
+
+  return {
+    sourceId: params.sourceId,
+    sourceTitle: updated?.title ?? params.fallbackTitle,
+    nodeCount: tree?.nodeCount ?? 0,
+    skillCount: tree?.skillCount ?? 0,
+    unitCount: outline.length,
+    lessonCount,
+    estimatedSessionCount: countEstimatedSessions(params.imported.units),
   };
 }
 
@@ -646,14 +700,24 @@ export async function importCurriculumSourceFromLocalJson(
   }
 }
 
-export async function createCurriculumSourceFromAiDraftArtifact(params: {
+export async function createCurriculumSourceFromCurriculumArtifact(params: {
   householdId: string;
   artifact: CurriculumAiGeneratedArtifact;
+  requestMode?: CurriculumGenerateRequestMode;
+  sourceKind?: CreateCurriculumSourceInput["kind"];
   progressionAttemptCount?: number;
   progressionFailureReason?: string | null;
   sourceMetadata?: Record<string, unknown>;
-}): Promise<CreatedAiDraftCurriculumResult> {
-  const imported = toImportedCurriculumDocumentFromAiArtifact(params.artifact, "ai_draft");
+}): Promise<CreatedCurriculumArtifactImportResult> {
+  const imported = toImportedCurriculumDocumentFromCurriculumArtifact(
+    params.artifact,
+    params.sourceKind ?? "ai_draft",
+  );
+  const metadata = {
+    ...(imported.metadata ?? {}),
+    ...(params.requestMode ? { requestMode: params.requestMode } : {}),
+    ...(params.sourceMetadata ?? {}),
+  };
 
   const source = await createSourceRecord(
     {
@@ -667,37 +731,23 @@ export async function createCurriculumSourceFromAiDraftArtifact(params: {
     },
     {
       status: "active",
-      metadata: {
-        ...(imported.metadata ?? {}),
-        ...(params.sourceMetadata ?? {}),
-      },
+      metadata,
     },
   );
 
   try {
     await importNormalizedTree(source.id, imported, {
-      metadata: {
-        ...(imported.metadata ?? {}),
-        ...(params.sourceMetadata ?? {}),
-      },
+      metadata,
       progressionProvenance: "initial_generation",
       progressionAttemptCount: params.progressionAttemptCount,
       progressionFailureReason: params.progressionFailureReason,
-      // Pass these if they become available or needed
     });
-    const tree = await getCurriculumTree(source.id, params.householdId);
-    const outline = await listCurriculumOutline(source.id);
-    const lessonCount = outline.reduce((total, unit) => total + unit.lessons.length, 0);
-
-    return {
+    return buildCreatedCurriculumArtifactImportResult({
       sourceId: source.id,
-      sourceTitle: source.title,
-      nodeCount: tree?.nodeCount ?? 0,
-      skillCount: tree?.skillCount ?? 0,
-      unitCount: outline.length,
-      lessonCount,
-      estimatedSessionCount: countEstimatedSessions(imported.units),
-    };
+      householdId: params.householdId,
+      fallbackTitle: source.title,
+      imported,
+    });
   } catch (error) {
     await getDb()
       .update(curriculumSources)
@@ -710,38 +760,33 @@ export async function createCurriculumSourceFromAiDraftArtifact(params: {
   }
 }
 
-export async function applyAiDraftArtifactToCurriculumSource(params: {
+export async function applyCurriculumArtifactToCurriculumSource(params: {
   sourceId: string;
   householdId: string;
   artifact: CurriculumAiGeneratedArtifact;
-}): Promise<CreatedAiDraftCurriculumResult> {
+}): Promise<CreatedCurriculumArtifactImportResult> {
   const existing = await getCurriculumSource(params.sourceId, params.householdId);
   if (!existing) {
     throw new Error(`CurriculumSource not found: ${params.sourceId}`);
   }
 
-  const imported = toImportedCurriculumDocumentFromAiArtifact(params.artifact, existing.kind);
+  const imported = toImportedCurriculumDocumentFromCurriculumArtifact(
+    params.artifact,
+    existing.kind,
+  );
   await importNormalizedTree(params.sourceId, imported, {
     metadata: {
       ...(imported.metadata ?? {}),
-      lastAiRevisionAt: new Date().toISOString(),
+      lastArtifactRevisionAt: new Date().toISOString(),
     },
   });
 
-  const updated = await getCurriculumSource(params.sourceId, params.householdId);
-  const tree = await getCurriculumTree(params.sourceId, params.householdId);
-  const outline = await listCurriculumOutline(params.sourceId);
-  const lessonCount = outline.reduce((total, unit) => total + unit.lessons.length, 0);
-
-  return {
+  return buildCreatedCurriculumArtifactImportResult({
     sourceId: params.sourceId,
-    sourceTitle: updated?.title ?? params.artifact.source.title,
-    nodeCount: tree?.nodeCount ?? 0,
-    skillCount: tree?.skillCount ?? 0,
-    unitCount: outline.length,
-    lessonCount,
-    estimatedSessionCount: countEstimatedSessions(imported.units),
-  };
+    householdId: params.householdId,
+    fallbackTitle: params.artifact.source.title,
+    imported,
+  });
 }
 
 export async function updateCurriculumSource(
