@@ -9,12 +9,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export function NewCurriculumClientPage({
   activeLearner,
+  organizationId,
   defaultSchoolYearLabel,
 }: {
   activeLearner: {
+    id: string;
     displayName: string;
     firstName: string;
   };
+  organizationId: string;
   defaultSchoolYearLabel?: string | null;
 }) {
   return (
@@ -44,6 +47,8 @@ export function NewCurriculumClientPage({
         </CardHeader>
         <CardContent className="p-4 sm:p-6">
           <HomeschoolCurriculumIntakeForm
+            organizationId={organizationId}
+            activeLearnerId={activeLearner.id}
             activeLearnerName={activeLearner.displayName}
             defaultSchoolYearLabel={defaultSchoolYearLabel}
           />

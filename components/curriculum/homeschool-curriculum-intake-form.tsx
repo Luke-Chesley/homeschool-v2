@@ -9,9 +9,13 @@ import type {
   IntakeSourcePackageModality,
   NormalizedIntakeSourcePackage,
 } from "@/lib/homeschool/intake/types";
+import { getBrowserStorageClient } from "@/lib/storage/client";
+import { storageBuckets } from "@/lib/storage/buckets";
+import { buildLearnerStoragePath } from "@/lib/storage/paths";
 
 const UPLOAD_ACCEPT =
   "application/pdf,.pdf,.txt,.md,.csv,.json,.html,.htm,application/json,text/plain,text/csv,text/markdown,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,application/vnd.openxmlformats-officedocument.presentationml.presentation,.pptx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx";
+const MAX_VERCEL_MULTIPART_UPLOAD_BYTES = 4 * 1024 * 1024;
 
 function resolveUploadModality(file: File): Exclude<IntakeSourcePackageModality, "text" | "outline"> {
   const fileName = file.name.toLowerCase();
@@ -43,7 +47,19 @@ function formatFileSize(bytes: number) {
   return `${Math.round(bytes / 1024 / 102.4) / 10} MB`;
 }
 
+function sanitizeUploadFileName(fileName: string) {
+  return (
+    fileName
+      .trim()
+      .replace(/[^a-zA-Z0-9._-]+/g, "-")
+      .replace(/-{2,}/g, "-")
+      .replace(/^-+|-+$/g, "") || "upload"
+  );
+}
+
 export function HomeschoolCurriculumIntakeForm(props: {
+  organizationId?: string | null;
+  activeLearnerId?: string | null;
   defaultSchoolYearLabel?: string | null;
   activeLearnerName: string;
 }) {
@@ -85,8 +101,59 @@ export function HomeschoolCurriculumIntakeForm(props: {
 
     setPreparingSource(true);
     try {
+      const modality = resolveUploadModality(uploadedFile);
+
+      if (props.organizationId && props.activeLearnerId) {
+        const storagePath = buildLearnerStoragePath(
+          props.organizationId,
+          props.activeLearnerId,
+          "intake-packages",
+          crypto.randomUUID(),
+          sanitizeUploadFileName(uploadedFile.name),
+        );
+        const storage = getBrowserStorageClient().from(storageBuckets.learnerUploads);
+        const upload = await storage.upload(storagePath, uploadedFile, {
+          contentType: uploadedFile.type || "application/octet-stream",
+          upsert: false,
+        });
+
+        if (upload.error) {
+          throw new Error(upload.error.message);
+        }
+
+        const response = await fetch("/api/homeschool/intake-package", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            modality,
+            fileName: uploadedFile.name,
+            mimeType: uploadedFile.type || "application/octet-stream",
+            byteSize: uploadedFile.size,
+            storageBucket: storageBuckets.learnerUploads,
+            storagePath,
+            note: curriculumSummary.trim() || undefined,
+          }),
+        });
+
+        const payload = await response.json().catch(() => null);
+        if (!response.ok) {
+          void storage.remove([storagePath]).catch(() => undefined);
+          throw new Error(payload?.error ?? "Could not upload that source.");
+        }
+
+        const preparedPackage = payload as NormalizedIntakeSourcePackage;
+        setSourcePackage(preparedPackage);
+        return preparedPackage;
+      }
+
+      if (uploadedFile.size > MAX_VERCEL_MULTIPART_UPLOAD_BYTES) {
+        throw new Error(
+          "This file is too large for the hosted fallback upload. Add it from Curriculum with an active learner selected, or keep the file under 4 MB.",
+        );
+      }
+
       const formData = new FormData();
-      formData.set("modality", resolveUploadModality(uploadedFile));
+      formData.set("modality", modality);
       formData.set("file", uploadedFile);
       if (curriculumSummary.trim()) {
         formData.set("note", curriculumSummary.trim());

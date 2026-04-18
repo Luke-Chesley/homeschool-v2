@@ -86,6 +86,20 @@ export const CreateTextIntakeSourcePackageRequestSchema = z.object({
   note: z.string().trim().max(2_000).optional(),
 });
 
+export const CreateStoredAssetIntakeSourcePackageRequestSchema = z.object({
+  modality: z.enum(["photo", "image", "pdf", "file"]),
+  fileName: z.string().trim().min(1).max(255),
+  mimeType: z.string().trim().min(1).max(255),
+  byteSize: z.number().int().nonnegative().optional(),
+  storageBucket: z.string().trim().min(1).max(255),
+  storagePath: z.string().trim().min(1).max(1024),
+  note: z.string().trim().max(2_000).optional(),
+});
+
 export type CreateTextIntakeSourcePackageRequest = z.infer<
   typeof CreateTextIntakeSourcePackageRequestSchema
+>;
+
+export type CreateStoredAssetIntakeSourcePackageRequest = z.infer<
+  typeof CreateStoredAssetIntakeSourcePackageRequestSchema
 >;

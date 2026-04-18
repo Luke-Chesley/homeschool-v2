@@ -7,11 +7,17 @@ import {
 } from "@/lib/app-session/server";
 import {
   createAssetBackedIntakeSourcePackage,
+  createStoredAssetBackedIntakeSourcePackage,
   createTextIntakeSourcePackage,
 } from "@/lib/homeschool/intake/service";
-import { CreateTextIntakeSourcePackageRequestSchema } from "@/lib/homeschool/intake/types";
+import {
+  CreateStoredAssetIntakeSourcePackageRequestSchema,
+  CreateTextIntakeSourcePackageRequestSchema,
+} from "@/lib/homeschool/intake/types";
 import { ACTIVATION_EVENT_NAMES } from "@/lib/homeschool/onboarding/activation-contracts";
 import { trackOperationalError, trackProductEvent } from "@/lib/platform/observability";
+import { storageBuckets } from "@/lib/storage/buckets";
+import { buildLearnerStoragePath } from "@/lib/storage/paths";
 
 const AssetBackedModalitySchema = z.enum(["photo", "image", "pdf", "file"]);
 
@@ -22,30 +28,96 @@ export async function POST(request: NextRequest) {
 
     if (contentType.includes("application/json")) {
       const body = await request.json().catch(() => null);
-      const parsed = CreateTextIntakeSourcePackageRequestSchema.safeParse(body);
+      const textRequest = CreateTextIntakeSourcePackageRequestSchema.safeParse(body);
 
-      if (!parsed.success) {
+      if (textRequest.success) {
+        const pkg = await createTextIntakeSourcePackage({
+          organizationId: session.organization.id,
+          learnerId: session.activeLearner?.id ?? null,
+          input: textRequest.data,
+        });
+
+        await trackProductEvent({
+          name: ACTIVATION_EVENT_NAMES.intakePackageCreated,
+          organizationId: session.organization.id,
+          learnerId: session.activeLearner?.id ?? null,
+          metadata: {
+            packageId: pkg.id,
+            modality: pkg.modality,
+            assetCount: pkg.assetCount,
+            extractionStatus: pkg.extractionStatus,
+          },
+        });
+
+        return NextResponse.json(pkg, { status: 201 });
+      }
+
+      const storedAssetRequest =
+        CreateStoredAssetIntakeSourcePackageRequestSchema.safeParse(body);
+
+      if (!storedAssetRequest.success) {
         return NextResponse.json(
-          { error: "Invalid intake package request.", issues: parsed.error.flatten() },
+          { error: "Invalid intake package request.", issues: storedAssetRequest.error.flatten() },
           { status: 400 },
         );
       }
 
-      const pkg = await createTextIntakeSourcePackage({
+      if (!session.activeLearner) {
+        return NextResponse.json(
+          { error: "Choose a learner before uploading a stored source." },
+          { status: 400 },
+        );
+      }
+
+      const expectedStoragePrefix = `${buildLearnerStoragePath(
+        session.organization.id,
+        session.activeLearner.id,
+      )}/`;
+
+      if (
+        storedAssetRequest.data.storageBucket !== storageBuckets.learnerUploads ||
+        !storedAssetRequest.data.storagePath.startsWith(expectedStoragePrefix)
+      ) {
+        return NextResponse.json(
+          { error: "That uploaded file is not available for this learner." },
+          { status: 400 },
+        );
+      }
+
+      const pkg = await createStoredAssetBackedIntakeSourcePackage({
         organizationId: session.organization.id,
-        learnerId: session.activeLearner?.id ?? null,
-        input: parsed.data,
+        learnerId: session.activeLearner.id,
+        modality: storedAssetRequest.data.modality,
+        fileName: storedAssetRequest.data.fileName,
+        mimeType: storedAssetRequest.data.mimeType,
+        byteSize: storedAssetRequest.data.byteSize,
+        note: storedAssetRequest.data.note,
+        storageBucket: storedAssetRequest.data.storageBucket,
+        storagePath: storedAssetRequest.data.storagePath,
       });
 
       await trackProductEvent({
         name: ACTIVATION_EVENT_NAMES.intakePackageCreated,
         organizationId: session.organization.id,
-        learnerId: session.activeLearner?.id ?? null,
+        learnerId: session.activeLearner.id,
         metadata: {
           packageId: pkg.id,
           modality: pkg.modality,
           assetCount: pkg.assetCount,
           extractionStatus: pkg.extractionStatus,
+        },
+      });
+
+      await trackProductEvent({
+        name: ACTIVATION_EVENT_NAMES.intakeAssetUploaded,
+        organizationId: session.organization.id,
+        learnerId: session.activeLearner.id,
+        metadata: {
+          packageId: pkg.id,
+          modality: pkg.modality,
+          fileName: storedAssetRequest.data.fileName,
+          mimeType: storedAssetRequest.data.mimeType,
+          byteSize: storedAssetRequest.data.byteSize ?? null,
         },
       });
 

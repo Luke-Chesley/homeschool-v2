@@ -58,6 +58,7 @@ const intakeOptions: Array<{ value: FastPathIntakeRoute; label: string }> = [
 const DEFAULT_INTAKE_ROUTE: FastPathIntakeRoute = "single_lesson";
 const UPLOAD_ACCEPT =
   "image/*,application/pdf,.pdf,.txt,.md,.csv,.json,.html,.htm,application/json,text/plain,text/csv,text/markdown";
+const MAX_HOSTED_UPLOAD_BYTES = 4 * 1024 * 1024;
 
 const horizonLabels: Record<CurriculumGenerationHorizon, string> = {
   today: "Today",
@@ -307,6 +308,12 @@ export function HomeschoolOnboardingForm(props: {
 
     if (!uploadedFile) {
       throw new Error("Choose a file before continuing.");
+    }
+
+    if (uploadedFile.size > MAX_HOSTED_UPLOAD_BYTES) {
+      throw new Error(
+        "This onboarding upload is too large for the hosted app right now. Keep the file under 4 MB, paste text here, or finish onboarding and add the PDF from Curriculum.",
+      );
     }
 
     setWorkingState(

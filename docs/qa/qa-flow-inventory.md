@@ -96,6 +96,21 @@ Core expectations:
 - generated or planned work becomes visible from `Today`
 - empty states guide the user toward a real next action
 
+Run this exact sequence for each QA pass that touches curriculum source intake:
+
+1. Open `/curriculum` and move into `/curriculum/new`.
+   - Expected: the add-source entry point is reachable without dead-end navigation.
+   - Report notes: capture the exact route used to enter the flow.
+2. On `/curriculum/new`, choose `Build from source`.
+   - Expected: both paste and upload options are visible and selectable.
+   - Report notes: record whether the active learner name is shown correctly in the page copy.
+3. Upload one small file and submit.
+   - Expected: the file summary renders, source preparation completes, and the resulting source or queued job advances without a generic upload error.
+   - Report notes: include file type, approximate size, and whether the source landed on `/curriculum/[sourceId]` or entered the queued flow.
+4. If testing hosted environments, repeat with a PDF larger than 4 MB.
+   - Expected: curriculum upload still works on hosted because the browser uploads directly to storage; onboarding should show the explicit size-limit message instead of a generic failure.
+   - Report notes: capture the exact PDF size, whether the request completed, and any plain-text `413` or storage auth errors in the network panel.
+
 ## Learner Flow
 
 Routes:

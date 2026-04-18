@@ -428,15 +428,16 @@ export async function createTextIntakeSourcePackage(params: {
   return mapPackage(record, []);
 }
 
-export async function createAssetBackedIntakeSourcePackage(params: {
+async function finalizeAssetBackedIntakeSourcePackage(params: {
   organizationId: string;
   learnerId?: string | null;
   modality: Extract<IntakeSourcePackageModality, "photo" | "image" | "pdf" | "file">;
   fileName: string;
   mimeType: string;
   byteSize?: number | null;
-  buffer: Buffer;
   note?: string | null;
+  storageBucket: string;
+  storagePath: string;
 }) {
   const repos = getRepositories();
   const initialTitle = titleFromText(params.note?.trim() || params.fileName);
@@ -454,25 +455,6 @@ export async function createAssetBackedIntakeSourcePackage(params: {
   });
 
   try {
-    const safeFileName = sanitizeFileName(params.fileName);
-    const storagePath = buildOrganizationStoragePath(
-      params.organizationId,
-      "intake-packages",
-      packageRecord.id,
-      safeFileName,
-    );
-
-    const storage = getAdminStorageClient().from(storageBuckets.learnerUploads);
-    const upload = await storage.upload(storagePath, params.buffer, {
-      cacheControl: "3600",
-      contentType: params.mimeType,
-      upsert: true,
-    });
-
-    if (upload.error) {
-      throw new Error(upload.error.message);
-    }
-
     const extracted = await extractAssetText({
       modality: params.modality,
       mimeType: params.mimeType,
@@ -504,8 +486,8 @@ export async function createAssetBackedIntakeSourcePackage(params: {
 
     await repos.aiIntake.createAsset({
       packageId: packageRecord.id,
-      storageBucket: storageBuckets.learnerUploads,
-      storagePath,
+      storageBucket: params.storageBucket,
+      storagePath: params.storagePath,
       fileName: params.fileName,
       mimeType: params.mimeType,
       byteSize: params.byteSize ?? null,
@@ -542,4 +524,60 @@ export async function createAssetBackedIntakeSourcePackage(params: {
   }
 
   return getNormalizedIntakeSourcePackage(packageRecord.id);
+}
+
+export async function createStoredAssetBackedIntakeSourcePackage(params: {
+  organizationId: string;
+  learnerId?: string | null;
+  modality: Extract<IntakeSourcePackageModality, "photo" | "image" | "pdf" | "file">;
+  fileName: string;
+  mimeType: string;
+  byteSize?: number | null;
+  note?: string | null;
+  storageBucket: string;
+  storagePath: string;
+}) {
+  return finalizeAssetBackedIntakeSourcePackage(params);
+}
+
+export async function createAssetBackedIntakeSourcePackage(params: {
+  organizationId: string;
+  learnerId?: string | null;
+  modality: Extract<IntakeSourcePackageModality, "photo" | "image" | "pdf" | "file">;
+  fileName: string;
+  mimeType: string;
+  byteSize?: number | null;
+  buffer: Buffer;
+  note?: string | null;
+}) {
+  const safeFileName = sanitizeFileName(params.fileName);
+  const storagePath = buildOrganizationStoragePath(
+    params.organizationId,
+    "intake-packages",
+    crypto.randomUUID(),
+    safeFileName,
+  );
+
+  const storage = getAdminStorageClient().from(storageBuckets.learnerUploads);
+  const upload = await storage.upload(storagePath, params.buffer, {
+    cacheControl: "3600",
+    contentType: params.mimeType,
+    upsert: true,
+  });
+
+  if (upload.error) {
+    throw new Error(upload.error.message);
+  }
+
+  return finalizeAssetBackedIntakeSourcePackage({
+    organizationId: params.organizationId,
+    learnerId: params.learnerId ?? null,
+    modality: params.modality,
+    fileName: params.fileName,
+    mimeType: params.mimeType,
+    byteSize: params.byteSize ?? null,
+    note: params.note,
+    storageBucket: storageBuckets.learnerUploads,
+    storagePath,
+  });
 }

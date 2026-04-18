@@ -8,9 +8,11 @@ export default async function NewCurriculumPage() {
   return (
     <NewCurriculumClientPage
       activeLearner={{
+        id: session.activeLearner.id,
         displayName: session.activeLearner.displayName,
         firstName: session.activeLearner.firstName,
       }}
+      organizationId={session.organization.id}
       defaultSchoolYearLabel={preferences.schoolYearLabel}
     />
   );
