@@ -90,12 +90,12 @@ Plan item cards no longer show per-item activity counts or generation controls. 
 
 ## How evidence/progress still maps back to objectives/skills
 
-The activity spec retains `linkedObjectiveIds` and `linkedSkillTitles`, which are populated from the plan items' skill titles in `buildActivityContextFromLessonDraft`. These appear in:
+The activity spec retains `linkedObjectiveIds` and `linkedSkillLabels`, which are populated from the plan items' skill titles in `buildActivityContextFromLessonDraft`. These appear in:
 
 - `activityEvidence.linkedObjectiveIds` — per-evidence traceability
 - `activityEvidence.linkedSkillIds` — per-evidence traceability
 - `interactiveActivities.masteryRubric.linkedObjectiveIds` — activity-level summary
-- `interactiveActivities.metadata.linkedSkillTitles` — full skill list for reporting
+- `interactiveActivities.metadata.linkedSkillLabels` — full skill list for reporting
 
 The reporting chain is: activity evidence → activity (lessonDraftFingerprint) → lesson session → objectives/skills.
 

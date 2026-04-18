@@ -11,7 +11,6 @@ export const OnboardingLaunchSummarySchema = z.object({
     "two_weeks",
     "starter_module",
   ]),
-  openingLessonCount: z.number().int().positive(),
   summaryText: z.string().min(1),
   scopeSummary: z.string().nullable().optional(),
   initialSliceUsed: z.boolean().default(false),

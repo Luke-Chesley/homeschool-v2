@@ -116,7 +116,7 @@ export async function publishActivityForLessonDraft(params: {
       sessionId: params.lessonSessionId,
       lessonDraftFingerprint: params.lessonDraftFingerprint,
       trackedPlanItemIds: planItems.map((p) => p.id),
-      linkedSkillTitles: planItems.map((p) => p.title),
+      linkedSkillLabels: planItems.map((p) => p.title),
       standardIds: planItems.flatMap((p) => p.standards ?? []),
       estimatedMinutes: genResult.artifact.estimatedMinutes,
       interactionMode: genResult.artifact.interactionMode,

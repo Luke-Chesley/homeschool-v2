@@ -25,6 +25,7 @@ Durable curriculum metadata now centers on three canonical blocks:
 - `entryLabel`
 - `continuationMode`
 - `recommendedHorizon`
+- `deliveryPattern`
 
 The canonical `sourceKind` values are:
 
@@ -74,9 +75,10 @@ Large sources need a continuation breadcrumb even when the first launch stays sm
 - `sourceModel.entryLabel`
 - `sourceModel.continuationMode`
 - `sourceModel.recommendedHorizon`
+- `sourceModel.deliveryPattern`
 - `sourceModel.detectedChunks`
 - `launchPlan.chosenHorizon`
-- launch-slice fields such as `launchPlan.initialSliceUsed`, `launchPlan.initialSliceLabel`, and `launchPlan.openingLessonCount`
+- launch-slice fields such as `launchPlan.initialSliceUsed`, `launchPlan.initialSliceLabel`, `launchPlan.openingLessonRefs`, and `launchPlan.openingSkillRefs`
 - `curriculumLineage`
 
 This metadata is intentionally lightweight. It exists so later “continue from source” work can resume from the next bounded slice without re-deriving the source interpretation from scratch.

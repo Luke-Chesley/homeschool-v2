@@ -45,6 +45,7 @@ export function buildPersistedSourceModel(params: {
     | "scaffold_only";
   entryLabel?: string | null;
   continuationMode: "none" | "sequential" | "timebox" | "manual_review";
+  deliveryPattern: "task_first" | "skill_first" | "concept_first" | "timeboxed" | "mixed";
   recommendedHorizon: "single_day" | "few_days" | "one_week" | "two_weeks" | "starter_module";
   assumptions: string[];
   detectedChunks: string[];
@@ -71,6 +72,7 @@ export function buildPersistedSourceModel(params: {
     entryStrategy: params.entryStrategy,
     entryLabel: params.entryLabel ?? null,
     continuationMode: params.continuationMode,
+    deliveryPattern: params.deliveryPattern,
     recommendedHorizon: params.recommendedHorizon,
     assumptions: params.assumptions,
     detectedChunks: params.detectedChunks,
@@ -165,6 +167,7 @@ export async function createCurriculumFromSourceEntry(params: {
     | "scaffold_only";
   entryLabel?: string | null;
   continuationMode: "none" | "sequential" | "timebox" | "manual_review";
+  deliveryPattern: "task_first" | "skill_first" | "concept_first" | "timeboxed" | "mixed";
   recommendedHorizon: "single_day" | "few_days" | "one_week" | "two_weeks" | "starter_module";
   sourceText: string;
   sourcePackages?: IntakeSourcePackageContext[];
@@ -190,6 +193,7 @@ export async function createCurriculumFromSourceEntry(params: {
       entryStrategy: params.entryStrategy,
       entryLabel: params.entryLabel ?? null,
       continuationMode: params.continuationMode,
+      deliveryPattern: params.deliveryPattern,
       recommendedHorizon: params.recommendedHorizon,
       sourceText: params.sourceText,
       sourcePackages: params.sourcePackages ?? [],
@@ -245,6 +249,7 @@ export async function createFastPathCurriculumFromSource(params: {
     entryStrategy: params.preview.entryStrategy,
     entryLabel: params.preview.entryLabel ?? null,
     continuationMode: params.preview.continuationMode,
+    deliveryPattern: params.preview.deliveryPattern,
     recommendedHorizon: params.preview.chosenHorizon,
     sourceText: params.sourceText,
     sourcePackages: params.sourcePackages ?? [],
@@ -263,6 +268,7 @@ export async function createFastPathCurriculumFromSource(params: {
           entryStrategy: params.preview.entryStrategy,
           entryLabel: params.preview.entryLabel ?? null,
           continuationMode: params.preview.continuationMode,
+          deliveryPattern: params.preview.deliveryPattern,
           recommendedHorizon: params.preview.recommendedHorizon,
           assumptions: params.preview.assumptions,
           detectedChunks: params.preview.detectedChunks,

@@ -52,7 +52,7 @@ The Activity Artifact represents a structured, AI-generated specification for an
 | Field | Type | Description |
 |-------|------|-------------|
 | linkedObjectiveIds | string[] | IDs of curriculum objectives addressed. |
-| linkedSkillTitles | string[] | Skill names for context. |
+| linkedSkillLabels | string[] | Skill names for context. |
 | completionRules | object | Rules for when the activity is considered complete. |
 | adaptationRules | object | Hint strategy and retry rules. |
 | teacherSupport | object | Setup notes, discussion questions, etc. |

@@ -489,16 +489,35 @@ function buildMinimalArtifactForProgression(
       coverageNotes: [],
     },
     document: { Skills: document } as Record<string, CurriculumJsonNode>,
-    units: [],
+    units: [
+      {
+        unitRef: "unit:progression-preview",
+        title: "Opening progression window",
+        description: "Synthetic opening anchor for progression preview only.",
+        lessons: [
+          {
+            unitRef: "unit:progression-preview",
+            lessonRef: "lesson:progression-preview",
+            lessonType: "skill_support",
+            title: "Opening progression window",
+            description: "Use the existing skill map as the bounded opening window for progression work.",
+            materials: [],
+            objectives: [],
+            linkedSkillRefs: skillNodes.map((node) => node.id),
+          },
+        ],
+      },
+    ],
     launchPlan: {
       recommendedHorizon: "starter_module",
-      openingLessonCount: Math.max(1, skillNodes.length || 1),
       scopeSummary: "Use the existing skill map as the bounded opening window for progression work.",
       initialSliceUsed: false,
       initialSliceLabel: null,
       entryStrategy: null,
       entryLabel: null,
       continuationMode: null,
+      openingLessonRefs: ["lesson:progression-preview"],
+      openingSkillRefs: skillNodes.map((node) => node.id),
     },
   };
 }

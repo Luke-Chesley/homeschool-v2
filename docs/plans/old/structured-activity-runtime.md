@@ -26,7 +26,7 @@ The production path now: `PlanItem → generateActivitySpec() → ActivitySpec �
   purpose: string,
   activityKind: ActivityKind,
   linkedObjectiveIds: string[],
-  linkedSkillTitles: string[],
+  linkedSkillLabels: string[],
   estimatedMinutes: number,
   interactionMode: "digital" | "offline" | "hybrid",
   components: ComponentSpec[],        // ordered, from bounded library

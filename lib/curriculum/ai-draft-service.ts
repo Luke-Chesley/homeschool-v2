@@ -304,13 +304,16 @@ async function buildCurriculumRevisionSnapshot(sourceId: string, householdId: st
       estimatedWeeks: unit.estimatedWeeks,
       estimatedSessions: unit.estimatedSessions,
       lessons: unit.lessons.map((lesson) => ({
+        unitRef: lesson.unitRef,
+        lessonRef: lesson.lessonRef,
+        lessonType: lesson.lessonType,
         title: lesson.title,
         description: lesson.description,
         subject: lesson.subject,
         estimatedMinutes: lesson.estimatedMinutes,
         materials: lesson.materials,
         objectives: lesson.objectives,
-        linkedSkillTitles: lesson.linkedSkillTitles,
+        linkedSkillRefs: lesson.linkedSkillRefs,
       })),
     })),
   };

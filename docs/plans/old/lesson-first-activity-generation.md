@@ -36,7 +36,7 @@ StructuredLessonDraft              → primary content source
   assessment_artifact              → evidence schema hint
 
 PlanItem (optional, scope context)
-  title                            → scope label, linkedSkillTitles
+  title                            → scope label, linkedSkillLabels
   subject                          → curriculumSubject
   sourceLabel                      → curriculum.sourceTitle
   lessonLabel                      → lesson breadcrumb
@@ -66,7 +66,7 @@ The scope is passed through to the prompt so the model can design the activity t
 
 1. `scope.kind = "route_item"` with `scope.planItemId = planItem.id`
 2. The model is instructed to "design this activity to target the scoped skill/topic within the broader lesson"
-3. `linkedSkillTitles` includes the plan item's title
+3. `linkedSkillLabels` includes the plan item's title
 4. Subject and curriculum source come from the plan item
 
 The activity is still *downstream of the lesson design* — the lesson draft's block sequence, success criteria, and teacher notes shape the interaction pattern. The plan item just narrows the focus.

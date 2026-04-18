@@ -4,6 +4,7 @@ import { getDb } from "@/lib/db/server";
 import { getEnabledPlanningDayOffsets } from "./planning-days";
 import {
   curriculumNodes,
+  curriculumSources,
   curriculumPhases,
   curriculumPhaseNodes,
   curriculumSkillPrerequisites,
@@ -60,6 +61,8 @@ type RouteBoardContext = {
   orderedPhaseIds: string[];
 };
 
+type CurriculumSourceMetadata = Record<string, unknown>;
+
 type RouteItemProjection = {
   id: string;
   skillNodeId: string;
@@ -114,6 +117,10 @@ function buildSuggestedScheduledDates(params: {
   });
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 function readNumber(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) {
     return value;
@@ -125,6 +132,20 @@ function readNumber(value: unknown): number | null {
     }
   }
   return null;
+}
+
+function readString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function readStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((entry) => readString(entry))
+    .filter((entry): entry is string => entry != null);
 }
 
 function getPlanningDayCount(profile: LearnerRouteProfileRecord | null): number {
@@ -650,6 +671,7 @@ function buildSkillMaps(nodes: typeof curriculumNodes.$inferSelect[]) {
 
 interface GenerationContext {
   profile: LearnerRouteProfileRecord | null;
+  sourceMetadata: CurriculumSourceMetadata;
   activeBranchActivations: Array<typeof learnerBranchActivations.$inferSelect>;
   nodes: typeof curriculumNodes.$inferSelect[];
   prerequisites: CurriculumPrerequisiteRecord[];
@@ -661,9 +683,12 @@ interface GenerationContext {
 
 async function loadGenerationContext(params: { learnerId: string; sourceId: string }): Promise<GenerationContext> {
   const db = getDb();
-  const [profile, activeBranchActivations, nodes, prerequisites, phases, phaseNodes, skillStates] = await Promise.all([
+  const [profile, source, activeBranchActivations, nodes, prerequisites, phases, phaseNodes, skillStates] = await Promise.all([
     db.query.learnerRouteProfiles.findFirst({
       where: and(eq(learnerRouteProfiles.learnerId, params.learnerId), eq(learnerRouteProfiles.sourceId, params.sourceId)),
+    }),
+    db.query.curriculumSources.findFirst({
+      where: eq(curriculumSources.id, params.sourceId),
     }),
     db.query.learnerBranchActivations.findMany({
       where: and(
@@ -700,6 +725,7 @@ async function loadGenerationContext(params: { learnerId: string; sourceId: stri
 
   return {
     profile: profile ?? null,
+    sourceMetadata: isRecord(source?.metadata) ? source.metadata : {},
     activeBranchActivations,
     nodes,
     prerequisites,
@@ -738,6 +764,7 @@ async function loadPlannedSkillNodeIdsBeforeWeek(params: {
 
 function buildRecommendations(params: {
   profile: LearnerRouteProfileRecord | null;
+  sourceMetadata: CurriculumSourceMetadata;
   activeBranchActivations: Array<typeof learnerBranchActivations.$inferSelect>;
   nodes: typeof curriculumNodes.$inferSelect[];
   prerequisites: CurriculumPrerequisiteRecord[];
@@ -755,6 +782,7 @@ function buildRecommendations(params: {
 } {
   const {
     profile,
+    sourceMetadata,
     activeBranchActivations,
     nodes,
     prerequisites,
@@ -768,25 +796,13 @@ function buildRecommendations(params: {
   const planningDayCount = getPlanningDayCount(profile);
   const enabledDayOffsets = getEnabledPlanningDayOffsets(profile?.planningDays ?? null);
 
-  if (activeBranchActivations.length === 0) {
-    return {
-      orderedSkillNodeIds: [],
-      targetItemsPerWeek,
-      targetItemsPerDay,
-      planningDayCount,
-      enabledDayOffsets,
-      generationBasis: {
-        algorithmVersion: "2026-04-01-progression-v1",
-        reason: "no_active_branch_activations",
-        targetItemsPerWeek,
-        targetItemsPerDay,
-        planningDayCount,
-        enabledDayOffsets,
-      },
-    };
-  }
-
   const { nodeById, canonicalPositionBySkillNodeId, collectSkillDescendants } = buildSkillMaps(nodes);
+  const rawLaunchPlan = isRecord(sourceMetadata.launchPlan) ? sourceMetadata.launchPlan : {};
+  const rawSourceModel = isRecord(sourceMetadata.sourceModel) ? sourceMetadata.sourceModel : {};
+  const openingLessonRefs = readStringArray(rawLaunchPlan.openingLessonRefs);
+  const openingSkillRefs = readStringArray(rawLaunchPlan.openingSkillRefs);
+  const firstOpeningLessonRef = openingLessonRefs[0] ?? null;
+  const deliveryPattern = readString(rawSourceModel.deliveryPattern);
 
   // Map prerequisites by kind
   const hardPrerequisitesBySkillNodeId = new Map<string, string[]>();
@@ -900,6 +916,110 @@ function buildRecommendations(params: {
     })
     .filter((value): value is NonNullable<typeof value> => value != null)
     .sort((left, right) => left.branchNodePath.localeCompare(right.branchNodePath));
+
+  if (openingSkillRefs.length > 0) {
+    const openingOrderBySkillNodeId = new Map(
+      openingSkillRefs.map((skillRef, index) => [skillRef, index]),
+    );
+    const rankLessonType = (value: string | null) => {
+      switch (value) {
+        case "task":
+          return 0;
+        case "setup":
+          return 2;
+        default:
+          return 1;
+      }
+    };
+    const remainingOpeningSkillNodeIds = openingSkillRefs
+      .filter((skillNodeId) => nodeById.has(skillNodeId))
+      .filter((skillNodeId) => {
+        const status = skillStateBySkillNodeId.get(skillNodeId) ?? "not_started";
+        if (!isSchedulableStatus(status)) {
+          return false;
+        }
+
+        return !plannedSkillNodeIdsBeforeWeek.has(skillNodeId)
+          || UNFINISHED_SCHEDULED_STATUSES.has(status);
+      })
+      .sort((left, right) => {
+        const leftNode = nodeById.get(left)!;
+        const rightNode = nodeById.get(right)!;
+        const leftMetadata = isRecord(leftNode.metadata) ? leftNode.metadata : {};
+        const rightMetadata = isRecord(rightNode.metadata) ? rightNode.metadata : {};
+        const leftLessonRef = readString(leftMetadata.lessonRef);
+        const rightLessonRef = readString(rightMetadata.lessonRef);
+
+        if (firstOpeningLessonRef) {
+          const leftMatchesOpeningLesson = leftLessonRef === firstOpeningLessonRef ? 0 : 1;
+          const rightMatchesOpeningLesson = rightLessonRef === firstOpeningLessonRef ? 0 : 1;
+          if (leftMatchesOpeningLesson !== rightMatchesOpeningLesson) {
+            return leftMatchesOpeningLesson - rightMatchesOpeningLesson;
+          }
+        }
+
+        if (deliveryPattern === "task_first") {
+          const leftLessonType = readString(leftMetadata.lessonType);
+          const rightLessonType = readString(rightMetadata.lessonType);
+          const leftRank = rankLessonType(leftLessonType);
+          const rightRank = rankLessonType(rightLessonType);
+          if (leftRank !== rightRank) {
+            return leftRank - rightRank;
+          }
+        }
+
+        const launchOrder =
+          (openingOrderBySkillNodeId.get(left) ?? Number.MAX_SAFE_INTEGER)
+          - (openingOrderBySkillNodeId.get(right) ?? Number.MAX_SAFE_INTEGER);
+        if (launchOrder !== 0) {
+          return launchOrder;
+        }
+
+        return (canonicalPositionBySkillNodeId.get(left) ?? Number.MAX_SAFE_INTEGER)
+          - (canonicalPositionBySkillNodeId.get(right) ?? Number.MAX_SAFE_INTEGER);
+      });
+
+    if (remainingOpeningSkillNodeIds.length > 0) {
+      return {
+        orderedSkillNodeIds: remainingOpeningSkillNodeIds.slice(0, targetItemsPerWeek),
+        targetItemsPerWeek,
+        targetItemsPerDay,
+        planningDayCount,
+        enabledDayOffsets,
+        generationBasis: {
+          algorithmVersion: "2026-04-18-launch-window-v1",
+          targetItemsPerWeek,
+          targetItemsPerDay,
+          planningDayCount,
+          enabledDayOffsets,
+          launchMode: "opening_window",
+          firstOpeningLessonRef,
+          openingLessonRefs,
+          openingSkillRefs,
+          selectedCount: remainingOpeningSkillNodeIds.length,
+          deliveryPattern,
+        },
+      };
+    }
+  }
+
+  if (activeBranchActivations.length === 0) {
+    return {
+      orderedSkillNodeIds: [],
+      targetItemsPerWeek,
+      targetItemsPerDay,
+      planningDayCount,
+      enabledDayOffsets,
+      generationBasis: {
+        algorithmVersion: "2026-04-01-progression-v1",
+        reason: "no_active_branch_activations",
+        targetItemsPerWeek,
+        targetItemsPerDay,
+        planningDayCount,
+        enabledDayOffsets,
+      },
+    };
+  }
 
   const weightedBranchCycle: string[] = [];
   for (const branch of branchInputs) {

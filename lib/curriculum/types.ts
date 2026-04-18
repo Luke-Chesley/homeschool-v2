@@ -104,10 +104,21 @@ export const CurriculumSourceContinuationModeSchema = z.enum([
   "manual_review",
 ]);
 
+export const CurriculumSourceDeliveryPatternSchema = z.enum([
+  "task_first",
+  "skill_first",
+  "concept_first",
+  "timeboxed",
+  "mixed",
+]);
+
 export type CurriculumSourceInterpretKind = z.infer<typeof CurriculumSourceInterpretKindSchema>;
 export type CurriculumSourceEntryStrategy = z.infer<typeof CurriculumSourceEntryStrategySchema>;
 export type CurriculumSourceContinuationMode = z.infer<
   typeof CurriculumSourceContinuationModeSchema
+>;
+export type CurriculumSourceDeliveryPattern = z.infer<
+  typeof CurriculumSourceDeliveryPatternSchema
 >;
 export type CurriculumSourceRecommendedHorizon = z.infer<
   typeof CurriculumSourceRecommendedHorizonSchema
@@ -121,6 +132,7 @@ export const CurriculumSourceModelSchema = z.object({
   entryStrategy: CurriculumSourceEntryStrategySchema,
   entryLabel: z.string().nullable().optional(),
   continuationMode: CurriculumSourceContinuationModeSchema,
+  deliveryPattern: CurriculumSourceDeliveryPatternSchema,
   recommendedHorizon: CurriculumSourceRecommendedHorizonSchema,
   assumptions: z.array(z.string()),
   detectedChunks: z.array(z.string()).min(1),
@@ -138,13 +150,14 @@ export type CurriculumSourceModel = z.infer<typeof CurriculumSourceModelSchema>;
 
 export const CurriculumLaunchPlanSchema = z.object({
   recommendedHorizon: CurriculumSourceRecommendedHorizonSchema,
-  openingLessonCount: z.number().int().positive(),
   scopeSummary: z.string().min(1),
   initialSliceUsed: z.boolean(),
   initialSliceLabel: z.string().nullable().optional(),
   entryStrategy: CurriculumSourceEntryStrategySchema.nullable().optional(),
   entryLabel: z.string().nullable().optional(),
   continuationMode: CurriculumSourceContinuationModeSchema.nullable().optional(),
+  openingLessonRefs: z.array(z.string().min(1)).min(1),
+  openingSkillRefs: z.array(z.string().min(1)).default([]),
 }).strict();
 
 export type CurriculumLaunchPlan = z.infer<typeof CurriculumLaunchPlanSchema>;
@@ -238,6 +251,7 @@ export interface CurriculumTree {
 export const CurriculumUnitSchema = z.object({
   id: z.string(),
   sourceId: z.string(),
+  unitRef: z.string().min(1),
   title: z.string().min(1),
   description: z.string().optional(),
   sequence: z.number().int().nonnegative(),
@@ -249,17 +263,31 @@ export const CurriculumUnitSchema = z.object({
 
 export type CurriculumUnit = z.infer<typeof CurriculumUnitSchema>;
 
+export const CurriculumLessonTypeSchema = z.enum([
+  "task",
+  "skill_support",
+  "concept",
+  "setup",
+  "reflection",
+  "assessment",
+]);
+
+export type CurriculumLessonType = z.infer<typeof CurriculumLessonTypeSchema>;
+
 export const CurriculumLessonSchema = z.object({
   id: z.string(),
   unitId: z.string(),
+  unitRef: z.string().min(1),
+  lessonRef: z.string().min(1),
   title: z.string().min(1),
   description: z.string().optional(),
   subject: z.string().optional(),
   sequence: z.number().int().nonnegative(),
+  lessonType: CurriculumLessonTypeSchema,
   estimatedMinutes: z.number().optional(),
   materials: z.array(z.string()).default([]),
   objectives: z.array(z.string()).default([]),
-  linkedSkillTitles: z.array(z.string()).default([]),
+  linkedSkillRefs: z.array(z.string()).default([]),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });

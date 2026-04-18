@@ -40,6 +40,7 @@ function buildArtifact(overrides: Record<string, unknown> = {}) {
     entryStrategy: "use_as_is",
     entryLabel: null,
     continuationMode: "none",
+    deliveryPattern: "skill_first",
     suggestedTitle: "Fractions practice",
     confidence: "high",
     recommendedHorizon: "single_day",
@@ -198,6 +199,7 @@ test("executeSourceInterpret sends sourcePackages/sourceFiles and parses a works
 
   assert.equal(result.artifact.sourceKind, "bounded_material");
   assert.equal(result.artifact.recommendedHorizon, "single_day");
+  assert.equal(result.artifact.deliveryPattern, "skill_first");
   assert.equal(request.url, "http://learning-core.test/v1/operations/source_interpret/execute");
   assert.equal(request.body.input.requestedRoute, "single_lesson");
   assert.deepEqual(request.body.input.sourcePackages, sourcePackages);
@@ -224,6 +226,7 @@ test("executeSourceInterpret parses a weekly plan result", async () => {
       entryStrategy: "timebox_start",
       entryLabel: "week 1",
       continuationMode: "timebox",
+      deliveryPattern: "timeboxed",
       recommendedHorizon: "one_week",
       suggestedTitle: "Week 1 math",
       detectedChunks: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
@@ -233,6 +236,7 @@ test("executeSourceInterpret parses a weekly plan result", async () => {
   assert.equal(result.artifact.sourceKind, "timeboxed_plan");
   assert.equal(result.artifact.entryStrategy, "timebox_start");
   assert.equal(result.artifact.recommendedHorizon, "one_week");
+  assert.equal(result.artifact.deliveryPattern, "timeboxed");
 });
 
 test("executeSourceInterpret parses an ordered outline result", async () => {
@@ -253,6 +257,7 @@ test("executeSourceInterpret parses an ordered outline result", async () => {
       sourceKind: "structured_sequence",
       entryStrategy: "sequential_start",
       continuationMode: "sequential",
+      deliveryPattern: "concept_first",
       recommendedHorizon: "few_days",
       suggestedTitle: "Math outline",
       detectedChunks: ["Number sense", "Fractions", "Decimals"],
@@ -283,6 +288,7 @@ test("executeSourceInterpret parses a whole-book result with a bounded initial h
       entryStrategy: "section_start",
       entryLabel: "chapter 1",
       continuationMode: "sequential",
+      deliveryPattern: "task_first",
       recommendedHorizon: "one_week",
       suggestedTitle: "Kids in the Kitchen",
       detectedChunks: ["Chapter 1", "Chapter 2", "Chapter 3"],
@@ -313,6 +319,7 @@ test("executeSourceInterpret parses a topic seed result", async () => {
       sourceKind: "topic_seed",
       entryStrategy: "scaffold_only",
       continuationMode: "manual_review",
+      deliveryPattern: "mixed",
       recommendedHorizon: "starter_module",
       suggestedTitle: "Fractions",
       detectedChunks: ["fractions"],
@@ -322,6 +329,7 @@ test("executeSourceInterpret parses a topic seed result", async () => {
   assert.equal(result.artifact.sourceKind, "topic_seed");
   assert.equal(result.artifact.entryStrategy, "scaffold_only");
   assert.equal(result.artifact.recommendedHorizon, "starter_module");
+  assert.equal(result.artifact.deliveryPattern, "mixed");
 });
 
 test("executeSourceInterpret parses an ambiguous conservative result", async () => {
@@ -343,6 +351,7 @@ test("executeSourceInterpret parses an ambiguous conservative result", async () 
       entryStrategy: "scaffold_only",
       continuationMode: "manual_review",
       suggestedTitle: "Starter curriculum shell",
+      deliveryPattern: "mixed",
       confidence: "low",
       recommendedHorizon: "few_days",
       followUpQuestion: "Should this start from a specific chapter or topic?",

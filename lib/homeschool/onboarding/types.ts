@@ -51,6 +51,14 @@ export const SOURCE_CONTINUATION_MODES = [
   "manual_review",
 ] as const;
 
+export const SOURCE_DELIVERY_PATTERNS = [
+  "task_first",
+  "skill_first",
+  "concept_first",
+  "timeboxed",
+  "mixed",
+] as const;
+
 export type HomeschoolOnboardingInput = {
   organizationId: string;
   householdName: string;
@@ -92,6 +100,8 @@ export type SourceEntryStrategy = (typeof SOURCE_ENTRY_STRATEGIES)[number];
 
 export type SourceContinuationMode = (typeof SOURCE_CONTINUATION_MODES)[number];
 
+export type SourceDeliveryPattern = (typeof SOURCE_DELIVERY_PATTERNS)[number];
+
 export type HomeschoolFastPathOnboardingInput = {
   organizationId: string;
   learnerName: string;
@@ -116,6 +126,7 @@ export type HomeschoolFastPathPreview = {
   entryStrategy: SourceEntryStrategy;
   entryLabel?: string | null;
   continuationMode: SourceContinuationMode;
+  deliveryPattern: SourceDeliveryPattern;
   title: string;
   detectedChunks: string[];
   assumptions: string[];
@@ -140,6 +151,7 @@ export type HomeschoolFastPathSourceModel = {
   entryStrategy: SourceEntryStrategy;
   entryLabel?: string | null;
   continuationMode: SourceContinuationMode;
+  deliveryPattern: SourceDeliveryPattern;
   recommendedHorizon: CurriculumGenerationHorizon;
   assumptions: string[];
   detectedChunks: string[];
@@ -153,13 +165,13 @@ export type HomeschoolFastPathLaunchPlan = {
   scopeSummary?: string | null;
   initialSliceUsed: boolean;
   initialSliceLabel?: string | null;
-  openingLessonCount?: number;
+  openingLessonRefs?: string[];
+  openingSkillRefs?: string[];
   lastGeneratedLessonTitle?: string | null;
 };
 
 export type HomeschoolFastPathLaunchSummary = {
   chosenHorizon: CurriculumGenerationHorizon;
-  openingLessonCount: number;
   summaryText: string;
   scopeSummary?: string | null;
   initialSliceUsed: boolean;

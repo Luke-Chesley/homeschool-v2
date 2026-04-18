@@ -5,6 +5,7 @@ import {
   CurriculumSourceEntryStrategySchema,
   CurriculumSourceRecommendedHorizonSchema,
   JsonRecordSchema,
+  CurriculumLessonTypeSchema,
 } from "./types.ts";
 
 const CurriculumAiChatRoleSchema = z.enum(["user", "assistant"]);
@@ -95,18 +96,22 @@ export const CurriculumAiPacingSchema = z.object({
 export type CurriculumAiPacing = z.infer<typeof CurriculumAiPacingSchema>;
 
 export const CurriculumAiLessonSchema = z.object({
+  unitRef: z.string().trim().min(1).max(180),
+  lessonRef: z.string().trim().min(1).max(180),
   title: z.string().trim().min(1).max(180),
   description: z.string().trim().min(1).max(600),
   subject: z.string().trim().min(1).max(80).optional(),
+  lessonType: CurriculumLessonTypeSchema,
   estimatedMinutes: z.number().int().positive().max(240).optional(),
   materials: truncatedArraySchema(z.string().trim().min(1).max(180), 12),
   objectives: truncatedArraySchema(z.string().trim().min(1).max(220), 8),
-  linkedSkillTitles: truncatedArraySchema(z.string().trim().min(1).max(180), 8),
+  linkedSkillRefs: truncatedArraySchema(z.string().trim().min(1).max(1_000), 8),
 });
 
 export type CurriculumAiLesson = z.infer<typeof CurriculumAiLessonSchema>;
 
 export const CurriculumAiUnitSchema = z.object({
+  unitRef: z.string().trim().min(1).max(180),
   title: z.string().trim().min(1).max(180),
   description: z.string().trim().min(1).max(700),
   estimatedWeeks: z.number().positive().max(52).optional(),
@@ -150,13 +155,14 @@ export type CurriculumAiProgression = z.infer<typeof CurriculumAiProgressionSche
 
 export const CurriculumLaunchPlanSchema = z.object({
   recommendedHorizon: CurriculumSourceRecommendedHorizonSchema,
-  openingLessonCount: z.number().int().positive(),
   scopeSummary: z.string().trim().min(1).max(1_200),
   initialSliceUsed: z.boolean(),
   initialSliceLabel: z.string().trim().min(1).max(240).nullable().optional(),
   entryStrategy: CurriculumSourceEntryStrategySchema.nullable().optional(),
   entryLabel: z.string().trim().min(1).max(240).nullable().optional(),
   continuationMode: CurriculumSourceContinuationModeSchema.nullable().optional(),
+  openingLessonRefs: z.array(z.string().trim().min(1).max(180)).min(1),
+  openingSkillRefs: z.array(z.string().trim().min(1).max(1_000)).default([]),
 });
 
 export type CurriculumLaunchPlan = z.infer<typeof CurriculumLaunchPlanSchema>;

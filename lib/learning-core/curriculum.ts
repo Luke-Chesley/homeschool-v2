@@ -11,6 +11,7 @@ import {
 } from "@/lib/curriculum/ai-draft";
 import {
   CurriculumSourceContinuationModeSchema,
+  CurriculumSourceDeliveryPatternSchema,
   CurriculumSourceEntryStrategySchema,
   CurriculumSourceIntakeRouteSchema,
   CurriculumSourceInterpretKindSchema,
@@ -73,6 +74,7 @@ export const CurriculumGenerateSourceEntryInputSchema = z
     entryStrategy: CurriculumSourceEntryStrategySchema,
     entryLabel: z.string().trim().min(1).max(240).nullable().optional(),
     continuationMode: CurriculumSourceContinuationModeSchema,
+    deliveryPattern: CurriculumSourceDeliveryPatternSchema,
     recommendedHorizon: CurriculumSourceRecommendedHorizonSchema,
     sourceText: z.string().trim().min(1),
     sourcePackages: z.array(IntakeSourcePackageContextSchema),

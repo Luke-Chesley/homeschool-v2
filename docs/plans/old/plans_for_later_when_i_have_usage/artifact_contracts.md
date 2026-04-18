@@ -134,7 +134,7 @@ Be explicit about:
 - pacing fields
 - document tree
 - units.lessons.estimatedMinutes
-- linkedSkillTitles / objectives
+- linkedSkillLabels / objectives
 - any places where operational persistence diverges from raw artifact shape
 
 Acceptance criteria:

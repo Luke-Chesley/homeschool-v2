@@ -21,18 +21,22 @@ export interface ImportedCurriculumDocument {
   progression?: CurriculumAiProgression;
   metadata?: Record<string, unknown>;
   units?: Array<{
+    unitRef: string;
     title: string;
     description: string;
     estimatedWeeks?: number;
     estimatedSessions?: number;
     lessons: Array<{
+      unitRef: string;
+      lessonRef: string;
+      lessonType: "task" | "skill_support" | "concept" | "setup" | "reflection" | "assessment";
       title: string;
       description: string;
       subject?: string;
       estimatedMinutes?: number;
       materials: string[];
       objectives: string[];
-      linkedSkillTitles: string[];
+      linkedSkillRefs: string[];
     }>;
   }>;
 }

@@ -19,6 +19,14 @@ import {
 import { buildLearningCoreEnvelope } from "./envelope";
 import { executeLearningCoreOperation } from "./operations";
 
+export const SourceDeliveryPatternSchema = z.enum([
+  "task_first",
+  "skill_first",
+  "concept_first",
+  "timeboxed",
+  "mixed",
+]);
+
 export const SourceInterpretInputSchema = z
   .object({
     learnerName: z.string().nullable().optional(),
@@ -42,6 +50,7 @@ export const SourceInterpretArtifactSchema = z
     entryStrategy: CurriculumSourceEntryStrategySchema,
     entryLabel: z.string().nullable().optional(),
     continuationMode: CurriculumSourceContinuationModeSchema,
+    deliveryPattern: SourceDeliveryPatternSchema,
     suggestedTitle: z.string(),
     confidence: CurriculumSourceIntakeConfidenceSchema,
     recommendedHorizon: CurriculumSourceRecommendedHorizonSchema,

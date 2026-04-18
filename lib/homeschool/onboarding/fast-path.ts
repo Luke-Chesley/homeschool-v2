@@ -11,6 +11,7 @@ import type {
   HomeschoolFastPathPreview,
   HomeschoolFastPathSourceModel,
   SourceContinuationMode,
+  SourceDeliveryPattern,
   SourceEntryStrategy,
   SourceInterpretSourceKind,
 } from "./types";
@@ -264,6 +265,7 @@ export function buildFastPathPreview(params: {
     entryStrategy: SourceEntryStrategy;
     entryLabel?: string | null;
     continuationMode: SourceContinuationMode;
+    deliveryPattern: SourceDeliveryPattern;
     suggestedTitle: string;
     confidence: CurriculumIntakeConfidence;
     recommendedHorizon: CurriculumGenerationHorizon;
@@ -294,6 +296,7 @@ export function buildFastPathPreview(params: {
     entryStrategy: params.interpretation.entryStrategy,
     entryLabel: params.interpretation.entryLabel ?? null,
     continuationMode: params.interpretation.continuationMode,
+    deliveryPattern: params.interpretation.deliveryPattern,
     recommendedHorizon: params.interpretation.recommendedHorizon,
     assumptions: params.interpretation.assumptions,
     detectedChunks:
@@ -330,6 +333,7 @@ export function buildFastPathPreview(params: {
     entryStrategy: params.interpretation.entryStrategy,
     entryLabel: params.interpretation.entryLabel ?? null,
     continuationMode: params.interpretation.continuationMode,
+    deliveryPattern: params.interpretation.deliveryPattern,
     title:
       params.corrections?.title?.trim()
       || params.interpretation.suggestedTitle
@@ -381,47 +385,26 @@ function resolveSummaryLaunchPlan(params: {
     | "scopeSummary"
     | "initialSliceUsed"
     | "initialSliceLabel"
-    | "openingLessonCount"
+    | "openingLessonRefs"
   >;
-  openingLessonCount?: number;
   initialSliceLabel?: string | null;
 }) {
   const previewLaunchPlan = params.preview?.launchPlan;
-  const chosenHorizon =
-    params.launchPlan?.chosenHorizon
-    ?? previewLaunchPlan?.chosenHorizon
-    ?? params.preview?.chosenHorizon;
+  const launchPlan = params.launchPlan ?? previewLaunchPlan;
+  const chosenHorizon = params.preview?.chosenHorizon ?? launchPlan?.chosenHorizon;
 
   if (!chosenHorizon) {
     throw new Error("Launch summary requires a chosen horizon.");
   }
 
-  const openingLessonCount =
-    params.openingLessonCount
-    ?? params.launchPlan?.openingLessonCount
-    ?? previewLaunchPlan?.openingLessonCount;
-
-  if (openingLessonCount == null || openingLessonCount < 1) {
-    throw new Error("Launch summary requires a positive opening lesson count.");
-  }
-
   return {
     chosenHorizon,
-    openingLessonCount,
-    scopeSummary:
-      params.launchPlan?.scopeSummary
-      ?? previewLaunchPlan?.scopeSummary
-      ?? params.preview?.scopeSummary
-      ?? null,
-    initialSliceUsed:
-      params.launchPlan?.initialSliceUsed
-      ?? previewLaunchPlan?.initialSliceUsed
-      ?? params.preview?.initialSliceUsed
-      ?? false,
+    openingLessonRefs: launchPlan?.openingLessonRefs ?? [],
+    scopeSummary: launchPlan?.scopeSummary ?? params.preview?.scopeSummary ?? null,
+    initialSliceUsed: launchPlan?.initialSliceUsed ?? params.preview?.initialSliceUsed ?? false,
     initialSliceLabel:
       params.initialSliceLabel
-      ?? params.launchPlan?.initialSliceLabel
-      ?? previewLaunchPlan?.initialSliceLabel
+      ?? launchPlan?.initialSliceLabel
       ?? params.preview?.initialSliceLabel
       ?? null,
   };
@@ -442,31 +425,36 @@ export function buildFastPathLaunchSummary(params: {
     | "scopeSummary"
     | "initialSliceUsed"
     | "initialSliceLabel"
-    | "openingLessonCount"
+    | "openingLessonRefs"
   >;
-  openingLessonCount?: number;
   initialSliceLabel?: string | null;
 }): HomeschoolFastPathLaunchSummary {
   const launchPlan = resolveSummaryLaunchPlan(params);
+  const openingLessonTotal = launchPlan.openingLessonRefs.length;
   let summaryText: string;
 
   if (launchPlan.chosenHorizon === "single_day") {
     summaryText = "We set this up for today.";
-  } else if (launchPlan.initialSliceUsed && launchPlan.initialSliceLabel) {
-    summaryText = `We started with ${launchPlan.initialSliceLabel}, set up the opening ${launchPlan.openingLessonCount} lessons, and opened day 1.`;
-  } else if (launchPlan.chosenHorizon === "starter_module") {
-    summaryText = `We built a starter module with ${launchPlan.openingLessonCount} lessons and opened day 1.`;
-  } else if (launchPlan.chosenHorizon === "two_weeks") {
-    summaryText = `We set up the opening ${launchPlan.openingLessonCount} lessons across ${describeChosenHorizon(
+  } else if (
+    launchPlan.initialSliceUsed &&
+    launchPlan.initialSliceLabel &&
+    openingLessonTotal > 0
+  ) {
+    summaryText = `We started with ${launchPlan.initialSliceLabel}, set up the opening ${openingLessonTotal} lessons, and opened day 1.`;
+  } else if (launchPlan.chosenHorizon === "starter_module" && openingLessonTotal > 0) {
+    summaryText = `We built a starter module with ${openingLessonTotal} lessons and opened day 1.`;
+  } else if (launchPlan.chosenHorizon === "two_weeks" && openingLessonTotal > 0) {
+    summaryText = `We set up the opening ${openingLessonTotal} lessons across ${describeChosenHorizon(
       launchPlan.chosenHorizon,
     )} and opened day 1.`;
+  } else if (openingLessonTotal > 0) {
+    summaryText = `We set up the opening ${openingLessonTotal} lessons and opened day 1.`;
   } else {
-    summaryText = `We set up the opening ${launchPlan.openingLessonCount} lessons and opened day 1.`;
+    summaryText = "We set up the opening launch window and opened day 1.";
   }
 
   return {
     chosenHorizon: launchPlan.chosenHorizon,
-    openingLessonCount: launchPlan.openingLessonCount,
     summaryText,
     scopeSummary: launchPlan.scopeSummary,
     initialSliceUsed: launchPlan.initialSliceUsed,

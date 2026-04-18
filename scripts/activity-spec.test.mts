@@ -34,7 +34,7 @@ const minimalValidSpec: ActivitySpec = {
   purpose: "Practice identifying digit place values in 5-digit numbers.",
   activityKind: "guided_practice",
   linkedObjectiveIds: [],
-  linkedSkillTitles: ["place value"],
+  linkedSkillLabels: ["place value"],
   estimatedMinutes: 15,
   interactionMode: "digital",
   components: [
@@ -76,7 +76,7 @@ const offlineSpec: ActivitySpec = {
   purpose: "Observe and record 5 plants in the local area.",
   activityKind: "offline_real_world",
   linkedObjectiveIds: [],
-  linkedSkillTitles: ["plant identification"],
+  linkedSkillLabels: ["plant identification"],
   estimatedMinutes: 30,
   interactionMode: "offline",
   components: [
@@ -133,7 +133,7 @@ const chessSpec: ActivitySpec = {
   purpose: "Play the queen move that gives check from the given position.",
   activityKind: "guided_practice",
   linkedObjectiveIds: [],
-  linkedSkillTitles: ["forcing check"],
+  linkedSkillLabels: ["forcing check"],
   estimatedMinutes: 6,
   interactionMode: "digital",
   components: [
@@ -544,7 +544,7 @@ test("single_select spec — validates and configures scoring correctly", () => 
     purpose: "Test recall of place value concepts.",
     activityKind: "retrieval",
     linkedObjectiveIds: [],
-    linkedSkillTitles: [],
+    linkedSkillLabels: [],
     estimatedMinutes: 10,
     interactionMode: "digital",
     components: [
@@ -598,7 +598,7 @@ test("project step with rubric self-check — validates", () => {
     purpose: "Review your story draft against the writing rubric.",
     activityKind: "project_step",
     linkedObjectiveIds: [],
-    linkedSkillTitles: ["narrative writing"],
+    linkedSkillLabels: ["narrative writing"],
     estimatedMinutes: 20,
     interactionMode: "digital",
     components: [
@@ -664,7 +664,7 @@ test("reflection activity — validates and captures confidence signal", () => {
     purpose: "Reflect on what was learned and capture confidence.",
     activityKind: "reflection",
     linkedObjectiveIds: [],
-    linkedSkillTitles: [],
+    linkedSkillLabels: [],
     estimatedMinutes: 5,
     interactionMode: "digital",
     components: [
@@ -974,7 +974,7 @@ test("computeLessonDraftFingerprint — skill overlap does not cause fingerprint
   assert.notEqual(fpA, fpB, "overlapping skills must not cause fingerprint collision");
 });
 
-test("buildLearningCoreActivityGenerateInput — retains linked skill titles for traceability", () => {
+test("buildLearningCoreActivityGenerateInput — retains linked skill labels for traceability", () => {
   const input = buildLearningCoreActivityGenerateInput({
     lessonDraft: sampleLessonDraft,
     learnerName: "Alex",
@@ -1006,7 +1006,7 @@ test("activity hierarchy: one lesson draft → one request payload", () => {
   assert.equal(input.linked_skill_titles.length, 2);
 });
 
-test("evidence/progress traceability: request retains linked skill titles", () => {
+test("evidence/progress traceability: request retains linked skill labels", () => {
   const input = buildLearningCoreActivityGenerateInput({
     lessonDraft: sampleLessonDraft,
     learnerName: "Alex",

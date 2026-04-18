@@ -115,7 +115,7 @@ Tasks:
   - document tree
   - pacing
   - units/lessons
-  - titles/descriptions/objectives/linkedSkillTitles
+  - titles/descriptions/objectives/linkedSkillLabels
 - Instruct the model to generate:
   - phases/layers/bands
   - hard prerequisite edges

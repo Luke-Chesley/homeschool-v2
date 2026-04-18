@@ -48,6 +48,7 @@ function buildPreview(
       entryStrategy: "use_as_is",
       entryLabel: null,
       continuationMode: "none",
+      deliveryPattern: "skill_first",
       suggestedTitle: "Fractions practice",
       confidence: "high",
       recommendedHorizon: "single_day",
@@ -102,6 +103,7 @@ test("durable intake metadata accepts only the canonical source model", () => {
       entryStrategy: "explicit_range",
       entryLabel: "chapter 1",
       continuationMode: "sequential",
+      deliveryPattern: "skill_first",
       recommendedHorizon: "one_week",
       assumptions: ["Launch from chapter 1 and keep the rest for continuation."],
       detectedChunks: ["Chapter 1", "Chapter 2", "Chapter 3"],
@@ -121,7 +123,8 @@ test("durable intake metadata accepts only the canonical source model", () => {
       scopeSummary: "Start with chapter 1 and keep the rest available for later.",
       initialSliceUsed: true,
       initialSliceLabel: "chapter 1",
-      openingLessonCount: 4,
+      openingLessonRefs: ["lesson-1", "lesson-2", "lesson-3", "lesson-4"],
+      openingSkillRefs: ["skill-1", "skill-2"],
     },
     curriculumLineage: { operation: "curriculum_generate" },
     createdFrom: "onboarding_fast_path",
@@ -136,7 +139,7 @@ test("durable intake metadata accepts only the canonical source model", () => {
   assert.equal(parsed.sourceModel?.recommendedHorizon, "one_week");
   assert.equal(parsed.launchPlan?.recommendedHorizon, "one_week");
   assert.equal(parsed.sourceModel?.lineage?.operation, "source_interpret");
-  assert.equal(parsed.launchPlan?.openingLessonCount, 4);
+  assert.equal(parsed.launchPlan?.openingLessonRefs.length, 4);
   assert.equal(parsed.curriculumLineage?.operation, "curriculum_generate");
 });
 
@@ -183,13 +186,19 @@ test("case B: weekly plan infers one week and produces a bounded launch summary"
   });
   const summary = buildFastPathLaunchSummary({
     preview,
-    openingLessonCount: 4,
+    launchPlan: {
+      chosenHorizon: preview.chosenHorizon,
+      scopeSummary: preview.scopeSummary,
+      initialSliceUsed: preview.initialSliceUsed,
+      initialSliceLabel: preview.initialSliceLabel,
+      openingLessonRefs: ["lesson-1", "lesson-2", "lesson-3", "lesson-4"],
+    },
   });
 
   assert.equal(preview.chosenHorizon, "one_week");
   assert.equal(preview.needsConfirmation, false);
   assert.match(summary.summaryText, /opening 4 lessons/i);
-  assert.equal(summary.openingLessonCount, 4);
+  assert.deepEqual(summary.initialSliceUsed, true);
 });
 
 test("case C: clean outline stays bounded to a few days", () => {
@@ -270,7 +279,13 @@ test("case F: comprehensive source stays bounded and preserves its entry slice",
   });
   const summary = buildFastPathLaunchSummary({
     preview,
-    openingLessonCount: 6,
+    launchPlan: {
+      chosenHorizon: preview.chosenHorizon,
+      scopeSummary: preview.scopeSummary,
+      initialSliceUsed: preview.initialSliceUsed,
+      initialSliceLabel: preview.initialSliceLabel,
+      openingLessonRefs: ["lesson-1", "lesson-2", "lesson-3", "lesson-4", "lesson-5", "lesson-6"],
+    },
     initialSliceLabel: "chapter 1",
   });
 
@@ -278,7 +293,7 @@ test("case F: comprehensive source stays bounded and preserves its entry slice",
   assert.equal(preview.initialSliceUsed, true);
   assert.match(preview.scopeSummary, /chapter 1/i);
   assert.match(summary.summaryText, /chapter 1/i);
-  assert.equal(summary.openingLessonCount, 6);
+  assert.match(summary.summaryText, /opening 6 lessons/i);
 });
 
 test("case G: large source with explicit narrow request stays anchored to that range", () => {
@@ -323,6 +338,7 @@ test("preview carries canonical sourceModel and launchPlan blocks", () => {
       entryStrategy: "explicit_range",
       entryLabel: "chapter 1",
       continuationMode: "sequential",
+      deliveryPattern: "skill_first",
       recommendedHorizon: "one_week",
     },
   });
@@ -341,11 +357,11 @@ test("launch summary can be derived directly from launchPlan metadata", () => {
       scopeSummary: "Start with chapter 1 and keep the rest available for later.",
       initialSliceUsed: true,
       initialSliceLabel: "chapter 1",
-      openingLessonCount: 4,
+      openingLessonRefs: ["lesson-1", "lesson-2", "lesson-3", "lesson-4"],
     },
   });
 
-  assert.equal(summary.openingLessonCount, 4);
+  assert.match(summary.summaryText, /opening 4 lessons/i);
   assert.equal(summary.initialSliceUsed, true);
   assert.match(summary.summaryText, /chapter 1/i);
 });

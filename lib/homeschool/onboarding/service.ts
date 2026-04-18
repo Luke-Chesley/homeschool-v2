@@ -22,7 +22,6 @@ import {
   queueTodayLessonBuild,
 } from "@/lib/planning/today-service";
 import {
-  collapseWeeklyRouteToTodayWindow,
   getOrCreateWeeklyRouteBoardForLearner,
 } from "@/lib/planning/weekly-route-service";
 import { recordHomeschoolAuditEvent } from "@/lib/homeschool/reporting/service";
@@ -673,6 +672,7 @@ async function initializeCurriculum(input: HomeschoolOnboardingInput, learner: t
       entryStrategy: sourceInterpretResult.artifact.entryStrategy,
       entryLabel: sourceInterpretResult.artifact.entryLabel ?? null,
       continuationMode: sourceInterpretResult.artifact.continuationMode,
+      deliveryPattern: sourceInterpretResult.artifact.deliveryPattern,
       recommendedHorizon: sourceInterpretResult.artifact.recommendedHorizon,
       sourceText: resolvedSource.sourceInput,
       sourcePackages: resolvedSource.sourcePackageContexts,
@@ -707,6 +707,7 @@ async function initializeCurriculum(input: HomeschoolOnboardingInput, learner: t
           entryStrategy: sourceInterpretResult.artifact.entryStrategy,
           entryLabel: sourceInterpretResult.artifact.entryLabel ?? null,
           continuationMode: sourceInterpretResult.artifact.continuationMode,
+          deliveryPattern: sourceInterpretResult.artifact.deliveryPattern,
           recommendedHorizon: sourceInterpretResult.artifact.recommendedHorizon,
           assumptions: sourceInterpretResult.artifact.assumptions,
           detectedChunks: sourceInterpretResult.artifact.detectedChunks,
@@ -1040,8 +1041,13 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
   const sourceId = curriculum.id;
   const launchSummary = buildFastPathLaunchSummary({
     preview,
-    openingLessonCount: curriculumGeneration.launchContext.openingLessonCount,
-    initialSliceLabel: curriculumGeneration.launchContext.initialSliceLabel,
+    launchPlan: {
+      chosenHorizon: curriculumGeneration.launchContext.recommendedHorizon,
+      scopeSummary: curriculumGeneration.launchContext.scopeSummary ?? null,
+      initialSliceUsed: curriculumGeneration.launchContext.initialSliceUsed,
+      initialSliceLabel: curriculumGeneration.launchContext.initialSliceLabel ?? null,
+      openingLessonRefs: curriculumGeneration.launchContext.openingLessonRefs,
+    },
   });
   await setLiveCurriculumSource(input.organizationId, sourceId);
 
@@ -1050,11 +1056,6 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
     sourceId,
   });
   const todayDate = new Date().toISOString().slice(0, 10);
-  await collapseWeeklyRouteToTodayWindow({
-    learnerId: primaryLearner.id,
-    sourceId,
-    date: todayDate,
-  });
   const todayWorkspace = await getTodayWorkspace({
     organizationId: input.organizationId,
     learnerId: primaryLearner.id,
@@ -1085,7 +1086,6 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
         entryStrategy: preview.entryStrategy,
         entryLabel: preview.entryLabel ?? null,
         continuationMode: preview.continuationMode,
-        openingLessonCount: curriculumGeneration.launchContext.openingLessonCount,
       },
     });
   }
@@ -1129,7 +1129,7 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
         followUpQuestion: preview.followUpQuestion ?? null,
         initialSliceUsed: curriculumGeneration.launchContext.initialSliceUsed,
         initialSliceLabel: curriculumGeneration.launchContext.initialSliceLabel,
-        scopeSummary: preview.scopeSummary,
+        scopeSummary: curriculumGeneration.launchContext.scopeSummary,
         assumptions: preview.assumptions,
         detectedChunks: preview.detectedChunks,
         sourceModel: preview.sourceModel,
@@ -1158,7 +1158,6 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
       entryStrategy: preview.entryStrategy,
       entryLabel: preview.entryLabel ?? null,
       continuationMode: preview.continuationMode,
-      openingLessonCount: launchSummary.openingLessonCount,
     },
   });
 

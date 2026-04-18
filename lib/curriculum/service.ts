@@ -16,20 +16,28 @@ import type { CurriculumGenerateRequestMode } from "@/lib/learning-core/curricul
 import { ensureOrganizationPlatformSettings } from "@/lib/platform/settings";
 
 import type { CurriculumAiGeneratedArtifact } from "./ai-draft";
+import {
+  canonicalizeCurriculumArtifact,
+  type CanonicalCurriculumUnit,
+} from "./canonical-artifact";
 import { loadLocalCurriculumJson, type ImportedCurriculumDocument } from "./local-json-import";
 import { normalizeCurriculumDocument } from "./normalization";
 import {
   CurriculumLaunchPlanSchema,
+  CurriculumLessonTypeSchema,
   CurriculumSourceIntakeSchema,
   CurriculumSourceModelSchema,
   JsonRecordSchema,
 } from "./types";
 import type {
+  CurriculumLesson,
+  CurriculumLessonType,
   CurriculumNode,
   CurriculumSource,
   CurriculumSourceIntake,
   CurriculumTree,
   CurriculumTreeNode,
+  CurriculumUnit,
   CreateCurriculumLessonInput,
   CreateCurriculumObjectiveInput,
   CreateCurriculumSourceInput,
@@ -74,6 +82,34 @@ function extractSourcePacing(
 function extractSourceIntake(metadata: Record<string, unknown>): CurriculumSourceIntake | undefined {
   const parsed = CurriculumSourceIntakeSchema.safeParse(metadata.intake);
   return parsed.success ? parsed.data : undefined;
+}
+
+function requireUnitRef(itemId: string, metadata: Record<string, unknown>): string {
+  if (typeof metadata.unitRef === "string" && metadata.unitRef.length > 0) {
+    return metadata.unitRef;
+  }
+
+  throw new Error(`Curriculum unit ${itemId} is missing canonical unitRef.`);
+}
+
+function requireLessonMetadata(
+  itemId: string,
+  metadata: Record<string, unknown>,
+): { unitRef: string; lessonRef: string; lessonType: CurriculumLessonType } {
+  const unitRef = typeof metadata.unitRef === "string" && metadata.unitRef.length > 0
+    ? metadata.unitRef
+    : null;
+  const lessonRef = typeof metadata.lessonRef === "string" && metadata.lessonRef.length > 0
+    ? metadata.lessonRef
+    : null;
+  const parsedLessonType = CurriculumLessonTypeSchema.safeParse(metadata.lessonType);
+  const lessonType = parsedLessonType.success ? parsedLessonType.data : null;
+
+  if (!unitRef || !lessonRef || !lessonType) {
+    throw new Error(`Curriculum lesson ${itemId} is missing canonical lesson metadata.`);
+  }
+
+  return { unitRef, lessonRef, lessonType };
 }
 
 function extractSourceModel(metadata: Record<string, unknown>) {
@@ -270,6 +306,7 @@ function countEstimatedSessions(units: ImportedCurriculumDocument["units"] = [])
 }
 
 function buildCurriculumArtifactMetadata(artifact: CurriculumAiGeneratedArtifact) {
+  const canonicalArtifact = canonicalizeCurriculumArtifact(artifact);
   return {
     intakeSummary: artifact.intakeSummary,
     teachingApproach: artifact.source.teachingApproach,
@@ -277,17 +314,27 @@ function buildCurriculumArtifactMetadata(artifact: CurriculumAiGeneratedArtifact
     parentNotes: artifact.source.parentNotes,
     rationale: artifact.source.rationale,
     pacing: artifact.pacing,
-    launchPlan: artifact.launchPlan,
+    launchPlan: canonicalArtifact.launchPlan,
+    skillCatalog: canonicalArtifact.skillCatalog,
     generatedUnitCount: artifact.units.length,
     generatedLessonCount: artifact.units.reduce((total, unit) => total + unit.lessons.length, 0),
     generatedEstimatedSessionCount: countEstimatedSessions(artifact.units),
   };
 }
 
+type ImportedCanonicalCurriculumUnit = ImportedCurriculumDocument["units"] extends Array<infer _T>
+  ? CanonicalCurriculumUnit
+  : CanonicalCurriculumUnit;
+
+type ImportedCanonicalCurriculumDocument = Omit<ImportedCurriculumDocument, "units"> & {
+  units?: ImportedCanonicalCurriculumUnit[];
+};
+
 function toImportedCurriculumDocumentFromCurriculumArtifact(
   artifact: CurriculumAiGeneratedArtifact,
   kind: CreateCurriculumSourceInput["kind"] = "ai_draft",
-): ImportedCurriculumDocument {
+): ImportedCanonicalCurriculumDocument {
+  const canonicalArtifact = canonicalizeCurriculumArtifact(artifact);
   return {
     title: artifact.source.title,
     description: artifact.source.description,
@@ -297,7 +344,7 @@ function toImportedCurriculumDocumentFromCurriculumArtifact(
     gradeLevels: artifact.source.gradeLevels,
     document: artifact.document,
     progression: artifact.progression,
-    units: artifact.units,
+    units: canonicalArtifact.units,
     metadata: buildCurriculumArtifactMetadata(artifact),
   };
 }
@@ -329,7 +376,7 @@ async function buildCreatedCurriculumArtifactImportResult(params: {
 async function replaceCurriculumOutline(
   tx: Pick<ReturnType<typeof getDb>, "delete" | "insert">,
   sourceId: string,
-  units: ImportedCurriculumDocument["units"] = [],
+  units: ImportedCanonicalCurriculumDocument["units"] = [],
 ) {
   await tx.delete(curriculumItems).where(eq(curriculumItems.sourceId, sourceId));
 
@@ -349,6 +396,7 @@ async function replaceCurriculumOutline(
         metadata: {
           estimatedWeeks: unit.estimatedWeeks ?? null,
           estimatedSessions: unit.estimatedSessions ?? null,
+          unitRef: unit.unitRef,
         },
       })
       .returning();
@@ -367,7 +415,10 @@ async function replaceCurriculumOutline(
         metadata: {
           materials: lesson.materials ?? [],
           objectives: lesson.objectives ?? [],
-          linkedSkillTitles: lesson.linkedSkillTitles ?? [],
+          unitRef: lesson.unitRef,
+          lessonRef: lesson.lessonRef,
+          lessonType: lesson.lessonType,
+          linkedSkillRefs: lesson.linkedSkillRefs ?? [],
         },
       });
     }
@@ -868,7 +919,7 @@ export async function getCurriculumTree(
   return buildCurriculumTree(source, nodes);
 }
 
-export async function listCurriculumUnits(sourceId: string) {
+export async function listCurriculumUnits(sourceId: string): Promise<CurriculumUnit[]> {
   const items = await getDb().query.curriculumItems.findMany({
     where: (table, { eq }) => eq(table.sourceId, sourceId),
     orderBy: (table, { asc }) => [asc(table.position), asc(table.createdAt)],
@@ -888,12 +939,13 @@ export async function listCurriculumUnits(sourceId: string) {
         typeof item.metadata.estimatedSessions === "number"
           ? item.metadata.estimatedSessions
           : undefined,
+      unitRef: requireUnitRef(item.id, item.metadata),
       createdAt: item.createdAt.toISOString(),
       updatedAt: item.updatedAt.toISOString(),
     }));
 }
 
-export async function createCurriculumUnit(input: CreateCurriculumUnitInput) {
+export async function createCurriculumUnit(input: CreateCurriculumUnitInput): Promise<CurriculumUnit> {
   const [unit] = await getDb()
     .insert(curriculumItems)
     .values({
@@ -909,6 +961,7 @@ export async function createCurriculumUnit(input: CreateCurriculumUnitInput) {
       metadata: {
         estimatedWeeks: input.estimatedWeeks ?? null,
         estimatedSessions: input.estimatedSessions ?? null,
+        unitRef: input.unitRef,
       },
     })
     .returning();
@@ -925,6 +978,7 @@ export async function createCurriculumUnit(input: CreateCurriculumUnitInput) {
       typeof unit.metadata.estimatedSessions === "number"
         ? unit.metadata.estimatedSessions
         : undefined,
+    unitRef: requireUnitRef(unit.id, unit.metadata),
     createdAt: unit.createdAt.toISOString(),
     updatedAt: unit.updatedAt.toISOString(),
   };
@@ -933,7 +987,7 @@ export async function createCurriculumUnit(input: CreateCurriculumUnitInput) {
 export async function updateCurriculumUnit(
   id: string,
   patch: Partial<CreateCurriculumUnitInput>,
-) {
+): Promise<CurriculumUnit> {
   const existing = await getDb().query.curriculumItems.findFirst({
     where: (table, { eq }) => eq(table.id, id),
   });
@@ -949,6 +1003,7 @@ export async function updateCurriculumUnit(
         ...(existing.metadata ?? {}),
         estimatedWeeks: patch.estimatedWeeks ?? existing.metadata.estimatedWeeks ?? null,
         estimatedSessions: patch.estimatedSessions ?? existing.metadata.estimatedSessions ?? null,
+        unitRef: patch.unitRef ?? existing.metadata.unitRef ?? null,
       },
       updatedAt: new Date(),
     })
@@ -967,6 +1022,7 @@ export async function updateCurriculumUnit(
       typeof unit.metadata.estimatedSessions === "number"
         ? unit.metadata.estimatedSessions
         : undefined,
+    unitRef: requireUnitRef(unit.id, unit.metadata),
     createdAt: unit.createdAt.toISOString(),
     updatedAt: unit.updatedAt.toISOString(),
   };
@@ -976,7 +1032,7 @@ export async function deleteCurriculumUnit(id: string) {
   await getDb().delete(curriculumItems).where(eq(curriculumItems.id, id));
 }
 
-export async function listCurriculumLessons(unitId: string) {
+export async function listCurriculumLessons(unitId: string): Promise<CurriculumLesson[]> {
   const unit = await getDb().query.curriculumItems.findFirst({
     where: (table, { eq }) => eq(table.id, unitId),
   });
@@ -989,25 +1045,32 @@ export async function listCurriculumLessons(unitId: string) {
 
   return items
     .filter((item) => item.itemType === "lesson" && item.parentItemId === unitId)
-    .map((item) => ({
-      id: item.id,
-      unitId,
-      title: item.title,
-      description: item.description ?? undefined,
-      subject: item.subject ?? undefined,
-      sequence: item.position,
-      estimatedMinutes: item.estimatedMinutes ?? undefined,
-      materials: Array.isArray(item.metadata.materials) ? (item.metadata.materials as string[]) : [],
-      objectives: Array.isArray(item.metadata.objectives) ? (item.metadata.objectives as string[]) : [],
-      linkedSkillTitles: Array.isArray(item.metadata.linkedSkillTitles)
-        ? (item.metadata.linkedSkillTitles as string[])
-        : [],
-      createdAt: item.createdAt.toISOString(),
-      updatedAt: item.updatedAt.toISOString(),
-    }));
+    .map((item) => {
+      const { unitRef, lessonRef, lessonType } = requireLessonMetadata(item.id, item.metadata);
+
+      return {
+        id: item.id,
+        unitId,
+        unitRef,
+        lessonRef,
+        title: item.title,
+        description: item.description ?? undefined,
+        subject: item.subject ?? undefined,
+        sequence: item.position,
+        lessonType,
+        estimatedMinutes: item.estimatedMinutes ?? undefined,
+        materials: Array.isArray(item.metadata.materials) ? (item.metadata.materials as string[]) : [],
+        objectives: Array.isArray(item.metadata.objectives) ? (item.metadata.objectives as string[]) : [],
+        linkedSkillRefs: Array.isArray(item.metadata.linkedSkillRefs)
+          ? (item.metadata.linkedSkillRefs as string[])
+          : [],
+        createdAt: item.createdAt.toISOString(),
+        updatedAt: item.updatedAt.toISOString(),
+      };
+    });
 }
 
-export async function createCurriculumLesson(input: CreateCurriculumLessonInput) {
+export async function createCurriculumLesson(input: CreateCurriculumLessonInput): Promise<CurriculumLesson> {
   const unit = await getDb().query.curriculumItems.findFirst({
     where: (table, { eq }) => eq(table.id, input.unitId),
   });
@@ -1028,18 +1091,28 @@ export async function createCurriculumLesson(input: CreateCurriculumLessonInput)
       metadata: {
         materials: input.materials,
         objectives: input.objectives ?? [],
-        linkedSkillTitles: input.linkedSkillTitles ?? [],
+        unitRef:
+          input.unitRef
+          ?? (typeof unit.metadata.unitRef === "string" ? unit.metadata.unitRef : null),
+        lessonRef: input.lessonRef,
+        lessonType: input.lessonType,
+        linkedSkillRefs: input.linkedSkillRefs ?? [],
       },
     })
     .returning();
 
+  const { unitRef, lessonRef, lessonType } = requireLessonMetadata(lesson.id, lesson.metadata);
+
   return {
     id: lesson.id,
     unitId: input.unitId,
+    unitRef,
+    lessonRef,
     title: lesson.title,
     description: lesson.description ?? undefined,
     subject: lesson.subject ?? undefined,
     sequence: lesson.position,
+    lessonType,
     estimatedMinutes: lesson.estimatedMinutes ?? undefined,
     materials: Array.isArray(lesson.metadata.materials)
       ? (lesson.metadata.materials as string[])
@@ -1047,8 +1120,8 @@ export async function createCurriculumLesson(input: CreateCurriculumLessonInput)
     objectives: Array.isArray(lesson.metadata.objectives)
       ? (lesson.metadata.objectives as string[])
       : [],
-    linkedSkillTitles: Array.isArray(lesson.metadata.linkedSkillTitles)
-      ? (lesson.metadata.linkedSkillTitles as string[])
+    linkedSkillRefs: Array.isArray(lesson.metadata.linkedSkillRefs)
+      ? (lesson.metadata.linkedSkillRefs as string[])
       : [],
     createdAt: lesson.createdAt.toISOString(),
     updatedAt: lesson.updatedAt.toISOString(),
@@ -1076,23 +1149,31 @@ export async function updateCurriculumLesson(
         ...(existing.metadata ?? {}),
         materials: patch.materials ?? (existing.metadata.materials as string[] | undefined) ?? [],
         objectives: patch.objectives ?? (existing.metadata.objectives as string[] | undefined) ?? [],
-        linkedSkillTitles:
-          patch.linkedSkillTitles ??
-          (existing.metadata.linkedSkillTitles as string[] | undefined) ??
-          [],
+        unitRef: patch.unitRef ?? existing.metadata.unitRef ?? null,
+        lessonRef: patch.lessonRef ?? existing.metadata.lessonRef ?? null,
+        lessonType: patch.lessonType ?? existing.metadata.lessonType ?? "task",
+        linkedSkillRefs:
+          patch.linkedSkillRefs
+          ?? (existing.metadata.linkedSkillRefs as string[] | undefined)
+          ?? [],
       },
       updatedAt: new Date(),
     })
     .where(eq(curriculumItems.id, id))
     .returning();
 
+  const { unitRef, lessonRef, lessonType } = requireLessonMetadata(lesson.id, lesson.metadata);
+
   return {
     id: lesson.id,
     unitId: lesson.parentItemId!,
+    unitRef,
+    lessonRef,
     title: lesson.title,
     description: lesson.description ?? undefined,
     subject: lesson.subject ?? undefined,
     sequence: lesson.position,
+    lessonType,
     estimatedMinutes: lesson.estimatedMinutes ?? undefined,
     materials: Array.isArray(lesson.metadata.materials)
       ? (lesson.metadata.materials as string[])
@@ -1100,8 +1181,8 @@ export async function updateCurriculumLesson(
     objectives: Array.isArray(lesson.metadata.objectives)
       ? (lesson.metadata.objectives as string[])
       : [],
-    linkedSkillTitles: Array.isArray(lesson.metadata.linkedSkillTitles)
-      ? (lesson.metadata.linkedSkillTitles as string[])
+    linkedSkillRefs: Array.isArray(lesson.metadata.linkedSkillRefs)
+      ? (lesson.metadata.linkedSkillRefs as string[])
       : [],
     createdAt: lesson.createdAt.toISOString(),
     updatedAt: lesson.updatedAt.toISOString(),

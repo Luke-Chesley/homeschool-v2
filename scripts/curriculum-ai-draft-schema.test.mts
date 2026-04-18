@@ -5,7 +5,8 @@ import { CurriculumAiGeneratedArtifactSchema } from "@/lib/curriculum/ai-draft";
 
 const launchPlan = {
   recommendedHorizon: "starter_module",
-  openingLessonCount: 8,
+  openingLessonRefs: Array.from({ length: 8 }, (_, index) => `lesson-${index + 1}`),
+  openingSkillRefs: Array.from({ length: 3 }, (_, index) => `skill-${index + 1}`),
   scopeSummary: "Open with the first stretch of lessons from the generated curriculum.",
   initialSliceUsed: true,
   initialSliceLabel: "Unit 1",
@@ -45,18 +46,22 @@ test("CurriculumAiGeneratedArtifactSchema truncates overflowing summary arrays",
     },
     units: [
       {
+        unitRef: "unit-1",
         title: "Unit 1",
         description: "Start with movement and basic play.",
         estimatedWeeks: 1,
         estimatedSessions: 5,
         lessons: [
           {
+            unitRef: "unit-1",
+            lessonRef: "lesson-1",
             title: "Lesson 1",
             description: "Learn the board and piece movement.",
+            lessonType: "task",
             estimatedMinutes: 35,
             materials: Array.from({ length: 14 }, (_, index) => `Material ${index + 1}`),
             objectives: Array.from({ length: 10 }, (_, index) => `Objective ${index + 1}`),
-            linkedSkillTitles: Array.from({ length: 10 }, (_, index) => `Skill ${index + 1}`),
+            linkedSkillRefs: Array.from({ length: 10 }, (_, index) => `skill-${index + 1}`),
           },
         ],
       },
@@ -73,8 +78,8 @@ test("CurriculumAiGeneratedArtifactSchema truncates overflowing summary arrays",
   assert.equal(parsed.pacing.coverageNotes.length, 8);
   assert.equal(parsed.units[0]?.lessons[0]?.materials.length, 12);
   assert.equal(parsed.units[0]?.lessons[0]?.objectives.length, 8);
-  assert.equal(parsed.units[0]?.lessons[0]?.linkedSkillTitles.length, 8);
-  assert.equal(parsed.launchPlan.openingLessonCount, 8);
+  assert.equal(parsed.units[0]?.lessons[0]?.linkedSkillRefs.length, 8);
+  assert.equal(parsed.launchPlan.openingLessonRefs.length, 8);
 });
 
 test("CurriculumAiGeneratedArtifactSchema accepts long progression refs so unresolved progression can fall back later", () => {
@@ -111,19 +116,23 @@ test("CurriculumAiGeneratedArtifactSchema accepts long progression refs so unres
     },
     units: [
       {
+        unitRef: "unit-1",
         title: "Unit 1",
         description: "Start with daily life and structural change in early 19th-century Virginia.",
         estimatedWeeks: 2,
         estimatedSessions: 8,
         lessons: [
           {
+            unitRef: "unit-1",
+            lessonRef: "lesson-1",
             title: "Lesson 1",
             description: "Study early 1800s Virginia life through maps and narration.",
             subject: "Virginia History",
+            lessonType: "concept",
             estimatedMinutes: 35,
             materials: ["Map", "Notebook"],
             objectives: ["Describe daily life in early 1800s Virginia."],
-            linkedSkillTitles: ["Early 1800s life in Virginia"],
+            linkedSkillRefs: ["early-1800s-virginia"],
           },
         ],
       },
@@ -131,7 +140,7 @@ test("CurriculumAiGeneratedArtifactSchema accepts long progression refs so unres
     launchPlan: {
       ...launchPlan,
       recommendedHorizon: "two_weeks",
-      openingLessonCount: 12,
+      openingLessonRefs: Array.from({ length: 12 }, (_, index) => `lesson-${index + 1}`),
       scopeSummary: "Open with the first two weeks of the Virginia history sequence.",
     },
     progression: {

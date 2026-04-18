@@ -1,4 +1,5 @@
 import type { CurriculumAiGeneratedArtifact } from "./ai-draft.ts";
+import { canonicalizeCurriculumArtifact } from "./canonical-artifact.ts";
 import type { CurriculumGranularityProfile, RequestedPacing } from "./granularity.ts";
 import {
   hasWrapperLabelSignals,
@@ -47,7 +48,7 @@ interface LessonEnvelope {
   title: string;
   description: string;
   objectives: string[];
-  linkedSkillTitles: string[];
+  linkedSkillRefs: string[];
 }
 
 export function assessCurriculumArtifactQuality(
@@ -55,7 +56,13 @@ export function assessCurriculumArtifactQuality(
   context: CurriculumArtifactQualityContext,
 ): CurriculumQualityIssue[] {
   const issues: CurriculumQualityIssue[] = [];
-  const skillLeaves = collectDocumentSkillLeaves(artifact.document);
+  const canonicalArtifact = canonicalizeCurriculumArtifact(artifact);
+  const skillLeaves = canonicalArtifact.skillCatalog.map((skill) => ({
+    title: skill.title,
+    description: skill.description,
+    path: skill.path,
+    skillRef: skill.skillRef,
+  }));
   const topicKeywords = extractMeaningfulKeywords(context.topicText);
   const artifactText = buildArtifactText(artifact);
 
@@ -306,7 +313,7 @@ function describeSkillBroadness(
 
 function describeLessonTeachability(
   lesson: LessonEnvelope,
-  skillLeaves: DocumentSkillLeaf[],
+  skillLeaves: Array<DocumentSkillLeaf & { skillRef: string }>,
   granularity: CurriculumGranularityProfile,
 ) {
   const issues: CurriculumQualityIssue[] = [];
@@ -318,14 +325,14 @@ function describeLessonTeachability(
     });
   }
 
-  if (lesson.linkedSkillTitles.length === 0) {
+  if (lesson.linkedSkillRefs.length === 0) {
     issues.push({
       code: "lesson_skill_alignment",
       message: `Lesson "${lesson.title}" is not linked to any skill.`,
     });
   }
 
-  if (lesson.linkedSkillTitles.length > 3) {
+  if (lesson.linkedSkillRefs.length > 3) {
     issues.push({
       code: "lesson_skill_alignment",
       message: `Lesson "${lesson.title}" links to too many skills to stay instructionally clear.`,
@@ -341,13 +348,13 @@ function describeLessonTeachability(
     });
   }
 
-  const linkedSkillTitles = new Set(lesson.linkedSkillTitles.map((value) => normalizeKey(value)));
-  for (const title of linkedSkillTitles) {
-    const match = skillLeaves.find((skill) => normalizeKey(skill.title) === title);
+  const linkedSkillRefs = new Set(lesson.linkedSkillRefs);
+  for (const skillRef of linkedSkillRefs) {
+    const match = skillLeaves.find((skill) => skill.skillRef === skillRef);
     if (!match) {
       issues.push({
         code: "lesson_skill_alignment",
-        message: `Lesson "${lesson.title}" links to a skill title that does not appear in the curriculum tree.`,
+        message: `Lesson "${lesson.title}" links to a skill ref that does not appear in the curriculum tree.`,
       });
       break;
     }
@@ -431,17 +438,17 @@ function describePracticeBalance(
 
 function describeLessonSkillAlignment(
   lessons: LessonEnvelope[],
-  skillLeaves: DocumentSkillLeaf[],
+  skillLeaves: Array<DocumentSkillLeaf & { skillRef: string }>,
 ) {
   const issues: CurriculumQualityIssue[] = [];
-  const skillTitles = new Set(skillLeaves.map((skill) => normalizeKey(skill.title)));
+  const skillRefs = new Set(skillLeaves.map((skill) => skill.skillRef));
 
   for (const lesson of lessons) {
-    for (const linkedSkill of lesson.linkedSkillTitles) {
-      if (!skillTitles.has(normalizeKey(linkedSkill))) {
+    for (const linkedSkillRef of lesson.linkedSkillRefs) {
+      if (!skillRefs.has(linkedSkillRef)) {
         issues.push({
           code: "lesson_skill_alignment",
-          message: `Lesson "${lesson.title}" references "${linkedSkill}" but that skill is not present in the curriculum tree.`,
+          message: `Lesson "${lesson.title}" references "${linkedSkillRef}" but that skill is not present in the curriculum tree.`,
         });
       }
     }
@@ -525,12 +532,13 @@ function collectNestedDocumentSkills(
 }
 
 function collectLessons(artifact: CurriculumAiGeneratedArtifact): LessonEnvelope[] {
-  return artifact.units.flatMap((unit) =>
+  const canonicalArtifact = canonicalizeCurriculumArtifact(artifact);
+  return canonicalArtifact.units.flatMap((unit) =>
     unit.lessons.map((lesson) => ({
       title: lesson.title,
       description: lesson.description,
       objectives: lesson.objectives,
-      linkedSkillTitles: lesson.linkedSkillTitles,
+      linkedSkillRefs: lesson.linkedSkillRefs,
     })),
   );
 }

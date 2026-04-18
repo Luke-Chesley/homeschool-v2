@@ -128,7 +128,7 @@ export const ActivitySpecSchema = z.object({
   /** IDs of curriculum objectives or skill nodes this activity addresses */
   linkedObjectiveIds: z.array(z.string()).default([]),
   /** Free-text skill titles for generation context (not required to be DB IDs) */
-  linkedSkillTitles: z.array(z.string()).default([]),
+  linkedSkillLabels: z.array(z.string()).default([]),
 
   estimatedMinutes: z.number().int().positive(),
 

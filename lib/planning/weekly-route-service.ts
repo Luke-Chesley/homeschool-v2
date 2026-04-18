@@ -50,14 +50,6 @@ function buildWeekdayDates(weekStartDate: string) {
   return Array.from({ length: WEEKDAY_COUNT }, (_, index) => addDays(weekStartDate, index));
 }
 
-function isFastPathQueuedItem(row: WeeklyRouteItemRow) {
-  return row.manualOverrideNote === "fast_path_future_queue";
-}
-
-function isFastPathQueuedBoardItem(item: WeeklyRouteBoard["items"][number]) {
-  return item.manualOverrideNote === "fast_path_future_queue";
-}
-
 async function findPlannedSkillNodeIdsBeforeWeek(route: WeeklyRouteRecord) {
   const rows = await getDb()
     .select({
@@ -130,8 +122,7 @@ async function ensureSuggestedWeeklyRouteSchedule(route: WeeklyRouteRecord) {
   const unscheduledRows = rows.filter(
     (row) =>
       row.state !== "removed" &&
-      row.scheduledDate == null &&
-      !isFastPathQueuedItem(row),
+      row.scheduledDate == null,
   );
   const assignments: Array<{ id: string; scheduledDate: string }> = [];
 
@@ -374,91 +365,6 @@ function getExpansionTargetDates(params: {
   }
 }
 
-export async function collapseWeeklyRouteToTodayWindow(params: {
-  learnerId: string;
-  sourceId: string;
-  date: string;
-}) {
-  const weekStartDate = toWeekStartDate(params.date);
-  const db = getDb();
-  const route = await db.query.weeklyRoutes.findFirst({
-    where: and(
-      eq(weeklyRoutes.learnerId, params.learnerId),
-      eq(weeklyRoutes.sourceId, params.sourceId),
-      eq(weeklyRoutes.weekStartDate, weekStartDate),
-    ),
-  });
-
-  if (!route) {
-    return null;
-  }
-
-  const { board } = await getOrCreateWeeklyRouteBoardForLearner({
-    learnerId: params.learnerId,
-    sourceId: params.sourceId,
-    weekStartDate,
-  });
-  const anchor = getLaunchAnchorItem(board, params.date);
-
-  if (!anchor) {
-    return board;
-  }
-
-  const rows = await db.query.weeklyRouteItems.findMany({
-    where: eq(weeklyRouteItems.weeklyRouteId, route.id),
-    orderBy: [asc(weeklyRouteItems.currentPosition), asc(weeklyRouteItems.createdAt)],
-  });
-
-  await db.transaction(async (tx) => {
-    for (const row of rows) {
-      let nextState = row.state;
-      let nextScheduledDate = row.scheduledDate;
-      let nextOverrideKind = row.manualOverrideKind;
-      let nextOverrideNote = row.manualOverrideNote;
-
-      if (row.id === anchor.id) {
-        nextState = "scheduled";
-        nextScheduledDate = params.date;
-        nextOverrideKind = "pinned";
-        nextOverrideNote = "fast_path_today_anchor";
-      } else if (row.currentPosition < anchor.currentPosition) {
-        nextState = "removed";
-        nextScheduledDate = null;
-        nextOverrideKind = "deferred";
-        nextOverrideNote = "fast_path_prelaunch_pruned";
-      } else {
-        nextState = "queued";
-        nextScheduledDate = null;
-        nextOverrideKind = "none";
-        nextOverrideNote = "fast_path_future_queue";
-      }
-
-      if (
-        row.state !== nextState ||
-        row.scheduledDate !== nextScheduledDate ||
-        row.manualOverrideKind !== nextOverrideKind ||
-        row.manualOverrideNote !== nextOverrideNote
-      ) {
-        await tx
-          .update(weeklyRouteItems)
-          .set({
-            state: nextState,
-            scheduledDate: nextScheduledDate,
-            manualOverrideKind: nextOverrideKind,
-            manualOverrideNote: nextOverrideNote,
-            updatedAt: new Date(),
-          })
-          .where(eq(weeklyRouteItems.id, row.id));
-      }
-    }
-  });
-
-  return getWeeklyRouteBoardById({
-    learnerId: params.learnerId,
-    weeklyRouteId: route.id,
-  });
-}
-
 export async function expandWeeklyRouteFromToday(params: {
   learnerId: string;
   sourceId: string;
@@ -541,19 +447,12 @@ export async function expandWeeklyRouteFromToday(params: {
   const scheduledDates: string[] = [];
 
   for (const targetDate of datesToFill) {
-    const nextQueuedItem =
-      board.items.find(
-        (item) =>
-          item.state !== "removed" &&
-          item.scheduledDate == null &&
-          isFastPathQueuedBoardItem(item),
-      ) ??
-      board.items.find(
-        (item) =>
-          item.state !== "removed" &&
-          item.scheduledDate == null &&
-          item.currentPosition > anchorPosition,
-      );
+    const nextQueuedItem = board.items.find(
+      (item) =>
+        item.state !== "removed" &&
+        item.scheduledDate == null &&
+        item.currentPosition > anchorPosition,
+    );
 
     if (!nextQueuedItem) {
       break;

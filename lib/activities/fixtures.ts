@@ -22,7 +22,7 @@ export const FIXTURE_SESSIONS: ActivitySession[] = [
       purpose: "Study the position and play the queen move that gives check.",
       activityKind: "guided_practice",
       linkedObjectiveIds: [],
-      linkedSkillTitles: ["forcing check"],
+      linkedSkillLabels: ["forcing check"],
       estimatedMinutes: 6,
       interactionMode: "digital",
       components: [
