@@ -4,6 +4,11 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import {
+  SourceInterpretArtifactSchema,
+  SourceInterpretInputSchema,
+} from "../lib/learning-core/source-interpret.ts";
+
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 
 function walkSourceFiles(dir: string): string[] {
@@ -67,6 +72,13 @@ test("active app code does not reference deleted prompt or gateway paths", () =>
     { label: "deleted learning-core adapter", regex: /learning-core-adapter/ },
     { label: "deleted provider adapter", regex: /provider-adapter/ },
     { label: "deleted generate endpoint", regex: /\/api\/ai\/generate\b/ },
+    { label: "legacy source_interpret source kind", regex: /\bsingle_day_material\b/ },
+    { label: "legacy source_interpret source kind", regex: /\bweekly_assignments\b/ },
+    { label: "legacy source_interpret source kind", regex: /\bsequence_outline\b/ },
+    { label: "legacy source_interpret horizon intent", regex: /\buserHorizonIntent\b/ },
+    { label: "legacy source_interpret metadata", regex: /\bsourceScale\b/ },
+    { label: "legacy source_interpret metadata", regex: /\bsliceStrategy\b/ },
+    { label: "legacy source_interpret metadata", regex: /\bsliceNotes\b/ },
   ];
 
   const violations: string[] = [];
@@ -101,4 +113,75 @@ test("learning-core client surface is operation-based", () => {
   assert.match(operationsSource, /\/v1\/operations\/\$\{operationName\}\/prompt-preview/);
   assert.match(operationsSource, /\/v1\/operations\/\$\{operationName\}\/execute/);
   assert.doesNotMatch(clientSource, /\/v1\/gateway\//);
+});
+
+test("source interpret wrapper matches the canonical request shape", () => {
+  const parsed = SourceInterpretInputSchema.parse({
+    learnerName: "Ava",
+    requestedRoute: "outline",
+    extractedText: "Workbook chapter 1",
+    sourcePackages: [
+      {
+        id: "pkg-1",
+        title: "Workbook",
+        modality: "pdf",
+        summary: "Fractions workbook",
+        extractionStatus: "ready",
+        assetCount: 1,
+        assetIds: ["asset-1"],
+        detectedChunks: ["Chapter 1"],
+        sourceFingerprint: "fp-1",
+      },
+    ],
+    sourceFiles: [
+      {
+        assetId: "asset-1",
+        packageId: "pkg-1",
+        title: "Workbook",
+        modality: "pdf",
+        fileName: "workbook.pdf",
+        mimeType: "application/pdf",
+        fileUrl: "https://example.com/workbook.pdf",
+      },
+    ],
+  });
+
+  assert.deepEqual(parsed.inputModalities, []);
+  assert.equal(parsed.sourcePackages[0]?.id, "pkg-1");
+  assert.equal(parsed.sourceFiles[0]?.assetId, "asset-1");
+
+  assert.throws(
+    () =>
+      SourceInterpretInputSchema.parse({
+        requestedRoute: "topic",
+        extractedText: "Teach chess openings",
+        userHorizonIntent: "starter_module",
+      }),
+    /unrecognized key/i,
+  );
+});
+
+test("source interpret wrapper rejects legacy source kinds and keeps canonical taxonomy", () => {
+  const parsed = SourceInterpretArtifactSchema.parse({
+    sourceKind: "comprehensive_source",
+    entryStrategy: "explicit_range",
+    entryLabel: "chapter 1",
+    continuationMode: "sequential",
+    suggestedTitle: "Fractions workbook",
+    confidence: "medium",
+    recommendedHorizon: "one_week",
+  });
+
+  assert.deepEqual(parsed.assumptions, []);
+  assert.deepEqual(parsed.detectedChunks, []);
+  assert.equal(parsed.needsConfirmation, false);
+
+  assert.throws(
+    () =>
+      SourceInterpretArtifactSchema.parse({
+        ...parsed,
+        sourceKind: "full_curriculum",
+      }),
+    /invalid enum value/i,
+  );
 });
