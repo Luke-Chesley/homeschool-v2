@@ -483,8 +483,8 @@ export function HomeschoolOnboardingForm(props: {
           <CardHeader>
             <CardTitle>Paste or upload anything you have</CardTitle>
             <CardDescription>
-              Share the quickest source. We&apos;ll scope it to the smallest useful plan
-              automatically and open day 1.
+              Share the quickest source and we&apos;ll build a practical first plan
+              automatically and open your first session right away.
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
@@ -510,8 +510,8 @@ export function HomeschoolOnboardingForm(props: {
                 </label>
 
                 <div className="rounded-xl border border-border/60 bg-background/75 px-4 py-3 text-xs text-muted-foreground">
-                  <p>We&apos;ll scope this to the smallest useful plan automatically.</p>
-                  <p>If it clearly supports more than one day, we&apos;ll set up the next few lessons or week and open day 1.</p>
+                  <p>We&apos;ll turn your input into a practical first plan automatically.</p>
+                  <p>If it clearly supports multiple days, we&apos;ll set up the next lessons too.</p>
                   <p>If you upload a larger source like a book or workbook, we&apos;ll start with a bounded first slice and keep the rest ready for later.</p>
                 </div>
               </div>

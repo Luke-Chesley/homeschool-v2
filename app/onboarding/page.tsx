@@ -24,7 +24,7 @@ export default async function OnboardingPage() {
           <p className="section-meta">Fast onboarding</p>
           <h1 className="page-title">Reach Today first.</h1>
           <p className="page-subtitle">
-            Add one learner and paste or upload anything you have. We&apos;ll scope the smallest useful launch automatically, open day 1, and keep larger sources bounded for later expansion.
+            Add one learner and paste or upload anything you have. We&apos;ll create a focused first plan and keep the rest ready for later.
           </p>
         </div>
 
@@ -35,7 +35,7 @@ export default async function OnboardingPage() {
           <CardContent className="space-y-2 text-sm text-muted-foreground">
             <p>Add one learner name.</p>
             <p>Paste text or upload one source.</p>
-            <p>We infer the smallest useful scope and open Today on day 1.</p>
+            <p>Start today with a practical first plan.</p>
           </CardContent>
         </Card>
       </section>

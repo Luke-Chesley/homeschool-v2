@@ -156,10 +156,6 @@ function UploadForm({ onCancel }: { onCancel: () => void }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// AI draft form (stub — integration point for plan 08)
-// ---------------------------------------------------------------------------
-
 function AiDraftForm({
   activeLearner,
   onCreatedSourceId,
