@@ -39,7 +39,21 @@ import {
   type OnboardingMilestone,
 } from "@/lib/homeschool/onboarding/activation-contracts";
 import { createFastPathBoundedCurriculum } from "@/lib/homeschool/onboarding/bounded-plan";
-import { getNormalizedIntakeSourcePackage } from "@/lib/homeschool/intake/service";
+import {
+  buildFastPathLaunchSummary,
+  buildFastPathPreview,
+  extractDetectedChunks,
+  routeToCurriculumMode,
+} from "@/lib/homeschool/onboarding/fast-path";
+import {
+  createLearningCoreInputFilesFromSourcePackages,
+  getNormalizedIntakeSourcePackages,
+  toIntakeSourcePackageContext,
+} from "@/lib/homeschool/intake/service";
+import type {
+  IntakeSourcePackageContext,
+  IntakeSourcePackageModality,
+} from "@/lib/homeschool/intake/types";
 import { executeSourceInterpret } from "@/lib/learning-core/source-interpret";
 import { trackProductEvent } from "@/lib/platform/observability";
 
@@ -52,14 +66,10 @@ import {
 } from "@/lib/homeschool/onboarding/types";
 import type {
   CurriculumGenerationHorizon,
-  CurriculumHorizonDecisionSource,
-  CurriculumIntakeConfidence,
   FastPathIntakeRoute,
   HomeschoolFastPathOnboardingInput,
   HomeschoolOnboardingInput,
   HomeschoolOnboardingStatus,
-  HomeschoolFastPathPreview,
-  SourceInterpretSourceKind,
 } from "@/lib/homeschool/onboarding/types";
 
 const LearnerSchema = z.object({
@@ -86,10 +96,11 @@ export const HomeschoolOnboardingSchema = z.object({
   curriculumTitle: z.string().trim().min(1).max(160),
   curriculumSummary: z.string().trim().max(600).optional(),
   curriculumText: z.string().trim().max(12000).optional(),
+  sourcePackageIds: z.array(z.string().trim().min(1)).max(8).optional(),
   curriculumSourceMetadata: z.record(z.string(), z.unknown()).optional(),
 });
 
-export const HomeschoolCurriculumIntakeSchema = z.object({
+const RawHomeschoolCurriculumIntakeSchema = z.object({
   organizationId: z.string().min(1),
   learnerId: z.string().min(1),
   learnerName: z.string().min(1),
@@ -102,7 +113,29 @@ export const HomeschoolCurriculumIntakeSchema = z.object({
   curriculumTitle: z.string().trim().min(1).max(160),
   curriculumSummary: z.string().trim().max(600).optional(),
   curriculumText: z.string().trim().max(12000).optional(),
+  sourcePackageId: z.string().min(1).optional(),
+  sourcePackageIds: z.array(z.string().trim().min(1)).max(8).optional(),
 });
+
+export const HomeschoolCurriculumIntakeSchema = RawHomeschoolCurriculumIntakeSchema.superRefine(
+  (input, ctx) => {
+    if (
+      input.curriculumMode !== "manual_shell" &&
+      !input.curriculumText?.trim() &&
+      normalizeSourcePackageIds(input).length === 0
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Paste source material or upload a source package.",
+        path: ["curriculumText"],
+      });
+    }
+  },
+).transform((input) => ({
+  ...input,
+  sourcePackageIds: normalizeSourcePackageIds(input),
+  sourcePackageId: normalizeSourcePackageIds(input)[0],
+}));
 
 export type HomeschoolOnboardingPayload = z.infer<typeof HomeschoolOnboardingSchema>;
 export type HomeschoolCurriculumIntakePayload = z.infer<typeof HomeschoolCurriculumIntakeSchema>;
@@ -129,6 +162,34 @@ function normalizeFastPathIntakeRoute(route: z.infer<typeof FastPathIntakeRouteI
   }
 }
 
+function normalizeSourcePackageIds(input: {
+  sourcePackageId?: string;
+  sourcePackageIds?: string[];
+}) {
+  return [
+    ...new Set(
+      [input.sourcePackageId, ...(input.sourcePackageIds ?? [])]
+        .map((value) => value?.trim())
+        .filter((value): value is string => Boolean(value)),
+    ),
+  ];
+}
+
+function combineResolvedSourceText(parts: string[]) {
+  const combined: string[] = [];
+  const seen = new Set<string>();
+
+  for (const part of parts.map((value) => value.trim()).filter(Boolean)) {
+    if (seen.has(part)) {
+      continue;
+    }
+    seen.add(part);
+    combined.push(part);
+  }
+
+  return combined.join("\n\n");
+}
+
 const RawHomeschoolFastPathOnboardingSchema = z.object({
   organizationId: z.string().min(1),
   learnerName: z.string().trim().min(1).max(80),
@@ -136,6 +197,7 @@ const RawHomeschoolFastPathOnboardingSchema = z.object({
   intakeType: FastPathIntakeRouteInputSchema.optional(),
   sourceInput: z.string().trim().min(1).max(12000).optional(),
   sourcePackageId: z.string().min(1).optional(),
+  sourcePackageIds: z.array(z.string().trim().min(1)).max(8).optional(),
   horizonIntent: z.enum(["today_only", "auto"]).optional(),
   confirmPreview: z.boolean().optional(),
   previewCorrections: z
@@ -150,7 +212,7 @@ const RawHomeschoolFastPathOnboardingSchema = z.object({
 
 export const HomeschoolFastPathOnboardingSchema = RawHomeschoolFastPathOnboardingSchema.superRefine(
   (input, ctx) => {
-    if (!input.sourceInput && !input.sourcePackageId) {
+    if (!input.sourceInput && normalizeSourcePackageIds(input).length === 0) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: "Source input or source package is required.",
@@ -168,7 +230,8 @@ export const HomeschoolFastPathOnboardingSchema = RawHomeschoolFastPathOnboardin
   ),
   intakeRouteExplicit: Boolean(input.intakeRoute ?? input.intakeType),
   sourceInput: input.sourceInput,
-  sourcePackageId: input.sourcePackageId,
+  sourcePackageIds: normalizeSourcePackageIds(input),
+  sourcePackageId: normalizeSourcePackageIds(input)[0],
   horizonIntent: input.horizonIntent,
   confirmPreview: input.confirmPreview,
   previewCorrections: input.previewCorrections,
@@ -574,10 +637,18 @@ function buildStructuredDocumentFromOutline(input: HomeschoolOnboardingInput) {
   };
 }
 
-function buildAiMessages(input: HomeschoolOnboardingInput): CurriculumAiChatMessage[] {
+function buildAiMessages(
+  input: HomeschoolOnboardingInput,
+  options?: {
+    sourceText?: string | null;
+    sourcePackages?: IntakeSourcePackageContext[];
+  },
+): CurriculumAiChatMessage[] {
   const learnerSummary = input.learners
     .map((learner) => `${learner.displayName}${learner.gradeLevel ? ` (${learner.gradeLevel})` : ""}`)
     .join(", ");
+  const sourceText = options?.sourceText ?? input.curriculumText;
+  const sourcePackages = options?.sourcePackages ?? [];
 
   return [
     {
@@ -592,7 +663,10 @@ function buildAiMessages(input: HomeschoolOnboardingInput): CurriculumAiChatMess
         input.schoolYearLabel ? `School year: ${input.schoolYearLabel}` : null,
         input.teachingStyle ? `Teaching style: ${input.teachingStyle}` : null,
         input.curriculumSummary ? `Parent summary: ${input.curriculumSummary}` : null,
-        input.curriculumText ? `Source material:\n${input.curriculumText}` : null,
+        sourcePackages.length > 0
+          ? `Source packages:\n${JSON.stringify(sourcePackages, null, 2)}`
+          : null,
+        sourceText ? `Source material:\n${sourceText}` : null,
       ]
         .filter(Boolean)
         .join("\n\n"),
@@ -673,8 +747,16 @@ export async function createHomeschoolCurriculumFromIntake(
     curriculumTitle: input.curriculumTitle,
     curriculumSummary: input.curriculumSummary,
     curriculumText: input.curriculumText,
+    sourcePackageIds: input.sourcePackageIds,
     schoolYearLabel: input.schoolYearLabel,
     teachingStyle: input.teachingStyle,
+    curriculumSourceMetadata:
+      input.sourcePackageIds.length > 0
+        ? {
+            createdFrom: "curriculum_add_flow",
+            sourcePackageIds: input.sourcePackageIds,
+          }
+        : undefined,
   };
 
   const curriculum = await initializeCurriculum(curriculumInput, {
@@ -911,7 +993,17 @@ async function upsertLearnersForOnboarding(
 }
 
 async function initializeCurriculum(input: HomeschoolOnboardingInput, learner: typeof learners.$inferSelect) {
-  if (input.curriculumMode === "ai_decompose" && input.curriculumText?.trim()) {
+  if (
+    input.curriculumMode === "ai_decompose" &&
+    (input.curriculumText?.trim() || (input.sourcePackageIds?.length ?? 0) > 0)
+  ) {
+    const resolvedSource = await resolveFastPathSource({
+      sourceInput: input.curriculumText,
+      sourcePackageIds: input.sourcePackageIds,
+    });
+    const sourceFiles = await createLearningCoreInputFilesFromSourcePackages(
+      resolvedSource.sourcePackages,
+    );
     const generation = await generateCurriculumArtifact({
       learner: {
         id: learner.id,
@@ -921,7 +1013,12 @@ async function initializeCurriculum(input: HomeschoolOnboardingInput, learner: t
         lastName: learner.lastName,
         status: learner.status,
       },
-      messages: buildAiMessages(input),
+      messages: buildAiMessages(input, {
+        sourceText: resolvedSource.sourceInput,
+        sourcePackages: resolvedSource.sourcePackageContexts,
+      }),
+      sourcePackages: resolvedSource.sourcePackageContexts,
+      sourceFiles,
     });
 
     if (generation.kind === "failure") {
@@ -931,7 +1028,15 @@ async function initializeCurriculum(input: HomeschoolOnboardingInput, learner: t
     return createCurriculumSourceFromAiDraftArtifact({
       householdId: input.organizationId,
       artifact: generation.artifact,
-      sourceMetadata: input.curriculumSourceMetadata,
+      sourceMetadata: {
+        ...(input.curriculumSourceMetadata ?? {}),
+        sourcePackageIds: resolvedSource.sourcePackageIds,
+        sourcePackages: resolvedSource.sourcePackageContexts,
+        sourceModalities: resolvedSource.sourceModalities,
+        sourcePackageId: resolvedSource.sourcePackage?.id ?? null,
+        sourceModality: resolvedSource.sourcePackage?.modality ?? "text",
+        assetIds: resolvedSource.assetIds,
+      },
     });
   }
 
@@ -946,248 +1051,52 @@ async function initializeCurriculum(input: HomeschoolOnboardingInput, learner: t
   });
 }
 
-function extractDetectedChunks(sourceInput: string) {
-  const trimmedLines = sourceInput
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .slice(0, 4);
-
-  return trimmedLines.length > 0 ? trimmedLines : [sourceInput.trim().slice(0, 80)];
-}
-
-function buildPreviewTitle(input: {
-  intakeRoute: FastPathIntakeRoute;
-  sourceInput: string;
-}) {
-  const prefix =
-    input.intakeRoute === "topic"
-      ? "Topic starter"
-      : input.intakeRoute === "weekly_plan"
-        ? "Week plan"
-        : input.intakeRoute === "outline"
-          ? "Outline plan"
-          : input.intakeRoute === "manual_shell"
-            ? "Starter shell"
-            : "Lesson plan";
-
-  return `${prefix}: ${input.sourceInput.trim().slice(0, 48)}`;
-}
-
-function sourceKindToRoute(sourceKind: SourceInterpretSourceKind): FastPathIntakeRoute {
-  switch (sourceKind) {
-    case "single_day_material":
-      return "single_lesson";
-    case "weekly_assignments":
-      return "weekly_plan";
-    case "sequence_outline":
-      return "outline";
-    case "topic_seed":
-      return "topic";
-    case "manual_shell":
-    case "ambiguous":
-      return "manual_shell";
-  }
-}
-
-function routeToCurriculumMode(intakeRoute: FastPathIntakeRoute) {
-  switch (intakeRoute) {
-    case "weekly_plan":
-    case "outline":
-      return "paste_outline" as const;
-    case "single_lesson":
-    case "topic":
-    case "manual_shell":
-      return "manual_shell" as const;
-  }
-}
-
-const HORIZON_RANK: Record<CurriculumGenerationHorizon, number> = {
-  today: 1,
-  tomorrow: 2,
-  next_few_days: 3,
-  current_week: 4,
-  starter_module: 5,
-  starter_week: 6,
-};
-
-const HORIZON_BY_RANK: Record<number, CurriculumGenerationHorizon> = {
-  1: "today",
-  2: "tomorrow",
-  3: "next_few_days",
-  4: "current_week",
-  5: "starter_module",
-  6: "starter_week",
-};
-
-function maxHorizonRankForRoute(intakeRoute: FastPathIntakeRoute) {
-  switch (intakeRoute) {
-    case "single_lesson":
-      return 2;
-    case "weekly_plan":
-    case "outline":
-      return 4;
-    case "topic":
-      return 5;
-    case "manual_shell":
-      return 6;
-  }
-}
-
-function maxHorizonRankForSourceKind(sourceKind: SourceInterpretSourceKind) {
-  switch (sourceKind) {
-    case "single_day_material":
-      return 2;
-    case "weekly_assignments":
-    case "sequence_outline":
-      return 4;
-    case "topic_seed":
-      return 5;
-    case "manual_shell":
-      return 6;
-    case "ambiguous":
-      return 1;
-  }
-}
-
-function clampHorizon(params: {
-  sourceKind: SourceInterpretSourceKind;
-  intakeRoute: FastPathIntakeRoute;
-  requestedHorizon: CurriculumGenerationHorizon;
-}) {
-  const maxRank = Math.min(
-    maxHorizonRankForRoute(params.intakeRoute),
-    maxHorizonRankForSourceKind(params.sourceKind),
-  );
-  const requestedRank = HORIZON_RANK[params.requestedHorizon];
-
-  if (requestedRank <= maxRank) {
-    return params.requestedHorizon;
-  }
-
-  return HORIZON_BY_RANK[maxRank];
-}
-
-function buildFastPathPreview(
-  input: {
-    learnerName: string;
-    intakeRoute: FastPathIntakeRoute;
-    intakeRouteExplicit: boolean;
-    sourceInput: string;
-    horizonIntent?: "today_only" | "auto";
-    interpretation: {
-      sourceKind: SourceInterpretSourceKind;
-      suggestedTitle: string;
-      confidence: CurriculumIntakeConfidence;
-      recommendedHorizon: CurriculumGenerationHorizon;
-      assumptions: string[];
-      detectedChunks: string[];
-      followUpQuestion?: string | null;
-      needsConfirmation: boolean;
-    };
-  },
-  corrections?: HomeschoolFastPathOnboardingInput["previewCorrections"],
-): HomeschoolFastPathPreview {
-  const routedByPolicy = sourceKindToRoute(input.interpretation.sourceKind);
-  const requestedRoute = input.intakeRoute;
-  const requestedRouteWasExplicit = input.intakeRouteExplicit;
-  const inferredRoute = corrections?.intakeRoute ?? routedByPolicy;
-  const inferredHorizonCandidate =
-    input.horizonIntent === "today_only" ? "today" : input.interpretation.recommendedHorizon;
-  const inferredHorizon = clampHorizon({
-    sourceKind: input.interpretation.sourceKind,
-    intakeRoute: routedByPolicy,
-    requestedHorizon: inferredHorizonCandidate,
-  });
-  const inferredDecisionSource: CurriculumHorizonDecisionSource =
-    input.horizonIntent === "today_only"
-      ? "user_selected"
-      : inferredHorizon !== input.interpretation.recommendedHorizon
-        ? "confidence_limited"
-        : "system_default";
-  const requestedChosenHorizon = corrections?.chosenHorizon ?? inferredHorizon;
-  const chosenHorizon = clampHorizon({
-    sourceKind: input.interpretation.sourceKind,
-    intakeRoute: inferredRoute,
-    requestedHorizon: requestedChosenHorizon,
-  });
-  const decisionSource: CurriculumHorizonDecisionSource =
-    corrections?.chosenHorizon
-      ? chosenHorizon === corrections.chosenHorizon
-        ? "user_corrected_in_preview"
-        : "confidence_limited"
-      : inferredDecisionSource;
-  const detectedChunks =
-    input.interpretation.detectedChunks.length > 0
-      ? input.interpretation.detectedChunks
-      : extractDetectedChunks(input.sourceInput);
-  const assumptions = [...input.interpretation.assumptions];
-  const routeMismatch = routedByPolicy !== requestedRoute;
-
-  if (requestedRouteWasExplicit && routeMismatch) {
-    assumptions.push(
-      `We are routing this as ${routedByPolicy.replaceAll("_", " ")} instead of ${requestedRoute.replaceAll("_", " ")}.`,
-    );
-  }
-
-  if (chosenHorizon !== requestedChosenHorizon) {
-    assumptions.push("We kept the first plan conservative so the source does not overpromise scope.");
-  }
-
-  return {
-    learnerTarget: corrections?.learnerName?.trim() || input.learnerName.trim(),
-    requestedRoute,
-    requestedRouteWasExplicit,
-    intakeRoute: inferredRoute,
-    sourceKind: input.interpretation.sourceKind,
-    title:
-      corrections?.title?.trim() ||
-      input.interpretation.suggestedTitle ||
-      buildPreviewTitle({ intakeRoute: inferredRoute, sourceInput: input.sourceInput }),
-    detectedChunks,
-    assumptions: assumptions.length > 0 ? assumptions : ["We will keep the first plan bounded."],
-    inferredHorizon,
-    chosenHorizon,
-    horizonDecisionSource: decisionSource,
-    confidence: input.interpretation.confidence,
-    followUpQuestion: input.interpretation.followUpQuestion ?? null,
-    needsConfirmation:
-      input.interpretation.needsConfirmation ||
-      input.interpretation.confidence !== "high" ||
-      input.interpretation.sourceKind === "ambiguous" ||
-      (requestedRouteWasExplicit && routeMismatch) ||
-      Boolean(input.interpretation.followUpQuestion),
-  };
-}
-
 async function resolveFastPathSource(params: Pick<
   HomeschoolFastPathOnboardingInput,
-  "sourceInput" | "sourcePackageId"
+  "sourceInput" | "sourcePackageId" | "sourcePackageIds"
 >) {
-  if (params.sourcePackageId) {
-    const sourcePackage = await getNormalizedIntakeSourcePackage(params.sourcePackageId);
-    const normalizedText = sourcePackage.normalizedText.trim();
+  const packageIds = normalizeSourcePackageIds(params);
+  const sourcePackages =
+    packageIds.length > 0 ? await getNormalizedIntakeSourcePackages(packageIds) : [];
 
-    if (!normalizedText) {
+  for (const sourcePackage of sourcePackages) {
+    if (!sourcePackage.normalizedText.trim()) {
       throw new Error("The selected source package did not produce usable text.");
     }
-
-    return {
-      sourceInput: normalizedText,
-      sourcePackage,
-      assetIds: sourcePackage.assets.map((asset) => asset.id),
-    };
   }
 
-  const sourceInput = params.sourceInput?.trim() ?? "";
+  const rawSourceInput = params.sourceInput?.trim() ?? "";
+  const sourceInput = combineResolvedSourceText([
+    rawSourceInput,
+    ...sourcePackages.map((sourcePackage) => sourcePackage.normalizedText),
+  ]);
   if (!sourceInput) {
     throw new Error("Source input is required.");
   }
 
+  const sourcePackageContexts = sourcePackages.map((sourcePackage) =>
+    toIntakeSourcePackageContext(sourcePackage),
+  );
+  const sourceModalities = [
+    ...new Set<IntakeSourcePackageModality>([
+      ...(rawSourceInput ? (["text"] as IntakeSourcePackageModality[]) : []),
+      ...sourcePackageContexts.map((sourcePackage) => sourcePackage.modality),
+    ]),
+  ];
+
   return {
     sourceInput,
-    sourcePackage: null,
-    assetIds: [],
+    rawSourceInput: rawSourceInput || null,
+    sourcePackage: sourcePackages[0] ?? null,
+    sourcePackages,
+    sourcePackageContexts,
+    sourcePackageIds: sourcePackageContexts.map((sourcePackage) => sourcePackage.id),
+    sourceModalities,
+    assetIds: [
+      ...new Set(
+        sourcePackageContexts.flatMap((sourcePackage) => sourcePackage.assetIds),
+      ),
+    ],
   };
 }
 
@@ -1230,6 +1139,9 @@ async function markOnboardingMilestone(params: {
 export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPathOnboardingInput) {
   const input = HomeschoolFastPathOnboardingSchema.parse(rawInput);
   const resolvedSource = await resolveFastPathSource(input);
+  const sourceFiles = await createLearningCoreInputFilesFromSourcePackages(
+    resolvedSource.sourcePackages,
+  );
   await markOnboardingMilestone({
     organizationId: input.organizationId,
     milestone: "fast_path_started",
@@ -1258,7 +1170,12 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
     organizationId: input.organizationId,
     metadata: {
       sourceLength: resolvedSource.sourceInput.length,
+      sourceCount:
+        resolvedSource.sourcePackageContexts.length +
+          (resolvedSource.rawSourceInput ? 1 : 0) || 1,
+      sourcePackageIds: resolvedSource.sourcePackageIds,
       sourcePackageId: resolvedSource.sourcePackage?.id ?? null,
+      sourceModalities: resolvedSource.sourceModalities,
       sourceModality: resolvedSource.sourcePackage?.modality ?? "text",
       assetCount: resolvedSource.assetIds.length,
     },
@@ -1268,19 +1185,23 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
     input: {
       learnerName: input.learnerName,
       requestedRoute: input.intakeRoute,
-      inputModalities: [resolvedSource.sourcePackage?.modality ?? "text"],
-      rawText: input.sourceInput?.trim() ?? resolvedSource.sourceInput,
+      inputModalities: resolvedSource.sourceModalities,
+      rawText: resolvedSource.rawSourceInput ?? resolvedSource.sourceInput,
       extractedText: resolvedSource.sourceInput,
-      extractedStructure: resolvedSource.sourcePackage
+      extractedStructure: resolvedSource.sourcePackageContexts.length > 0
         ? {
-            summary: resolvedSource.sourcePackage.summary,
-            detectedChunks: resolvedSource.sourcePackage.detectedChunks,
-            extractionStatus: resolvedSource.sourcePackage.extractionStatus,
+            sourceCount: resolvedSource.sourcePackageContexts.length,
+            packages: resolvedSource.sourcePackageContexts,
+            detectedChunks: resolvedSource.sourcePackageContexts.flatMap(
+              (sourcePackage) => sourcePackage.detectedChunks,
+            ),
           }
         : {
             detectedChunks: extractDetectedChunks(resolvedSource.sourceInput),
           },
       assetRefs: resolvedSource.assetIds,
+      sourcePackages: resolvedSource.sourcePackageContexts,
+      sourceFiles,
       userHorizonIntent: input.horizonIntent ?? "auto",
       titleCandidate: resolvedSource.sourcePackage?.title ?? null,
     },
@@ -1295,6 +1216,8 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
     metadata: {
       requestedRoute: input.intakeRoute,
       sourceKind: sourceInterpretResult.artifact.sourceKind,
+      sourceScale: sourceInterpretResult.artifact.sourceScale ?? null,
+      sliceStrategy: sourceInterpretResult.artifact.sliceStrategy ?? null,
       confidence: sourceInterpretResult.artifact.confidence,
       recommendedHorizon: sourceInterpretResult.artifact.recommendedHorizon,
       needsConfirmation: sourceInterpretResult.artifact.needsConfirmation,
@@ -1304,13 +1227,15 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
   const preview = buildFastPathPreview(
     {
       sourceInput: resolvedSource.sourceInput,
+      sourcePackages: resolvedSource.sourcePackageContexts,
       learnerName: input.learnerName,
       intakeRoute: input.intakeRoute,
       intakeRouteExplicit: input.intakeRouteExplicit ?? false,
       horizonIntent: input.horizonIntent,
       interpretation: sourceInterpretResult.artifact,
+      corrections: input.previewCorrections,
+      previewConfirmed: Boolean(input.confirmPreview),
     },
-    input.previewCorrections,
   );
   if (preview.needsConfirmation && !input.confirmPreview) {
     return {
@@ -1336,7 +1261,11 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
     curriculumMode,
     curriculumTitle: preview.title,
     curriculumSummary: `Fast-path intake (${preview.intakeRoute.replaceAll("_", " ")})${
-      resolvedSource.sourcePackage ? ` · ${resolvedSource.sourcePackage.modality}` : ""
+      resolvedSource.sourcePackageContexts.length === 1
+        ? ` · ${resolvedSource.sourcePackageContexts[0]!.modality}`
+        : resolvedSource.sourcePackageContexts.length > 1
+          ? ` · ${resolvedSource.sourcePackageContexts.length} sources`
+          : ""
     }`,
     curriculumText: sourceInput,
     curriculumSourceMetadata: {},
@@ -1350,13 +1279,21 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
     learnerId: null,
     confidence: preview.confidence,
     sourceKind: preview.sourceKind,
+    sourceScale: preview.sourceScale ?? null,
+    sliceStrategy: preview.sliceStrategy ?? null,
+    sliceNotes: preview.sliceNotes,
+    initialSliceUsed: preview.initialSliceUsed,
     inferredHorizon: preview.inferredHorizon,
     chosenHorizon: preview.chosenHorizon,
     horizonDecisionSource: preview.horizonDecisionSource,
+    scopeSummary: preview.scopeSummary,
     assumptions: preview.assumptions,
     detectedChunks: preview.detectedChunks,
     followUpQuestion: preview.followUpQuestion ?? null,
     needsConfirmation: preview.needsConfirmation,
+    sourcePackageIds: resolvedSource.sourcePackageIds,
+    sourcePackages: resolvedSource.sourcePackageContexts,
+    sourceModalities: resolvedSource.sourceModalities,
     sourcePackageId: resolvedSource.sourcePackage?.id ?? null,
     sourceModality: resolvedSource.sourcePackage?.modality ?? "text",
     learningCoreLineage: sourceInterpretResult.lineage,
@@ -1371,6 +1308,8 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
       intakeRoute: preview.intakeRoute,
       requestedRoute: preview.requestedRoute,
       sourceKind: preview.sourceKind,
+      sourceScale: preview.sourceScale ?? null,
+      sliceStrategy: preview.sliceStrategy ?? null,
       chosenHorizon: preview.chosenHorizon,
       curriculumMode,
     },
@@ -1381,11 +1320,18 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
     organizationId: input.organizationId,
     learnerName: preview.learnerTarget,
     sourceText: sourceInput,
+    sourcePackages: resolvedSource.sourcePackageContexts,
+    sourceFiles,
     preview,
     intakeMetadata,
   });
   const curriculum = boundedCurriculum.curriculum;
   const sourceId = curriculum.id;
+  const launchSummary = buildFastPathLaunchSummary({
+    preview,
+    lessonCount: boundedCurriculum.launchContext.lessonCount,
+    initialSliceLabel: boundedCurriculum.launchContext.initialSliceLabel,
+  });
   await setLiveCurriculumSource(input.organizationId, sourceId);
 
   const { weekStartDate } = await getOrCreateWeeklyRouteBoardForLearner({
@@ -1425,6 +1371,9 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
         itemCount: todayWorkspace.workspace.items.length,
         sourceKind: preview.sourceKind,
         chosenHorizon: preview.chosenHorizon,
+        sourceScale: preview.sourceScale ?? null,
+        sliceStrategy: preview.sliceStrategy ?? null,
+        lessonCount: launchSummary.lessonCount,
       },
     });
   }
@@ -1452,14 +1401,25 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
         route: preview.intakeRoute,
         requestedRoute: preview.requestedRoute,
         sourceInput,
+        sourcePackageIds: resolvedSource.sourcePackageIds,
+        sourcePackages: resolvedSource.sourcePackageContexts,
+        sourceModalities: resolvedSource.sourceModalities,
         sourcePackageId: resolvedSource.sourcePackage?.id ?? null,
         sourceModality: resolvedSource.sourcePackage?.modality ?? "text",
         confidence: preview.confidence,
         sourceKind: preview.sourceKind,
+        sourceScale: preview.sourceScale ?? null,
+        sliceStrategy: preview.sliceStrategy ?? null,
         inferredHorizon: preview.inferredHorizon,
         chosenHorizon: preview.chosenHorizon,
         horizonDecisionSource: preview.horizonDecisionSource,
         followUpQuestion: preview.followUpQuestion ?? null,
+        initialSliceUsed: preview.initialSliceUsed,
+        initialSliceLabel: boundedCurriculum.launchContext.initialSliceLabel,
+        initialLessonCount: boundedCurriculum.launchContext.lessonCount,
+        scopeSummary: preview.scopeSummary,
+        launchSummary,
+        boundedPlanLineage: boundedCurriculum.lineage,
       },
     },
   });
@@ -1476,6 +1436,9 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
       sourceKind: preview.sourceKind,
       confidence: preview.confidence,
       chosenHorizon: preview.chosenHorizon,
+      sourceScale: preview.sourceScale ?? null,
+      sliceStrategy: preview.sliceStrategy ?? null,
+      lessonCount: launchSummary.lessonCount,
     },
   });
 
@@ -1486,6 +1449,7 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
     weekStartDate,
     redirectTo: "/today",
     preview,
+    launchSummary,
   };
 }
 

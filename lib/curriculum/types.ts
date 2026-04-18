@@ -1,5 +1,10 @@
 import { z } from "zod";
 
+import {
+  IntakeSourcePackageContextSchema,
+  IntakeSourcePackageModalitySchema,
+} from "@/lib/homeschool/intake/types";
+
 export type CurriculumSourceKind =
   | "manual"
   | "upload"
@@ -73,6 +78,10 @@ export const CurriculumSourceGenerationHorizonSchema = z.enum([
 ]);
 
 export const CurriculumSourceHorizonDecisionSourceSchema = z.enum([
+  "model_inferred",
+  "legacy_user_override",
+  "internal_override",
+  "preview_confirmed",
   "system_default",
   "confidence_limited",
   "user_selected",
@@ -81,6 +90,19 @@ export const CurriculumSourceHorizonDecisionSourceSchema = z.enum([
 ]);
 
 export const CurriculumSourceIntakeConfidenceSchema = z.enum(["low", "medium", "high"]);
+
+export const CurriculumSourceScaleSchema = z.enum(["small", "medium", "large"]);
+
+export const CurriculumSourceSliceStrategySchema = z.enum([
+  "single_lesson",
+  "first_lesson",
+  "first_chapter",
+  "first_unit",
+  "first_few_sections",
+  "current_week_only",
+  "explicit_range",
+  "manual_shell_only",
+]);
 
 export const CurriculumSourceIntakeSchema = z.object({
   route: CurriculumSourceIntakeRouteSchema,
@@ -100,20 +122,40 @@ export const CurriculumSourceIntakeSchema = z.object({
       "ambiguous",
     ])
     .optional(),
+  sourceScale: CurriculumSourceScaleSchema.nullable().optional(),
+  sliceStrategy: CurriculumSourceSliceStrategySchema.nullable().optional(),
+  sliceNotes: z.array(z.string()).default([]),
+  initialSliceUsed: z.boolean().optional(),
+  initialSliceLabel: z.string().nullable().optional(),
   inferredHorizon: CurriculumSourceGenerationHorizonSchema,
   chosenHorizon: CurriculumSourceGenerationHorizonSchema,
   horizonDecisionSource: CurriculumSourceHorizonDecisionSourceSchema,
+  scopeSummary: z.string().optional(),
   assumptions: z.array(z.string()).default([]),
   detectedChunks: z.array(z.string()).default([]),
   followUpQuestion: z.string().nullable().optional(),
   needsConfirmation: z.boolean().optional(),
+  sourcePackageIds: z.array(z.string()).default([]),
+  sourcePackages: z.array(IntakeSourcePackageContextSchema).default([]),
+  sourceModalities: z.array(IntakeSourcePackageModalitySchema).default([]),
   sourcePackageId: z.string().nullable().optional(),
-  sourceModality: z
-    .enum(["text", "outline", "photo", "image", "pdf", "file"])
-    .optional(),
+  sourceModality: IntakeSourcePackageModalitySchema.optional(),
   curriculumMode: z.enum(["manual_shell", "paste_outline", "ai_decompose"]).optional(),
   learningCoreLineage: JsonRecordSchema.optional(),
+  boundedPlanLineage: JsonRecordSchema.optional(),
   sourceFingerprint: z.string().optional(),
+  initialLessonCount: z.number().int().positive().optional(),
+  lastGeneratedLessonTitle: z.string().nullable().optional(),
+  launchSummary: z
+    .object({
+      chosenHorizon: CurriculumSourceGenerationHorizonSchema,
+      lessonCount: z.number().int().positive(),
+      summaryText: z.string().min(1),
+      scopeSummary: z.string().nullable().optional(),
+      usedSlice: z.boolean(),
+      initialSliceLabel: z.string().nullable().optional(),
+    })
+    .optional(),
   createdFrom: z.enum(["onboarding_fast_path", "curriculum_add_flow", "curriculum_regeneration"]),
 });
 

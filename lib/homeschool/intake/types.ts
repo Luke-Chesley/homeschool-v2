@@ -25,6 +25,32 @@ export const IntakeSourceAssetSchema = z.object({
   updatedAt: z.string().datetime(),
 });
 
+export const IntakeSourcePackageContextSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  modality: IntakeSourcePackageModalitySchema,
+  summary: z.string().min(1),
+  extractionStatus: IntakeSourceAssetExtractionStatusSchema,
+  assetCount: z.number().int().nonnegative(),
+  assetIds: z.array(z.string()).default([]),
+  detectedChunks: z.array(z.string()).default([]),
+  sourceFingerprint: z.string().nullable().optional(),
+});
+
+export const LearningCoreInputFileSchema = z.object({
+  assetId: z.string().min(1),
+  packageId: z.string().min(1),
+  title: z.string().min(1),
+  modality: IntakeSourcePackageModalitySchema,
+  fileName: z.string().min(1),
+  mimeType: z.string().min(1),
+  fileUrl: z.string().url().optional(),
+  fileData: z.string().min(1).optional(),
+}).refine(
+  (value) => Boolean(value.fileUrl) !== Boolean(value.fileData),
+  "Provide exactly one of fileUrl or fileData.",
+);
+
 export const NormalizedIntakeSourcePackageSchema = z.object({
   id: z.string().min(1),
   organizationId: z.string().min(1),
@@ -50,6 +76,8 @@ export type IntakeSourceAssetExtractionStatus = z.infer<
   typeof IntakeSourceAssetExtractionStatusSchema
 >;
 export type IntakeSourceAsset = z.infer<typeof IntakeSourceAssetSchema>;
+export type IntakeSourcePackageContext = z.infer<typeof IntakeSourcePackageContextSchema>;
+export type LearningCoreInputFile = z.infer<typeof LearningCoreInputFileSchema>;
 export type NormalizedIntakeSourcePackage = z.infer<typeof NormalizedIntakeSourcePackageSchema>;
 
 export const CreateTextIntakeSourcePackageRequestSchema = z.object({

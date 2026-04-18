@@ -2,7 +2,7 @@
 
 - **Status:** Active
 - **Canonical Artifact Name:** NormalizedIntakeSourcePackage
-- **Current Version:** 1.0.0
+- **Current Version:** 1.1.0
 
 ## Purpose
 The Normalized Intake Source Package is the durable launch-stage input artifact created before AI routing or generation begins. It gives the app one stable shape for pasted text, outlines, photos, PDFs, and uploaded files.
@@ -19,9 +19,11 @@ The Normalized Intake Source Package is the durable launch-stage input artifact 
 - **Entrypoints:**
   - `app/api/homeschool/onboarding/route.ts`
   - `lib/homeschool/onboarding/service.ts`
+  - `lib/planning/today-lesson-generation.ts`
 - **Processing Logic:**
   - The onboarding flow uses the package's `normalizedText` as the canonical source text for preview, confidence estimation, and first-pass generation.
   - Asset-backed packages expose extraction state and asset metadata without forcing a curriculum source record to exist yet.
+  - Downstream app metadata stores a trimmed source-package context projection so later agent calls can recover modality, summary, asset ids, and extraction state without duplicating full asset rows.
 
 ## Persistence
 - **Storage Location:**
@@ -30,6 +32,7 @@ The Normalized Intake Source Package is the durable launch-stage input artifact 
 - **Storage Shape:**
   - The package row stores `normalized_text`, `source_fingerprint`, and summary metadata.
   - Asset rows store uploaded file metadata plus asset-level extracted text and extraction status.
+  - Curriculum/onboarding metadata may persist a source-package context projection keyed by package id, modality, summary, extraction status, detected chunks, and asset ids.
 
 ## Field Definitions
 

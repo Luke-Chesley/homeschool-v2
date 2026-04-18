@@ -6,6 +6,7 @@ import { AlertCircle, Camera, CheckCircle2, Loader2, Type, Upload, X } from "luc
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { persistOnboardingLaunchSummary } from "@/lib/homeschool/onboarding/launch-summary";
 import type {
   CurriculumGenerationHorizon,
   FastPathIntakeRoute,
@@ -16,7 +17,6 @@ import type {
   NormalizedIntakeSourcePackage,
 } from "@/lib/homeschool/intake/types";
 
-type HorizonIntent = "today_only" | "auto";
 type OnboardingJobStage =
   | "idle"
   | "preparing_source"
@@ -131,7 +131,7 @@ function summarizePackageStatus(pkg: NormalizedIntakeSourcePackage) {
     return "Using the extracted text plus your note for this source.";
   }
   if (pkg.assetCount > 0) {
-    return "Uploaded source is stored and normalized for preview.";
+    return "Uploaded source is stored and ready to send to the model.";
   }
   return "Text source is normalized and ready for preview.";
 }
@@ -146,6 +146,58 @@ function formatFileSize(bytes: number) {
   }
 
   return `${Math.round(bytes / 1024 / 102.4) / 10} MB`;
+}
+
+function truncateErrorCopy(value: string, maxLength = 220) {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+  return `${normalized.slice(0, maxLength - 1).trimEnd()}…`;
+}
+
+function extractProviderErrorMessage(raw: string) {
+  const singleQuoted = raw.match(/'message':\s*'([^']+)'/);
+  if (singleQuoted?.[1]) {
+    return singleQuoted[1];
+  }
+
+  const doubleQuoted = raw.match(/"message":\s*"([^"]+)"/);
+  if (doubleQuoted?.[1]) {
+    return doubleQuoted[1];
+  }
+
+  return raw.replace(/^Error code:\s*\d+\s*-\s*/, "").trim();
+}
+
+function describeOnboardingError(raw: string) {
+  const message = extractProviderErrorMessage(raw);
+  const normalized = message.toLowerCase();
+
+  if (
+    normalized.includes("error while downloading") ||
+    normalized.includes("upstream status code: 407") ||
+    (normalized.includes("invalid_value") && normalized.includes("param': 'url"))
+  ) {
+    return {
+      summary: "The model could not access that uploaded file.",
+      detail:
+        "That file was stored on a local-only URL. Retry with the same file and we’ll send it directly instead of asking the model to fetch it.",
+    };
+  }
+
+  if (normalized.includes("mutually exclusive parameters")) {
+    return {
+      summary: "The model rejected the uploaded file request.",
+      detail: "The file payload shape was invalid. Retry with the same file.",
+    };
+  }
+
+  const detail = truncateErrorCopy(message || raw);
+  return {
+    summary: detail.length <= 96 ? detail : "Could not finish onboarding.",
+    detail,
+  };
 }
 
 export function HomeschoolOnboardingForm(props: {
@@ -163,14 +215,12 @@ export function HomeschoolOnboardingForm(props: {
   const [sourceNote, setSourceNote] = React.useState("");
   const [uploadedFile, setUploadedFile] = React.useState<File | null>(null);
   const [sourcePackage, setSourcePackage] = React.useState<NormalizedIntakeSourcePackage | null>(null);
-  const [horizonIntent, setHorizonIntent] = React.useState<HorizonIntent>("today_only");
   const [preview, setPreview] = React.useState<HomeschoolFastPathPreview | null>(null);
   const [previewLearnerName, setPreviewLearnerName] = React.useState("");
   const [previewRoute, setPreviewRoute] = React.useState<FastPathIntakeRoute>(
     DEFAULT_INTAKE_ROUTE,
   );
   const [previewTitle, setPreviewTitle] = React.useState("");
-  const [previewHorizon, setPreviewHorizon] = React.useState<CurriculumGenerationHorizon>("today");
   const [submitting, setSubmitting] = React.useState(false);
   const [jobState, setJobState] = React.useState<OnboardingJobState>({ stage: "idle" });
   const [error, setError] = React.useState<string | null>(null);
@@ -308,15 +358,13 @@ export function HomeschoolOnboardingForm(props: {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           learnerName,
-          sourcePackageId: preparedPackage.id,
-          horizonIntent,
+          sourcePackageIds: [preparedPackage.id],
           confirmPreview,
           previewCorrections: confirmPreview
             ? {
                 learnerName: previewLearnerName,
                 intakeRoute: previewRoute,
                 title: previewTitle,
-                chosenHorizon: previewHorizon,
               }
             : undefined,
         }),
@@ -332,27 +380,28 @@ export function HomeschoolOnboardingForm(props: {
         setPreviewLearnerName(payload.preview.learnerTarget);
         setPreviewRoute(payload.preview.intakeRoute);
         setPreviewTitle(payload.preview.title);
-        setPreviewHorizon(payload.preview.chosenHorizon);
         setStep(3);
         setSubmitting(false);
         setWorkingState(
           "preview_ready",
           "Quick preview ready",
-          "Confirm the interpretation before we save the route and open Today.",
+          "Confirm the interpretation only if something important looks off before we open Today.",
         );
         return;
       }
 
+      persistOnboardingLaunchSummary(payload?.launchSummary ?? null);
       router.push(payload?.redirectTo ?? "/today");
       router.refresh();
     } catch (nextError) {
       const message =
         nextError instanceof Error ? nextError.message : "Could not finish onboarding.";
-      setError(message);
+      const describedError = describeOnboardingError(message);
+      setError(describedError.summary);
       setJobState({
         stage: "failed",
         title: "Could not finish this step",
-        detail: message,
+        detail: describedError.detail,
       });
       setSubmitting(false);
       return;
@@ -434,8 +483,8 @@ export function HomeschoolOnboardingForm(props: {
           <CardHeader>
             <CardTitle>Paste or upload anything you have</CardTitle>
             <CardDescription>
-              Skip the route choice. Share the quickest source and we&apos;ll interpret it from
-              there.
+              Share the quickest source. We&apos;ll scope it to the smallest useful plan
+              automatically and open day 1.
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
@@ -459,6 +508,12 @@ export function HomeschoolOnboardingForm(props: {
                     A lesson, weekly plan, outline, topic, copied page, or rough notes all work.
                   </span>
                 </label>
+
+                <div className="rounded-xl border border-border/60 bg-background/75 px-4 py-3 text-xs text-muted-foreground">
+                  <p>We&apos;ll scope this to the smallest useful plan automatically.</p>
+                  <p>If it clearly supports more than one day, we&apos;ll set up the next few lessons or week and open day 1.</p>
+                  <p>If you upload a larger source like a book or workbook, we&apos;ll start with a bounded first slice and keep the rest ready for later.</p>
+                </div>
               </div>
 
               <div className="grid gap-3">
@@ -571,30 +626,6 @@ export function HomeschoolOnboardingForm(props: {
               </div>
             ) : null}
 
-            <fieldset className="grid gap-2">
-              <legend className="text-sm font-medium">Planning horizon</legend>
-              <label className="flex items-start gap-2 rounded-xl border border-border/60 bg-background/70 px-3 py-3 text-sm text-muted-foreground">
-                <input
-                  type="radio"
-                  name="horizon"
-                  checked={horizonIntent === "today_only"}
-                  onChange={() => setHorizonIntent("today_only")}
-                  className="mt-1 size-4"
-                />
-                <span>Use this for just today</span>
-              </label>
-              <label className="flex items-start gap-2 rounded-xl border border-border/60 bg-background/70 px-3 py-3 text-sm text-muted-foreground">
-                <input
-                  type="radio"
-                  name="horizon"
-                  checked={horizonIntent === "auto"}
-                  onChange={() => setHorizonIntent("auto")}
-                  className="mt-1 size-4"
-                />
-                <span>Auto-expand when the source clearly supports more than today</span>
-              </label>
-            </fieldset>
-
             <div className="grid gap-2 sm:flex sm:justify-between">
               <Button type="button" variant="outline" onClick={() => setStep(1)} className="w-full sm:w-auto">
                 Back
@@ -605,7 +636,7 @@ export function HomeschoolOnboardingForm(props: {
                 onClick={() => void submitFastPath(false)}
                 className="min-h-11 w-full sm:min-h-10 sm:w-auto"
               >
-                Review source and generate
+                Generate and open Today
               </Button>
             </div>
           </CardContent>
@@ -617,8 +648,7 @@ export function HomeschoolOnboardingForm(props: {
           <CardHeader>
             <CardTitle>Quick preview before save</CardTitle>
             <CardDescription>
-              Confidence is {preview.confidence}. Correct anything obvious before we save and open
-              Today.
+              Confidence is {preview.confidence}. This only appears when the source needs a quick confirmation before we open Today.
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4 text-sm">
@@ -668,28 +698,23 @@ export function HomeschoolOnboardingForm(props: {
                 className="min-h-11 rounded-xl border border-input bg-background px-3 py-2.5 font-normal"
               />
             </label>
-            <label className="grid gap-1.5 font-medium">
-              Planning horizon
-              <select
-                value={previewHorizon}
-                onChange={(event) =>
-                  setPreviewHorizon(event.target.value as CurriculumGenerationHorizon)
-                }
-                className="min-h-11 rounded-xl border border-input bg-background px-3 py-2.5 font-normal"
-              >
-                {Object.entries(horizonLabels).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </label>
             {preview.requestedRouteWasExplicit ? (
               <p>
                 <span className="font-medium">Requested route:</span>{" "}
                 {routeLabel(preview.requestedRoute)}
               </p>
             ) : null}
+            <div className="rounded-xl border border-border/60 bg-background/70 p-3 text-muted-foreground">
+              <p className="font-medium text-foreground">Inferred scope</p>
+              <p className="mt-1">{preview.scopeSummary}</p>
+              <div className="mt-2 grid gap-1 text-xs">
+                <p>Launch horizon: {horizonLabels[preview.chosenHorizon]}</p>
+                {preview.sourceScale ? <p>Source scale: {preview.sourceScale}</p> : null}
+                {preview.initialSliceUsed && preview.sliceNotes.length > 0 ? (
+                  <p>Starting slice: {preview.sliceNotes[0]}</p>
+                ) : null}
+              </div>
+            </div>
             <p>
               <span className="font-medium">Detected source kind:</span>{" "}
               {sourceKindLabels[preview.sourceKind]}
@@ -697,10 +722,6 @@ export function HomeschoolOnboardingForm(props: {
             <p>
               <span className="font-medium">We&apos;ll use it as:</span>{" "}
               {routeLabel(preview.intakeRoute)}
-            </p>
-            <p>
-              <span className="font-medium">Suggested horizon:</span>{" "}
-              {horizonLabels[preview.inferredHorizon]}
             </p>
             {preview.followUpQuestion ? (
               <div className="rounded-xl border border-border/60 bg-background/70 p-3 text-muted-foreground">
@@ -734,7 +755,11 @@ export function HomeschoolOnboardingForm(props: {
         </Card>
       ) : null}
 
-      {error ? <p className="rounded-xl bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p> : null}
+      {error ? (
+        <p className="rounded-xl bg-destructive/10 px-4 py-3 text-sm text-destructive break-words whitespace-pre-wrap">
+          {error}
+        </p>
+      ) : null}
       {jobState.stage !== "idle" ? (
         <div
           className={`rounded-xl border px-4 py-3 text-sm ${
@@ -749,7 +774,9 @@ export function HomeschoolOnboardingForm(props: {
               <div className="space-y-1">
                 <p className="font-medium text-foreground">{jobState.title}</p>
                 {jobState.detail ? (
-                  <p className="text-muted-foreground">{jobState.detail}</p>
+                  <p className="text-muted-foreground break-words whitespace-pre-wrap">
+                    {jobState.detail}
+                  </p>
                 ) : null}
               </div>
               <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-3">

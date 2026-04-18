@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { PlanningShell } from "@/components/planning/planning-shell";
 import { TodayOpenTracker } from "@/components/planning/TodayOpenTracker";
+import { OnboardingLaunchFlash } from "@/components/planning/today/onboarding-launch-flash";
 import { TodayWorkspaceView } from "@/components/planning/today-workspace-view";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -78,6 +79,7 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
           <span>{sessionTiming.resolvedTotalMinutes} min</span>
         </div>
       </header>
+      <OnboardingLaunchFlash />
       <TodayWorkspaceView workspace={workspace} sourceId={sourceId} />
     </PlanningShell>
   );
