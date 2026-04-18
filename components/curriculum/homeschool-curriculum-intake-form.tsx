@@ -9,7 +9,7 @@ import type {
   IntakeSourcePackageModality,
   NormalizedIntakeSourcePackage,
 } from "@/lib/homeschool/intake/types";
-import { getBrowserStorageClient } from "@/lib/storage/client";
+import { createBrowserSupabaseClient } from "@/lib/platform/supabase-browser";
 import { storageBuckets } from "@/lib/storage/buckets";
 import { buildLearnerStoragePath } from "@/lib/storage/paths";
 
@@ -111,7 +111,7 @@ export function HomeschoolCurriculumIntakeForm(props: {
           crypto.randomUUID(),
           sanitizeUploadFileName(uploadedFile.name),
         );
-        const storage = getBrowserStorageClient().from(storageBuckets.learnerUploads);
+        const storage = createBrowserSupabaseClient().storage.from(storageBuckets.learnerUploads);
         const upload = await storage.upload(storagePath, uploadedFile, {
           contentType: uploadedFile.type || "application/octet-stream",
           upsert: false,
