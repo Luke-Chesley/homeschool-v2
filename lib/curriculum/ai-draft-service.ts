@@ -7,19 +7,12 @@ import {
   CurriculumAiRevisionResultSchema,
   type CurriculumAiChatMessage,
   type CurriculumAiChatTurn,
-  type CurriculumAiCreateResult,
   type CurriculumAiFailureResult,
-  type CurriculumAiGenerateResult,
   type CurriculumAiGeneratedArtifact,
   type CurriculumAiProgression,
   type CurriculumAiRevisionResult,
 } from "@/lib/curriculum/ai-draft";
-import type {
-  IntakeSourcePackageContext,
-  LearningCoreInputFile,
-} from "@/lib/homeschool/intake/types";
 import {
-  executeCurriculumGenerate,
   executeCurriculumIntake,
   executeCurriculumRevision,
   executeProgressionGenerate,
@@ -28,7 +21,6 @@ import {
 
 import {
   applyCurriculumArtifactToCurriculumSource,
-  createCurriculumSourceFromCurriculumArtifact,
   getCurriculumSource,
   getCurriculumTree,
   listCurriculumOutline,
@@ -87,40 +79,6 @@ export async function continueCurriculumAiDraftConversation(params: {
   });
 
   return CurriculumAiChatTurnSchema.parse(response.artifact);
-}
-
-export async function createCurriculumFromConversation(
-  params: {
-    householdId: string;
-    learner: AppLearner;
-    messages: CurriculumAiChatMessage[];
-  },
-  deps?: {
-    generate?: typeof generateCurriculumArtifact;
-    persist?: typeof createCurriculumSourceFromCurriculumArtifact;
-  },
-): Promise<CurriculumAiCreateResult> {
-  const generate = deps?.generate ?? generateCurriculumArtifact;
-  const persist = deps?.persist ?? createCurriculumSourceFromCurriculumArtifact;
-  const generation = await generate({
-    learner: params.learner,
-    messages: params.messages,
-  });
-
-  if (generation.kind === "failure") {
-    return generation;
-  }
-
-  const created = await persist({
-    householdId: params.householdId,
-    artifact: generation.artifact,
-    requestMode: "conversation_intake",
-  });
-
-  return {
-    kind: "success",
-    ...created,
-  };
 }
 
 export async function reviseCurriculumFromConversation(params: {
@@ -210,43 +168,6 @@ export async function buildCurriculumRevisionPromptPreview(params: {
     organizationId: params.householdId,
     learnerId: params.learner.id,
   });
-}
-
-export async function generateCurriculumArtifact(params: {
-  learner: AppLearner;
-  messages: CurriculumAiChatMessage[];
-  sourcePackages?: IntakeSourcePackageContext[];
-  sourceFiles?: LearningCoreInputFile[];
-},
-deps?: {
-  execute?: typeof executeCurriculumGenerate;
-}): Promise<CurriculumAiGenerateResult> {
-  const execute = deps?.execute ?? executeCurriculumGenerate;
-
-  try {
-    const response = await execute({
-      input: {
-        learnerName: params.learner.displayName,
-        requestMode: "conversation_intake",
-        messages: params.messages,
-        granularityGuidance: [],
-        correctionNotes: [],
-      },
-      organizationId: params.learner.organizationId,
-      learnerId: params.learner.id,
-    });
-
-    return {
-      kind: "success",
-      artifact: response.artifact,
-    };
-  } catch (error) {
-    return buildFailureResult({
-      stage: "generation",
-      reason: error instanceof Error ? error.message : "Generation failed",
-      userSafeMessage: "Could not generate this curriculum yet.",
-    });
-  }
 }
 
 export async function generateCurriculumProgression(params: {

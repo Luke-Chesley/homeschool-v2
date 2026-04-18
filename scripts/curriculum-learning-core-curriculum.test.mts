@@ -41,6 +41,20 @@ test("CurriculumGenerateInputSchema rejects source-only fields on conversation_i
   assert.equal(parsed.success, false);
 });
 
+test("CurriculumGenerateInputSchema accepts a conversation_intake payload", () => {
+  const parsed = CurriculumGenerateInputSchema.parse({
+    learnerName: "Maya",
+    titleCandidate: "Fractions this summer",
+    requestMode: "conversation_intake",
+    messages: [{ role: "user", content: "Teach my son fractions this summer." }],
+    granularityGuidance: ["Keep the first week teachable."],
+    correctionNotes: ["Prefer visual models first."],
+  });
+
+  assert.equal(parsed.requestMode, "conversation_intake");
+  assert.equal(parsed.messages.length, 1);
+});
+
 test("CurriculumGenerateSourceEntryInputSchema requires non-empty sourceText", () => {
   const parsed = CurriculumGenerateSourceEntryInputSchema.safeParse({
     learnerName: "Maya",
