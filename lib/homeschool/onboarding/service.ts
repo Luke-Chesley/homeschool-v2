@@ -39,6 +39,12 @@ import {
 } from "@/lib/homeschool/onboarding/activation-contracts";
 import { createFastPathBoundedCurriculum } from "@/lib/homeschool/onboarding/bounded-plan";
 import {
+  buildFastPathLaunchSummary,
+  buildFastPathPreview,
+  extractDetectedChunks,
+  routeToCurriculumMode,
+} from "@/lib/homeschool/onboarding/fast-path";
+import {
   createLearningCoreInputFilesFromSourcePackages,
   getNormalizedIntakeSourcePackages,
   toIntakeSourcePackageContext,
@@ -59,14 +65,10 @@ import {
 } from "@/lib/homeschool/onboarding/types";
 import type {
   CurriculumGenerationHorizon,
-  CurriculumHorizonDecisionSource,
-  CurriculumIntakeConfidence,
   FastPathIntakeRoute,
   HomeschoolFastPathOnboardingInput,
   HomeschoolOnboardingInput,
   HomeschoolOnboardingStatus,
-  HomeschoolFastPathPreview,
-  SourceInterpretSourceKind,
 } from "@/lib/homeschool/onboarding/types";
 
 const LearnerSchema = z.object({
@@ -1029,220 +1031,6 @@ async function initializeCurriculum(input: HomeschoolOnboardingInput, learner: t
   });
 }
 
-function extractDetectedChunks(sourceInput: string) {
-  const trimmedLines = sourceInput
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .slice(0, 4);
-
-  return trimmedLines.length > 0 ? trimmedLines : [sourceInput.trim().slice(0, 80)];
-}
-
-function buildPreviewTitle(input: {
-  intakeRoute: FastPathIntakeRoute;
-  sourceInput: string;
-}) {
-  const prefix =
-    input.intakeRoute === "topic"
-      ? "Topic starter"
-      : input.intakeRoute === "weekly_plan"
-        ? "Week plan"
-        : input.intakeRoute === "outline"
-          ? "Outline plan"
-          : input.intakeRoute === "manual_shell"
-            ? "Starter shell"
-            : "Lesson plan";
-
-  return `${prefix}: ${input.sourceInput.trim().slice(0, 48)}`;
-}
-
-function sourceKindToRoute(sourceKind: SourceInterpretSourceKind): FastPathIntakeRoute {
-  switch (sourceKind) {
-    case "single_day_material":
-      return "single_lesson";
-    case "weekly_assignments":
-      return "weekly_plan";
-    case "sequence_outline":
-      return "outline";
-    case "topic_seed":
-      return "topic";
-    case "manual_shell":
-    case "ambiguous":
-      return "manual_shell";
-  }
-}
-
-function routeToCurriculumMode(intakeRoute: FastPathIntakeRoute) {
-  switch (intakeRoute) {
-    case "weekly_plan":
-    case "outline":
-      return "paste_outline" as const;
-    case "single_lesson":
-    case "topic":
-    case "manual_shell":
-      return "manual_shell" as const;
-  }
-}
-
-const HORIZON_RANK: Record<CurriculumGenerationHorizon, number> = {
-  today: 1,
-  tomorrow: 2,
-  next_few_days: 3,
-  current_week: 4,
-  starter_module: 5,
-  starter_week: 6,
-};
-
-const HORIZON_BY_RANK: Record<number, CurriculumGenerationHorizon> = {
-  1: "today",
-  2: "tomorrow",
-  3: "next_few_days",
-  4: "current_week",
-  5: "starter_module",
-  6: "starter_week",
-};
-
-function maxHorizonRankForRoute(intakeRoute: FastPathIntakeRoute) {
-  switch (intakeRoute) {
-    case "single_lesson":
-      return 2;
-    case "weekly_plan":
-    case "outline":
-      return 4;
-    case "topic":
-      return 5;
-    case "manual_shell":
-      return 6;
-  }
-}
-
-function maxHorizonRankForSourceKind(sourceKind: SourceInterpretSourceKind) {
-  switch (sourceKind) {
-    case "single_day_material":
-      return 2;
-    case "weekly_assignments":
-    case "sequence_outline":
-      return 4;
-    case "topic_seed":
-      return 5;
-    case "manual_shell":
-      return 6;
-    case "ambiguous":
-      return 1;
-  }
-}
-
-function clampHorizon(params: {
-  sourceKind: SourceInterpretSourceKind;
-  intakeRoute: FastPathIntakeRoute;
-  requestedHorizon: CurriculumGenerationHorizon;
-}) {
-  const maxRank = Math.min(
-    maxHorizonRankForRoute(params.intakeRoute),
-    maxHorizonRankForSourceKind(params.sourceKind),
-  );
-  const requestedRank = HORIZON_RANK[params.requestedHorizon];
-
-  if (requestedRank <= maxRank) {
-    return params.requestedHorizon;
-  }
-
-  return HORIZON_BY_RANK[maxRank];
-}
-
-function buildFastPathPreview(
-  input: {
-    learnerName: string;
-    intakeRoute: FastPathIntakeRoute;
-    intakeRouteExplicit: boolean;
-    sourceInput: string;
-    horizonIntent?: "today_only" | "auto";
-    interpretation: {
-      sourceKind: SourceInterpretSourceKind;
-      suggestedTitle: string;
-      confidence: CurriculumIntakeConfidence;
-      recommendedHorizon: CurriculumGenerationHorizon;
-      assumptions: string[];
-      detectedChunks: string[];
-      followUpQuestion?: string | null;
-      needsConfirmation: boolean;
-    };
-  },
-  corrections?: HomeschoolFastPathOnboardingInput["previewCorrections"],
-): HomeschoolFastPathPreview {
-  const routedByPolicy = sourceKindToRoute(input.interpretation.sourceKind);
-  const requestedRoute = input.intakeRoute;
-  const requestedRouteWasExplicit = input.intakeRouteExplicit;
-  const inferredRoute = corrections?.intakeRoute ?? routedByPolicy;
-  const inferredHorizonCandidate =
-    input.horizonIntent === "today_only" ? "today" : input.interpretation.recommendedHorizon;
-  const inferredHorizon = clampHorizon({
-    sourceKind: input.interpretation.sourceKind,
-    intakeRoute: routedByPolicy,
-    requestedHorizon: inferredHorizonCandidate,
-  });
-  const inferredDecisionSource: CurriculumHorizonDecisionSource =
-    input.horizonIntent === "today_only"
-      ? "user_selected"
-      : inferredHorizon !== input.interpretation.recommendedHorizon
-        ? "confidence_limited"
-        : "system_default";
-  const requestedChosenHorizon = corrections?.chosenHorizon ?? inferredHorizon;
-  const chosenHorizon = clampHorizon({
-    sourceKind: input.interpretation.sourceKind,
-    intakeRoute: inferredRoute,
-    requestedHorizon: requestedChosenHorizon,
-  });
-  const decisionSource: CurriculumHorizonDecisionSource =
-    corrections?.chosenHorizon
-      ? chosenHorizon === corrections.chosenHorizon
-        ? "user_corrected_in_preview"
-        : "confidence_limited"
-      : inferredDecisionSource;
-  const detectedChunks =
-    input.interpretation.detectedChunks.length > 0
-      ? input.interpretation.detectedChunks
-      : extractDetectedChunks(input.sourceInput);
-  const assumptions = [...input.interpretation.assumptions];
-  const routeMismatch = routedByPolicy !== requestedRoute;
-
-  if (requestedRouteWasExplicit && routeMismatch) {
-    assumptions.push(
-      `We are routing this as ${routedByPolicy.replaceAll("_", " ")} instead of ${requestedRoute.replaceAll("_", " ")}.`,
-    );
-  }
-
-  if (chosenHorizon !== requestedChosenHorizon) {
-    assumptions.push("We kept the first plan conservative so the source does not overpromise scope.");
-  }
-
-  return {
-    learnerTarget: corrections?.learnerName?.trim() || input.learnerName.trim(),
-    requestedRoute,
-    requestedRouteWasExplicit,
-    intakeRoute: inferredRoute,
-    sourceKind: input.interpretation.sourceKind,
-    title:
-      corrections?.title?.trim() ||
-      input.interpretation.suggestedTitle ||
-      buildPreviewTitle({ intakeRoute: inferredRoute, sourceInput: input.sourceInput }),
-    detectedChunks,
-    assumptions: assumptions.length > 0 ? assumptions : ["We will keep the first plan bounded."],
-    inferredHorizon,
-    chosenHorizon,
-    horizonDecisionSource: decisionSource,
-    confidence: input.interpretation.confidence,
-    followUpQuestion: input.interpretation.followUpQuestion ?? null,
-    needsConfirmation:
-      input.interpretation.needsConfirmation ||
-      input.interpretation.confidence !== "high" ||
-      input.interpretation.sourceKind === "ambiguous" ||
-      (requestedRouteWasExplicit && routeMismatch) ||
-      Boolean(input.interpretation.followUpQuestion),
-  };
-}
-
 async function resolveFastPathSource(params: Pick<
   HomeschoolFastPathOnboardingInput,
   "sourceInput" | "sourcePackageId" | "sourcePackageIds"
@@ -1408,6 +1196,8 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
     metadata: {
       requestedRoute: input.intakeRoute,
       sourceKind: sourceInterpretResult.artifact.sourceKind,
+      sourceScale: sourceInterpretResult.artifact.sourceScale ?? null,
+      sliceStrategy: sourceInterpretResult.artifact.sliceStrategy ?? null,
       confidence: sourceInterpretResult.artifact.confidence,
       recommendedHorizon: sourceInterpretResult.artifact.recommendedHorizon,
       needsConfirmation: sourceInterpretResult.artifact.needsConfirmation,
@@ -1417,13 +1207,15 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
   const preview = buildFastPathPreview(
     {
       sourceInput: resolvedSource.sourceInput,
+      sourcePackages: resolvedSource.sourcePackageContexts,
       learnerName: input.learnerName,
       intakeRoute: input.intakeRoute,
       intakeRouteExplicit: input.intakeRouteExplicit ?? false,
       horizonIntent: input.horizonIntent,
       interpretation: sourceInterpretResult.artifact,
+      corrections: input.previewCorrections,
+      previewConfirmed: Boolean(input.confirmPreview),
     },
-    input.previewCorrections,
   );
   if (preview.needsConfirmation && !input.confirmPreview) {
     return {
@@ -1467,9 +1259,14 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
     learnerId: null,
     confidence: preview.confidence,
     sourceKind: preview.sourceKind,
+    sourceScale: preview.sourceScale ?? null,
+    sliceStrategy: preview.sliceStrategy ?? null,
+    sliceNotes: preview.sliceNotes,
+    initialSliceUsed: preview.initialSliceUsed,
     inferredHorizon: preview.inferredHorizon,
     chosenHorizon: preview.chosenHorizon,
     horizonDecisionSource: preview.horizonDecisionSource,
+    scopeSummary: preview.scopeSummary,
     assumptions: preview.assumptions,
     detectedChunks: preview.detectedChunks,
     followUpQuestion: preview.followUpQuestion ?? null,
@@ -1491,6 +1288,8 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
       intakeRoute: preview.intakeRoute,
       requestedRoute: preview.requestedRoute,
       sourceKind: preview.sourceKind,
+      sourceScale: preview.sourceScale ?? null,
+      sliceStrategy: preview.sliceStrategy ?? null,
       chosenHorizon: preview.chosenHorizon,
       curriculumMode,
     },
@@ -1508,6 +1307,11 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
   });
   const curriculum = boundedCurriculum.curriculum;
   const sourceId = curriculum.id;
+  const launchSummary = buildFastPathLaunchSummary({
+    preview,
+    lessonCount: boundedCurriculum.launchContext.lessonCount,
+    initialSliceLabel: boundedCurriculum.launchContext.initialSliceLabel,
+  });
   await setLiveCurriculumSource(input.organizationId, sourceId);
 
   const { weekStartDate } = await getOrCreateWeeklyRouteBoardForLearner({
@@ -1547,6 +1351,9 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
         itemCount: todayWorkspace.workspace.items.length,
         sourceKind: preview.sourceKind,
         chosenHorizon: preview.chosenHorizon,
+        sourceScale: preview.sourceScale ?? null,
+        sliceStrategy: preview.sliceStrategy ?? null,
+        lessonCount: launchSummary.lessonCount,
       },
     });
   }
@@ -1581,10 +1388,18 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
         sourceModality: resolvedSource.sourcePackage?.modality ?? "text",
         confidence: preview.confidence,
         sourceKind: preview.sourceKind,
+        sourceScale: preview.sourceScale ?? null,
+        sliceStrategy: preview.sliceStrategy ?? null,
         inferredHorizon: preview.inferredHorizon,
         chosenHorizon: preview.chosenHorizon,
         horizonDecisionSource: preview.horizonDecisionSource,
         followUpQuestion: preview.followUpQuestion ?? null,
+        initialSliceUsed: preview.initialSliceUsed,
+        initialSliceLabel: boundedCurriculum.launchContext.initialSliceLabel,
+        initialLessonCount: boundedCurriculum.launchContext.lessonCount,
+        scopeSummary: preview.scopeSummary,
+        launchSummary,
+        boundedPlanLineage: boundedCurriculum.lineage,
       },
     },
   });
@@ -1601,6 +1416,9 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
       sourceKind: preview.sourceKind,
       confidence: preview.confidence,
       chosenHorizon: preview.chosenHorizon,
+      sourceScale: preview.sourceScale ?? null,
+      sliceStrategy: preview.sliceStrategy ?? null,
+      lessonCount: launchSummary.lessonCount,
     },
   });
 
@@ -1611,6 +1429,7 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
     weekStartDate,
     redirectTo: "/today",
     preview,
+    launchSummary,
   };
 }
 

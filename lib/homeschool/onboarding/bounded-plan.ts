@@ -9,8 +9,22 @@ import { importStructuredCurriculumDocument } from "@/lib/curriculum/service";
 import { executeBoundedPlanGenerate } from "@/lib/learning-core/bounded-plan";
 import type { HomeschoolFastPathPreview } from "@/lib/homeschool/onboarding/types";
 
-function countLessons(units: ImportedCurriculumDocument["units"] = []) {
+type ImportedCurriculumUnits = NonNullable<ImportedCurriculumDocument["units"]>;
+
+function countLessons(units: ImportedCurriculumUnits = []) {
   return units.reduce((total, unit) => total + unit.lessons.length, 0);
+}
+
+function getInitialSliceLabel(params: {
+  preview: HomeschoolFastPathPreview;
+  units: ImportedCurriculumUnits;
+}) {
+  const preferredPreviewLabel = params.preview.sliceNotes.find((value) => value.trim().length > 0)?.trim();
+  if (preferredPreviewLabel) {
+    return preferredPreviewLabel;
+  }
+
+  return params.units[0]?.title ?? null;
 }
 
 function buildImportDocumentFromUnits(params: {
@@ -49,14 +63,10 @@ function buildImportDocumentFromUnits(params: {
   return document;
 }
 
-function toImportedBoundedPlanDocument(params: {
-  artifact: Awaited<ReturnType<typeof executeBoundedPlanGenerate>>["artifact"];
-  intakeMetadata: Record<string, unknown>;
-  preview: HomeschoolFastPathPreview;
-  lineage: Awaited<ReturnType<typeof executeBoundedPlanGenerate>>["lineage"];
-}): ImportedCurriculumDocument {
-  const subjects = params.artifact.subjects.length > 0 ? params.artifact.subjects : ["Integrated Studies"];
-  const units = params.artifact.units.map((unit) => ({
+function toImportedUnits(
+  artifact: Awaited<ReturnType<typeof executeBoundedPlanGenerate>>["artifact"],
+): ImportedCurriculumUnits {
+  return artifact.units.map((unit) => ({
     title: unit.title,
     description: unit.description,
     estimatedWeeks: unit.estimatedWeeks ?? undefined,
@@ -71,11 +81,21 @@ function toImportedBoundedPlanDocument(params: {
       linkedSkillTitles: lesson.linkedSkillTitles,
     })),
   }));
+}
+
+function toImportedBoundedPlanDocument(params: {
+  artifact: Awaited<ReturnType<typeof executeBoundedPlanGenerate>>["artifact"];
+  units: ImportedCurriculumUnits;
+  intakeMetadata: Record<string, unknown>;
+  preview: HomeschoolFastPathPreview;
+  lineage: Awaited<ReturnType<typeof executeBoundedPlanGenerate>>["lineage"];
+}): ImportedCurriculumDocument {
+  const subjects = params.artifact.subjects.length > 0 ? params.artifact.subjects : ["Integrated Studies"];
   const pacing =
     params.artifact.suggestedSessionMinutes != null
       ? {
           sessionMinutes: params.artifact.suggestedSessionMinutes,
-          totalSessions: countLessons(units),
+          totalSessions: countLessons(params.units),
         }
       : undefined;
 
@@ -85,8 +105,8 @@ function toImportedBoundedPlanDocument(params: {
     kind: "ai_draft",
     subjects,
     gradeLevels: [],
-    document: buildImportDocumentFromUnits({ subjects, units }),
-    units,
+    document: buildImportDocumentFromUnits({ subjects, units: params.units }),
+    units: params.units,
     metadata: {
       intake: params.intakeMetadata,
       pacing,
@@ -94,6 +114,11 @@ function toImportedBoundedPlanDocument(params: {
         provisional: true,
         horizon: params.preview.chosenHorizon,
         sourceKind: params.preview.sourceKind,
+        sourceScale: params.preview.sourceScale ?? null,
+        sliceStrategy: params.preview.sliceStrategy ?? null,
+        sliceNotes: params.preview.sliceNotes,
+        initialSliceUsed: params.preview.initialSliceUsed,
+        scopeSummary: params.preview.scopeSummary,
         requestedRoute: params.preview.requestedRoute,
         routedRoute: params.preview.intakeRoute,
         rationale: params.artifact.rationale,
@@ -120,6 +145,9 @@ export async function createFastPathBoundedCurriculum(params: {
       requestedRoute: params.preview.requestedRoute,
       routedRoute: params.preview.intakeRoute,
       sourceKind: params.preview.sourceKind,
+      sourceScale: params.preview.sourceScale ?? null,
+      sliceStrategy: params.preview.sliceStrategy ?? null,
+      sliceNotes: params.preview.sliceNotes,
       chosenHorizon: params.preview.chosenHorizon,
       sourceText: params.sourceText,
       sourcePackages: params.sourcePackages ?? [],
@@ -133,11 +161,37 @@ export async function createFastPathBoundedCurriculum(params: {
     workflowMode: "fast_path",
   });
 
+  const importedUnits = toImportedUnits(generation.artifact);
+  const lessonCount = countLessons(importedUnits);
+  const initialSliceLabel = getInitialSliceLabel({
+    preview: params.preview,
+    units: importedUnits,
+  });
+  const lastGeneratedLessonTitle =
+    importedUnits.flatMap((unit) => unit.lessons).at(-1)?.title ?? null;
+  const launchContext = {
+    lessonCount,
+    horizon: params.preview.chosenHorizon,
+    scopeSummary: params.preview.scopeSummary,
+    sourceScale: params.preview.sourceScale ?? null,
+    sliceStrategy: params.preview.sliceStrategy ?? null,
+    initialSliceUsed: params.preview.initialSliceUsed,
+    initialSliceLabel,
+    lastGeneratedLessonTitle,
+  };
+
   const curriculum = await importStructuredCurriculumDocument({
     householdId: params.organizationId,
     imported: toImportedBoundedPlanDocument({
       artifact: generation.artifact,
-      intakeMetadata: params.intakeMetadata,
+      units: importedUnits,
+      intakeMetadata: {
+        ...params.intakeMetadata,
+        initialSliceLabel,
+        initialLessonCount: lessonCount,
+        lastGeneratedLessonTitle,
+        boundedPlanLineage: generation.lineage,
+      },
       preview: params.preview,
       lineage: generation.lineage,
     }),
@@ -147,5 +201,6 @@ export async function createFastPathBoundedCurriculum(params: {
     curriculum,
     artifact: generation.artifact,
     lineage: generation.lineage,
+    launchContext,
   };
 }
