@@ -1,5 +1,8 @@
 # Phase 2: Curriculum Intake And Horizon Policy
 
+> Note
+> This policy note predates the source-taxonomy refactor. Use [docs/notes/source-taxonomy-model.md](/home/luke/Desktop/learning/homeschool-v2/.worktrees/source-model-refactor/docs/notes/source-taxonomy-model.md) for the current canonical taxonomy, bounded-horizon language, and continuation model.
+
 ## Purpose
 
 The launch user often has partial or messy source material.

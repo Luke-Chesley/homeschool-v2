@@ -11,20 +11,22 @@ export type AiLaunchSupportedModality =
   (typeof AI_LAUNCH_SUPPORTED_MODALITIES)[number];
 
 export const AI_LAUNCH_ROUTE_FAMILIES = [
-  "single_day_material",
-  "weekly_assignments",
-  "sequence_outline",
+  "bounded_material",
+  "timeboxed_plan",
+  "structured_sequence",
+  "comprehensive_source",
   "topic_seed",
-  "manual_shell",
-  "needs_confirmation",
+  "shell_request",
+  "ambiguous",
 ] as const;
 
 export type AiLaunchRouteFamily = (typeof AI_LAUNCH_ROUTE_FAMILIES)[number];
 
 export const AI_LAUNCH_HORIZON_CEILINGS = [
-  "today",
-  "next_few_days",
-  "current_week",
+  "single_day",
+  "few_days",
+  "one_week",
+  "two_weeks",
   "starter_module",
 ] as const;
 
@@ -57,31 +59,41 @@ export interface AiLaunchRoutingRule {
 
 export const AI_LAUNCH_ROUTING_RULES: readonly AiLaunchRoutingRule[] = [
   {
-    routeFamily: "single_day_material",
+    routeFamily: "bounded_material",
     label: "Single assignment or photographed day material",
     supportedModalities: ["text", "photo", "image", "pdf", "file"],
-    defaultHorizon: "today",
-    maxHorizon: "today",
+    defaultHorizon: "single_day",
+    maxHorizon: "single_day",
     requiresConfirmation: false,
-    notes: "Weak or day-scoped input must stay bounded to today on first pass.",
+    notes: "Weak or day-scoped input must stay bounded to a single-day start on first pass.",
   },
   {
-    routeFamily: "weekly_assignments",
-    label: "Weekly assignment sheet or week notes",
+    routeFamily: "timeboxed_plan",
+    label: "Weekly or time-boxed assignment plan",
     supportedModalities: ["text", "outline", "photo", "image", "pdf", "file"],
-    defaultHorizon: "current_week",
-    maxHorizon: "current_week",
+    defaultHorizon: "one_week",
+    maxHorizon: "two_weeks",
     requiresConfirmation: false,
-    notes: "This is the widest automatic route allowed at launch.",
+    notes: "Time-boxed sources may extend to two weeks when the source already provides that structure.",
   },
   {
-    routeFamily: "sequence_outline",
-    label: "Outline or table of contents",
+    routeFamily: "structured_sequence",
+    label: "Outline or ordered sequence",
     supportedModalities: ["text", "outline", "photo", "image", "pdf", "file"],
-    defaultHorizon: "next_few_days",
-    maxHorizon: "starter_module",
+    defaultHorizon: "few_days",
+    maxHorizon: "one_week",
     requiresConfirmation: false,
-    notes: "Outline strength can justify a starter module, but not a full curriculum.",
+    notes: "Structured sequences should start from the first bounded arc instead of widening to the full source.",
+  },
+  {
+    routeFamily: "comprehensive_source",
+    label: "Outline, table of contents, workbook, or whole-book source",
+    supportedModalities: ["text", "outline", "photo", "image", "pdf", "file"],
+    defaultHorizon: "one_week",
+    maxHorizon: "two_weeks",
+    requiresConfirmation: false,
+    notes:
+      "Large or comprehensive sources still launch from a bounded initial slice; whole-book uploads stay continuation-friendly instead of widening automatically.",
   },
   {
     routeFamily: "topic_seed",
@@ -93,20 +105,20 @@ export const AI_LAUNCH_ROUTING_RULES: readonly AiLaunchRoutingRule[] = [
     notes: "Topic-only inputs should generate bounded starter modules rather than fake scope.",
   },
   {
-    routeFamily: "manual_shell",
+    routeFamily: "shell_request",
     label: "Manual shell only",
     supportedModalities: ["text", "outline"],
-    defaultHorizon: "today",
-    maxHorizon: "today",
+    defaultHorizon: "starter_module",
+    maxHorizon: "starter_module",
     requiresConfirmation: false,
     notes: "This path preserves a low-AI fallback and avoids premature expansion.",
   },
   {
-    routeFamily: "needs_confirmation",
+    routeFamily: "ambiguous",
     label: "Ambiguous source requiring parent confirmation",
     supportedModalities: ["text", "outline", "photo", "image", "pdf", "file"],
-    defaultHorizon: "today",
-    maxHorizon: "today",
+    defaultHorizon: "single_day",
+    maxHorizon: "single_day",
     requiresConfirmation: true,
     notes: "Ambiguous inputs must pause for confirmation rather than widen automatically.",
   },
@@ -125,5 +137,6 @@ export const AI_LAUNCH_RULES = {
   onboardingAutoTriggersLessonGeneration: true,
   activityAutoFollowsLessonGeneration: true,
   noFakeWeek: true,
+  noUserHorizonChoice: true,
   deferPolishedActivationMetrics: true,
 } as const;

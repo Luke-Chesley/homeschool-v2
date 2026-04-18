@@ -1,5 +1,8 @@
 # Phase 2: Curriculum Intake Implementation
 
+> Note
+> This implementation plan predates the source-taxonomy refactor. Use [docs/notes/source-taxonomy-model.md](/home/luke/Desktop/learning/homeschool-v2/.worktrees/source-model-refactor/docs/notes/source-taxonomy-model.md) for the current canonical source taxonomy, `recommendedHorizon` semantics, and continuation metadata.
+
 ## Purpose
 
 This document turns Phase 2 from product policy into implementation work.

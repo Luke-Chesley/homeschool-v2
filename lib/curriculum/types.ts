@@ -69,40 +69,61 @@ export const CurriculumSourceIntakeRouteSchema = z.enum([
 ]);
 
 export const CurriculumSourceGenerationHorizonSchema = z.enum([
-  "today",
-  "tomorrow",
-  "next_few_days",
-  "current_week",
+  "single_day",
+  "few_days",
+  "one_week",
+  "two_weeks",
   "starter_module",
-  "starter_week",
 ]);
+export const CurriculumSourceRecommendedHorizonSchema = CurriculumSourceGenerationHorizonSchema;
 
 export const CurriculumSourceHorizonDecisionSourceSchema = z.enum([
   "model_inferred",
-  "legacy_user_override",
   "internal_override",
-  "preview_confirmed",
-  "system_default",
   "confidence_limited",
-  "user_selected",
-  "user_corrected_in_preview",
   "manual_regeneration",
 ]);
 
 export const CurriculumSourceIntakeConfidenceSchema = z.enum(["low", "medium", "high"]);
 
-export const CurriculumSourceScaleSchema = z.enum(["small", "medium", "large"]);
-
-export const CurriculumSourceSliceStrategySchema = z.enum([
-  "single_lesson",
-  "first_lesson",
-  "first_chapter",
-  "first_unit",
-  "first_few_sections",
-  "current_week_only",
-  "explicit_range",
-  "manual_shell_only",
+export const CurriculumSourceInterpretKindSchema = z.enum([
+  "bounded_material",
+  "timeboxed_plan",
+  "structured_sequence",
+  "comprehensive_source",
+  "topic_seed",
+  "shell_request",
+  "ambiguous",
 ]);
+
+export const CurriculumSourceEntryStrategySchema = z.enum([
+  "use_as_is",
+  "explicit_range",
+  "sequential_start",
+  "section_start",
+  "timebox_start",
+  "scaffold_only",
+]);
+
+export const CurriculumSourceContinuationModeSchema = z.enum([
+  "none",
+  "sequential",
+  "timebox",
+  "manual_review",
+]);
+
+export type CurriculumSourceInterpretKind = z.infer<typeof CurriculumSourceInterpretKindSchema>;
+export type CurriculumSourceEntryStrategy = z.infer<typeof CurriculumSourceEntryStrategySchema>;
+export type CurriculumSourceContinuationMode = z.infer<
+  typeof CurriculumSourceContinuationModeSchema
+>;
+export type CurriculumSourceRecommendedHorizon = z.infer<
+  typeof CurriculumSourceRecommendedHorizonSchema
+>;
+
+export type CurriculumSourceHorizonDecisionSource = z.infer<
+  typeof CurriculumSourceHorizonDecisionSourceSchema
+>;
 
 export const CurriculumSourceIntakeSchema = z.object({
   route: CurriculumSourceIntakeRouteSchema,
@@ -112,22 +133,13 @@ export const CurriculumSourceIntakeSchema = z.object({
   assetIds: z.array(z.string()).default([]),
   learnerId: z.string().nullable().optional(),
   confidence: CurriculumSourceIntakeConfidenceSchema,
-  sourceKind: z
-    .enum([
-      "single_day_material",
-      "weekly_assignments",
-      "sequence_outline",
-      "topic_seed",
-      "manual_shell",
-      "ambiguous",
-    ])
-    .optional(),
-  sourceScale: CurriculumSourceScaleSchema.nullable().optional(),
-  sliceStrategy: CurriculumSourceSliceStrategySchema.nullable().optional(),
-  sliceNotes: z.array(z.string()).default([]),
+  sourceKind: CurriculumSourceInterpretKindSchema.optional(),
+  entryStrategy: CurriculumSourceEntryStrategySchema.optional(),
+  entryLabel: z.string().nullable().optional(),
+  continuationMode: CurriculumSourceContinuationModeSchema.optional(),
   initialSliceUsed: z.boolean().optional(),
   initialSliceLabel: z.string().nullable().optional(),
-  inferredHorizon: CurriculumSourceGenerationHorizonSchema,
+  recommendedHorizon: CurriculumSourceRecommendedHorizonSchema,
   chosenHorizon: CurriculumSourceGenerationHorizonSchema,
   horizonDecisionSource: CurriculumSourceHorizonDecisionSourceSchema,
   scopeSummary: z.string().optional(),
@@ -140,7 +152,6 @@ export const CurriculumSourceIntakeSchema = z.object({
   sourceModalities: z.array(IntakeSourcePackageModalitySchema).default([]),
   sourcePackageId: z.string().nullable().optional(),
   sourceModality: IntakeSourcePackageModalitySchema.optional(),
-  curriculumMode: z.enum(["manual_shell", "paste_outline", "ai_decompose"]).optional(),
   learningCoreLineage: JsonRecordSchema.optional(),
   boundedPlanLineage: JsonRecordSchema.optional(),
   sourceFingerprint: z.string().optional(),

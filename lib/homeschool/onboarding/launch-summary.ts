@@ -6,12 +6,11 @@ const SESSION_STORAGE_KEY = "homeschool-onboarding-launch-summary";
 
 export const OnboardingLaunchSummarySchema = z.object({
   chosenHorizon: z.enum([
-    "today",
-    "tomorrow",
-    "next_few_days",
-    "current_week",
+    "single_day",
+    "few_days",
+    "one_week",
+    "two_weeks",
     "starter_module",
-    "starter_week",
   ]),
   lessonCount: z.number().int().positive(),
   summaryText: z.string().min(1),

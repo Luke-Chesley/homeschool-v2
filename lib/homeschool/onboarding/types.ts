@@ -8,58 +8,47 @@ export const FAST_PATH_INTAKE_ROUTES = [
   "manual_shell",
 ] as const;
 
-export const LEGACY_FAST_PATH_INTAKE_ROUTES = [
-  "book_curriculum",
-  "outline_weekly_plan",
-] as const;
-
 export const CURRICULUM_GENERATION_HORIZONS = [
-  "today",
-  "tomorrow",
-  "next_few_days",
-  "current_week",
+  "single_day",
+  "few_days",
+  "one_week",
+  "two_weeks",
   "starter_module",
-  "starter_week",
 ] as const;
 
 export const CURRICULUM_HORIZON_DECISION_SOURCES = [
   "model_inferred",
-  "legacy_user_override",
   "internal_override",
-  "preview_confirmed",
-  "system_default",
   "confidence_limited",
-  "user_selected",
-  "user_corrected_in_preview",
   "manual_regeneration",
 ] as const;
 
 export const CURRICULUM_INTAKE_CONFIDENCE_LEVELS = ["low", "medium", "high"] as const;
 
 export const SOURCE_INTERPRET_SOURCE_KINDS = [
-  "single_day_material",
-  "weekly_assignments",
-  "sequence_outline",
+  "bounded_material",
+  "timeboxed_plan",
+  "structured_sequence",
+  "comprehensive_source",
   "topic_seed",
-  "manual_shell",
+  "shell_request",
   "ambiguous",
 ] as const;
 
-export const SOURCE_INTERPRET_SOURCE_SCALES = [
-  "small",
-  "medium",
-  "large",
+export const SOURCE_ENTRY_STRATEGIES = [
+  "use_as_is",
+  "explicit_range",
+  "sequential_start",
+  "section_start",
+  "timebox_start",
+  "scaffold_only",
 ] as const;
 
-export const SOURCE_INTERPRET_SLICE_STRATEGIES = [
-  "single_lesson",
-  "first_lesson",
-  "first_chapter",
-  "first_unit",
-  "first_few_sections",
-  "current_week_only",
-  "explicit_range",
-  "manual_shell_only",
+export const SOURCE_CONTINUATION_MODES = [
+  "none",
+  "sequential",
+  "timebox",
+  "manual_review",
 ] as const;
 
 export type HomeschoolOnboardingInput = {
@@ -90,13 +79,6 @@ export type HomeschoolOnboardingInput = {
 
 export type FastPathIntakeRoute = (typeof FAST_PATH_INTAKE_ROUTES)[number];
 
-export type LegacyFastPathIntakeRoute = (typeof LEGACY_FAST_PATH_INTAKE_ROUTES)[number];
-
-export type FastPathIntakeType = FastPathIntakeRoute | LegacyFastPathIntakeRoute;
-
-/** Internal and legacy-only override. Normal onboarding now defaults to auto inference. */
-export type FastPathHorizonIntent = "today_only" | "auto";
-
 export type CurriculumGenerationHorizon = (typeof CURRICULUM_GENERATION_HORIZONS)[number];
 
 export type CurriculumHorizonDecisionSource =
@@ -106,9 +88,9 @@ export type CurriculumIntakeConfidence = (typeof CURRICULUM_INTAKE_CONFIDENCE_LE
 
 export type SourceInterpretSourceKind = (typeof SOURCE_INTERPRET_SOURCE_KINDS)[number];
 
-export type SourceInterpretSourceScale = (typeof SOURCE_INTERPRET_SOURCE_SCALES)[number];
+export type SourceEntryStrategy = (typeof SOURCE_ENTRY_STRATEGIES)[number];
 
-export type SourceInterpretSliceStrategy = (typeof SOURCE_INTERPRET_SLICE_STRATEGIES)[number];
+export type SourceContinuationMode = (typeof SOURCE_CONTINUATION_MODES)[number];
 
 export type HomeschoolFastPathOnboardingInput = {
   organizationId: string;
@@ -117,15 +99,11 @@ export type HomeschoolFastPathOnboardingInput = {
   intakeRouteExplicit?: boolean;
   sourceInput?: string;
   sourcePackageIds?: string[];
-  /** Backward-compatible single-package entrypoint. */
-  sourcePackageId?: string;
-  horizonIntent?: FastPathHorizonIntent;
   confirmPreview?: boolean;
   previewCorrections?: {
     learnerName?: string;
     intakeRoute?: FastPathIntakeRoute;
     title?: string;
-    chosenHorizon?: CurriculumGenerationHorizon;
   };
 };
 
@@ -135,20 +113,21 @@ export type HomeschoolFastPathPreview = {
   requestedRouteWasExplicit: boolean;
   intakeRoute: FastPathIntakeRoute;
   sourceKind: SourceInterpretSourceKind;
-  sourceScale?: SourceInterpretSourceScale | null;
-  sliceStrategy?: SourceInterpretSliceStrategy | null;
-  sliceNotes: string[];
-  initialSliceUsed: boolean;
+  entryStrategy: SourceEntryStrategy;
+  entryLabel?: string | null;
+  continuationMode: SourceContinuationMode;
   title: string;
   detectedChunks: string[];
   assumptions: string[];
-  inferredHorizon: CurriculumGenerationHorizon;
+  recommendedHorizon: CurriculumGenerationHorizon;
   chosenHorizon: CurriculumGenerationHorizon;
   horizonDecisionSource: CurriculumHorizonDecisionSource;
   scopeSummary: string;
   confidence: CurriculumIntakeConfidence;
   followUpQuestion?: string | null;
   needsConfirmation: boolean;
+  initialSliceUsed: boolean;
+  initialSliceLabel?: string | null;
 };
 
 export type HomeschoolFastPathLaunchSummary = {

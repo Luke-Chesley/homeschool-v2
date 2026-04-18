@@ -5,16 +5,16 @@ import { z } from "zod";
 import {
   CURRICULUM_GENERATION_HORIZONS,
   FAST_PATH_INTAKE_ROUTES,
-  SOURCE_INTERPRET_SLICE_STRATEGIES,
+  SOURCE_CONTINUATION_MODES,
+  SOURCE_ENTRY_STRATEGIES,
   SOURCE_INTERPRET_SOURCE_KINDS,
-  SOURCE_INTERPRET_SOURCE_SCALES,
 } from "@/lib/homeschool/onboarding/types";
 import type {
   CurriculumGenerationHorizon,
   FastPathIntakeRoute,
-  SourceInterpretSliceStrategy,
+  SourceContinuationMode,
+  SourceEntryStrategy,
   SourceInterpretSourceKind,
-  SourceInterpretSourceScale,
 } from "@/lib/homeschool/onboarding/types";
 import {
   IntakeSourcePackageContextSchema,
@@ -66,9 +66,9 @@ const BoundedPlanInputSchema = z.object({
   requestedRoute: z.enum(FAST_PATH_INTAKE_ROUTES),
   routedRoute: z.enum(FAST_PATH_INTAKE_ROUTES),
   sourceKind: z.enum(SOURCE_INTERPRET_SOURCE_KINDS),
-  sourceScale: z.enum(SOURCE_INTERPRET_SOURCE_SCALES).nullable().optional(),
-  sliceStrategy: z.enum(SOURCE_INTERPRET_SLICE_STRATEGIES).nullable().optional(),
-  sliceNotes: z.array(z.string()).default([]),
+  entryStrategy: z.enum(SOURCE_ENTRY_STRATEGIES),
+  entryLabel: z.string().nullable().optional(),
+  continuationMode: z.enum(SOURCE_CONTINUATION_MODES),
   chosenHorizon: z.enum(CURRICULUM_GENERATION_HORIZONS),
   sourceText: z.string().min(1),
   sourcePackages: z.array(IntakeSourcePackageContextSchema).default([]),
@@ -135,9 +135,9 @@ export async function executeBoundedPlanGenerate(params: {
     requestedRoute: FastPathIntakeRoute;
     routedRoute: FastPathIntakeRoute;
     sourceKind: SourceInterpretSourceKind;
-    sourceScale?: SourceInterpretSourceScale | null;
-    sliceStrategy?: SourceInterpretSliceStrategy | null;
-    sliceNotes?: string[];
+    entryStrategy: SourceEntryStrategy;
+    entryLabel?: string | null;
+    continuationMode: SourceContinuationMode;
     chosenHorizon: CurriculumGenerationHorizon;
     sourceText: string;
     sourcePackages?: IntakeSourcePackageContext[];

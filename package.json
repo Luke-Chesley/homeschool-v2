@@ -12,7 +12,7 @@
     "dev:db:reset": "bash ./scripts/supabase.sh db-reset",
     "inngest:dev": "bash ./scripts/inngest-dev.sh",
     "check:tools": "bash ./scripts/check-local-tools.sh",
-    "test:curriculum": "node --import ./scripts/path-loader.mjs --test --experimental-strip-types scripts/curriculum-*.test.mts scripts/session-timing.test.mts",
+    "test:curriculum": "node --import ./scripts/path-loader.mjs --test --experimental-strip-types scripts/curriculum-*.test.mts scripts/onboarding-fast-path.test.mts scripts/session-timing.test.mts",
     "test:activity": "node --import ./scripts/path-loader.mjs --test --experimental-strip-types scripts/activity-spec.test.mts",
     "test:activity:ui": "node scripts/activity-chessboard-smoke.mjs",
     "test:architecture": "node --import ./scripts/path-loader.mjs --test --experimental-strip-types scripts/learning-core-cutover.test.mts",

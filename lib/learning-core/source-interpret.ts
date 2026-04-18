@@ -6,17 +6,17 @@ import {
   CURRICULUM_GENERATION_HORIZONS,
   CURRICULUM_INTAKE_CONFIDENCE_LEVELS,
   FAST_PATH_INTAKE_ROUTES,
-  SOURCE_INTERPRET_SLICE_STRATEGIES,
+  SOURCE_CONTINUATION_MODES,
+  SOURCE_ENTRY_STRATEGIES,
   SOURCE_INTERPRET_SOURCE_KINDS,
-  SOURCE_INTERPRET_SOURCE_SCALES,
 } from "@/lib/homeschool/onboarding/types";
 import type {
   CurriculumGenerationHorizon,
   CurriculumIntakeConfidence,
   FastPathIntakeRoute,
-  SourceInterpretSliceStrategy,
+  SourceContinuationMode,
+  SourceEntryStrategy,
   SourceInterpretSourceKind,
-  SourceInterpretSourceScale,
 } from "@/lib/homeschool/onboarding/types";
 import {
   IntakeSourcePackageContextSchema,
@@ -41,7 +41,6 @@ const SourceInterpretInputSchema = z.object({
   assetRefs: z.array(z.string()).default([]),
   sourcePackages: z.array(IntakeSourcePackageContextSchema).default([]),
   sourceFiles: z.array(LearningCoreInputFileSchema).default([]),
-  userHorizonIntent: z.enum(["today_only", "auto"]).default("auto"),
   titleCandidate: z.string().optional().nullable(),
 });
 
@@ -49,9 +48,9 @@ export type LearningCoreSourceInterpretInput = z.infer<typeof SourceInterpretInp
 
 export const SourceInterpretArtifactSchema = z.object({
   sourceKind: z.enum(SOURCE_INTERPRET_SOURCE_KINDS),
-  sourceScale: z.enum(SOURCE_INTERPRET_SOURCE_SCALES).nullable().optional(),
-  sliceStrategy: z.enum(SOURCE_INTERPRET_SLICE_STRATEGIES).nullable().optional(),
-  sliceNotes: z.array(z.string()).default([]),
+  entryStrategy: z.enum(SOURCE_ENTRY_STRATEGIES),
+  entryLabel: z.string().nullable().optional(),
+  continuationMode: z.enum(SOURCE_CONTINUATION_MODES),
   suggestedTitle: z.string().min(1),
   confidence: z.enum(CURRICULUM_INTAKE_CONFIDENCE_LEVELS),
   recommendedHorizon: z.enum(CURRICULUM_GENERATION_HORIZONS),
@@ -63,9 +62,9 @@ export const SourceInterpretArtifactSchema = z.object({
 
 export type LearningCoreSourceInterpretArtifact = {
   sourceKind: SourceInterpretSourceKind;
-  sourceScale?: SourceInterpretSourceScale | null;
-  sliceStrategy?: SourceInterpretSliceStrategy | null;
-  sliceNotes: string[];
+  entryStrategy: SourceEntryStrategy;
+  entryLabel?: string | null;
+  continuationMode: SourceContinuationMode;
   suggestedTitle: string;
   confidence: CurriculumIntakeConfidence;
   recommendedHorizon: CurriculumGenerationHorizon;
@@ -86,7 +85,6 @@ export async function executeSourceInterpret(params: {
     assetRefs?: string[];
     sourcePackages?: IntakeSourcePackageContext[];
     sourceFiles?: LearningCoreInputFile[];
-    userHorizonIntent?: "today_only" | "auto";
     titleCandidate?: string | null;
   };
   surface: string;

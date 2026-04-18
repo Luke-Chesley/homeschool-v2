@@ -1,30 +1,18 @@
 import "@/lib/server-only";
 
 import type { ImportedCurriculumDocument } from "@/lib/curriculum/local-json-import";
+import { importStructuredCurriculumDocument } from "@/lib/curriculum/service";
 import type {
   IntakeSourcePackageContext,
   LearningCoreInputFile,
 } from "@/lib/homeschool/intake/types";
-import { importStructuredCurriculumDocument } from "@/lib/curriculum/service";
-import { executeBoundedPlanGenerate } from "@/lib/learning-core/bounded-plan";
 import type { HomeschoolFastPathPreview } from "@/lib/homeschool/onboarding/types";
+import { executeBoundedPlanGenerate } from "@/lib/learning-core/bounded-plan";
 
 type ImportedCurriculumUnits = NonNullable<ImportedCurriculumDocument["units"]>;
 
 function countLessons(units: ImportedCurriculumUnits = []) {
   return units.reduce((total, unit) => total + unit.lessons.length, 0);
-}
-
-function getInitialSliceLabel(params: {
-  preview: HomeschoolFastPathPreview;
-  units: ImportedCurriculumUnits;
-}) {
-  const preferredPreviewLabel = params.preview.sliceNotes.find((value) => value.trim().length > 0)?.trim();
-  if (preferredPreviewLabel) {
-    return preferredPreviewLabel;
-  }
-
-  return params.units[0]?.title ?? null;
 }
 
 function buildImportDocumentFromUnits(params: {
@@ -89,13 +77,16 @@ function toImportedBoundedPlanDocument(params: {
   intakeMetadata: Record<string, unknown>;
   preview: HomeschoolFastPathPreview;
   lineage: Awaited<ReturnType<typeof executeBoundedPlanGenerate>>["lineage"];
+  initialSliceLabel?: string | null;
+  lessonCount: number;
+  lastGeneratedLessonTitle?: string | null;
 }): ImportedCurriculumDocument {
   const subjects = params.artifact.subjects.length > 0 ? params.artifact.subjects : ["Integrated Studies"];
   const pacing =
     params.artifact.suggestedSessionMinutes != null
       ? {
           sessionMinutes: params.artifact.suggestedSessionMinutes,
-          totalSessions: countLessons(params.units),
+          totalSessions: params.lessonCount,
         }
       : undefined;
 
@@ -112,17 +103,21 @@ function toImportedBoundedPlanDocument(params: {
       pacing,
       boundedPlan: {
         provisional: true,
-        horizon: params.preview.chosenHorizon,
         sourceKind: params.preview.sourceKind,
-        sourceScale: params.preview.sourceScale ?? null,
-        sliceStrategy: params.preview.sliceStrategy ?? null,
-        sliceNotes: params.preview.sliceNotes,
+        entryStrategy: params.preview.entryStrategy,
+        entryLabel: params.preview.entryLabel ?? null,
+        continuationMode: params.preview.continuationMode,
+        recommendedHorizon: params.preview.recommendedHorizon,
+        chosenHorizon: params.preview.chosenHorizon,
         initialSliceUsed: params.preview.initialSliceUsed,
+        initialSliceLabel: params.initialSliceLabel ?? null,
         scopeSummary: params.preview.scopeSummary,
         requestedRoute: params.preview.requestedRoute,
         routedRoute: params.preview.intakeRoute,
         rationale: params.artifact.rationale,
         suggestedSessionMinutes: params.artifact.suggestedSessionMinutes ?? null,
+        lessonCount: params.lessonCount,
+        lastGeneratedLessonTitle: params.lastGeneratedLessonTitle ?? null,
         createdFromFastPath: true,
         learningCoreLineage: params.lineage,
       },
@@ -145,9 +140,9 @@ export async function createFastPathBoundedCurriculum(params: {
       requestedRoute: params.preview.requestedRoute,
       routedRoute: params.preview.intakeRoute,
       sourceKind: params.preview.sourceKind,
-      sourceScale: params.preview.sourceScale ?? null,
-      sliceStrategy: params.preview.sliceStrategy ?? null,
-      sliceNotes: params.preview.sliceNotes,
+      entryStrategy: params.preview.entryStrategy,
+      entryLabel: params.preview.entryLabel ?? null,
+      continuationMode: params.preview.continuationMode,
       chosenHorizon: params.preview.chosenHorizon,
       sourceText: params.sourceText,
       sourcePackages: params.sourcePackages ?? [],
@@ -163,22 +158,9 @@ export async function createFastPathBoundedCurriculum(params: {
 
   const importedUnits = toImportedUnits(generation.artifact);
   const lessonCount = countLessons(importedUnits);
-  const initialSliceLabel = getInitialSliceLabel({
-    preview: params.preview,
-    units: importedUnits,
-  });
+  const initialSliceLabel = params.preview.entryLabel ?? importedUnits[0]?.title ?? null;
   const lastGeneratedLessonTitle =
     importedUnits.flatMap((unit) => unit.lessons).at(-1)?.title ?? null;
-  const launchContext = {
-    lessonCount,
-    horizon: params.preview.chosenHorizon,
-    scopeSummary: params.preview.scopeSummary,
-    sourceScale: params.preview.sourceScale ?? null,
-    sliceStrategy: params.preview.sliceStrategy ?? null,
-    initialSliceUsed: params.preview.initialSliceUsed,
-    initialSliceLabel,
-    lastGeneratedLessonTitle,
-  };
 
   const curriculum = await importStructuredCurriculumDocument({
     householdId: params.organizationId,
@@ -194,6 +176,9 @@ export async function createFastPathBoundedCurriculum(params: {
       },
       preview: params.preview,
       lineage: generation.lineage,
+      initialSliceLabel,
+      lessonCount,
+      lastGeneratedLessonTitle,
     }),
   });
 
@@ -201,6 +186,16 @@ export async function createFastPathBoundedCurriculum(params: {
     curriculum,
     artifact: generation.artifact,
     lineage: generation.lineage,
-    launchContext,
+    launchContext: {
+      lessonCount,
+      horizon: params.preview.chosenHorizon,
+      scopeSummary: params.preview.scopeSummary,
+      entryStrategy: params.preview.entryStrategy,
+      entryLabel: params.preview.entryLabel ?? null,
+      continuationMode: params.preview.continuationMode,
+      initialSliceUsed: params.preview.initialSliceUsed,
+      initialSliceLabel,
+      lastGeneratedLessonTitle,
+    },
   };
 }

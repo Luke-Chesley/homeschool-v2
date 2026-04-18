@@ -63,21 +63,37 @@ const UPLOAD_ACCEPT =
   "image/*,application/pdf,.pdf,.txt,.md,.csv,.json,.html,.htm,application/json,text/plain,text/csv,text/markdown";
 
 const horizonLabels: Record<CurriculumGenerationHorizon, string> = {
-  today: "Today",
-  tomorrow: "Tomorrow",
-  next_few_days: "Next few days",
-  current_week: "Current week",
+  single_day: "Today",
+  few_days: "Next few lessons",
+  one_week: "One week",
+  two_weeks: "Two weeks",
   starter_module: "Starter module",
-  starter_week: "Starter week",
 };
 
 const sourceKindLabels: Record<HomeschoolFastPathPreview["sourceKind"], string> = {
-  single_day_material: "Single day material",
-  weekly_assignments: "Weekly assignments",
-  sequence_outline: "Sequence outline",
+  bounded_material: "Bounded material",
+  timeboxed_plan: "Timeboxed plan",
+  structured_sequence: "Structured sequence",
+  comprehensive_source: "Comprehensive source",
   topic_seed: "Topic seed",
-  manual_shell: "Manual shell",
+  shell_request: "Shell request",
   ambiguous: "Ambiguous",
+};
+
+const entryStrategyLabels: Record<HomeschoolFastPathPreview["entryStrategy"], string> = {
+  use_as_is: "Use as is",
+  explicit_range: "Use the explicit range",
+  sequential_start: "Start at the beginning",
+  section_start: "Start at the first section",
+  timebox_start: "Start with the first timebox",
+  scaffold_only: "Build a starter scaffold",
+};
+
+const continuationModeLabels: Record<HomeschoolFastPathPreview["continuationMode"], string> = {
+  none: "No automatic continuation",
+  sequential: "Continue in sequence",
+  timebox: "Continue by timebox",
+  manual_review: "Continue only after review",
 };
 
 function routeLabel(value: FastPathIntakeRoute) {
@@ -741,11 +757,11 @@ export function HomeschoolOnboardingForm(props: {
               <p className="font-medium text-foreground">Inferred scope</p>
               <p className="mt-1">{preview.scopeSummary}</p>
               <div className="mt-2 grid gap-1 text-xs">
-                <p>Launch horizon: {horizonLabels[preview.chosenHorizon]}</p>
-                {preview.sourceScale ? <p>Source scale: {preview.sourceScale}</p> : null}
-                {preview.initialSliceUsed && preview.sliceNotes.length > 0 ? (
-                  <p>Starting slice: {preview.sliceNotes[0]}</p>
-                ) : null}
+                <p>Recommended horizon: {horizonLabels[preview.recommendedHorizon]}</p>
+                <p>Chosen horizon: {horizonLabels[preview.chosenHorizon]}</p>
+                <p>Entry strategy: {entryStrategyLabels[preview.entryStrategy]}</p>
+                {preview.entryLabel ? <p>Starting point: {preview.entryLabel}</p> : null}
+                <p>Continuation: {continuationModeLabels[preview.continuationMode]}</p>
               </div>
             </div>
             <p>

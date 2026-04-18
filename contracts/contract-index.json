@@ -23,6 +23,31 @@
       ]
     },
     {
+      "id": "source-interpretation-artifact",
+      "title": "Source Interpretation Artifact",
+      "docPath": "contracts/source-interpretation-artifact.md",
+      "canonicalSources": [
+        "learning-core/learning_core/contracts/source_interpret.py",
+        "learning-core/learning_core/skills/source_interpret/SKILL.md",
+        "learning-core/learning_core/skills/source_interpret/scripts/main.py",
+        "lib/learning-core/source-interpret.ts",
+        "lib/homeschool/onboarding/fast-path.ts"
+      ],
+      "producerEntrypoints": [
+        "learning-core: POST /v1/operations/source_interpret/execute"
+      ],
+      "consumerEntrypoints": [
+        "app/api/homeschool/onboarding/route.ts",
+        "lib/homeschool/onboarding/service.ts",
+        "lib/homeschool/onboarding/bounded-plan.ts",
+        "lib/planning/today-lesson-generation.ts"
+      ],
+      "versionFields": [
+        "recommendedHorizon",
+        "continuationMode"
+      ]
+    },
+    {
       "id": "curriculum-artifact",
       "title": "Curriculum Artifact",
       "docPath": "contracts/curriculum-artifact.md",

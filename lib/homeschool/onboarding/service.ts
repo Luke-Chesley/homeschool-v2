@@ -62,7 +62,6 @@ import {
   CURRICULUM_HORIZON_DECISION_SOURCES,
   CURRICULUM_INTAKE_CONFIDENCE_LEVELS,
   FAST_PATH_INTAKE_ROUTES,
-  LEGACY_FAST_PATH_INTAKE_ROUTES,
 } from "@/lib/homeschool/onboarding/types";
 import type {
   CurriculumGenerationHorizon,
@@ -113,7 +112,6 @@ const RawHomeschoolCurriculumIntakeSchema = z.object({
   curriculumTitle: z.string().trim().min(1).max(160),
   curriculumSummary: z.string().trim().max(600).optional(),
   curriculumText: z.string().trim().max(12000).optional(),
-  sourcePackageId: z.string().min(1).optional(),
   sourcePackageIds: z.array(z.string().trim().min(1)).max(8).optional(),
 });
 
@@ -134,41 +132,23 @@ export const HomeschoolCurriculumIntakeSchema = RawHomeschoolCurriculumIntakeSch
 ).transform((input) => ({
   ...input,
   sourcePackageIds: normalizeSourcePackageIds(input),
-  sourcePackageId: normalizeSourcePackageIds(input)[0],
 }));
 
 export type HomeschoolOnboardingPayload = z.infer<typeof HomeschoolOnboardingSchema>;
 export type HomeschoolCurriculumIntakePayload = z.infer<typeof HomeschoolCurriculumIntakeSchema>;
 
-const CanonicalFastPathIntakeRouteSchema = z.enum(FAST_PATH_INTAKE_ROUTES);
-const LegacyFastPathIntakeRouteSchema = z.enum(LEGACY_FAST_PATH_INTAKE_ROUTES);
-const FastPathIntakeRouteInputSchema = z.union([
-  CanonicalFastPathIntakeRouteSchema,
-  LegacyFastPathIntakeRouteSchema,
-]);
+const FastPathIntakeRouteInputSchema = z.enum(FAST_PATH_INTAKE_ROUTES);
 const CurriculumGenerationHorizonSchema = z.enum(CURRICULUM_GENERATION_HORIZONS);
 const CurriculumHorizonDecisionSourceSchema = z.enum(CURRICULUM_HORIZON_DECISION_SOURCES);
 const CurriculumIntakeConfidenceSchema = z.enum(CURRICULUM_INTAKE_CONFIDENCE_LEVELS);
 const DEFAULT_FAST_PATH_INTAKE_ROUTE: FastPathIntakeRoute = "single_lesson";
 
-function normalizeFastPathIntakeRoute(route: z.infer<typeof FastPathIntakeRouteInputSchema>): FastPathIntakeRoute {
-  switch (route) {
-    case "book_curriculum":
-      return "single_lesson";
-    case "outline_weekly_plan":
-      return "weekly_plan";
-    default:
-      return route;
-  }
-}
-
 function normalizeSourcePackageIds(input: {
-  sourcePackageId?: string;
   sourcePackageIds?: string[];
 }) {
   return [
     ...new Set(
-      [input.sourcePackageId, ...(input.sourcePackageIds ?? [])]
+      (input.sourcePackageIds ?? [])
         .map((value) => value?.trim())
         .filter((value): value is string => Boolean(value)),
     ),
@@ -194,18 +174,14 @@ const RawHomeschoolFastPathOnboardingSchema = z.object({
   organizationId: z.string().min(1),
   learnerName: z.string().trim().min(1).max(80),
   intakeRoute: FastPathIntakeRouteInputSchema.optional(),
-  intakeType: FastPathIntakeRouteInputSchema.optional(),
   sourceInput: z.string().trim().min(1).max(12000).optional(),
-  sourcePackageId: z.string().min(1).optional(),
   sourcePackageIds: z.array(z.string().trim().min(1)).max(8).optional(),
-  horizonIntent: z.enum(["today_only", "auto"]).optional(),
   confirmPreview: z.boolean().optional(),
   previewCorrections: z
     .object({
       learnerName: z.string().trim().min(1).max(80).optional(),
-      intakeRoute: CanonicalFastPathIntakeRouteSchema.optional(),
+      intakeRoute: FastPathIntakeRouteInputSchema.optional(),
       title: z.string().trim().min(1).max(160).optional(),
-      chosenHorizon: CurriculumGenerationHorizonSchema.optional(),
     })
     .optional(),
 });
@@ -223,16 +199,10 @@ export const HomeschoolFastPathOnboardingSchema = RawHomeschoolFastPathOnboardin
 ).transform((input) => ({
   organizationId: input.organizationId,
   learnerName: input.learnerName,
-  intakeRoute: normalizeFastPathIntakeRoute(
-    (input.intakeRoute ?? input.intakeType ?? DEFAULT_FAST_PATH_INTAKE_ROUTE) as z.infer<
-      typeof FastPathIntakeRouteInputSchema
-    >,
-  ),
-  intakeRouteExplicit: Boolean(input.intakeRoute ?? input.intakeType),
+  intakeRoute: input.intakeRoute ?? DEFAULT_FAST_PATH_INTAKE_ROUTE,
+  intakeRouteExplicit: Boolean(input.intakeRoute),
   sourceInput: input.sourceInput,
   sourcePackageIds: normalizeSourcePackageIds(input),
-  sourcePackageId: normalizeSourcePackageIds(input)[0],
-  horizonIntent: input.horizonIntent,
   confirmPreview: input.confirmPreview,
   previewCorrections: input.previewCorrections,
 }));
@@ -323,18 +293,16 @@ function getFastPathIntakeMetadata(input: HomeschoolOnboardingInput) {
 
 function lessonCountForHorizon(horizon: CurriculumGenerationHorizon | null) {
   switch (horizon) {
-    case "today":
+    case "single_day":
       return 1;
-    case "tomorrow":
-      return 2;
-    case "next_few_days":
+    case "few_days":
       return 3;
-    case "current_week":
+    case "one_week":
       return 5;
+    case "two_weeks":
+      return 8;
     case "starter_module":
       return 4;
-    case "starter_week":
-      return 5;
     default:
       return 3;
   }
@@ -1053,7 +1021,7 @@ async function initializeCurriculum(input: HomeschoolOnboardingInput, learner: t
 
 async function resolveFastPathSource(params: Pick<
   HomeschoolFastPathOnboardingInput,
-  "sourceInput" | "sourcePackageId" | "sourcePackageIds"
+  "sourceInput" | "sourcePackageIds"
 >) {
   const packageIds = normalizeSourcePackageIds(params);
   const sourcePackages =
@@ -1162,7 +1130,6 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
     metadata: {
       intakeRoute: input.intakeRoute,
       intakeRouteExplicit: input.intakeRouteExplicit ?? false,
-      horizonIntent: input.horizonIntent ?? "auto",
     },
   });
   await trackProductEvent({
@@ -1174,7 +1141,6 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
         resolvedSource.sourcePackageContexts.length +
           (resolvedSource.rawSourceInput ? 1 : 0) || 1,
       sourcePackageIds: resolvedSource.sourcePackageIds,
-      sourcePackageId: resolvedSource.sourcePackage?.id ?? null,
       sourceModalities: resolvedSource.sourceModalities,
       sourceModality: resolvedSource.sourcePackage?.modality ?? "text",
       assetCount: resolvedSource.assetIds.length,
@@ -1202,7 +1168,6 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
       assetRefs: resolvedSource.assetIds,
       sourcePackages: resolvedSource.sourcePackageContexts,
       sourceFiles,
-      userHorizonIntent: input.horizonIntent ?? "auto",
       titleCandidate: resolvedSource.sourcePackage?.title ?? null,
     },
     surface: "onboarding",
@@ -1216,8 +1181,9 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
     metadata: {
       requestedRoute: input.intakeRoute,
       sourceKind: sourceInterpretResult.artifact.sourceKind,
-      sourceScale: sourceInterpretResult.artifact.sourceScale ?? null,
-      sliceStrategy: sourceInterpretResult.artifact.sliceStrategy ?? null,
+      entryStrategy: sourceInterpretResult.artifact.entryStrategy,
+      entryLabel: sourceInterpretResult.artifact.entryLabel ?? null,
+      continuationMode: sourceInterpretResult.artifact.continuationMode,
       confidence: sourceInterpretResult.artifact.confidence,
       recommendedHorizon: sourceInterpretResult.artifact.recommendedHorizon,
       needsConfirmation: sourceInterpretResult.artifact.needsConfirmation,
@@ -1231,10 +1197,8 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
       learnerName: input.learnerName,
       intakeRoute: input.intakeRoute,
       intakeRouteExplicit: input.intakeRouteExplicit ?? false,
-      horizonIntent: input.horizonIntent,
       interpretation: sourceInterpretResult.artifact,
       corrections: input.previewCorrections,
-      previewConfirmed: Boolean(input.confirmPreview),
     },
   );
   if (preview.needsConfirmation && !input.confirmPreview) {
@@ -1279,11 +1243,12 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
     learnerId: null,
     confidence: preview.confidence,
     sourceKind: preview.sourceKind,
-    sourceScale: preview.sourceScale ?? null,
-    sliceStrategy: preview.sliceStrategy ?? null,
-    sliceNotes: preview.sliceNotes,
+    entryStrategy: preview.entryStrategy,
+    entryLabel: preview.entryLabel ?? null,
+    continuationMode: preview.continuationMode,
     initialSliceUsed: preview.initialSliceUsed,
-    inferredHorizon: preview.inferredHorizon,
+    initialSliceLabel: preview.initialSliceLabel ?? null,
+    recommendedHorizon: preview.recommendedHorizon,
     chosenHorizon: preview.chosenHorizon,
     horizonDecisionSource: preview.horizonDecisionSource,
     scopeSummary: preview.scopeSummary,
@@ -1291,11 +1256,11 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
     detectedChunks: preview.detectedChunks,
     followUpQuestion: preview.followUpQuestion ?? null,
     needsConfirmation: preview.needsConfirmation,
-    sourcePackageIds: resolvedSource.sourcePackageIds,
-    sourcePackages: resolvedSource.sourcePackageContexts,
-    sourceModalities: resolvedSource.sourceModalities,
-    sourcePackageId: resolvedSource.sourcePackage?.id ?? null,
-    sourceModality: resolvedSource.sourcePackage?.modality ?? "text",
+      sourcePackageIds: resolvedSource.sourcePackageIds,
+      sourcePackages: resolvedSource.sourcePackageContexts,
+      sourceModalities: resolvedSource.sourceModalities,
+      sourcePackageId: resolvedSource.sourcePackage?.id ?? null,
+      sourceModality: resolvedSource.sourcePackage?.modality ?? "text",
     learningCoreLineage: sourceInterpretResult.lineage,
     curriculumMode,
     createdFrom: "onboarding_fast_path" as const,
@@ -1308,8 +1273,9 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
       intakeRoute: preview.intakeRoute,
       requestedRoute: preview.requestedRoute,
       sourceKind: preview.sourceKind,
-      sourceScale: preview.sourceScale ?? null,
-      sliceStrategy: preview.sliceStrategy ?? null,
+      entryStrategy: preview.entryStrategy,
+      entryLabel: preview.entryLabel ?? null,
+      continuationMode: preview.continuationMode,
       chosenHorizon: preview.chosenHorizon,
       curriculumMode,
     },
@@ -1371,8 +1337,9 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
         itemCount: todayWorkspace.workspace.items.length,
         sourceKind: preview.sourceKind,
         chosenHorizon: preview.chosenHorizon,
-        sourceScale: preview.sourceScale ?? null,
-        sliceStrategy: preview.sliceStrategy ?? null,
+        entryStrategy: preview.entryStrategy,
+        entryLabel: preview.entryLabel ?? null,
+        continuationMode: preview.continuationMode,
         lessonCount: launchSummary.lessonCount,
       },
     });
@@ -1408,16 +1375,20 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
         sourceModality: resolvedSource.sourcePackage?.modality ?? "text",
         confidence: preview.confidence,
         sourceKind: preview.sourceKind,
-        sourceScale: preview.sourceScale ?? null,
-        sliceStrategy: preview.sliceStrategy ?? null,
-        inferredHorizon: preview.inferredHorizon,
+        entryStrategy: preview.entryStrategy,
+        entryLabel: preview.entryLabel ?? null,
+        continuationMode: preview.continuationMode,
+        recommendedHorizon: preview.recommendedHorizon,
         chosenHorizon: preview.chosenHorizon,
         horizonDecisionSource: preview.horizonDecisionSource,
         followUpQuestion: preview.followUpQuestion ?? null,
         initialSliceUsed: preview.initialSliceUsed,
-        initialSliceLabel: boundedCurriculum.launchContext.initialSliceLabel,
+        initialSliceLabel:
+          boundedCurriculum.launchContext.initialSliceLabel ?? preview.initialSliceLabel ?? null,
         initialLessonCount: boundedCurriculum.launchContext.lessonCount,
         scopeSummary: preview.scopeSummary,
+        assumptions: preview.assumptions,
+        detectedChunks: preview.detectedChunks,
         launchSummary,
         boundedPlanLineage: boundedCurriculum.lineage,
       },
@@ -1436,8 +1407,9 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
       sourceKind: preview.sourceKind,
       confidence: preview.confidence,
       chosenHorizon: preview.chosenHorizon,
-      sourceScale: preview.sourceScale ?? null,
-      sliceStrategy: preview.sliceStrategy ?? null,
+      entryStrategy: preview.entryStrategy,
+      entryLabel: preview.entryLabel ?? null,
+      continuationMode: preview.continuationMode,
       lessonCount: launchSummary.lessonCount,
     },
   });

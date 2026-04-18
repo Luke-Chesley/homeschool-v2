@@ -4,32 +4,29 @@ import type {
   CurriculumGenerationHorizon,
   CurriculumHorizonDecisionSource,
   CurriculumIntakeConfidence,
-  FastPathHorizonIntent,
   FastPathIntakeRoute,
   HomeschoolFastPathLaunchSummary,
   HomeschoolFastPathOnboardingInput,
   HomeschoolFastPathPreview,
-  SourceInterpretSliceStrategy,
+  SourceContinuationMode,
+  SourceEntryStrategy,
   SourceInterpretSourceKind,
-  SourceInterpretSourceScale,
 } from "./types";
 
 const HORIZON_RANK: Record<CurriculumGenerationHorizon, number> = {
-  today: 1,
-  tomorrow: 2,
-  next_few_days: 3,
-  current_week: 4,
+  single_day: 1,
+  few_days: 2,
+  one_week: 3,
+  two_weeks: 4,
   starter_module: 5,
-  starter_week: 6,
 };
 
 const HORIZON_BY_RANK: Record<number, CurriculumGenerationHorizon> = {
-  1: "today",
-  2: "tomorrow",
-  3: "next_few_days",
-  4: "current_week",
+  1: "single_day",
+  2: "few_days",
+  3: "one_week",
+  4: "two_weeks",
   5: "starter_module",
-  6: "starter_week",
 };
 
 function buildPreviewTitle(input: {
@@ -40,12 +37,12 @@ function buildPreviewTitle(input: {
     input.intakeRoute === "topic"
       ? "Topic starter"
       : input.intakeRoute === "weekly_plan"
-        ? "Week plan"
+        ? "Timed plan"
         : input.intakeRoute === "outline"
-          ? "Outline plan"
+          ? "Structured launch"
           : input.intakeRoute === "manual_shell"
             ? "Starter shell"
-            : "Lesson plan";
+            : "Lesson launch";
 
   return `${prefix}: ${input.sourceInput.trim().slice(0, 48)}`;
 }
@@ -55,22 +52,23 @@ export function extractDetectedChunks(sourceInput: string) {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean)
-    .slice(0, 4);
+    .slice(0, 6);
 
   return trimmedLines.length > 0 ? trimmedLines : [sourceInput.trim().slice(0, 80)];
 }
 
 export function sourceKindToRoute(sourceKind: SourceInterpretSourceKind): FastPathIntakeRoute {
   switch (sourceKind) {
-    case "single_day_material":
+    case "bounded_material":
       return "single_lesson";
-    case "weekly_assignments":
+    case "timeboxed_plan":
       return "weekly_plan";
-    case "sequence_outline":
+    case "structured_sequence":
+    case "comprehensive_source":
       return "outline";
     case "topic_seed":
       return "topic";
-    case "manual_shell":
+    case "shell_request":
     case "ambiguous":
       return "manual_shell";
   }
@@ -91,30 +89,32 @@ export function routeToCurriculumMode(intakeRoute: FastPathIntakeRoute) {
 function maxHorizonRankForRoute(intakeRoute: FastPathIntakeRoute) {
   switch (intakeRoute) {
     case "single_lesson":
-      return 2;
+      return HORIZON_RANK.single_day;
     case "weekly_plan":
+      return HORIZON_RANK.two_weeks;
     case "outline":
-      return 4;
+      return HORIZON_RANK.two_weeks;
     case "topic":
-      return 5;
     case "manual_shell":
-      return 6;
+      return HORIZON_RANK.starter_module;
   }
 }
 
 function maxHorizonRankForSourceKind(sourceKind: SourceInterpretSourceKind) {
   switch (sourceKind) {
-    case "single_day_material":
-      return 2;
-    case "weekly_assignments":
-    case "sequence_outline":
-      return 4;
+    case "bounded_material":
+      return HORIZON_RANK.few_days;
+    case "timeboxed_plan":
+      return HORIZON_RANK.two_weeks;
+    case "structured_sequence":
+      return HORIZON_RANK.one_week;
+    case "comprehensive_source":
+      return HORIZON_RANK.two_weeks;
     case "topic_seed":
-      return 5;
-    case "manual_shell":
-      return 6;
+    case "shell_request":
+      return HORIZON_RANK.starter_module;
     case "ambiguous":
-      return 1;
+      return HORIZON_RANK.single_day;
   }
 }
 
@@ -136,80 +136,74 @@ function clampHorizon(params: {
   return HORIZON_BY_RANK[maxRank];
 }
 
-function getSliceDescriptor(params: {
-  sliceStrategy?: SourceInterpretSliceStrategy | null;
-  sliceNotes?: string[];
+function usesInitialSourceSlice(params: {
+  sourceKind: SourceInterpretSourceKind;
+  entryStrategy: SourceEntryStrategy;
 }) {
-  const preferredNote = params.sliceNotes?.find((value) => value.trim().length > 0)?.trim();
-  if (preferredNote) {
-    return preferredNote;
+  if (params.sourceKind === "comprehensive_source") {
+    return true;
   }
 
-  switch (params.sliceStrategy) {
+  return params.entryStrategy !== "use_as_is" && params.entryStrategy !== "scaffold_only";
+}
+
+function getInitialSliceLabel(params: {
+  entryStrategy: SourceEntryStrategy;
+  entryLabel?: string | null;
+}) {
+  if (params.entryLabel?.trim()) {
+    return params.entryLabel.trim();
+  }
+
+  switch (params.entryStrategy) {
     case "explicit_range":
-      return "the range you specified";
-    case "first_chapter":
-      return "the first chapter";
-    case "first_unit":
-      return "the first unit";
-    case "first_few_sections":
+      return "the assigned range";
+    case "section_start":
       return "the first section";
-    case "first_lesson":
-      return "the first lesson";
-    case "current_week_only":
-      return "the current week portion";
-    case "manual_shell_only":
-      return "a lightweight starter shell";
-    case "single_lesson":
-      return "today's lesson";
-    default:
+    case "sequential_start":
+      return "the beginning";
+    case "timebox_start":
+      return "week 1";
+    case "scaffold_only":
+      return "a starter shell";
+    case "use_as_is":
       return null;
   }
 }
 
-export function usesInitialSourceSlice(params: {
-  sourceScale?: SourceInterpretSourceScale | null;
-  sliceStrategy?: SourceInterpretSliceStrategy | null;
-}) {
-  if (params.sourceScale === "large") {
-    return true;
-  }
-
-  return Boolean(
-    params.sliceStrategy &&
-      params.sliceStrategy !== "single_lesson" &&
-      params.sliceStrategy !== "manual_shell_only" &&
-      params.sliceStrategy !== "current_week_only",
-  );
-}
-
 function buildScopeSummary(params: {
+  sourceKind: SourceInterpretSourceKind;
+  entryStrategy: SourceEntryStrategy;
+  entryLabel?: string | null;
   chosenHorizon: CurriculumGenerationHorizon;
-  sourceScale?: SourceInterpretSourceScale | null;
-  sliceStrategy?: SourceInterpretSliceStrategy | null;
-  sliceNotes?: string[];
 }) {
-  const sliceDescriptor = getSliceDescriptor(params);
-  const usedSlice = usesInitialSourceSlice(params);
+  const sliceLabel = getInitialSliceLabel(params);
 
-  if (params.sourceScale === "large" || usedSlice) {
-    return sliceDescriptor
-      ? `This looks like a larger source, so we'll start with ${sliceDescriptor} and keep the rest available for later.`
-      : "This looks like a larger source, so we'll start with a bounded first slice and keep the rest available for later.";
+  if (params.sourceKind === "comprehensive_source") {
+    return sliceLabel
+      ? `This looks like a larger source, so we'll start with ${sliceLabel} and keep the rest available for later.`
+      : "This looks like a larger source, so we'll start with a bounded opening and keep the rest available for later.";
   }
 
-  switch (params.chosenHorizon) {
-    case "today":
-    case "tomorrow":
-      return "This looks like enough to set up today first.";
-    case "next_few_days":
-      return "This looks like enough to set up the next few lessons and open day 1.";
-    case "current_week":
-      return "This looks like enough for the current week. We'll open day 1 and keep the rest ready.";
-    case "starter_module":
-      return "This looks like a topic starter, so we'll build a small launch-safe module and open day 1.";
-    case "starter_week":
-      return "This looks like a lightweight starter week. We'll open day 1 and keep the rest reversible.";
+  switch (params.sourceKind) {
+    case "bounded_material":
+      return params.chosenHorizon === "few_days"
+        ? "This source supports a short opening sequence, so we'll set up the next few lessons and open day 1."
+        : "This source looks bounded enough to set up today first.";
+    case "timeboxed_plan":
+      return params.chosenHorizon === "two_weeks"
+        ? `This already looks timeboxed, so we'll start with ${sliceLabel ?? "the first window"} and set up the next two weeks.`
+        : `This already looks timeboxed, so we'll start with ${sliceLabel ?? "the first window"} and open day 1.`;
+    case "structured_sequence":
+      return sliceLabel
+        ? `This looks like an ordered sequence, so we'll start with ${sliceLabel} and keep the opening bounded.`
+        : "This looks like an ordered sequence, so we'll start at the beginning and keep the opening bounded.";
+    case "topic_seed":
+      return "This looks like a topic start, so we'll build a small starter module and open day 1.";
+    case "shell_request":
+      return "This looks like a shell request, so we'll build a lightweight starter module and open day 1.";
+    case "ambiguous":
+      return "This source is still ambiguous, so we'll keep the opening conservative until it is confirmed.";
   }
 }
 
@@ -218,32 +212,14 @@ function shouldRequireFastPathPreview(params: {
     confidence: CurriculumIntakeConfidence;
     followUpQuestion?: string | null;
     needsConfirmation: boolean;
-    sourceScale?: SourceInterpretSourceScale | null;
-    sliceStrategy?: SourceInterpretSliceStrategy | null;
+    sourceKind: SourceInterpretSourceKind;
   };
-  requestedRouteWasExplicit: boolean;
-  routedByPolicy: FastPathIntakeRoute;
-  requestedRoute: FastPathIntakeRoute;
-  sourcePackages: IntakeSourcePackageContext[];
 }) {
-  const requiresReview = params.sourcePackages.some(
-    (sourcePackage) => sourcePackage.extractionStatus === "requires_review",
-  );
-  const routeMismatch =
-    params.requestedRouteWasExplicit && params.routedByPolicy !== params.requestedRoute;
-  const largeSliceIsAmbiguous =
-    params.interpretation.sourceScale === "large" &&
-    (!params.interpretation.sliceStrategy ||
-      params.interpretation.needsConfirmation ||
-      params.interpretation.confidence === "low");
-
   return (
     params.interpretation.needsConfirmation ||
     params.interpretation.confidence === "low" ||
     Boolean(params.interpretation.followUpQuestion) ||
-    requiresReview ||
-    routeMismatch ||
-    largeSliceIsAmbiguous
+    params.interpretation.sourceKind === "ambiguous"
   );
 }
 
@@ -251,35 +227,27 @@ export function resolveFastPathChosenHorizon(params: {
   recommendedHorizon: CurriculumGenerationHorizon;
   sourceKind: SourceInterpretSourceKind;
   intakeRoute: FastPathIntakeRoute;
-  legacyHorizonIntent?: FastPathHorizonIntent;
-  legacyChosenHorizon?: CurriculumGenerationHorizon;
-  previewConfirmed?: boolean;
+  confidence: CurriculumIntakeConfidence;
 }) {
-  let requestedHorizon = params.recommendedHorizon;
   let decisionSource: CurriculumHorizonDecisionSource = "model_inferred";
-
-  if (params.legacyChosenHorizon) {
-    requestedHorizon = params.legacyChosenHorizon;
-    decisionSource = "internal_override";
-  } else if (params.legacyHorizonIntent === "today_only") {
-    requestedHorizon = "today";
-    decisionSource = "legacy_user_override";
-  }
-
-  const chosenHorizon = clampHorizon({
+  let chosenHorizon = clampHorizon({
     sourceKind: params.sourceKind,
     intakeRoute: params.intakeRoute,
-    requestedHorizon,
+    requestedHorizon: params.recommendedHorizon,
   });
 
-  if (decisionSource === "model_inferred" && params.previewConfirmed) {
-    decisionSource = "preview_confirmed";
+  if (chosenHorizon !== params.recommendedHorizon) {
+    decisionSource = "internal_override";
+  }
+
+  if (params.confidence === "low" && HORIZON_RANK[chosenHorizon] > HORIZON_RANK.single_day) {
+    chosenHorizon = "single_day";
+    decisionSource = "confidence_limited";
   }
 
   return {
     chosenHorizon,
     horizonDecisionSource: decisionSource,
-    wasClamped: chosenHorizon !== requestedHorizon,
   };
 }
 
@@ -289,12 +257,11 @@ export function buildFastPathPreview(params: {
   intakeRouteExplicit: boolean;
   sourceInput: string;
   sourcePackages: IntakeSourcePackageContext[];
-  horizonIntent?: FastPathHorizonIntent;
   interpretation: {
     sourceKind: SourceInterpretSourceKind;
-    sourceScale?: SourceInterpretSourceScale | null;
-    sliceStrategy?: SourceInterpretSliceStrategy | null;
-    sliceNotes?: string[];
+    entryStrategy: SourceEntryStrategy;
+    entryLabel?: string | null;
+    continuationMode: SourceContinuationMode;
     suggestedTitle: string;
     confidence: CurriculumIntakeConfidence;
     recommendedHorizon: CurriculumGenerationHorizon;
@@ -304,100 +271,98 @@ export function buildFastPathPreview(params: {
     needsConfirmation: boolean;
   };
   corrections?: HomeschoolFastPathOnboardingInput["previewCorrections"];
-  previewConfirmed?: boolean;
 }): HomeschoolFastPathPreview {
   const routedByPolicy = sourceKindToRoute(params.interpretation.sourceKind);
-  const requestedRoute = params.intakeRoute;
-  const requestedRouteWasExplicit = params.intakeRouteExplicit;
   const intakeRoute = params.corrections?.intakeRoute ?? routedByPolicy;
   const resolvedHorizon = resolveFastPathChosenHorizon({
     recommendedHorizon: params.interpretation.recommendedHorizon,
     sourceKind: params.interpretation.sourceKind,
     intakeRoute,
-    legacyHorizonIntent: params.horizonIntent,
-    legacyChosenHorizon: params.corrections?.chosenHorizon,
-    previewConfirmed: params.previewConfirmed,
+    confidence: params.interpretation.confidence,
   });
-  const detectedChunks =
-    params.interpretation.detectedChunks.length > 0
-      ? params.interpretation.detectedChunks
-      : extractDetectedChunks(params.sourceInput);
-  const assumptions = [...params.interpretation.assumptions];
-
-  if (requestedRouteWasExplicit && routedByPolicy !== requestedRoute) {
-    assumptions.push(
-      `We are routing this as ${routedByPolicy.replaceAll("_", " ")} instead of ${requestedRoute.replaceAll("_", " ")}.`,
-    );
-  }
-
-  if (resolvedHorizon.wasClamped) {
-    assumptions.push("We kept the launch horizon conservative so the first plan stays bounded.");
-  }
-
-  const scopeSummary = buildScopeSummary({
-    chosenHorizon: resolvedHorizon.chosenHorizon,
-    sourceScale: params.interpretation.sourceScale,
-    sliceStrategy: params.interpretation.sliceStrategy,
-    sliceNotes: params.interpretation.sliceNotes,
+  const initialSliceLabel = getInitialSliceLabel({
+    entryStrategy: params.interpretation.entryStrategy,
+    entryLabel: params.interpretation.entryLabel,
   });
 
   return {
-    learnerTarget: params.corrections?.learnerName?.trim() || params.learnerName.trim(),
-    requestedRoute,
-    requestedRouteWasExplicit,
+    learnerTarget: params.corrections?.learnerName?.trim() || params.learnerName,
+    requestedRoute: params.intakeRoute,
+    requestedRouteWasExplicit: params.intakeRouteExplicit,
     intakeRoute,
     sourceKind: params.interpretation.sourceKind,
-    sourceScale: params.interpretation.sourceScale ?? null,
-    sliceStrategy: params.interpretation.sliceStrategy ?? null,
-    sliceNotes: params.interpretation.sliceNotes ?? [],
-    initialSliceUsed: usesInitialSourceSlice({
-      sourceScale: params.interpretation.sourceScale,
-      sliceStrategy: params.interpretation.sliceStrategy,
-    }),
+    entryStrategy: params.interpretation.entryStrategy,
+    entryLabel: params.interpretation.entryLabel ?? null,
+    continuationMode: params.interpretation.continuationMode,
     title:
-      params.corrections?.title?.trim() ||
-      params.interpretation.suggestedTitle ||
-      buildPreviewTitle({ intakeRoute, sourceInput: params.sourceInput }),
-    detectedChunks,
-    assumptions: assumptions.length > 0 ? assumptions : ["We will keep the first plan bounded."],
-    inferredHorizon: params.interpretation.recommendedHorizon,
+      params.corrections?.title?.trim()
+      || params.interpretation.suggestedTitle
+      || buildPreviewTitle({ intakeRoute, sourceInput: params.sourceInput }),
+    detectedChunks:
+      params.interpretation.detectedChunks.length > 0
+        ? params.interpretation.detectedChunks
+        : extractDetectedChunks(params.sourceInput),
+    assumptions: params.interpretation.assumptions,
+    recommendedHorizon: params.interpretation.recommendedHorizon,
     chosenHorizon: resolvedHorizon.chosenHorizon,
     horizonDecisionSource: resolvedHorizon.horizonDecisionSource,
-    scopeSummary,
+    scopeSummary: buildScopeSummary({
+      sourceKind: params.interpretation.sourceKind,
+      entryStrategy: params.interpretation.entryStrategy,
+      entryLabel: params.interpretation.entryLabel,
+      chosenHorizon: resolvedHorizon.chosenHorizon,
+    }),
     confidence: params.interpretation.confidence,
     followUpQuestion: params.interpretation.followUpQuestion ?? null,
     needsConfirmation: shouldRequireFastPathPreview({
       interpretation: params.interpretation,
-      requestedRouteWasExplicit,
-      routedByPolicy,
-      requestedRoute,
-      sourcePackages: params.sourcePackages,
     }),
+    initialSliceUsed: usesInitialSourceSlice({
+      sourceKind: params.interpretation.sourceKind,
+      entryStrategy: params.interpretation.entryStrategy,
+    }),
+    initialSliceLabel,
   };
+}
+
+function describeChosenHorizon(horizon: CurriculumGenerationHorizon) {
+  switch (horizon) {
+    case "single_day":
+      return "today";
+    case "few_days":
+      return "the next few lessons";
+    case "one_week":
+      return "the next week";
+    case "two_weeks":
+      return "the next 2 weeks";
+    case "starter_module":
+      return "a starter module";
+  }
 }
 
 export function buildFastPathLaunchSummary(params: {
   preview: Pick<
     HomeschoolFastPathPreview,
-    "chosenHorizon" | "sourceScale" | "sliceStrategy" | "sliceNotes" | "scopeSummary" | "initialSliceUsed"
+    "chosenHorizon" | "scopeSummary" | "initialSliceUsed" | "initialSliceLabel"
   >;
   lessonCount: number;
   initialSliceLabel?: string | null;
 }): HomeschoolFastPathLaunchSummary {
-  const sliceLabel = params.initialSliceLabel?.trim() || getSliceDescriptor(params.preview);
-  const pluralizedLessons = params.lessonCount === 1 ? "lesson" : "lessons";
+  const sliceLabel = params.initialSliceLabel ?? params.preview.initialSliceLabel ?? null;
   let summaryText: string;
 
-  if (params.lessonCount <= 1 && params.preview.chosenHorizon === "today" && !params.preview.initialSliceUsed) {
+  if (params.preview.chosenHorizon === "single_day") {
     summaryText = "We set this up for today.";
-  } else if (params.preview.initialSliceUsed) {
-    summaryText = sliceLabel
-      ? `We started with ${sliceLabel}, set up ${params.lessonCount} ${pluralizedLessons}, and opened day 1.`
-      : `We started with the first part of your source, set up ${params.lessonCount} ${pluralizedLessons}, and opened day 1.`;
-  } else if (params.preview.chosenHorizon === "current_week") {
-    summaryText = `We organized this into your current week, set up ${params.lessonCount} ${pluralizedLessons}, and opened day 1.`;
+  } else if (params.preview.initialSliceUsed && sliceLabel && params.preview.chosenHorizon === "two_weeks") {
+    summaryText = `We started with ${sliceLabel}, set up ${describeChosenHorizon(
+      params.preview.chosenHorizon,
+    )}, and opened day 1.`;
+  } else if (params.preview.initialSliceUsed && sliceLabel) {
+    summaryText = `We started with ${sliceLabel}, set up the next ${params.lessonCount} lessons, and opened day 1.`;
+  } else if (params.preview.chosenHorizon === "starter_module") {
+    summaryText = `We built a starter module with ${params.lessonCount} lessons and opened day 1.`;
   } else {
-    summaryText = `We set up ${params.lessonCount} ${pluralizedLessons} and opened day 1.`;
+    summaryText = `We set up the next ${params.lessonCount} lessons and opened day 1.`;
   }
 
   return {
