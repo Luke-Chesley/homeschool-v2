@@ -73,7 +73,7 @@ For the **regeneration path**: DB node IDs are loaded and passed as `skillRefs`,
 
 ## Remaining migration limitations
 
-1. **Initial generation still uses titles**: The stable node ID is derived from `sha256(sourceLineageId:normalizedType:normalizedPath)`, which requires the source ID to exist. The source is created before `importNormalizedTree` is called, but after `generateCurriculumArtifact`. Passing the pre-created source ID to the progression generation step would allow ID-based prompting on first import; this work is not done yet.
+1. **Initial generation still uses titles**: The stable node ID is derived from `sha256(sourceLineageId:normalizedType:normalizedPath)`, which requires the source ID to exist. The source is created before `importNormalizedTree` is called, but after curriculum generation. Passing the pre-created source ID to the progression generation step would allow ID-based prompting on first import; this work is not done yet.
 
 2. **`stale` status not auto-detected**: The `stale` state is defined but not automatically set when the curriculum core is updated. A future pass should set the progression state to `stale` when `importNormalizedTree` runs and finds that the source fingerprint has changed since the last progression was accepted.
 
