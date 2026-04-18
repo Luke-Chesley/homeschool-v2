@@ -1,5 +1,6 @@
 import "@/lib/server-only";
 
+import type { CurriculumSourceModel } from "@/lib/curriculum/types";
 import { importStructuredCurriculumDocument } from "@/lib/curriculum/service";
 import type { ImportedCurriculumDocument } from "@/lib/curriculum/local-json-import";
 import type {
@@ -22,6 +23,69 @@ type ConversationCurriculumMessage = {
   role: "user" | "assistant";
   content: string;
 };
+
+export function buildPersistedSourceModel(params: {
+  requestedRoute: "single_lesson" | "weekly_plan" | "outline" | "topic" | "manual_shell";
+  routedRoute: "single_lesson" | "weekly_plan" | "outline" | "topic" | "manual_shell";
+  confidence: "low" | "medium" | "high";
+  sourceKind:
+    | "bounded_material"
+    | "timeboxed_plan"
+    | "structured_sequence"
+    | "comprehensive_source"
+    | "topic_seed"
+    | "shell_request"
+    | "ambiguous";
+  entryStrategy:
+    | "use_as_is"
+    | "explicit_range"
+    | "sequential_start"
+    | "section_start"
+    | "timebox_start"
+    | "scaffold_only";
+  entryLabel?: string | null;
+  continuationMode: "none" | "sequential" | "timebox" | "manual_review";
+  recommendedHorizon: "single_day" | "few_days" | "one_week" | "two_weeks" | "starter_module";
+  assumptions: string[];
+  detectedChunks: string[];
+  followUpQuestion?: string | null;
+  needsConfirmation: boolean;
+  sourcePackages?: IntakeSourcePackageContext[];
+  sourcePackageIds?: string[];
+  sourcePackageId?: string | null;
+  sourceModalities?: Array<IntakeSourcePackageContext["modality"]>;
+  sourceModality?: IntakeSourcePackageContext["modality"];
+  lineage?: Record<string, unknown>;
+}): CurriculumSourceModel {
+  const sourcePackages = params.sourcePackages ?? [];
+  const sourcePackageIds = params.sourcePackageIds ?? sourcePackages.map((sourcePackage) => sourcePackage.id);
+  const sourceModalities = params.sourceModalities ?? [
+    ...new Set(sourcePackages.map((sourcePackage) => sourcePackage.modality)),
+  ];
+
+  return {
+    requestedRoute: params.requestedRoute,
+    routedRoute: params.routedRoute,
+    confidence: params.confidence,
+    sourceKind: params.sourceKind,
+    entryStrategy: params.entryStrategy,
+    entryLabel: params.entryLabel ?? null,
+    continuationMode: params.continuationMode,
+    recommendedHorizon: params.recommendedHorizon,
+    assumptions: params.assumptions,
+    detectedChunks: params.detectedChunks,
+    followUpQuestion: params.followUpQuestion ?? null,
+    needsConfirmation: params.needsConfirmation,
+    sourcePackageIds,
+    sourcePackages,
+    sourceModalities,
+    sourcePackageId: params.sourcePackageId ?? null,
+    sourceModality:
+      params.sourceModality
+      ?? (sourceModalities.length === 1 ? sourceModalities[0] : undefined),
+    lineage: params.lineage,
+  };
+}
 
 function countLessons(
   units: NonNullable<ImportedCurriculumDocument["units"]> = [],
@@ -189,23 +253,37 @@ export async function createFastPathCurriculumFromSource(params: {
     assumptions: params.preview.assumptions,
     surface: "onboarding",
     workflowMode: "fast_path",
-    metadataBuilder: ({ artifact, lineage }) => ({
-      intake: params.intakeMetadata,
-      sourceModel: {
-        sourceKind: params.preview.sourceKind,
-        entryStrategy: params.preview.entryStrategy,
-        entryLabel: params.preview.entryLabel ?? null,
-        continuationMode: params.preview.continuationMode,
-        detectedChunks: params.preview.detectedChunks,
-        assumptions: params.preview.assumptions,
-        sourcePackageIds:
-          ((params.intakeMetadata.sourcePackageIds as string[] | undefined) ?? []),
-        sourceModalities:
-          ((params.intakeMetadata.sourceModalities as string[] | undefined) ?? []),
-      },
-      launchPlan: artifact.launchPlan,
-      curriculumLineage: {
-        requestMode: "source_entry",
+      metadataBuilder: ({ artifact, lineage }) => ({
+        intake: params.intakeMetadata,
+        sourceModel: buildPersistedSourceModel({
+          requestedRoute: params.preview.requestedRoute,
+          routedRoute: params.preview.intakeRoute,
+          confidence: params.preview.confidence,
+          sourceKind: params.preview.sourceKind,
+          entryStrategy: params.preview.entryStrategy,
+          entryLabel: params.preview.entryLabel ?? null,
+          continuationMode: params.preview.continuationMode,
+          recommendedHorizon: params.preview.recommendedHorizon,
+          assumptions: params.preview.assumptions,
+          detectedChunks: params.preview.detectedChunks,
+          followUpQuestion: params.preview.followUpQuestion ?? null,
+          needsConfirmation: params.preview.needsConfirmation,
+          sourcePackages: params.sourcePackages ?? [],
+          sourcePackageIds:
+            ((params.intakeMetadata.sourcePackageIds as string[] | undefined) ?? []),
+          sourcePackageId:
+            ((params.intakeMetadata.sourcePackageId as string | null | undefined) ?? null),
+          sourceModalities:
+            (
+              params.intakeMetadata.sourceModalities as Array<IntakeSourcePackageContext["modality"]> | undefined
+            ) ?? [],
+          sourceModality:
+            params.intakeMetadata.sourceModality as IntakeSourcePackageContext["modality"] | undefined,
+          lineage: params.sourceInterpretLineage,
+        }),
+        launchPlan: artifact.launchPlan,
+        curriculumLineage: {
+          requestMode: "source_entry",
         sourceInterpret: params.sourceInterpretLineage ?? null,
         curriculumGenerate: lineage,
       },

@@ -27,45 +27,8 @@ type ResolvedLaunchPlan = NonNullable<NonNullable<CurriculumSourceResult>["launc
 
 function resolveCurriculumLaunchMetadata(source: CurriculumSourceResult) {
   const intake = source?.intake ?? null;
-  const sourceModel =
-    source?.sourceModel
-    ?? intake?.sourceModel
-    ?? (intake
-      ? {
-          requestedRoute: intake.requestedRoute,
-          routedRoute: intake.route,
-          confidence: intake.confidence,
-          sourceKind: intake.sourceKind,
-          entryStrategy: intake.entryStrategy,
-          entryLabel: intake.entryLabel ?? null,
-          continuationMode: intake.continuationMode,
-          recommendedHorizon: intake.recommendedHorizon,
-          assumptions: intake.assumptions,
-          detectedChunks: intake.detectedChunks,
-          followUpQuestion: intake.followUpQuestion ?? null,
-          needsConfirmation: intake.needsConfirmation,
-          sourcePackageIds: intake.sourcePackageIds,
-          sourcePackages: intake.sourcePackages,
-          sourceModalities: intake.sourceModalities,
-          sourcePackageId: intake.sourcePackageId ?? null,
-          sourceModality: intake.sourceModality,
-          lineage: intake.sourceModel?.lineage,
-        }
-      : null);
-  const launchPlan =
-    source?.launchPlan
-    ?? intake?.launchPlan
-    ?? (intake
-      ? {
-          chosenHorizon: intake.chosenHorizon,
-          horizonDecisionSource: intake.horizonDecisionSource,
-          scopeSummary: intake.scopeSummary ?? null,
-          initialSliceUsed: intake.initialSliceUsed,
-          initialSliceLabel: intake.initialSliceLabel ?? null,
-          openingLessonCount: undefined,
-          lastGeneratedLessonTitle: null,
-        }
-      : null);
+  const sourceModel = source?.sourceModel ?? intake?.sourceModel ?? null;
+  const launchPlan = source?.launchPlan ?? intake?.launchPlan ?? null;
   const curriculumLineage = source?.curriculumLineage ?? intake?.curriculumLineage ?? null;
 
   return {
@@ -199,32 +162,29 @@ async function buildTodayLessonGenerationContext(params: {
         ? {
             requestedRoute: sourceModel?.requestedRoute ?? intake?.requestedRoute ?? null,
             routedRoute: sourceModel?.routedRoute ?? intake?.route ?? null,
-            confidence: sourceModel?.confidence ?? intake?.confidence ?? null,
-            sourceKind: sourceModel?.sourceKind ?? intake?.sourceKind ?? null,
-            entryStrategy: sourceModel?.entryStrategy ?? intake?.entryStrategy ?? null,
-            entryLabel: sourceModel?.entryLabel ?? intake?.entryLabel ?? null,
+            confidence: sourceModel?.confidence ?? null,
+            sourceKind: sourceModel?.sourceKind ?? null,
+            entryStrategy:
+              sourceModel?.entryStrategy ?? launchPlan?.entryStrategy ?? null,
+            entryLabel:
+              sourceModel?.entryLabel ?? launchPlan?.entryLabel ?? null,
             continuationMode:
-              sourceModel?.continuationMode ?? intake?.continuationMode ?? null,
-            chosenHorizon: launchPlan?.chosenHorizon ?? intake?.chosenHorizon ?? null,
+              sourceModel?.continuationMode ?? launchPlan?.continuationMode ?? null,
             recommendedHorizon:
-              sourceModel?.recommendedHorizon ?? intake?.recommendedHorizon ?? null,
-            horizonDecisionSource:
-              launchPlan?.horizonDecisionSource ?? intake?.horizonDecisionSource ?? null,
+              launchPlan?.recommendedHorizon ?? sourceModel?.recommendedHorizon ?? null,
             sourcePackageIds: sourceModel?.sourcePackageIds ?? intake?.sourcePackageIds ?? [],
             sourcePackages: sourceModel?.sourcePackages ?? intake?.sourcePackages ?? [],
             sourceModalities: sourceModel?.sourceModalities ?? intake?.sourceModalities ?? [],
             sourcePackageId: sourceModel?.sourcePackageId ?? intake?.sourcePackageId ?? null,
             sourceModality: sourceModel?.sourceModality ?? intake?.sourceModality ?? null,
-            initialSliceUsed: launchPlan?.initialSliceUsed ?? intake?.initialSliceUsed ?? null,
-            initialSliceLabel: launchPlan?.initialSliceLabel ?? intake?.initialSliceLabel ?? null,
+            initialSliceUsed: launchPlan?.initialSliceUsed ?? null,
+            initialSliceLabel: launchPlan?.initialSliceLabel ?? null,
             openingLessonCount: launchPlan?.openingLessonCount ?? null,
-            scopeSummary: launchPlan?.scopeSummary ?? intake?.scopeSummary ?? null,
-            assumptions: sourceModel?.assumptions ?? intake?.assumptions ?? [],
-            detectedChunks: sourceModel?.detectedChunks ?? intake?.detectedChunks ?? [],
-            followUpQuestion:
-              sourceModel?.followUpQuestion ?? intake?.followUpQuestion ?? null,
-            needsConfirmation:
-              sourceModel?.needsConfirmation ?? intake?.needsConfirmation ?? null,
+            scopeSummary: launchPlan?.scopeSummary ?? null,
+            assumptions: sourceModel?.assumptions ?? [],
+            detectedChunks: sourceModel?.detectedChunks ?? [],
+            followUpQuestion: sourceModel?.followUpQuestion ?? null,
+            needsConfirmation: sourceModel?.needsConfirmation ?? null,
             sourceModel,
             launchPlan,
             curriculumLineage,
@@ -312,8 +272,9 @@ export async function generateTodayLessonDraft(params: {
     routeFingerprint: context.routeFingerprint,
     requestedRoute: context.sourceModel?.requestedRoute ?? context.source?.intake?.requestedRoute ?? null,
     routedRoute: context.sourceModel?.routedRoute ?? context.source?.intake?.route ?? null,
-    sourceKind: context.sourceModel?.sourceKind ?? context.source?.intake?.sourceKind ?? null,
-    chosenHorizon: context.launchPlan?.chosenHorizon ?? context.source?.intake?.chosenHorizon ?? null,
+    sourceKind: context.sourceModel?.sourceKind ?? null,
+    recommendedHorizon:
+      context.launchPlan?.recommendedHorizon ?? context.sourceModel?.recommendedHorizon ?? null,
     itemCount: context.workspaceResult.workspace.items.length,
   };
 

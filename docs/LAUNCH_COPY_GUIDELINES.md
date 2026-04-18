@@ -47,7 +47,7 @@ Do not expose these on normal parent surfaces:
 - Stripe env vars
 - route board
 - source interpret
-- bounded plan
+- launchPlan
 - graph workspace
 
 Do not use placeholder language like:

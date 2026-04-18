@@ -269,10 +269,6 @@ function countEstimatedSessions(units: ImportedCurriculumDocument["units"] = [])
   return units.reduce((total, unit) => total + (unit.estimatedSessions ?? unit.lessons.length), 0);
 }
 
-function resolveCurriculumArtifactLaunchPlan(artifact: CurriculumAiGeneratedArtifact) {
-  return artifact.launchPlan;
-}
-
 function buildCurriculumArtifactMetadata(artifact: CurriculumAiGeneratedArtifact) {
   return {
     intakeSummary: artifact.intakeSummary,
@@ -281,7 +277,7 @@ function buildCurriculumArtifactMetadata(artifact: CurriculumAiGeneratedArtifact
     parentNotes: artifact.source.parentNotes,
     rationale: artifact.source.rationale,
     pacing: artifact.pacing,
-    curriculumArtifactLaunchPlan: resolveCurriculumArtifactLaunchPlan(artifact),
+    launchPlan: artifact.launchPlan,
     generatedUnitCount: artifact.units.length,
     generatedLessonCount: artifact.units.reduce((total, unit) => total + unit.lessons.length, 0),
     generatedEstimatedSessionCount: countEstimatedSessions(artifact.units),

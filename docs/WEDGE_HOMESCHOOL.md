@@ -12,8 +12,8 @@ Turn curriculum into a workable week, adapt when life happens, and keep records 
 
 1. Parent enters or imports household setup details.
 2. Parent creates one or more learner profiles.
-3. Parent adds curriculum manually, pastes a structured outline, or uses AI-assisted decomposition from source material.
-4. The app generates the first workable week using learner constraints and household preferences.
+3. Parent adds curriculum manually, pastes a structured outline, uploads a source, or creates a curriculum from a conversation-only request.
+4. The app creates a durable curriculum, opens a bounded launch window, and starts day 1 quickly.
 5. The parent runs the day from one clear daily workspace.
 6. The parent marks work as done, partial, skipped, moved, or paused.
 7. The app records progress, attendance, notes, evidence, and summaries as the workflow happens.

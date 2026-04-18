@@ -27,7 +27,7 @@ Use when:
 Use when:
 - the wrong named operation handled the input
 - one-day inputs were sent down curriculum-wide generation
-- outline inputs should have gone through bounded planning first
+- source-entry inputs should have gone through `source_interpret -> curriculum_generate`
 
 ## learning-core / curriculum_intake
 Use when:

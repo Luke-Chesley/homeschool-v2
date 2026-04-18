@@ -170,10 +170,15 @@ test("source interpret wrapper rejects legacy source kinds and keeps canonical t
     suggestedTitle: "Fractions workbook",
     confidence: "medium",
     recommendedHorizon: "one_week",
+    assumptions: ["Start with chapter 1 and keep the rest available for continuation."],
+    detectedChunks: ["Chapter 1", "Chapter 2"],
+    needsConfirmation: false,
   });
 
-  assert.deepEqual(parsed.assumptions, []);
-  assert.deepEqual(parsed.detectedChunks, []);
+  assert.deepEqual(parsed.assumptions, [
+    "Start with chapter 1 and keep the rest available for continuation.",
+  ]);
+  assert.deepEqual(parsed.detectedChunks, ["Chapter 1", "Chapter 2"]);
   assert.equal(parsed.needsConfirmation, false);
 
   assert.throws(

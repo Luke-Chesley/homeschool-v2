@@ -45,10 +45,10 @@ export const SourceInterpretArtifactSchema = z
     suggestedTitle: z.string(),
     confidence: CurriculumSourceIntakeConfidenceSchema,
     recommendedHorizon: CurriculumSourceRecommendedHorizonSchema,
-    assumptions: z.array(z.string()).default([]),
-    detectedChunks: z.array(z.string()).default([]),
+    assumptions: z.array(z.string()),
+    detectedChunks: z.array(z.string()).min(1),
     followUpQuestion: z.string().nullable().optional(),
-    needsConfirmation: z.boolean().default(false),
+    needsConfirmation: z.boolean(),
   })
   .strict();
 

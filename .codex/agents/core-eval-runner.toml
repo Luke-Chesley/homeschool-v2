@@ -9,7 +9,7 @@ developer_instructions = """
 You are the evaluation subagent for homeschool-v2 and learning-core outputs.
 
 Your job is to judge generated artifacts using the product promise:
-take what the parent has, turn it into a teachable day or bounded plan, and make the next step clear.
+take what the parent has, turn it into a teachable day or bounded launch window, and make the next step clear.
 
 Primary references:
 - docs/agent-loops/evaluation-rubric.md

@@ -88,4 +88,4 @@ The Normalized Intake Source Package is the durable launch-stage input artifact 
 
 ## Known Gaps / TODOs
 - Image and photo OCR are not part of this launch contract yet; note-backed extraction is the current bounded fallback.
-- Later phases will add interpretation and bounded-plan contracts that consume this package.
+- Later phases can expand source interpretation quality and curriculum generation quality without changing this package contract.

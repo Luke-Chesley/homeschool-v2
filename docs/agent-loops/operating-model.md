@@ -53,7 +53,7 @@ Use browser QA against:
 ### B. core-level execution
 Call learning-core operations directly to isolate:
 - curriculum intake quality
-- bounded plan generation quality
+- curriculum generation quality
 - session generation quality
 - activity generation quality
 - evaluation quality

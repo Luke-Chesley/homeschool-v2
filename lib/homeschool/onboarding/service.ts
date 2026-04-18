@@ -32,6 +32,7 @@ import {
   type OnboardingMilestone,
 } from "@/lib/homeschool/onboarding/activation-contracts";
 import {
+  buildPersistedSourceModel,
   createCurriculumFromConversationIntake,
   createCurriculumFromSourceEntry,
   createFastPathCurriculumFromSource,
@@ -649,6 +650,17 @@ async function initializeCurriculum(input: HomeschoolOnboardingInput, learner: t
       learnerId: learner.id,
       workflowMode: "curriculum_creation",
     });
+    const routedRoute =
+      sourceInterpretResult.artifact.sourceKind === "bounded_material"
+        ? "single_lesson"
+        : sourceInterpretResult.artifact.sourceKind === "timeboxed_plan"
+          ? "weekly_plan"
+          : sourceInterpretResult.artifact.sourceKind === "topic_seed"
+            ? "topic"
+            : sourceInterpretResult.artifact.sourceKind === "shell_request"
+              || sourceInterpretResult.artifact.sourceKind === "ambiguous"
+              ? "manual_shell"
+              : "outline";
 
     return createCurriculumFromSourceEntry({
       organizationId: input.organizationId,
@@ -656,17 +668,7 @@ async function initializeCurriculum(input: HomeschoolOnboardingInput, learner: t
       learnerName: learner.displayName,
       titleCandidate: input.curriculumTitle,
       requestedRoute,
-      routedRoute:
-        sourceInterpretResult.artifact.sourceKind === "bounded_material"
-          ? "single_lesson"
-          : sourceInterpretResult.artifact.sourceKind === "timeboxed_plan"
-            ? "weekly_plan"
-            : sourceInterpretResult.artifact.sourceKind === "topic_seed"
-              ? "topic"
-              : sourceInterpretResult.artifact.sourceKind === "shell_request" ||
-                  sourceInterpretResult.artifact.sourceKind === "ambiguous"
-                ? "manual_shell"
-                : "outline",
+      routedRoute,
       sourceKind: sourceInterpretResult.artifact.sourceKind,
       entryStrategy: sourceInterpretResult.artifact.entryStrategy,
       entryLabel: sourceInterpretResult.artifact.entryLabel ?? null,
@@ -697,16 +699,26 @@ async function initializeCurriculum(input: HomeschoolOnboardingInput, learner: t
             (input.curriculumSourceMetadata as Record<string, unknown> | undefined)
               ?.createdFrom ?? "curriculum_add_flow",
         },
-        sourceModel: {
+        sourceModel: buildPersistedSourceModel({
+          requestedRoute,
+          routedRoute,
+          confidence: sourceInterpretResult.artifact.confidence,
           sourceKind: sourceInterpretResult.artifact.sourceKind,
           entryStrategy: sourceInterpretResult.artifact.entryStrategy,
           entryLabel: sourceInterpretResult.artifact.entryLabel ?? null,
           continuationMode: sourceInterpretResult.artifact.continuationMode,
-          detectedChunks: sourceInterpretResult.artifact.detectedChunks,
+          recommendedHorizon: sourceInterpretResult.artifact.recommendedHorizon,
           assumptions: sourceInterpretResult.artifact.assumptions,
+          detectedChunks: sourceInterpretResult.artifact.detectedChunks,
+          followUpQuestion: sourceInterpretResult.artifact.followUpQuestion ?? null,
+          needsConfirmation: sourceInterpretResult.artifact.needsConfirmation,
+          sourcePackages: resolvedSource.sourcePackageContexts,
           sourcePackageIds: resolvedSource.sourcePackageIds,
+          sourcePackageId: resolvedSource.sourcePackage?.id ?? null,
           sourceModalities: resolvedSource.sourceModalities,
-        },
+          sourceModality: resolvedSource.sourcePackage?.modality ?? "text",
+          lineage: sourceInterpretResult.lineage,
+        }),
         launchPlan: artifact.launchPlan,
         curriculumLineage: {
           requestMode: "source_entry",
@@ -989,27 +1001,11 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
     rawText: sourceInput,
     assetIds: resolvedSource.assetIds,
     learnerId: null,
-    confidence: preview.confidence,
-    sourceKind: preview.sourceKind,
-    entryStrategy: preview.entryStrategy,
-    entryLabel: preview.entryLabel ?? null,
-    continuationMode: preview.continuationMode,
-    initialSliceUsed: preview.initialSliceUsed,
-    initialSliceLabel: preview.initialSliceLabel ?? null,
-    recommendedHorizon: preview.recommendedHorizon,
-    chosenHorizon: preview.chosenHorizon,
-    horizonDecisionSource: preview.horizonDecisionSource,
-    scopeSummary: preview.scopeSummary,
-    assumptions: preview.assumptions,
-    detectedChunks: preview.detectedChunks,
-    followUpQuestion: preview.followUpQuestion ?? null,
-    needsConfirmation: preview.needsConfirmation,
     sourcePackageIds: resolvedSource.sourcePackageIds,
     sourcePackages: resolvedSource.sourcePackageContexts,
     sourceModalities: resolvedSource.sourceModalities,
     sourcePackageId: resolvedSource.sourcePackage?.id ?? null,
     sourceModality: resolvedSource.sourcePackage?.modality ?? "text",
-    curriculumMode,
     createdFrom: "onboarding_fast_path" as const,
   };
 

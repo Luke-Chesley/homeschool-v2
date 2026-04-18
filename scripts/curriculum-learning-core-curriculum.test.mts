@@ -55,6 +55,17 @@ test("CurriculumGenerateInputSchema accepts a conversation_intake payload", () =
   assert.equal(parsed.messages.length, 1);
 });
 
+test("CurriculumGenerateInputSchema rejects route fields on conversation_intake payloads", () => {
+  const parsed = CurriculumGenerateInputSchema.safeParse({
+    learnerName: "Maya",
+    requestMode: "conversation_intake",
+    requestedRoute: "topic",
+    messages: [{ role: "user", content: "Teach my son fractions this summer." }],
+  });
+
+  assert.equal(parsed.success, false);
+});
+
 test("CurriculumGenerateSourceEntryInputSchema requires non-empty sourceText", () => {
   const parsed = CurriculumGenerateSourceEntryInputSchema.safeParse({
     learnerName: "Maya",

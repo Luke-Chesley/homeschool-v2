@@ -12,7 +12,7 @@
 
 - [ ] Parent can create curriculum manually.
 - [ ] Parent can paste a structured outline and turn it into an editable curriculum tree.
-- [ ] Parent can use AI-assisted decomposition to generate a curriculum tree from raw text.
+- [ ] Parent can create a durable curriculum from source material or a conversation-only request.
 - [ ] Imported or generated curriculum records lineage metadata.
 - [ ] Parent can reorder, rename, trim, and keep using the resulting curriculum.
 
@@ -44,7 +44,7 @@
 
 ## Hardening
 
-- [ ] Long-running generation uses the async job path.
+- [ ] Long-running curriculum and lesson generation use the async job path.
 - [ ] Artifact regeneration keeps history.
 - [ ] Important mutations emit a basic audit event.
 - [ ] Basic analytics and error-monitoring hooks exist.

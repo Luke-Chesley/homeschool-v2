@@ -83,73 +83,12 @@ test("launch contract keeps comprehensive sources bounded and removes user horiz
 
 test("durable intake metadata accepts only the canonical source model", () => {
   const parsed = CurriculumSourceIntakeSchema.parse({
-    routeVersion: 1,
-    rawText: "Whole workbook with chapter 1 selected.",
-    assetIds: ["asset-1"],
-    learnerId: "learner-1",
-    sourceModel: {
-      requestedRoute: "outline",
-      routedRoute: "outline",
-      confidence: "medium",
-      sourceKind: "comprehensive_source",
-      entryStrategy: "explicit_range",
-      entryLabel: "chapter 1",
-      continuationMode: "sequential",
-      recommendedHorizon: "one_week",
-      assumptions: ["Launch from chapter 1 and keep the rest for continuation."],
-      detectedChunks: ["Chapter 1", "Chapter 2", "Chapter 3"],
-      sourcePackageIds: ["ipkg-1"],
-      sourcePackages: [buildSourcePackage()],
-      sourceModalities: ["pdf"],
-      sourcePackageId: "ipkg-1",
-      sourceModality: "pdf",
-      lineage: { operation: "source_interpret" },
-    },
-    launchPlan: {
-      chosenHorizon: "one_week",
-      horizonDecisionSource: "model_inferred",
-      scopeSummary: "Start with chapter 1 and keep the rest available for later.",
-      initialSliceUsed: true,
-      initialSliceLabel: "chapter 1",
-      openingLessonCount: 4,
-    },
-    curriculumLineage: { operation: "curriculum_generate" },
-    createdFrom: "onboarding_fast_path",
-  });
-
-  assert.equal(parsed.route, "outline");
-  assert.equal(parsed.confidence, "medium");
-  assert.equal(parsed.sourceKind, "comprehensive_source");
-  assert.equal(parsed.entryStrategy, "explicit_range");
-  assert.equal(parsed.entryLabel, "chapter 1");
-  assert.equal(parsed.continuationMode, "sequential");
-  assert.equal(parsed.recommendedHorizon, "one_week");
-  assert.equal(parsed.chosenHorizon, "one_week");
-  assert.equal(parsed.sourceModel?.lineage?.operation, "source_interpret");
-  assert.equal(parsed.launchPlan?.openingLessonCount, 4);
-  assert.equal(parsed.curriculumLineage?.operation, "curriculum_generate");
-});
-
-test("canonical launch metadata no longer depends on bounded-plan aliases", () => {
-  const parsed = CurriculumSourceIntakeSchema.parse({
     route: "outline",
     requestedRoute: "outline",
     routeVersion: 1,
     rawText: "Whole workbook with chapter 1 selected.",
     assetIds: ["asset-1"],
     learnerId: "learner-1",
-    confidence: "medium",
-    sourceKind: "comprehensive_source",
-    entryStrategy: "explicit_range",
-    entryLabel: "chapter 1",
-    continuationMode: "sequential",
-    initialSliceUsed: true,
-    initialSliceLabel: "chapter 1",
-    recommendedHorizon: "one_week",
-    chosenHorizon: "one_week",
-    horizonDecisionSource: "model_inferred",
-    assumptions: ["Launch from chapter 1 and keep the rest for continuation."],
-    detectedChunks: ["Chapter 1", "Chapter 2", "Chapter 3"],
     sourcePackageIds: ["ipkg-1"],
     sourcePackages: [buildSourcePackage()],
     sourceModalities: ["pdf"],
@@ -166,6 +105,7 @@ test("canonical launch metadata no longer depends on bounded-plan aliases", () =
       recommendedHorizon: "one_week",
       assumptions: ["Launch from chapter 1 and keep the rest for continuation."],
       detectedChunks: ["Chapter 1", "Chapter 2", "Chapter 3"],
+      needsConfirmation: false,
       sourcePackageIds: ["ipkg-1"],
       sourcePackages: [buildSourcePackage()],
       sourceModalities: ["pdf"],
@@ -174,8 +114,10 @@ test("canonical launch metadata no longer depends on bounded-plan aliases", () =
       lineage: { operation: "source_interpret" },
     },
     launchPlan: {
-      chosenHorizon: "one_week",
-      horizonDecisionSource: "model_inferred",
+      recommendedHorizon: "one_week",
+      entryStrategy: "explicit_range",
+      entryLabel: "chapter 1",
+      continuationMode: "sequential",
       scopeSummary: "Start with chapter 1 and keep the rest available for later.",
       initialSliceUsed: true,
       initialSliceLabel: "chapter 1",
@@ -185,10 +127,36 @@ test("canonical launch metadata no longer depends on bounded-plan aliases", () =
     createdFrom: "onboarding_fast_path",
   });
 
+  assert.equal(parsed.route, "outline");
+  assert.equal(parsed.sourceModel?.confidence, "medium");
+  assert.equal(parsed.sourceModel?.sourceKind, "comprehensive_source");
+  assert.equal(parsed.sourceModel?.entryStrategy, "explicit_range");
+  assert.equal(parsed.sourceModel?.entryLabel, "chapter 1");
+  assert.equal(parsed.sourceModel?.continuationMode, "sequential");
+  assert.equal(parsed.sourceModel?.recommendedHorizon, "one_week");
+  assert.equal(parsed.launchPlan?.recommendedHorizon, "one_week");
   assert.equal(parsed.sourceModel?.lineage?.operation, "source_interpret");
   assert.equal(parsed.launchPlan?.openingLessonCount, 4);
-  assert.equal(parsed.launchPlan?.initialSliceUsed, true);
   assert.equal(parsed.curriculumLineage?.operation, "curriculum_generate");
+});
+
+test("legacy flattened launch metadata is rejected", () => {
+  const parsed = CurriculumSourceIntakeSchema.safeParse({
+    route: "outline",
+    requestedRoute: "outline",
+    routeVersion: 1,
+    rawText: "Whole workbook with chapter 1 selected.",
+    assetIds: ["asset-1"],
+    learnerId: "learner-1",
+    confidence: "medium",
+    sourceKind: "comprehensive_source",
+    recommendedHorizon: "one_week",
+    chosenHorizon: "one_week",
+    curriculumLineage: { operation: "curriculum_generate" },
+    createdFrom: "onboarding_fast_path",
+  });
+
+  assert.equal(parsed.success, false);
 });
 
 test("case A: single bounded lesson stays on a single-day launch without preview", () => {
