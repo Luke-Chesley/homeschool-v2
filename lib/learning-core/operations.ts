@@ -21,6 +21,12 @@ export const LearningCorePromptPreviewSchema = z.object({
   system_prompt: z.string().min(1),
   user_prompt: z.string().min(1),
   request_envelope: LearningCoreEnvelopeSchema,
+  task_profile: z.string().nullable().optional(),
+  response_type: z.string().nullable().optional(),
+  workflow_card: z.string().nullable().optional(),
+  runtime_mode: z.string().nullable().optional(),
+  selected_packs: z.array(z.string()).optional(),
+  tool_families: z.array(z.string()).optional(),
 });
 
 export const LearningCoreLineageSchema = z.object({
@@ -41,6 +47,12 @@ export const LearningCoreTraceSchema = z.object({
     user_prompt: z.string().min(1),
   }),
   request_envelope: LearningCoreEnvelopeSchema,
+  task_profile: z.string().nullable().optional(),
+  response_type: z.string().nullable().optional(),
+  workflow_card: z.string().nullable().optional(),
+  runtime_mode: z.string().nullable().optional(),
+  selected_packs: z.array(z.string()).optional(),
+  tool_families: z.array(z.string()).optional(),
   executed_at: z.string().min(1),
 });
 
