@@ -62,6 +62,10 @@ const seedUnits: CurriculumUnit[] = [
     title: "Unit 1 — Whole Numbers to 100,000",
     sequence: 0,
     estimatedWeeks: 3,
+    skillRefs: [
+      "skill:singapore-math-4a/whole-numbers/read-write-10000",
+      "skill:singapore-math-4a/whole-numbers/place-value-100000",
+    ],
     createdAt: now,
     updatedAt: now,
   },
@@ -72,6 +76,9 @@ const seedUnits: CurriculumUnit[] = [
     title: "Unit 2 — Multiplication and Division",
     sequence: 1,
     estimatedWeeks: 4,
+    skillRefs: [
+      "skill:singapore-math-4a/multiplication-division/multiply-1-digit",
+    ],
     createdAt: now,
     updatedAt: now,
   },
