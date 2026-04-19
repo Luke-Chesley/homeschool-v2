@@ -1016,6 +1016,7 @@ export async function updateCurriculumUnit(
         estimatedWeeks: patch.estimatedWeeks ?? existing.metadata.estimatedWeeks ?? null,
         estimatedSessions: patch.estimatedSessions ?? existing.metadata.estimatedSessions ?? null,
         unitRef: patch.unitRef ?? existing.metadata.unitRef ?? null,
+        skillRefs: patch.skillRefs ?? existing.metadata.skillRefs ?? [],
       },
       updatedAt: new Date(),
     })
@@ -1034,6 +1035,9 @@ export async function updateCurriculumUnit(
       typeof unit.metadata.estimatedSessions === "number"
         ? unit.metadata.estimatedSessions
         : undefined,
+    skillRefs: Array.isArray(unit.metadata.skillRefs)
+      ? unit.metadata.skillRefs.filter((value): value is string => typeof value === "string")
+      : [],
     unitRef: requireUnitRef(unit.id, unit.metadata),
     createdAt: unit.createdAt.toISOString(),
     updatedAt: unit.updatedAt.toISOString(),
