@@ -129,20 +129,6 @@ function describeNamingIssues(params: {
       issues.push(unitIssue);
     }
 
-    for (const [lessonIndex, lesson] of unit.lessons.entries()) {
-      const lessonIssue = assessLabelQuality({
-        label: lesson.title,
-        path: ["units", String(unitIndex), "lessons", String(lessonIndex), "title"],
-        role: "lesson",
-        maxWords: 8,
-        maxChars: 60,
-        topicText,
-        requestText,
-      });
-      if (lessonIssue) {
-        issues.push(lessonIssue);
-      }
-    }
   }
 
   return uniqueIssues(issues);
@@ -533,19 +519,17 @@ function collectNestedDocumentSkills(
 
 function collectLessons(artifact: CurriculumAiGeneratedArtifact): LessonEnvelope[] {
   const canonicalArtifact = canonicalizeCurriculumArtifact(artifact);
-  return canonicalArtifact.units.flatMap((unit) =>
-    unit.lessons.map((lesson) => ({
-      title: lesson.title,
-      description: lesson.description,
-      objectives: lesson.objectives,
-      linkedSkillRefs: lesson.linkedSkillRefs,
-    })),
-  );
+  return canonicalArtifact.units.map((unit) => ({
+    title: unit.title,
+    description: unit.description,
+    objectives: [],
+    linkedSkillRefs: unit.skillRefs,
+  }));
 }
 
 function estimateTotalSessions(artifact: CurriculumAiGeneratedArtifact) {
   const unitSessionTotal = artifact.units.reduce(
-    (total, unit) => total + (unit.estimatedSessions ?? unit.lessons.length),
+    (total, unit) => total + (unit.estimatedSessions ?? 0),
     0,
   );
 
@@ -553,7 +537,7 @@ function estimateTotalSessions(artifact: CurriculumAiGeneratedArtifact) {
     return unitSessionTotal;
   }
 
-  return artifact.pacing.totalSessions ?? artifact.units.reduce((total, unit) => total + unit.lessons.length, 0);
+  return artifact.pacing.totalSessions ?? 0;
 }
 
 function buildArtifactText(artifact: CurriculumAiGeneratedArtifact) {

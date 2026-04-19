@@ -3,6 +3,11 @@ import "@/lib/server-only";
 import type { CurriculumSourceModel } from "@/lib/curriculum/types";
 import { importStructuredCurriculumDocument } from "@/lib/curriculum/service";
 import type { ImportedCurriculumDocument } from "@/lib/curriculum/local-json-import";
+import {
+  generateCurriculumLaunchPlan,
+  persistCurriculumLaunchPlan,
+} from "@/lib/curriculum/ai-draft-service";
+import { regenerateCurriculumProgression } from "@/lib/curriculum/progression-regeneration";
 import type {
   IntakeSourcePackageContext,
   LearningCoreInputFile,
@@ -89,10 +94,10 @@ export function buildPersistedSourceModel(params: {
   };
 }
 
-function countLessons(
+function countUnitSkillRefs(
   units: NonNullable<ImportedCurriculumDocument["units"]> = [],
 ) {
-  return units.reduce((total, unit) => total + unit.lessons.length, 0);
+  return new Set(units.flatMap((unit) => unit.skillRefs)).size;
 }
 
 function toImportedCurriculumDocument(params: {
@@ -107,7 +112,6 @@ function toImportedCurriculumDocument(params: {
     subjects: params.artifact.source.subjects,
     gradeLevels: params.artifact.source.gradeLevels,
     document: params.artifact.document,
-    progression: params.artifact.progression ?? undefined,
     units: params.artifact.units,
     metadata: {
       intakeSummary: params.artifact.intakeSummary,
@@ -116,9 +120,8 @@ function toImportedCurriculumDocument(params: {
       parentNotes: params.artifact.source.parentNotes,
       rationale: params.artifact.source.rationale,
       pacing: params.artifact.pacing,
-      launchPlan: params.artifact.launchPlan,
       generatedUnitCount: params.artifact.units.length,
-      generatedLessonCount: countLessons(params.artifact.units),
+      generatedSkillCount: countUnitSkillRefs(params.artifact.units),
       ...params.metadata,
     },
   };
@@ -139,7 +142,53 @@ async function importLearningCoreCurriculumArtifact(params: {
 
   return {
     curriculum,
-    lessonCount: countLessons(params.artifact.units),
+    skillCount: countUnitSkillRefs(params.artifact.units),
+  };
+}
+
+async function generatePostImportPlanningArtifacts(params: {
+  organizationId: string;
+  learnerId?: string | null;
+  learnerName: string;
+  curriculumSourceId: string;
+  chosenHorizon: "single_day" | "few_days" | "one_week" | "two_weeks" | "starter_module";
+}) {
+  const progressionResult = await regenerateCurriculumProgression({
+    sourceId: params.curriculumSourceId,
+    householdId: params.organizationId,
+    learnerDisplayName: params.learnerName,
+  });
+
+  if (progressionResult.kind === "failure") {
+    throw new Error(`Progression generation failed: ${progressionResult.reason}`);
+  }
+
+  const launchPlanResult = await generateCurriculumLaunchPlan({
+    householdId: params.organizationId,
+    sourceId: params.curriculumSourceId,
+    learner: { displayName: params.learnerName },
+    chosenHorizon: params.chosenHorizon,
+    progression: progressionResult.progression,
+  });
+
+  if (!launchPlanResult.launchPlan) {
+    throw new Error(
+      launchPlanResult.failureReason ?? "Launch plan generation failed.",
+    );
+  }
+
+  const sourceWithLaunchPlan = await persistCurriculumLaunchPlan({
+    householdId: params.organizationId,
+    sourceId: params.curriculumSourceId,
+    launchPlan: launchPlanResult.launchPlan,
+  });
+  if (!sourceWithLaunchPlan.launchPlan) {
+    throw new Error("Launch plan persistence did not produce a readable source launch plan.");
+  }
+
+  return {
+    launchPlan: sourceWithLaunchPlan.launchPlan,
+    progressionResult,
   };
 }
 
@@ -218,12 +267,20 @@ export async function createCurriculumFromSourceEntry(params: {
       : params.metadata,
   });
 
+  const planningArtifacts = await generatePostImportPlanningArtifacts({
+    organizationId: params.organizationId,
+    learnerId: params.learnerId ?? null,
+    learnerName: params.learnerName,
+    curriculumSourceId: imported.curriculum.id,
+    chosenHorizon: params.recommendedHorizon,
+  });
+
   return {
     curriculum: imported.curriculum,
     artifact: generation.artifact,
     lineage: generation.lineage,
-    launchPlan: generation.artifact.launchPlan,
-    lessonCount: imported.lessonCount,
+    launchPlan: planningArtifacts.launchPlan,
+    skillCount: imported.skillCount,
   };
 }
 
@@ -258,38 +315,37 @@ export async function createFastPathCurriculumFromSource(params: {
     assumptions: params.preview.assumptions,
     surface: "onboarding",
     workflowMode: "fast_path",
-      metadataBuilder: ({ artifact, lineage }) => ({
-        intake: params.intakeMetadata,
-        sourceModel: buildPersistedSourceModel({
-          requestedRoute: params.preview.requestedRoute,
-          routedRoute: params.preview.intakeRoute,
-          confidence: params.preview.confidence,
-          sourceKind: params.preview.sourceKind,
-          entryStrategy: params.preview.entryStrategy,
-          entryLabel: params.preview.entryLabel ?? null,
-          continuationMode: params.preview.continuationMode,
-          deliveryPattern: params.preview.deliveryPattern,
-          recommendedHorizon: params.preview.recommendedHorizon,
-          assumptions: params.preview.assumptions,
-          detectedChunks: params.preview.detectedChunks,
-          followUpQuestion: params.preview.followUpQuestion ?? null,
-          needsConfirmation: params.preview.needsConfirmation,
-          sourcePackages: params.sourcePackages ?? [],
-          sourcePackageIds:
-            ((params.intakeMetadata.sourcePackageIds as string[] | undefined) ?? []),
-          sourcePackageId:
-            ((params.intakeMetadata.sourcePackageId as string | null | undefined) ?? null),
-          sourceModalities:
-            (
-              params.intakeMetadata.sourceModalities as Array<IntakeSourcePackageContext["modality"]> | undefined
-            ) ?? [],
-          sourceModality:
-            params.intakeMetadata.sourceModality as IntakeSourcePackageContext["modality"] | undefined,
-          lineage: params.sourceInterpretLineage,
-        }),
-        launchPlan: artifact.launchPlan,
-        curriculumLineage: {
-          requestMode: "source_entry",
+    metadataBuilder: ({ lineage }) => ({
+      intake: params.intakeMetadata,
+      sourceModel: buildPersistedSourceModel({
+        requestedRoute: params.preview.requestedRoute,
+        routedRoute: params.preview.intakeRoute,
+        confidence: params.preview.confidence,
+        sourceKind: params.preview.sourceKind,
+        entryStrategy: params.preview.entryStrategy,
+        entryLabel: params.preview.entryLabel ?? null,
+        continuationMode: params.preview.continuationMode,
+        deliveryPattern: params.preview.deliveryPattern,
+        recommendedHorizon: params.preview.recommendedHorizon,
+        assumptions: params.preview.assumptions,
+        detectedChunks: params.preview.detectedChunks,
+        followUpQuestion: params.preview.followUpQuestion ?? null,
+        needsConfirmation: params.preview.needsConfirmation,
+        sourcePackages: params.sourcePackages ?? [],
+        sourcePackageIds:
+          ((params.intakeMetadata.sourcePackageIds as string[] | undefined) ?? []),
+        sourcePackageId:
+          ((params.intakeMetadata.sourcePackageId as string | null | undefined) ?? null),
+        sourceModalities:
+          (
+            params.intakeMetadata.sourceModalities as Array<IntakeSourcePackageContext["modality"]> | undefined
+          ) ?? [],
+        sourceModality:
+          params.intakeMetadata.sourceModality as IntakeSourcePackageContext["modality"] | undefined,
+        lineage: params.sourceInterpretLineage,
+      }),
+      curriculumLineage: {
+        requestMode: "source_entry",
         sourceInterpret: params.sourceInterpretLineage ?? null,
         curriculumGenerate: lineage,
       },
@@ -301,7 +357,7 @@ export async function createFastPathCurriculumFromSource(params: {
     artifact: generation.artifact,
     lineage: generation.lineage,
     launchContext: generation.launchPlan,
-    lessonCount: generation.lessonCount,
+    skillCount: generation.skillCount,
   };
 }
 
@@ -354,11 +410,20 @@ export async function createCurriculumFromConversationIntake(params: {
     },
   });
 
+  const progressionResult = await regenerateCurriculumProgression({
+    sourceId: imported.curriculum.id,
+    householdId: params.organizationId,
+    learnerDisplayName: params.learnerName,
+  });
+  if (progressionResult.kind === "failure") {
+    throw new Error(`Progression generation failed: ${progressionResult.reason}`);
+  }
+
   return {
     curriculum: imported.curriculum,
     artifact: generation.artifact,
     lineage: generation.lineage,
-    launchPlan: generation.artifact.launchPlan,
-    lessonCount: imported.lessonCount,
+    launchPlan: null,
+    skillCount: imported.skillCount,
   };
 }

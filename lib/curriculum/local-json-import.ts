@@ -1,7 +1,6 @@
 import "@/lib/server-only";
 
 import type { CurriculumSourceKind } from "./types";
-import type { CurriculumAiProgression } from "./ai-draft";
 
 export type CurriculumJsonNode =
   | string
@@ -18,7 +17,6 @@ export interface ImportedCurriculumDocument {
   subjects: string[];
   gradeLevels: string[];
   document: Record<string, CurriculumJsonNode>;
-  progression?: CurriculumAiProgression;
   metadata?: Record<string, unknown>;
   units?: Array<{
     unitRef: string;
@@ -26,18 +24,7 @@ export interface ImportedCurriculumDocument {
     description: string;
     estimatedWeeks?: number;
     estimatedSessions?: number;
-    lessons: Array<{
-      unitRef: string;
-      lessonRef: string;
-      lessonType: "task" | "skill_support" | "concept" | "setup" | "reflection" | "assessment";
-      title: string;
-      description: string;
-      subject?: string;
-      estimatedMinutes?: number;
-      materials: string[];
-      objectives: string[];
-      linkedSkillRefs: string[];
-    }>;
+    skillRefs: string[];
   }>;
 }
 

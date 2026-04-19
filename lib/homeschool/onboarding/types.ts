@@ -165,8 +165,8 @@ export type HomeschoolFastPathLaunchPlan = {
   scopeSummary?: string | null;
   initialSliceUsed: boolean;
   initialSliceLabel?: string | null;
-  openingLessonRefs?: string[];
-  openingSkillRefs?: string[];
+  openingUnitRefs?: string[];
+  openingSkillNodeIds?: string[];
   lastGeneratedLessonTitle?: string | null;
 };
 

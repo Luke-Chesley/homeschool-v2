@@ -67,38 +67,9 @@ export function buildFallbackCurriculumArtifact(params: {
   const document = buildFallbackDocument(title, blueprints);
   const units = blueprints.map((strand, strandIndex) => {
     const unitRef = `unit:${strandIndex + 1}:${toRefSlug(strand.title)}`;
-    const lessons = strand.goalGroups.flatMap((goalGroup, goalGroupIndex) =>
-      goalGroup.skills.map((skill, skillIndex) => {
-        const skillRef = `skill:${[
-          title,
-          strand.title,
-          goalGroup.title,
-          skill.title,
-        ]
-          .map(toRefSlug)
-          .join("/")}`;
-        const lessonRef = `${unitRef}/lesson:${skillIndex + 1 + goalGroupIndex * 100}:${toRefSlug(skill.title)}`;
-        return {
-          unitRef,
-          lessonRef,
-          lessonType: "task" as const,
-          title:
-            skillIndex === 0 && goalGroupIndex === 0
-              ? skill.title
-              : `${skill.title} practice`,
-          description: buildLessonDescription(
-            params.learner.firstName,
-            skill,
-            topic,
-            granularity,
-          ),
-          subject: subjects[0],
-          estimatedMinutes: sessionMinutes,
-          materials: buildFallbackMaterials(topic, params.capturedRequirements, granularity),
-          objectives: buildLessonObjectives(skill.title, granularity),
-          linkedSkillRefs: [skillRef],
-        };
-      }),
+    const skillRefs = strand.goalGroups.flatMap((goalGroup) =>
+      goalGroup.skills.map((skill) =>
+        `skill:${[title, strand.title, goalGroup.title, skill.title].map(toRefSlug).join("/")}`),
     );
 
     return {
@@ -106,8 +77,8 @@ export function buildFallbackCurriculumArtifact(params: {
       title: strand.title,
       description: buildUnitDescription(strand, topic, granularity),
       estimatedWeeks: unitWeekBudgets[strandIndex] ?? 1,
-      estimatedSessions: unitSessionBudgets[strandIndex] ?? lessons.length,
-      lessons,
+      estimatedSessions: unitSessionBudgets[strandIndex] ?? skillRefs.length,
+      skillRefs,
     };
   });
 
@@ -135,22 +106,6 @@ export function buildFallbackCurriculumArtifact(params: {
     },
     document,
     units,
-    launchPlan: {
-      recommendedHorizon:
-        totalWeeks >= 2
-          ? "two_weeks"
-          : totalWeeks >= 1
-            ? "one_week"
-            : "few_days",
-      scopeSummary: `Start with the opening ${units[0]?.title ?? "unit"} and keep the rest available for continuation.`,
-      initialSliceUsed: true,
-      initialSliceLabel: units[0]?.title ?? null,
-      entryStrategy: null,
-      entryLabel: units[0]?.title ?? null,
-      continuationMode: totalWeeks > 1 || units.length > 1 ? "sequential" : "manual_review",
-      openingLessonRefs: units[0]?.lessons.map((lesson) => lesson.lessonRef) ?? [],
-      openingSkillRefs: units[0]?.lessons.flatMap((lesson) => lesson.linkedSkillRefs) ?? [],
-    },
   };
 }
 

@@ -21,10 +21,10 @@ function truncateFailureReason(reason: string) {
 }
 
 function countEstimatedSessions(
-  units: Array<{ estimatedSessions?: number | null; lessons: unknown[] }>,
+  units: Array<{ estimatedSessions?: number | null }>,
 ) {
   return units.reduce(
-    (total, unit) => total + (unit.estimatedSessions ?? unit.lessons.length),
+    (total, unit) => total + (unit.estimatedSessions ?? 0),
     0,
   );
 }
@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
         nodeCount: tree?.nodeCount ?? 0,
         skillCount: tree?.skillCount ?? 0,
         unitCount: outline.length,
-        lessonCount: created.lessonCount,
+        lessonCount: outline.reduce((total, unit) => total + unit.lessons.length, 0),
         estimatedSessionCount: countEstimatedSessions(created.artifact.units),
       });
 

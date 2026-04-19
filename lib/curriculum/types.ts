@@ -149,15 +149,12 @@ export const CurriculumSourceModelSchema = z.object({
 export type CurriculumSourceModel = z.infer<typeof CurriculumSourceModelSchema>;
 
 export const CurriculumLaunchPlanSchema = z.object({
-  recommendedHorizon: CurriculumSourceRecommendedHorizonSchema,
+  chosenHorizon: CurriculumSourceRecommendedHorizonSchema,
   scopeSummary: z.string().min(1),
   initialSliceUsed: z.boolean(),
   initialSliceLabel: z.string().nullable().optional(),
-  entryStrategy: CurriculumSourceEntryStrategySchema.nullable().optional(),
-  entryLabel: z.string().nullable().optional(),
-  continuationMode: CurriculumSourceContinuationModeSchema.nullable().optional(),
-  openingLessonRefs: z.array(z.string().min(1)).min(1),
-  openingSkillRefs: z.array(z.string().min(1)).default([]),
+  openingUnitRefs: z.array(z.string().min(1)).default([]),
+  openingSkillNodeIds: z.array(z.string().min(1)).default([]),
 }).strict();
 
 export type CurriculumLaunchPlan = z.infer<typeof CurriculumLaunchPlanSchema>;
@@ -175,7 +172,6 @@ export const CurriculumSourceIntakeSchema = z
     sourcePackageId: z.string().nullable().optional(),
     sourceModality: IntakeSourcePackageModalitySchema.optional(),
     sourceModel: CurriculumSourceModelSchema.optional(),
-    launchPlan: CurriculumLaunchPlanSchema.optional(),
     curriculumLineage: JsonRecordSchema.optional(),
     sourceFingerprint: z.string().optional(),
     createdFrom: z.enum([
@@ -257,6 +253,7 @@ export const CurriculumUnitSchema = z.object({
   sequence: z.number().int().nonnegative(),
   estimatedWeeks: z.number().optional(),
   estimatedSessions: z.number().int().positive().optional(),
+  skillRefs: z.array(z.string()).default([]),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });

@@ -28,7 +28,7 @@ type ResolvedLaunchPlan = NonNullable<NonNullable<CurriculumSourceResult>["launc
 function resolveCurriculumLaunchMetadata(source: CurriculumSourceResult) {
   const intake = source?.intake ?? null;
   const sourceModel = source?.sourceModel ?? intake?.sourceModel ?? null;
-  const launchPlan = source?.launchPlan ?? intake?.launchPlan ?? null;
+  const launchPlan = source?.launchPlan ?? null;
   const curriculumLineage = source?.curriculumLineage ?? intake?.curriculumLineage ?? null;
 
   return {
@@ -164,14 +164,11 @@ async function buildTodayLessonGenerationContext(params: {
             routedRoute: sourceModel?.routedRoute ?? intake?.route ?? null,
             confidence: sourceModel?.confidence ?? null,
             sourceKind: sourceModel?.sourceKind ?? null,
-            entryStrategy:
-              sourceModel?.entryStrategy ?? launchPlan?.entryStrategy ?? null,
-            entryLabel:
-              sourceModel?.entryLabel ?? launchPlan?.entryLabel ?? null,
-            continuationMode:
-              sourceModel?.continuationMode ?? launchPlan?.continuationMode ?? null,
+            entryStrategy: sourceModel?.entryStrategy ?? null,
+            entryLabel: sourceModel?.entryLabel ?? null,
+            continuationMode: sourceModel?.continuationMode ?? null,
             recommendedHorizon:
-              launchPlan?.recommendedHorizon ?? sourceModel?.recommendedHorizon ?? null,
+              launchPlan?.chosenHorizon ?? sourceModel?.recommendedHorizon ?? null,
             sourcePackageIds: sourceModel?.sourcePackageIds ?? intake?.sourcePackageIds ?? [],
             sourcePackages: sourceModel?.sourcePackages ?? intake?.sourcePackages ?? [],
             sourceModalities: sourceModel?.sourceModalities ?? intake?.sourceModalities ?? [],
@@ -179,8 +176,8 @@ async function buildTodayLessonGenerationContext(params: {
             sourceModality: sourceModel?.sourceModality ?? intake?.sourceModality ?? null,
             initialSliceUsed: launchPlan?.initialSliceUsed ?? null,
             initialSliceLabel: launchPlan?.initialSliceLabel ?? null,
-            openingLessonRefs: launchPlan?.openingLessonRefs ?? [],
-            openingSkillRefs: launchPlan?.openingSkillRefs ?? [],
+            openingUnitRefs: launchPlan?.openingUnitRefs ?? [],
+            openingSkillNodeIds: launchPlan?.openingSkillNodeIds ?? [],
             scopeSummary: launchPlan?.scopeSummary ?? null,
             assumptions: sourceModel?.assumptions ?? [],
             detectedChunks: sourceModel?.detectedChunks ?? [],
@@ -275,7 +272,7 @@ export async function generateTodayLessonDraft(params: {
     routedRoute: context.sourceModel?.routedRoute ?? context.source?.intake?.route ?? null,
     sourceKind: context.sourceModel?.sourceKind ?? null,
     recommendedHorizon:
-      context.launchPlan?.recommendedHorizon ?? context.sourceModel?.recommendedHorizon ?? null,
+      context.launchPlan?.chosenHorizon ?? context.sourceModel?.recommendedHorizon ?? null,
     itemCount: context.workspaceResult.workspace.items.length,
   };
 

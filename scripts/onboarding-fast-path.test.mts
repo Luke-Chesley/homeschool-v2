@@ -115,17 +115,6 @@ test("durable intake metadata accepts only the canonical source model", () => {
       sourceModality: "pdf",
       lineage: { operation: "source_interpret" },
     },
-    launchPlan: {
-      recommendedHorizon: "one_week",
-      entryStrategy: "explicit_range",
-      entryLabel: "chapter 1",
-      continuationMode: "sequential",
-      scopeSummary: "Start with chapter 1 and keep the rest available for later.",
-      initialSliceUsed: true,
-      initialSliceLabel: "chapter 1",
-      openingLessonRefs: ["lesson-1", "lesson-2", "lesson-3", "lesson-4"],
-      openingSkillRefs: ["skill-1", "skill-2"],
-    },
     curriculumLineage: { operation: "curriculum_generate" },
     createdFrom: "onboarding_fast_path",
   });
@@ -137,9 +126,7 @@ test("durable intake metadata accepts only the canonical source model", () => {
   assert.equal(parsed.sourceModel?.entryLabel, "chapter 1");
   assert.equal(parsed.sourceModel?.continuationMode, "sequential");
   assert.equal(parsed.sourceModel?.recommendedHorizon, "one_week");
-  assert.equal(parsed.launchPlan?.recommendedHorizon, "one_week");
   assert.equal(parsed.sourceModel?.lineage?.operation, "source_interpret");
-  assert.equal(parsed.launchPlan?.openingLessonRefs.length, 4);
   assert.equal(parsed.curriculumLineage?.operation, "curriculum_generate");
 });
 
@@ -191,13 +178,13 @@ test("case B: weekly plan infers one week and produces a bounded launch summary"
       scopeSummary: preview.scopeSummary,
       initialSliceUsed: preview.initialSliceUsed,
       initialSliceLabel: preview.initialSliceLabel,
-      openingLessonRefs: ["lesson-1", "lesson-2", "lesson-3", "lesson-4"],
+      openingSkillNodeIds: ["skill-1", "skill-2", "skill-3", "skill-4"],
     },
   });
 
   assert.equal(preview.chosenHorizon, "one_week");
   assert.equal(preview.needsConfirmation, false);
-  assert.match(summary.summaryText, /opening 4 lessons/i);
+  assert.match(summary.summaryText, /4 opening skills/i);
   assert.deepEqual(summary.initialSliceUsed, true);
 });
 
@@ -284,7 +271,7 @@ test("case F: comprehensive source stays bounded and preserves its entry slice",
       scopeSummary: preview.scopeSummary,
       initialSliceUsed: preview.initialSliceUsed,
       initialSliceLabel: preview.initialSliceLabel,
-      openingLessonRefs: ["lesson-1", "lesson-2", "lesson-3", "lesson-4", "lesson-5", "lesson-6"],
+      openingSkillNodeIds: ["skill-1", "skill-2", "skill-3", "skill-4", "skill-5", "skill-6"],
     },
     initialSliceLabel: "chapter 1",
   });
@@ -293,7 +280,7 @@ test("case F: comprehensive source stays bounded and preserves its entry slice",
   assert.equal(preview.initialSliceUsed, true);
   assert.match(preview.scopeSummary, /chapter 1/i);
   assert.match(summary.summaryText, /chapter 1/i);
-  assert.match(summary.summaryText, /opening 6 lessons/i);
+  assert.match(summary.summaryText, /6 opening skills/i);
 });
 
 test("case G: large source with explicit narrow request stays anchored to that range", () => {
@@ -357,11 +344,11 @@ test("launch summary can be derived directly from launchPlan metadata", () => {
       scopeSummary: "Start with chapter 1 and keep the rest available for later.",
       initialSliceUsed: true,
       initialSliceLabel: "chapter 1",
-      openingLessonRefs: ["lesson-1", "lesson-2", "lesson-3", "lesson-4"],
+      openingSkillNodeIds: ["skill-1", "skill-2", "skill-3", "skill-4"],
     },
   });
 
-  assert.match(summary.summaryText, /opening 4 lessons/i);
+  assert.match(summary.summaryText, /4 opening skills/i);
   assert.equal(summary.initialSliceUsed, true);
   assert.match(summary.summaryText, /chapter 1/i);
 });

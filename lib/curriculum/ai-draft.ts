@@ -5,7 +5,6 @@ import {
   CurriculumSourceEntryStrategySchema,
   CurriculumSourceRecommendedHorizonSchema,
   JsonRecordSchema,
-  CurriculumLessonTypeSchema,
 } from "./types.ts";
 
 const CurriculumAiChatRoleSchema = z.enum(["user", "assistant"]);
@@ -95,28 +94,13 @@ export const CurriculumAiPacingSchema = z.object({
 
 export type CurriculumAiPacing = z.infer<typeof CurriculumAiPacingSchema>;
 
-export const CurriculumAiLessonSchema = z.object({
-  unitRef: z.string().trim().min(1).max(180),
-  lessonRef: z.string().trim().min(1).max(180),
-  title: z.string().trim().min(1).max(180),
-  description: z.string().trim().min(1).max(600),
-  subject: z.string().trim().min(1).max(80).optional(),
-  lessonType: CurriculumLessonTypeSchema,
-  estimatedMinutes: z.number().int().positive().max(240).optional(),
-  materials: truncatedArraySchema(z.string().trim().min(1).max(180), 12),
-  objectives: truncatedArraySchema(z.string().trim().min(1).max(220), 8),
-  linkedSkillRefs: truncatedArraySchema(z.string().trim().min(1).max(1_000), 8),
-});
-
-export type CurriculumAiLesson = z.infer<typeof CurriculumAiLessonSchema>;
-
 export const CurriculumAiUnitSchema = z.object({
   unitRef: z.string().trim().min(1).max(180),
   title: z.string().trim().min(1).max(180),
   description: z.string().trim().min(1).max(700),
   estimatedWeeks: z.number().positive().max(52).optional(),
   estimatedSessions: z.number().int().positive().max(160).optional(),
-  lessons: z.array(CurriculumAiLessonSchema).min(1).max(16),
+  skillRefs: truncatedArraySchema(z.string().trim().min(1).max(1_000), 48),
 });
 
 export type CurriculumAiUnit = z.infer<typeof CurriculumAiUnitSchema>;
@@ -153,19 +137,16 @@ export const CurriculumAiProgressionSchema = z.object({
 
 export type CurriculumAiProgression = z.infer<typeof CurriculumAiProgressionSchema>;
 
-export const CurriculumLaunchPlanSchema = z.object({
-  recommendedHorizon: CurriculumSourceRecommendedHorizonSchema,
+export const CurriculumAiLaunchPlanSchema = z.object({
+  chosenHorizon: CurriculumSourceRecommendedHorizonSchema,
   scopeSummary: z.string().trim().min(1).max(1_200),
   initialSliceUsed: z.boolean(),
   initialSliceLabel: z.string().trim().min(1).max(240).nullable().optional(),
-  entryStrategy: CurriculumSourceEntryStrategySchema.nullable().optional(),
-  entryLabel: z.string().trim().min(1).max(240).nullable().optional(),
-  continuationMode: CurriculumSourceContinuationModeSchema.nullable().optional(),
-  openingLessonRefs: z.array(z.string().trim().min(1).max(180)).min(1),
-  openingSkillRefs: z.array(z.string().trim().min(1).max(1_000)).default([]),
+  openingUnitRefs: z.array(z.string().trim().min(1).max(180)).default([]),
+  openingSkillRefs: z.array(z.string().trim().min(1).max(1_000)).min(1),
 });
 
-export type CurriculumLaunchPlan = z.infer<typeof CurriculumLaunchPlanSchema>;
+export type CurriculumAiLaunchPlan = z.infer<typeof CurriculumAiLaunchPlanSchema>;
 
 export const CurriculumAiGeneratedArtifactSchema = z.object({
   source: CurriculumAiDraftSummarySchema,
@@ -173,8 +154,6 @@ export const CurriculumAiGeneratedArtifactSchema = z.object({
   pacing: CurriculumAiPacingSchema,
   document: z.record(z.string().trim().min(1).max(180), CurriculumAiDocumentNodeSchema),
   units: z.array(CurriculumAiUnitSchema).min(1).max(20),
-  launchPlan: CurriculumLaunchPlanSchema,
-  progression: CurriculumAiProgressionSchema.optional(),
 });
 
 export type CurriculumAiGeneratedArtifact = z.infer<typeof CurriculumAiGeneratedArtifactSchema>;

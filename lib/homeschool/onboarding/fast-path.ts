@@ -385,7 +385,8 @@ function resolveSummaryLaunchPlan(params: {
     | "scopeSummary"
     | "initialSliceUsed"
     | "initialSliceLabel"
-    | "openingLessonRefs"
+    | "openingUnitRefs"
+    | "openingSkillNodeIds"
   >;
   initialSliceLabel?: string | null;
 }) {
@@ -399,7 +400,8 @@ function resolveSummaryLaunchPlan(params: {
 
   return {
     chosenHorizon,
-    openingLessonRefs: launchPlan?.openingLessonRefs ?? [],
+    openingUnitRefs: launchPlan?.openingUnitRefs ?? [],
+    openingSkillNodeIds: launchPlan?.openingSkillNodeIds ?? [],
     scopeSummary: launchPlan?.scopeSummary ?? params.preview?.scopeSummary ?? null,
     initialSliceUsed: launchPlan?.initialSliceUsed ?? params.preview?.initialSliceUsed ?? false,
     initialSliceLabel:
@@ -425,12 +427,14 @@ export function buildFastPathLaunchSummary(params: {
     | "scopeSummary"
     | "initialSliceUsed"
     | "initialSliceLabel"
-    | "openingLessonRefs"
+    | "openingUnitRefs"
+    | "openingSkillNodeIds"
   >;
   initialSliceLabel?: string | null;
 }): HomeschoolFastPathLaunchSummary {
   const launchPlan = resolveSummaryLaunchPlan(params);
-  const openingLessonTotal = launchPlan.openingLessonRefs.length;
+  const openingSkillTotal = launchPlan.openingSkillNodeIds.length;
+  const openingUnitTotal = launchPlan.openingUnitRefs.length;
   let summaryText: string;
 
   if (launchPlan.chosenHorizon === "single_day") {
@@ -438,17 +442,17 @@ export function buildFastPathLaunchSummary(params: {
   } else if (
     launchPlan.initialSliceUsed &&
     launchPlan.initialSliceLabel &&
-    openingLessonTotal > 0
+    openingSkillTotal > 0
   ) {
-    summaryText = `We started with ${launchPlan.initialSliceLabel}, set up the opening ${openingLessonTotal} lessons, and opened day 1.`;
-  } else if (launchPlan.chosenHorizon === "starter_module" && openingLessonTotal > 0) {
-    summaryText = `We built a starter module with ${openingLessonTotal} lessons and opened day 1.`;
-  } else if (launchPlan.chosenHorizon === "two_weeks" && openingLessonTotal > 0) {
-    summaryText = `We set up the opening ${openingLessonTotal} lessons across ${describeChosenHorizon(
+    summaryText = `We started with ${launchPlan.initialSliceLabel}, queued ${openingSkillTotal} opening skills, and opened day 1.`;
+  } else if (launchPlan.chosenHorizon === "starter_module" && openingSkillTotal > 0) {
+    summaryText = `We built a starter module with ${openingSkillTotal} opening skills and opened day 1.`;
+  } else if (launchPlan.chosenHorizon === "two_weeks" && openingSkillTotal > 0) {
+    summaryText = `We set up ${openingSkillTotal} opening skills across ${describeChosenHorizon(
       launchPlan.chosenHorizon,
     )} and opened day 1.`;
-  } else if (openingLessonTotal > 0) {
-    summaryText = `We set up the opening ${openingLessonTotal} lessons and opened day 1.`;
+  } else if (openingUnitTotal > 0) {
+    summaryText = `We set up ${openingUnitTotal} opening units and opened day 1.`;
   } else {
     summaryText = "We set up the opening launch window and opened day 1.";
   }

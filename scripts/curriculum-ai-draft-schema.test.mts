@@ -3,18 +3,6 @@ import assert from "node:assert/strict";
 
 import { CurriculumAiGeneratedArtifactSchema } from "@/lib/curriculum/ai-draft";
 
-const launchPlan = {
-  recommendedHorizon: "starter_module",
-  openingLessonRefs: Array.from({ length: 8 }, (_, index) => `lesson-${index + 1}`),
-  openingSkillRefs: Array.from({ length: 3 }, (_, index) => `skill-${index + 1}`),
-  scopeSummary: "Open with the first stretch of lessons from the generated curriculum.",
-  initialSliceUsed: true,
-  initialSliceLabel: "Unit 1",
-  entryStrategy: "use_as_is",
-  entryLabel: "Unit 1",
-  continuationMode: "sequential",
-} as const;
-
 test("CurriculumAiGeneratedArtifactSchema truncates overflowing summary arrays", () => {
   const parsed = CurriculumAiGeneratedArtifactSchema.parse({
     source: {
@@ -51,22 +39,9 @@ test("CurriculumAiGeneratedArtifactSchema truncates overflowing summary arrays",
         description: "Start with movement and basic play.",
         estimatedWeeks: 1,
         estimatedSessions: 5,
-        lessons: [
-          {
-            unitRef: "unit-1",
-            lessonRef: "lesson-1",
-            title: "Lesson 1",
-            description: "Learn the board and piece movement.",
-            lessonType: "task",
-            estimatedMinutes: 35,
-            materials: Array.from({ length: 14 }, (_, index) => `Material ${index + 1}`),
-            objectives: Array.from({ length: 10 }, (_, index) => `Objective ${index + 1}`),
-            linkedSkillRefs: Array.from({ length: 10 }, (_, index) => `skill-${index + 1}`),
-          },
-        ],
+        skillRefs: Array.from({ length: 10 }, (_, index) => `skill-${index + 1}`),
       },
     ],
-    launchPlan,
   });
 
   assert.equal(parsed.source.subjects.length, 6);
@@ -76,10 +51,7 @@ test("CurriculumAiGeneratedArtifactSchema truncates overflowing summary arrays",
   assert.equal(parsed.source.parentNotes.length, 6);
   assert.equal(parsed.source.rationale.length, 6);
   assert.equal(parsed.pacing.coverageNotes.length, 8);
-  assert.equal(parsed.units[0]?.lessons[0]?.materials.length, 12);
-  assert.equal(parsed.units[0]?.lessons[0]?.objectives.length, 8);
-  assert.equal(parsed.units[0]?.lessons[0]?.linkedSkillRefs.length, 8);
-  assert.equal(parsed.launchPlan.openingLessonRefs.length, 8);
+  assert.equal(parsed.units[0]?.skillRefs.length, 8);
 });
 
 test("CurriculumAiGeneratedArtifactSchema accepts long progression refs so unresolved progression can fall back later", () => {
@@ -121,45 +93,9 @@ test("CurriculumAiGeneratedArtifactSchema accepts long progression refs so unres
         description: "Start with daily life and structural change in early 19th-century Virginia.",
         estimatedWeeks: 2,
         estimatedSessions: 8,
-        lessons: [
-          {
-            unitRef: "unit-1",
-            lessonRef: "lesson-1",
-            title: "Lesson 1",
-            description: "Study early 1800s Virginia life through maps and narration.",
-            subject: "Virginia History",
-            lessonType: "concept",
-            estimatedMinutes: 35,
-            materials: ["Map", "Notebook"],
-            objectives: ["Describe daily life in early 1800s Virginia."],
-            linkedSkillRefs: ["early-1800s-virginia"],
-          },
-        ],
+        skillRefs: [longRef, `${longRef} / slavery and reform`],
       },
     ],
-    launchPlan: {
-      ...launchPlan,
-      recommendedHorizon: "two_weeks",
-      openingLessonRefs: Array.from({ length: 12 }, (_, index) => `lesson-${index + 1}`),
-      scopeSummary: "Open with the first two weeks of the Virginia history sequence.",
-    },
-    progression: {
-      phases: [
-        {
-          title: "Phase 1",
-          skillRefs: [longRef, `${longRef} / slavery and reform`],
-        },
-      ],
-      edges: [
-        {
-          fromSkillRef: longRef,
-          toSkillRef: `${longRef} / slavery and reform`,
-          kind: "recommendedBefore",
-        },
-      ],
-    },
   });
-
-  assert.equal(parsed.progression?.phases[0]?.skillRefs[0], trimmedLongRef);
-  assert.equal(parsed.progression?.edges[0]?.fromSkillRef, trimmedLongRef);
+  assert.equal(parsed.units[0]?.skillRefs[0], trimmedLongRef);
 });

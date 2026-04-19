@@ -720,7 +720,6 @@ async function initializeCurriculum(input: HomeschoolOnboardingInput, learner: t
           sourceModality: resolvedSource.sourcePackage?.modality ?? "text",
           lineage: sourceInterpretResult.lineage,
         }),
-        launchPlan: artifact.launchPlan,
         curriculumLineage: {
           requestMode: "source_entry",
           sourceInterpret: sourceInterpretResult.lineage,
@@ -1042,11 +1041,12 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
   const launchSummary = buildFastPathLaunchSummary({
     preview,
     launchPlan: {
-      chosenHorizon: curriculumGeneration.launchContext.recommendedHorizon,
+      chosenHorizon: curriculumGeneration.launchContext.chosenHorizon,
       scopeSummary: curriculumGeneration.launchContext.scopeSummary ?? null,
       initialSliceUsed: curriculumGeneration.launchContext.initialSliceUsed,
       initialSliceLabel: curriculumGeneration.launchContext.initialSliceLabel ?? null,
-      openingLessonRefs: curriculumGeneration.launchContext.openingLessonRefs,
+      openingUnitRefs: curriculumGeneration.launchContext.openingUnitRefs,
+      openingSkillNodeIds: curriculumGeneration.launchContext.openingSkillNodeIds,
     },
   });
   await setLiveCurriculumSource(input.organizationId, sourceId);

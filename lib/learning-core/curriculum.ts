@@ -6,6 +6,7 @@ import {
   CurriculumAiChatTurnSchema,
   CurriculumAiGeneratedArtifactSchema,
   CurriculumAiChatMessageSchema,
+  CurriculumAiLaunchPlanSchema,
   CurriculumAiProgressionSchema,
   CurriculumAiRevisionTurnSchema,
 } from "@/lib/curriculum/ai-draft";
@@ -242,5 +243,50 @@ export async function executeProgressionGenerate(params: {
       },
     }),
     CurriculumAiProgressionSchema,
+  );
+}
+
+export async function previewLaunchPlanGenerate(params: {
+  input: Record<string, unknown>;
+  organizationId?: string | null;
+  learnerId?: string | null;
+}) {
+  return previewLearningCoreOperation(
+    "launch_plan_generate",
+    buildLearningCoreEnvelope({
+      input: params.input,
+      surface: "curriculum",
+      organizationId: params.organizationId,
+      learnerId: params.learnerId,
+      requestOrigin: "server_action",
+      debug: true,
+      presentationContext: {
+        audience: "internal",
+        displayIntent: "preview",
+        shouldReturnPromptPreview: true,
+      },
+    }),
+  );
+}
+
+export async function executeLaunchPlanGenerate(params: {
+  input: Record<string, unknown>;
+  organizationId?: string | null;
+  learnerId?: string | null;
+}) {
+  return executeLearningCoreOperation(
+    "launch_plan_generate",
+    buildLearningCoreEnvelope({
+      input: params.input,
+      surface: "curriculum",
+      organizationId: params.organizationId,
+      learnerId: params.learnerId,
+      requestOrigin: "server_action",
+      presentationContext: {
+        audience: "internal",
+        displayIntent: "final",
+      },
+    }),
+    CurriculumAiLaunchPlanSchema,
   );
 }

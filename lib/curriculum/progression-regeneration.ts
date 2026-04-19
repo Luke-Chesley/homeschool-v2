@@ -13,8 +13,6 @@ import {
 } from "./service";
 import { generateCurriculumProgression } from "./ai-draft-service";
 import type { CurriculumAiProgression } from "./ai-draft";
-import type { CurriculumAiGeneratedArtifact } from "./ai-draft";
-import type { CurriculumJsonNode } from "./local-json-import";
 
 export interface RegenerateProgressionParams {
   sourceId: string;
@@ -25,6 +23,7 @@ export interface RegenerateProgressionParams {
 export type RegenerateProgressionResult =
   | {
       kind: "success";
+      progression: CurriculumAiProgression;
       phaseCount: number;
       edgeCount: number;
       attemptCount: number;
@@ -277,18 +276,11 @@ export async function regenerateCurriculumProgression(
     return { kind: "failure", reason: "No skill nodes found for this curriculum source.", attemptCount: 0 };
   }
 
-  // Build skill refs with stable IDs + titles for the ID-aware prompt path.
-  const skillRefs = skillNodes.map((n) => ({ skillId: n.id, skillTitle: n.title }));
-
-  // Build a minimal artifact shell — prompt/preview purposes only.
-  const minimalArtifact = buildMinimalArtifactForProgression(source, skillNodes);
-
-  // Run progression generation with the real skill IDs.
   const result = await generateCurriculumProgression(
     {
+      householdId: params.householdId,
+      sourceId: params.sourceId,
       learner: { displayName: params.learnerDisplayName },
-      artifact: minimalArtifact as any,
-      skillRefs,
     },
   );
 
@@ -471,6 +463,7 @@ export async function regenerateCurriculumProgression(
 
   return {
     kind: "success",
+    progression: result.progression,
     phaseCount: resolvedPhases.length,
     edgeCount: diagnostics.totalAcceptedEdges,
     attemptCount: result.attemptCount,
@@ -515,73 +508,4 @@ export async function buildProgressionPromptPreview(params: {
     },
     organizationId: params.householdId,
   });
-}
-
-// ── Prompt-only helpers (not used for persistence) ───────────────────────────
-
-/**
- * Build a minimal artifact that has enough structure for the progression prompt
- * but doesn't require a full AI re-generation.
- *
- * NOTE: This is prompt/debug-only. It must NOT participate in persistence-critical
- * resolution. Resolution happens via resolveProgressionAgainstExistingNodes().
- */
-function buildMinimalArtifactForProgression(
-  source: { title: string; summary?: string | null },
-  skillNodes: Array<{ id: string; title: string }>,
-): CurriculumAiGeneratedArtifact {
-  const document: Record<string, string> = {};
-  for (const node of skillNodes) {
-    document[node.title] = node.id;
-  }
-
-  return {
-    source: {
-      title: source.title,
-      description: source.summary ?? source.title,
-      subjects: [],
-      gradeLevels: [],
-      summary: source.summary ?? source.title,
-      teachingApproach: "",
-      successSignals: [],
-      parentNotes: [],
-      rationale: [],
-    },
-    intakeSummary: source.summary ?? source.title,
-    pacing: {
-      coverageStrategy: "Standard progression",
-      coverageNotes: [],
-    },
-    document: { Skills: document } as Record<string, CurriculumJsonNode>,
-    units: [
-      {
-        unitRef: "unit:progression-preview",
-        title: "Opening progression window",
-        description: "Synthetic opening anchor for progression preview only.",
-        lessons: [
-          {
-            unitRef: "unit:progression-preview",
-            lessonRef: "lesson:progression-preview",
-            lessonType: "skill_support",
-            title: "Opening progression window",
-            description: "Use the existing skill map as the bounded opening window for progression work.",
-            materials: [],
-            objectives: [],
-            linkedSkillRefs: skillNodes.map((node) => node.id),
-          },
-        ],
-      },
-    ],
-    launchPlan: {
-      recommendedHorizon: "starter_module",
-      scopeSummary: "Use the existing skill map as the bounded opening window for progression work.",
-      initialSliceUsed: false,
-      initialSliceLabel: null,
-      entryStrategy: null,
-      entryLabel: null,
-      continuationMode: null,
-      openingLessonRefs: ["lesson:progression-preview"],
-      openingSkillRefs: skillNodes.map((node) => node.id),
-    },
-  };
 }

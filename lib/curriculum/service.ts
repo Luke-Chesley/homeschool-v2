@@ -302,7 +302,7 @@ async function createSourceRecord(
 }
 
 function countEstimatedSessions(units: ImportedCurriculumDocument["units"] = []) {
-  return units.reduce((total, unit) => total + (unit.estimatedSessions ?? unit.lessons.length), 0);
+  return units.reduce((total, unit) => total + (unit.estimatedSessions ?? 0), 0);
 }
 
 function buildCurriculumArtifactMetadata(artifact: CurriculumAiGeneratedArtifact) {
@@ -314,10 +314,9 @@ function buildCurriculumArtifactMetadata(artifact: CurriculumAiGeneratedArtifact
     parentNotes: artifact.source.parentNotes,
     rationale: artifact.source.rationale,
     pacing: artifact.pacing,
-    launchPlan: canonicalArtifact.launchPlan,
     skillCatalog: canonicalArtifact.skillCatalog,
     generatedUnitCount: artifact.units.length,
-    generatedLessonCount: artifact.units.reduce((total, unit) => total + unit.lessons.length, 0),
+    generatedSkillCount: canonicalArtifact.skillCatalog.length,
     generatedEstimatedSessionCount: countEstimatedSessions(artifact.units),
   };
 }
@@ -343,7 +342,6 @@ function toImportedCurriculumDocumentFromCurriculumArtifact(
     subjects: artifact.source.subjects,
     gradeLevels: artifact.source.gradeLevels,
     document: artifact.document,
-    progression: artifact.progression,
     units: canonicalArtifact.units,
     metadata: buildCurriculumArtifactMetadata(artifact),
   };
@@ -381,47 +379,23 @@ async function replaceCurriculumOutline(
   await tx.delete(curriculumItems).where(eq(curriculumItems.sourceId, sourceId));
 
   for (const [unitIndex, unit] of units.entries()) {
-    const [createdUnit] = await tx
-      .insert(curriculumItems)
-      .values({
-        sourceId,
-        learnerId: null,
-        parentItemId: null,
-        itemType: "unit",
-        title: unit.title,
-        description: unit.description ?? null,
-        subject: null,
-        estimatedMinutes: null,
-        position: unitIndex,
-        metadata: {
-          estimatedWeeks: unit.estimatedWeeks ?? null,
-          estimatedSessions: unit.estimatedSessions ?? null,
-          unitRef: unit.unitRef,
-        },
-      })
-      .returning();
-
-    for (const [lessonIndex, lesson] of unit.lessons.entries()) {
-      await tx.insert(curriculumItems).values({
-        sourceId,
-        learnerId: null,
-        parentItemId: createdUnit.id,
-        itemType: "lesson",
-        title: lesson.title,
-        description: lesson.description ?? null,
-        subject: lesson.subject ?? null,
-        estimatedMinutes: lesson.estimatedMinutes ?? null,
-        position: lessonIndex,
-        metadata: {
-          materials: lesson.materials ?? [],
-          objectives: lesson.objectives ?? [],
-          unitRef: lesson.unitRef,
-          lessonRef: lesson.lessonRef,
-          lessonType: lesson.lessonType,
-          linkedSkillRefs: lesson.linkedSkillRefs ?? [],
-        },
-      });
-    }
+    await tx.insert(curriculumItems).values({
+      sourceId,
+      learnerId: null,
+      parentItemId: null,
+      itemType: "unit",
+      title: unit.title,
+      description: unit.description ?? null,
+      subject: null,
+      estimatedMinutes: null,
+      position: unitIndex,
+      metadata: {
+        estimatedWeeks: unit.estimatedWeeks ?? null,
+        estimatedSessions: unit.estimatedSessions ?? null,
+        unitRef: unit.unitRef,
+        skillRefs: unit.skillRefs ?? [],
+      },
+    });
   }
 }
 
@@ -447,8 +421,9 @@ async function importNormalizedTree(
     sourceId,
     sourceLineageId: source.id,
     document: imported.document,
-    progression: imported.progression,
+    progression: undefined,
   });
+  const hasExplicitProgression = false;
 
   await getDb().transaction(async (tx) => {
     const existingNodes = await tx
@@ -502,30 +477,31 @@ async function importNormalizedTree(
       .delete(curriculumSkillPrerequisites)
       .where(eq(curriculumSkillPrerequisites.sourceId, sourceId));
 
-    if (normalized.prerequisites.length > 0) {
+    if (hasExplicitProgression && normalized.prerequisites.length > 0) {
       await tx.insert(curriculumSkillPrerequisites).values(normalized.prerequisites);
     }
 
-    // Persist Phases
     await tx.delete(curriculumPhases).where(eq(curriculumPhases.sourceId, sourceId));
-    for (const phase of normalized.phases) {
-      const [createdPhase] = await tx
-        .insert(curriculumPhases)
-        .values({
-          sourceId,
-          title: phase.title,
-          description: phase.description ?? null,
-          position: phase.position,
-        })
-        .returning();
+    if (hasExplicitProgression) {
+      for (const phase of normalized.phases) {
+        const [createdPhase] = await tx
+          .insert(curriculumPhases)
+          .values({
+            sourceId,
+            title: phase.title,
+            description: phase.description ?? null,
+            position: phase.position,
+          })
+          .returning();
 
-      if (phase.nodeIds.length > 0) {
-        await tx.insert(curriculumPhaseNodes).values(
-          phase.nodeIds.map((nodeId) => ({
-            phaseId: createdPhase.id,
-            curriculumNodeId: nodeId,
-          })),
-        );
+        if (phase.nodeIds.length > 0) {
+          await tx.insert(curriculumPhaseNodes).values(
+            phase.nodeIds.map((nodeId) => ({
+              phaseId: createdPhase.id,
+              curriculumNodeId: nodeId,
+            })),
+          );
+        }
       }
     }
 
@@ -545,6 +521,8 @@ async function importNormalizedTree(
           academicYear: imported.academicYear ?? source.metadata.academicYear ?? null,
           subjects: imported.subjects,
           gradeLevels: imported.gradeLevels,
+          curriculumDocument: imported.document,
+          curriculumUnits: imported.units ?? [],
           importFingerprint: normalized.summary.sourceFingerprint,
           normalizedNodeCount: normalized.summary.nodeCount,
           normalizedSkillCount: normalized.summary.skillCount,
@@ -561,12 +539,10 @@ async function importNormalizedTree(
   // Persist progression state after the transaction.
   const diag = normalized.summary.progressionDiagnostics;
   let progressionStatus: ProgressionStatus;
-  if (diag.hasExplicitProgression) {
+  if (hasExplicitProgression && diag.hasExplicitProgression) {
     progressionStatus = "explicit_ready";
   } else if (options?.progressionFailureReason) {
     progressionStatus = "explicit_failed";
-  } else if (diag.usingInferredFallback) {
-    progressionStatus = "fallback_only";
   } else {
     progressionStatus = "not_attempted";
   }
@@ -575,11 +551,11 @@ async function importNormalizedTree(
     sourceId,
     status: progressionStatus,
     lastFailureReason: options?.progressionFailureReason ?? null,
-    lastAcceptedPhaseCount: diag.phaseCount,
-    lastAcceptedEdgeCount: diag.acceptedEdgeCount,
+    lastAcceptedPhaseCount: hasExplicitProgression ? diag.phaseCount : 0,
+    lastAcceptedEdgeCount: hasExplicitProgression ? diag.acceptedEdgeCount : 0,
     attemptCount: options?.progressionAttemptCount ?? 0,
-    usingInferredFallback: diag.usingInferredFallback,
-    provenance: options?.progressionProvenance ?? (diag.hasExplicitProgression ? "initial_generation" : "fallback_inference"),
+    usingInferredFallback: false,
+    provenance: options?.progressionProvenance ?? "initial_generation",
   });
 
   const updated = await getCurriculumSource(sourceId);
@@ -836,6 +812,35 @@ export async function applyCurriculumArtifactToCurriculumSource(params: {
   });
 }
 
+export async function setCurriculumLaunchPlan(params: {
+  sourceId: string;
+  householdId: string;
+  launchPlan: import("./types").CurriculumLaunchPlan;
+}) {
+  const existing = await getDb().query.curriculumSources.findFirst({
+    where: (table, { and, eq }) =>
+      and(eq(table.id, params.sourceId), eq(table.organizationId, params.householdId)),
+  });
+
+  if (!existing) {
+    throw new Error(`CurriculumSource not found: ${params.sourceId}`);
+  }
+
+  const [updated] = await getDb()
+    .update(curriculumSources)
+    .set({
+      metadata: {
+        ...(existing.metadata ?? {}),
+        launchPlan: params.launchPlan,
+      },
+      updatedAt: new Date(),
+    })
+    .where(eq(curriculumSources.id, params.sourceId))
+    .returning();
+
+  return mapSource(updated);
+}
+
 export async function updateCurriculumSource(
   id: string,
   patch: Partial<CreateCurriculumSourceInput>,
@@ -939,6 +944,9 @@ export async function listCurriculumUnits(sourceId: string): Promise<CurriculumU
         typeof item.metadata.estimatedSessions === "number"
           ? item.metadata.estimatedSessions
           : undefined,
+      skillRefs: Array.isArray(item.metadata.skillRefs)
+        ? item.metadata.skillRefs.filter((value): value is string => typeof value === "string")
+        : [],
       unitRef: requireUnitRef(item.id, item.metadata),
       createdAt: item.createdAt.toISOString(),
       updatedAt: item.updatedAt.toISOString(),
@@ -962,6 +970,7 @@ export async function createCurriculumUnit(input: CreateCurriculumUnitInput): Pr
         estimatedWeeks: input.estimatedWeeks ?? null,
         estimatedSessions: input.estimatedSessions ?? null,
         unitRef: input.unitRef,
+        skillRefs: input.skillRefs ?? [],
       },
     })
     .returning();
@@ -978,6 +987,9 @@ export async function createCurriculumUnit(input: CreateCurriculumUnitInput): Pr
       typeof unit.metadata.estimatedSessions === "number"
         ? unit.metadata.estimatedSessions
         : undefined,
+    skillRefs: Array.isArray(unit.metadata.skillRefs)
+      ? unit.metadata.skillRefs.filter((value): value is string => typeof value === "string")
+      : [],
     unitRef: requireUnitRef(unit.id, unit.metadata),
     createdAt: unit.createdAt.toISOString(),
     updatedAt: unit.updatedAt.toISOString(),
