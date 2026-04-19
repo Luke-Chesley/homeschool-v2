@@ -74,6 +74,46 @@ export interface ProgressionResolutionResult {
   diagnostics: ResolutionDiagnostics;
 }
 
+function normalizeLabel(value: string) {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+function slugify(value: string) {
+  return normalizeLabel(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "item";
+}
+
+function buildResolutionAliases(dbSkillNodes: Array<{ id: string; title: string }>) {
+  const byTitle = new Map<string, string>();
+  const bySlugTitle = new Map<string, string>();
+  const ambiguousSlugTitles = new Set<string>();
+  for (const node of dbSkillNodes) {
+    byTitle.set(normalizeLabel(node.title), node.id);
+    const slugTitle = slugify(node.title);
+    const existing = bySlugTitle.get(slugTitle);
+    if (existing && existing !== node.id) {
+      ambiguousSlugTitles.add(slugTitle);
+      bySlugTitle.delete(slugTitle);
+    } else if (!ambiguousSlugTitles.has(slugTitle)) {
+      bySlugTitle.set(slugTitle, node.id);
+    }
+  }
+
+  const canonicalAliasToId = new Map<string, string>();
+  const labelAliasToId = new Map<string, string>();
+
+  for (const [labelPath, nodeId] of byTitle.entries()) {
+    const segments = labelPath.split(" / ").map((segment) => normalizeLabel(segment)).filter(Boolean);
+    if (segments.length === 0) continue;
+    canonicalAliasToId.set(`skill:${segments.map(slugify).join("/")}`, nodeId);
+    labelAliasToId.set(segments.join(" / "), nodeId);
+  }
+
+  return { canonicalAliasToId, labelAliasToId, bySlugTitle };
+}
+
 /**
  * Resolve a generated progression draft strictly against existing authoritative
  * DB skill node IDs for a curriculum source.
@@ -88,6 +128,27 @@ export function resolveProgressionAgainstExistingNodes(
   progression: CurriculumAiProgression,
 ): ProgressionResolutionResult {
   const validNodeIdSet = new Set(dbSkillNodes.map((n) => n.id));
+  const { canonicalAliasToId, labelAliasToId, bySlugTitle } = buildResolutionAliases(dbSkillNodes);
+  const resolveSkillRef = (skillRef: string) => {
+    if (validNodeIdSet.has(skillRef)) {
+      return skillRef;
+    }
+
+    const explicit =
+      canonicalAliasToId.get(skillRef)
+      ?? labelAliasToId.get(skillRef);
+    if (explicit) {
+      return explicit;
+    }
+
+    if (skillRef.startsWith("skill:")) {
+      const leaf = skillRef.split("/").at(-1);
+      return leaf ? bySlugTitle.get(leaf) : undefined;
+    }
+
+    const leaf = skillRef.split(" / ").at(-1);
+    return leaf ? bySlugTitle.get(slugify(leaf)) : undefined;
+  };
 
   // ── Phase resolution ─────────────────────────────────────────────────────
   const resolvedPhases: ResolvedPhase[] = [];
@@ -97,8 +158,9 @@ export function resolveProgressionAgainstExistingNodes(
   for (const [index, phase] of progression.phases.entries()) {
     const nodeIds: string[] = [];
     for (const skillRef of phase.skillRefs) {
-      if (validNodeIdSet.has(skillRef)) {
-        nodeIds.push(skillRef);
+      const resolved = resolveSkillRef(skillRef);
+      if (resolved) {
+        nodeIds.push(resolved);
         totalAssignedSkillRefs++;
       } else {
         unresolvedSkillRefCount++;
@@ -124,8 +186,10 @@ export function resolveProgressionAgainstExistingNodes(
   const edgeSet = new Set<string>();
 
   for (const edge of progression.edges) {
-    const fromResolved = validNodeIdSet.has(edge.fromSkillRef);
-    const toResolved = validNodeIdSet.has(edge.toSkillRef);
+    const fromResolvedRef = resolveSkillRef(edge.fromSkillRef);
+    const toResolvedRef = resolveSkillRef(edge.toSkillRef);
+    const fromResolved = Boolean(fromResolvedRef);
+    const toResolved = Boolean(toResolvedRef);
 
     if (!fromResolved || !toResolved) {
       droppedEdgeCount++;
@@ -142,12 +206,12 @@ export function resolveProgressionAgainstExistingNodes(
       continue;
     }
 
-    if (edge.fromSkillRef === edge.toSkillRef) {
+    if (fromResolvedRef === toResolvedRef) {
       droppedEdgeCount++;
       continue;
     }
 
-    const edgeKey = `${edge.fromSkillRef}→${edge.toSkillRef}`;
+    const edgeKey = `${fromResolvedRef}→${toResolvedRef}`;
     if (edgeSet.has(edgeKey)) {
       droppedEdgeCount++;
       continue;
@@ -156,8 +220,8 @@ export function resolveProgressionAgainstExistingNodes(
     edgeSet.add(edgeKey);
     resolvedPrerequisites.push({
       sourceId,
-      skillNodeId: edge.toSkillRef,
-      prerequisiteSkillNodeId: edge.fromSkillRef,
+      skillNodeId: toResolvedRef!,
+      prerequisiteSkillNodeId: fromResolvedRef!,
       kind: edge.kind as PrerequisiteKind,
     });
   }

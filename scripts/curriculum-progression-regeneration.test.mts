@@ -254,3 +254,65 @@ test("resolveProgressionAgainstExistingNodes: position is zero-indexed and seque
   assert.equal(result.resolvedPhases[1].position, 1);
   assert.equal(result.resolvedPhases[2].position, 2);
 });
+
+test("resolveProgressionAgainstExistingNodes: resolves canonical skill refs derived from titles", () => {
+  const nodes = makeDbSkillNodes();
+
+  const progression: CurriculumAiProgression = {
+    phases: [
+      {
+        title: "Phase 1",
+        skillRefs: [
+          "skill:practical-life-cooking-and-kitchen-independence/montessori-foundations/introduction-and-readiness/board-setup",
+          "skill:practical-life-cooking-and-kitchen-independence/montessori-foundations/introduction-and-readiness/piece-movement",
+        ],
+      },
+    ],
+    edges: [
+      {
+        fromSkillRef:
+          "skill:practical-life-cooking-and-kitchen-independence/montessori-foundations/introduction-and-readiness/board-setup",
+        toSkillRef:
+          "skill:practical-life-cooking-and-kitchen-independence/montessori-foundations/introduction-and-readiness/piece-movement",
+        kind: "hardPrerequisite",
+      },
+    ],
+  };
+
+  const result = resolveProgressionAgainstExistingNodes("src-1", nodes, progression);
+
+  assert.deepEqual(result.resolvedPhases[0].nodeIds, ["cnode_abc001", "cnode_abc002"]);
+  assert.equal(result.resolvedPrerequisites.length, 1);
+  assert.equal(result.diagnostics.droppedEdgeCount, 0);
+});
+
+test("resolveProgressionAgainstExistingNodes: resolves legacy label-path skill refs", () => {
+  const nodes = makeDbSkillNodes();
+
+  const progression: CurriculumAiProgression = {
+    phases: [
+      {
+        title: "Phase 1",
+        skillRefs: [
+          "Practical Life Cooking and Kitchen Independence / Montessori Foundations / Introduction and Readiness / Board Setup",
+          "Practical Life Cooking and Kitchen Independence / Montessori Foundations / Introduction and Readiness / Piece Movement",
+        ],
+      },
+    ],
+    edges: [
+      {
+        fromSkillRef:
+          "Practical Life Cooking and Kitchen Independence / Montessori Foundations / Introduction and Readiness / Board Setup",
+        toSkillRef:
+          "Practical Life Cooking and Kitchen Independence / Montessori Foundations / Introduction and Readiness / Piece Movement",
+        kind: "hardPrerequisite",
+      },
+    ],
+  };
+
+  const result = resolveProgressionAgainstExistingNodes("src-1", nodes, progression);
+
+  assert.deepEqual(result.resolvedPhases[0].nodeIds, ["cnode_abc001", "cnode_abc002"]);
+  assert.equal(result.resolvedPrerequisites.length, 1);
+  assert.equal(result.diagnostics.droppedEdgeCount, 0);
+});

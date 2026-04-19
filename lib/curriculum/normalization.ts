@@ -101,6 +101,14 @@ function fingerprintDocument(document: Record<string, CurriculumJsonNode>) {
   return createHash("sha256").update(JSON.stringify(document)).digest("hex");
 }
 
+function canonicalSkillRefFromPath(path: string[]) {
+  return `skill:${path.map(slugify).join("/")}`;
+}
+
+function labelSkillRefFromPath(path: string[]) {
+  return path.map(cleanLabel).filter(Boolean).join(" / ");
+}
+
 function maybeExtractCode(value: string) {
   const match = value.match(/^([A-Za-z0-9][A-Za-z0-9.-]{1,20})\s+/);
   return match?.[1] ?? null;
@@ -406,9 +414,18 @@ export function normalizeCurriculumDocument(args: {
   }
 
   const skillIdByTitle = new Map<string, string>();
+  const skillIdByCanonicalRef = new Map<string, string>();
+  const skillIdByLabelPath = new Map<string, string>();
   for (const node of nodes.values()) {
     if (node.normalizedType === "skill") {
       skillIdByTitle.set(node.title, node.id);
+      const rawPath = Array.isArray(node.metadata.rawPath)
+        ? node.metadata.rawPath.filter((value): value is string => typeof value === "string")
+        : [];
+      if (rawPath.length > 0) {
+        skillIdByCanonicalRef.set(canonicalSkillRefFromPath(rawPath), node.id);
+        skillIdByLabelPath.set(labelSkillRefFromPath(rawPath), node.id);
+      }
     }
   }
 
@@ -422,13 +439,19 @@ export function normalizeCurriculumDocument(args: {
     }
   }
 
+  const resolveSkillRef = (skillRef: string) =>
+    validNodeIds.has(skillRef)
+      ? skillRef
+      : skillIdByCanonicalRef.get(skillRef)
+        ?? skillIdByLabelPath.get(skillRef)
+        ?? undefined;
+
   if (args.progression?.edges && args.progression.edges.length > 0) {
     const unmatchedEdgeEndpoints: Array<{ fromSkillRef: string; toSkillRef: string; unresolved: string[] }> = [];
 
     for (const edge of args.progression.edges) {
-      // In the new system, skillRef IS the nodeId (since we pass node IDs as skillRefs)
-      const skillNodeId = validNodeIds.has(edge.toSkillRef) ? edge.toSkillRef : undefined;
-      const prerequisiteSkillNodeId = validNodeIds.has(edge.fromSkillRef) ? edge.fromSkillRef : undefined;
+      const skillNodeId = resolveSkillRef(edge.toSkillRef);
+      const prerequisiteSkillNodeId = resolveSkillRef(edge.fromSkillRef);
 
       if (skillNodeId && prerequisiteSkillNodeId) {
         prerequisites.push({
@@ -438,7 +461,9 @@ export function normalizeCurriculumDocument(args: {
           kind: edge.kind,
           metadata: {
             derivedFrom: "explicit_progression_graph",
-            resolvedById: true,
+            resolvedById: validNodeIds.has(edge.toSkillRef) && validNodeIds.has(edge.fromSkillRef),
+            originalFromSkillRef: edge.fromSkillRef,
+            originalToSkillRef: edge.toSkillRef,
           },
         });
       } else {
@@ -488,7 +513,7 @@ export function normalizeCurriculumDocument(args: {
     for (const [index, phase] of args.progression.phases.entries()) {
       const nodeIds: string[] = [];
       for (const skillRef of phase.skillRefs) {
-        const nodeId = validNodeIds.has(skillRef) ? skillRef : undefined;
+        const nodeId = resolveSkillRef(skillRef);
         if (nodeId) {
           nodeIds.push(nodeId);
         } else {
