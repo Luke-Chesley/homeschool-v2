@@ -2,6 +2,7 @@ import { and, asc, eq, inArray, lt, ne } from "drizzle-orm";
 
 import { getDb } from "@/lib/db/server";
 import { getEnabledPlanningDayOffsets } from "./planning-days";
+import { normalizeTargetItemsPerDay } from "./defaults";
 import {
   curriculumNodes,
   curriculumSources,
@@ -118,6 +119,38 @@ function buildSuggestedScheduledDates(params: {
   });
 }
 
+export interface SuggestedSchedulePlacement {
+  scheduledDate: string | null;
+  scheduledSlotIndex: number | null;
+}
+
+export function buildSuggestedSchedulePlacements(params: {
+  weekStartDate: string;
+  itemCount: number;
+  targetItemsPerDay: number;
+  enabledDayOffsets: number[];
+}): SuggestedSchedulePlacement[] {
+  const scheduledDates = buildSuggestedScheduledDates(params);
+  const nextSlotIndexByDate = new Map<string, number>();
+
+  return scheduledDates.map((scheduledDate) => {
+    if (!scheduledDate) {
+      return {
+        scheduledDate: null,
+        scheduledSlotIndex: null,
+      };
+    }
+
+    const scheduledSlotIndex = nextSlotIndexByDate.get(scheduledDate) ?? 1;
+    nextSlotIndexByDate.set(scheduledDate, scheduledSlotIndex + 1);
+
+    return {
+      scheduledDate,
+      scheduledSlotIndex,
+    };
+  });
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -170,7 +203,7 @@ function getPlanningDayCount(profile: LearnerRouteProfileRecord | null): number 
 }
 
 function getTargetItemsPerWeek(profile: LearnerRouteProfileRecord | null): number {
-  const targetItemsPerDay = profile?.targetItemsPerDay ?? 1;
+  const targetItemsPerDay = normalizeTargetItemsPerDay(profile?.targetItemsPerDay ?? null);
   const planningDayCount = getPlanningDayCount(profile);
   return Math.max(1, targetItemsPerDay * planningDayCount);
 }
@@ -796,7 +829,7 @@ function buildRecommendations(params: {
     plannedSkillNodeIdsBeforeWeek,
   } = params;
   const targetItemsPerWeek = getTargetItemsPerWeek(profile);
-  const targetItemsPerDay = Math.max(1, profile?.targetItemsPerDay ?? 1);
+  const targetItemsPerDay = normalizeTargetItemsPerDay(profile?.targetItemsPerDay ?? null);
   const planningDayCount = getPlanningDayCount(profile);
   const enabledDayOffsets = getEnabledPlanningDayOffsets(profile?.planningDays ?? null);
 
@@ -1100,7 +1133,7 @@ async function persistGeneratedRoute(params: {
   enabledDayOffsets: number[];
   generationBasis: Record<string, unknown>;
 }) {
-  const scheduledDates = buildSuggestedScheduledDates({
+  const scheduledPlacements = buildSuggestedSchedulePlacements({
     weekStartDate: params.weekStartDate,
     itemCount: params.orderedSkillNodeIds.length,
     targetItemsPerDay: params.targetItemsPerDay,
@@ -1139,11 +1172,11 @@ async function persistGeneratedRoute(params: {
           skillNodeId,
           recommendedPosition: index,
           currentPosition: index,
-          scheduledDate: scheduledDates[index] ?? null,
-          scheduledSlotIndex: scheduledDates[index] ? 1 : null,
+          scheduledDate: scheduledPlacements[index]?.scheduledDate ?? null,
+          scheduledSlotIndex: scheduledPlacements[index]?.scheduledSlotIndex ?? null,
           manualOverrideKind: "none",
           manualOverrideNote: null,
-          state: scheduledDates[index] ? "scheduled" : "queued",
+          state: scheduledPlacements[index]?.scheduledDate ? "scheduled" : "queued",
         }),
       );
 

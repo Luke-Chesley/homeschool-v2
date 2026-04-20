@@ -8,6 +8,7 @@ import {
   toWeekStartDate,
   type WeeklyRouteBoard,
 } from "@/lib/curriculum-routing";
+import { normalizeTargetItemsPerDay } from "@/lib/curriculum-routing/defaults";
 import { getDb } from "@/lib/db/server";
 import {
   buildAdaptiveScheduleSlots,
@@ -114,6 +115,83 @@ async function shouldRegenerateForPriorWeekOverlap(route: WeeklyRouteRecord, boa
   );
 }
 
+export interface SuggestedWeeklyAssignmentItem {
+  id: string;
+  skillNodeId: string;
+  scheduledDate: string | null;
+  scheduledSlotIndex: number | null;
+  state: WeeklyRouteItemRow["state"];
+}
+
+export interface SuggestedWeeklyAssignment {
+  id: string;
+  scheduledDate: string;
+  scheduledSlotIndex: number;
+}
+
+export function buildSuggestedWeeklyAssignments(params: {
+  rows: SuggestedWeeklyAssignmentItem[];
+  weekStartDate: string;
+  enabledDayOffsets: number[];
+  targetItemsPerDay: number | null | undefined;
+}) {
+  const allWeekDates = buildWeekdayDates(params.weekStartDate);
+  const weekdayDates = params.enabledDayOffsets
+    .map((offset) => allWeekDates[offset])
+    .filter((date): date is string => date != null);
+  const targetItemsPerDay = normalizeTargetItemsPerDay(params.targetItemsPerDay);
+  const occupiedCountByDate = new Map<string, number>();
+  const nextSlotIndexByDate = new Map<string, number>();
+  const occupiedSkillDateKeys = new Set<string>();
+
+  for (const date of weekdayDates) {
+    nextSlotIndexByDate.set(date, 1);
+  }
+
+  for (const row of params.rows) {
+    if (row.scheduledDate == null || !weekdayDates.includes(row.scheduledDate)) {
+      continue;
+    }
+
+    occupiedCountByDate.set(row.scheduledDate, (occupiedCountByDate.get(row.scheduledDate) ?? 0) + 1);
+    occupiedSkillDateKeys.add(`${row.skillNodeId}::${row.scheduledDate}`);
+    nextSlotIndexByDate.set(
+      row.scheduledDate,
+      Math.max(nextSlotIndexByDate.get(row.scheduledDate) ?? 1, (row.scheduledSlotIndex ?? 0) + 1),
+    );
+  }
+
+  const unscheduledRows = params.rows.filter(
+    (row) => row.state !== "removed" && row.scheduledDate == null,
+  );
+  const assignments: SuggestedWeeklyAssignment[] = [];
+
+  for (const row of unscheduledRows) {
+    const nextDate = weekdayDates.find((date) => {
+      const occupiedCount = occupiedCountByDate.get(date) ?? 0;
+      return (
+        occupiedCount < targetItemsPerDay &&
+        !occupiedSkillDateKeys.has(`${row.skillNodeId}::${date}`)
+      );
+    });
+    if (!nextDate) {
+      continue;
+    }
+
+    const scheduledSlotIndex = nextSlotIndexByDate.get(nextDate) ?? 1;
+    assignments.push({
+      id: row.id,
+      scheduledDate: nextDate,
+      scheduledSlotIndex,
+    });
+    occupiedCountByDate.set(nextDate, (occupiedCountByDate.get(nextDate) ?? 0) + 1);
+    nextSlotIndexByDate.set(nextDate, scheduledSlotIndex + 1);
+    occupiedSkillDateKeys.add(`${row.skillNodeId}::${nextDate}`);
+  }
+
+  return assignments;
+}
+
 async function ensureSuggestedWeeklyRouteSchedule(route: WeeklyRouteRecord) {
   const db = getDb();
   const [rows, profile] = await Promise.all([
@@ -129,42 +207,19 @@ async function ensureSuggestedWeeklyRouteSchedule(route: WeeklyRouteRecord) {
     }),
   ]);
 
-  const allWeekDates = buildWeekdayDates(route.weekStartDate);
   const enabledOffsets = getEnabledPlanningDayOffsets(profile?.planningDays ?? null);
-  const weekdayDates = enabledOffsets
-    .map((offset) => allWeekDates[offset])
-    .filter((d): d is string => d != null);
-  const occupiedDates = new Set(
-    rows.filter((row) => row.scheduledDate != null).map((row) => row.scheduledDate as string),
-  );
-  const occupiedSkillDateKeys = new Set(
-    rows
-      .filter((row) => row.scheduledDate != null)
-      .map((row) => `${row.skillNodeId}::${row.scheduledDate}`),
-  );
-
-  const openDates = weekdayDates.filter((date) => !occupiedDates.has(date));
-  const unscheduledRows = rows.filter(
-    (row) =>
-      row.state !== "removed" &&
-      row.scheduledDate == null,
-  );
-  const assignments: Array<{ id: string; scheduledDate: string }> = [];
-
-  for (const row of unscheduledRows) {
-    const nextDate = openDates.find(
-      (date) =>
-        !occupiedDates.has(date) &&
-        !occupiedSkillDateKeys.has(`${row.skillNodeId}::${date}`),
-    );
-    if (!nextDate) {
-      continue;
-    }
-
-    assignments.push({ id: row.id, scheduledDate: nextDate });
-    occupiedDates.add(nextDate);
-    occupiedSkillDateKeys.add(`${row.skillNodeId}::${nextDate}`);
-  }
+  const assignments = buildSuggestedWeeklyAssignments({
+    rows: rows.map((row) => ({
+      id: row.id,
+      skillNodeId: row.skillNodeId,
+      scheduledDate: row.scheduledDate,
+      scheduledSlotIndex: row.scheduledSlotIndex,
+      state: row.state,
+    })),
+    weekStartDate: route.weekStartDate,
+    enabledDayOffsets: enabledOffsets,
+    targetItemsPerDay: profile?.targetItemsPerDay ?? null,
+  });
 
   if (assignments.length === 0) {
     return false;
@@ -176,6 +231,7 @@ async function ensureSuggestedWeeklyRouteSchedule(route: WeeklyRouteRecord) {
         .update(weeklyRouteItems)
         .set({
           scheduledDate: assignment.scheduledDate,
+          scheduledSlotIndex: assignment.scheduledSlotIndex,
           state: "scheduled",
           updatedAt: new Date(),
         })
@@ -226,7 +282,7 @@ function deriveNextState(
 }
 
 function getTargetItemsPerDay(profile: typeof learnerRouteProfiles.$inferSelect | null | undefined) {
-  return Math.max(1, profile?.targetItemsPerDay ?? 1);
+  return normalizeTargetItemsPerDay(profile?.targetItemsPerDay ?? null);
 }
 
 function toScheduleRefreshItem(row: WeeklyRouteItemRow) {

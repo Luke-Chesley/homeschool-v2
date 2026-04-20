@@ -1,5 +1,6 @@
 import { type AnyPgColumn, boolean, date, index, integer, pgEnum, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 
+import { DEFAULT_TARGET_ITEMS_PER_DAY } from "@/lib/curriculum-routing/defaults";
 import { activityAttempts } from "@/lib/db/schema/activities";
 import { curriculumSources } from "@/lib/db/schema/curriculum";
 import { learners } from "@/lib/db/schema/learners";
@@ -149,7 +150,7 @@ export const learnerRouteProfiles = pgTable(
     sourceId: text("source_id")
       .notNull()
       .references(() => curriculumSources.id, { onDelete: "cascade" }),
-    targetItemsPerDay: integer("target_items_per_day").notNull().default(1),
+    targetItemsPerDay: integer("target_items_per_day").notNull().default(DEFAULT_TARGET_ITEMS_PER_DAY),
     targetMinutesPerDay: integer("target_minutes_per_day"),
     branchWeighting: metadataColumn("branch_weighting"),
     planningDays: metadataColumn("planning_days"),
