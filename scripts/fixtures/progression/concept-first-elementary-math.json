@@ -1,0 +1,49 @@
+{
+  "id": "concept-first-elementary-math",
+  "title": "Concept-first elementary math",
+  "basis": {
+    "gradeLevels": ["elementary"],
+    "learnerPriorKnowledge": "unknown",
+    "totalWeeks": 8,
+    "sessionsPerWeek": 4,
+    "sessionMinutes": 40,
+    "totalSessions": 24,
+    "suggestedPhaseCountMin": 4,
+    "suggestedPhaseCountMax": 6,
+    "skillCatalog": [
+      {"skillRef": "skill:math/fractions/identify-wholes-and-parts", "title": "Identify wholes and parts", "ordinal": 1, "instructionalRole": "concept", "unitRef": "unit:1", "unitTitle": "Fraction ideas", "unitOrderIndex": 1},
+      {"skillRef": "skill:math/fractions/compare-fractions", "title": "Compare fractions", "ordinal": 2, "instructionalRole": "concept", "unitRef": "unit:1", "unitTitle": "Fraction ideas", "unitOrderIndex": 1},
+      {"skillRef": "skill:math/fractions/model-equivalent-fractions", "title": "Model equivalent fractions", "ordinal": 3, "instructionalRole": "procedure", "unitRef": "unit:2", "unitTitle": "Representations", "unitOrderIndex": 2},
+      {"skillRef": "skill:math/fractions/solve-word-problems", "title": "Solve word problems", "ordinal": 4, "instructionalRole": "application", "isAuthenticApplication": true, "unitRef": "unit:3", "unitTitle": "Problem solving", "unitOrderIndex": 3}
+    ],
+    "unitAnchors": [
+      {"unitRef": "unit:1", "title": "Fraction ideas", "description": "Establish meaning and comparison before procedures.", "orderIndex": 1, "estimatedWeeks": 2, "estimatedSessions": 8, "skillRefs": ["skill:math/fractions/identify-wholes-and-parts", "skill:math/fractions/compare-fractions"]},
+      {"unitRef": "unit:2", "title": "Representations", "description": "Model and transform fraction forms.", "orderIndex": 2, "estimatedWeeks": 2, "estimatedSessions": 8, "skillRefs": ["skill:math/fractions/model-equivalent-fractions"]},
+      {"unitRef": "unit:3", "title": "Problem solving", "description": "Apply fraction reasoning in contextual tasks.", "orderIndex": 3, "estimatedWeeks": 2, "estimatedSessions": 8, "skillRefs": ["skill:math/fractions/solve-word-problems"]}
+    ],
+    "skillNodeIdByRef": {
+      "skill:math/fractions/identify-wholes-and-parts": "node_math_1",
+      "skill:math/fractions/compare-fractions": "node_math_2",
+      "skill:math/fractions/model-equivalent-fractions": "node_math_3",
+      "skill:math/fractions/solve-word-problems": "node_math_4"
+    }
+  },
+  "goodProgression": {
+    "phases": [
+      {"title": "Meaning and language", "description": "Establish the core ideas and vocabulary that later work depends on.", "skillRefs": ["skill:math/fractions/identify-wholes-and-parts", "skill:math/fractions/compare-fractions"]},
+      {"title": "Representations and procedures", "description": "Move into modeling and structured equivalence work once the concepts are stable.", "skillRefs": ["skill:math/fractions/model-equivalent-fractions"]},
+      {"title": "Applied problem solving", "description": "Use the earlier conceptual and representational understanding in word problems and transfer tasks.", "skillRefs": ["skill:math/fractions/solve-word-problems"]}
+    ],
+    "edges": [
+      {"fromSkillRef": "skill:math/fractions/identify-wholes-and-parts", "toSkillRef": "skill:math/fractions/compare-fractions", "kind": "recommendedBefore"},
+      {"fromSkillRef": "skill:math/fractions/compare-fractions", "toSkillRef": "skill:math/fractions/model-equivalent-fractions", "kind": "hardPrerequisite"},
+      {"fromSkillRef": "skill:math/fractions/model-equivalent-fractions", "toSkillRef": "skill:math/fractions/solve-word-problems", "kind": "recommendedBefore"}
+    ]
+  },
+  "badProgressions": [
+    {"label": "missing-skill", "progression": {"phases": [{"title": "Only ideas", "description": "Stops early.", "skillRefs": ["skill:math/fractions/identify-wholes-and-parts", "skill:math/fractions/compare-fractions"]}, {"title": "Application", "description": "Skips procedure.", "skillRefs": ["skill:math/fractions/solve-word-problems"]}], "edges": []}},
+    {"label": "duplicate-skill", "progression": {"phases": [{"title": "Concepts", "description": "Start.", "skillRefs": ["skill:math/fractions/identify-wholes-and-parts", "skill:math/fractions/compare-fractions"]}, {"title": "Representations", "description": "Repeat compare fractions unnecessarily.", "skillRefs": ["skill:math/fractions/compare-fractions", "skill:math/fractions/model-equivalent-fractions", "skill:math/fractions/solve-word-problems"]}], "edges": []}},
+    {"label": "backward-prerequisite", "progression": {"phases": [{"title": "Application", "description": "Too early.", "skillRefs": ["skill:math/fractions/solve-word-problems"]}, {"title": "Concepts", "description": "Foundations come later.", "skillRefs": ["skill:math/fractions/identify-wholes-and-parts", "skill:math/fractions/compare-fractions", "skill:math/fractions/model-equivalent-fractions"]}], "edges": [{"fromSkillRef": "skill:math/fractions/model-equivalent-fractions", "toSkillRef": "skill:math/fractions/solve-word-problems", "kind": "hardPrerequisite"}]}},
+    {"label": "over-fragmented", "progression": {"phases": [{"title": "P1", "description": "Single idea.", "skillRefs": ["skill:math/fractions/identify-wholes-and-parts"]}, {"title": "P2", "description": "Single idea.", "skillRefs": ["skill:math/fractions/compare-fractions"]}, {"title": "P3", "description": "Single procedure.", "skillRefs": ["skill:math/fractions/model-equivalent-fractions"]}, {"title": "P4", "description": "Single task.", "skillRefs": ["skill:math/fractions/solve-word-problems"]}], "edges": []}}
+  ]
+}

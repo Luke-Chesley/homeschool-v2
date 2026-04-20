@@ -1,0 +1,52 @@
+{
+  "id": "task-first-project-science",
+  "title": "Task-first project-based science",
+  "basis": {
+    "gradeLevels": ["middle school"],
+    "learnerPriorKnowledge": "unknown",
+    "totalWeeks": 10,
+    "sessionsPerWeek": 3,
+    "sessionMinutes": 50,
+    "totalSessions": 30,
+    "suggestedPhaseCountMin": 4,
+    "suggestedPhaseCountMax": 6,
+    "skillCatalog": [
+      {"skillRef": "skill:science/project/identify-driving-question", "title": "Identify driving question", "ordinal": 1, "instructionalRole": "orientation", "unitRef": "unit:1", "unitTitle": "Launch", "unitOrderIndex": 1},
+      {"skillRef": "skill:science/safety/lab-safety", "title": "Lab safety", "ordinal": 2, "instructionalRole": "safety", "safetyCritical": true, "requiresAdultSupport": true, "unitRef": "unit:1", "unitTitle": "Launch", "unitOrderIndex": 1},
+      {"skillRef": "skill:science/project/design-investigation", "title": "Design investigation", "ordinal": 3, "instructionalRole": "integration", "unitRef": "unit:2", "unitTitle": "Plan", "unitOrderIndex": 2},
+      {"skillRef": "skill:science/project/run-investigation", "title": "Run investigation", "ordinal": 4, "instructionalRole": "application", "isAuthenticApplication": true, "unitRef": "unit:3", "unitTitle": "Fieldwork", "unitOrderIndex": 3},
+      {"skillRef": "skill:science/project/analyze-results", "title": "Analyze results", "ordinal": 5, "instructionalRole": "integration", "unitRef": "unit:4", "unitTitle": "Synthesis", "unitOrderIndex": 4}
+    ],
+    "unitAnchors": [
+      {"unitRef": "unit:1", "title": "Launch", "description": "Start with the task context, norms, and safety expectations.", "orderIndex": 1, "estimatedWeeks": 2, "estimatedSessions": 6, "skillRefs": ["skill:science/project/identify-driving-question", "skill:science/safety/lab-safety"]},
+      {"unitRef": "unit:2", "title": "Plan", "description": "Plan the investigation structure.", "orderIndex": 2, "estimatedWeeks": 2, "estimatedSessions": 6, "skillRefs": ["skill:science/project/design-investigation"]},
+      {"unitRef": "unit:3", "title": "Fieldwork", "description": "Carry out the project work.", "orderIndex": 3, "estimatedWeeks": 3, "estimatedSessions": 9, "skillRefs": ["skill:science/project/run-investigation"]},
+      {"unitRef": "unit:4", "title": "Synthesis", "description": "Interpret and communicate findings.", "orderIndex": 4, "estimatedWeeks": 2, "estimatedSessions": 6, "skillRefs": ["skill:science/project/analyze-results"]}
+    ],
+    "skillNodeIdByRef": {
+      "skill:science/project/identify-driving-question": "node_science_1",
+      "skill:science/safety/lab-safety": "node_science_2",
+      "skill:science/project/design-investigation": "node_science_3",
+      "skill:science/project/run-investigation": "node_science_4",
+      "skill:science/project/analyze-results": "node_science_5"
+    }
+  },
+  "goodProgression": {
+    "phases": [
+      {"title": "Project launch and safe access", "description": "Open with the authentic project frame while front-loading the safety and access expectations that make the work possible.", "skillRefs": ["skill:science/project/identify-driving-question", "skill:science/safety/lab-safety"]},
+      {"title": "Plan the investigation", "description": "Design the work before field execution so the project stays purposeful and tractable.", "skillRefs": ["skill:science/project/design-investigation"]},
+      {"title": "Carry out and interpret", "description": "Run the investigation, then analyze what the data means while revisiting the launch question.", "skillRefs": ["skill:science/project/run-investigation", "skill:science/project/analyze-results"]}
+    ],
+    "edges": [
+      {"fromSkillRef": "skill:science/safety/lab-safety", "toSkillRef": "skill:science/project/run-investigation", "kind": "hardPrerequisite"},
+      {"fromSkillRef": "skill:science/project/design-investigation", "toSkillRef": "skill:science/project/run-investigation", "kind": "recommendedBefore"},
+      {"fromSkillRef": "skill:science/project/identify-driving-question", "toSkillRef": "skill:science/project/analyze-results", "kind": "revisitAfter"}
+    ]
+  },
+  "badProgressions": [
+    {"label": "missing-skill", "progression": {"phases": [{"title": "Launch", "description": "Start.", "skillRefs": ["skill:science/project/identify-driving-question", "skill:science/safety/lab-safety"]}, {"title": "Do the task", "description": "Jump ahead.", "skillRefs": ["skill:science/project/run-investigation"]}, {"title": "Interpret", "description": "Reflect.", "skillRefs": ["skill:science/project/analyze-results"]}], "edges": []}},
+    {"label": "duplicate-skill", "progression": {"phases": [{"title": "Launch", "description": "Start.", "skillRefs": ["skill:science/project/identify-driving-question", "skill:science/safety/lab-safety"]}, {"title": "Plan", "description": "Repeat launch question.", "skillRefs": ["skill:science/project/identify-driving-question", "skill:science/project/design-investigation"]}, {"title": "Fieldwork", "description": "Finish.", "skillRefs": ["skill:science/project/run-investigation", "skill:science/project/analyze-results"]}], "edges": []}},
+    {"label": "backward-prerequisite", "progression": {"phases": [{"title": "Fieldwork", "description": "Begins with doing.", "skillRefs": ["skill:science/project/run-investigation"]}, {"title": "Launch and plan", "description": "Foundations come second.", "skillRefs": ["skill:science/project/identify-driving-question", "skill:science/safety/lab-safety", "skill:science/project/design-investigation", "skill:science/project/analyze-results"]}], "edges": [{"fromSkillRef": "skill:science/project/design-investigation", "toSkillRef": "skill:science/project/run-investigation", "kind": "hardPrerequisite"}]}},
+    {"label": "over-fragmented", "progression": {"phases": [{"title": "P1", "description": "Single.", "skillRefs": ["skill:science/project/identify-driving-question"]}, {"title": "P2", "description": "Single.", "skillRefs": ["skill:science/safety/lab-safety"]}, {"title": "P3", "description": "Single.", "skillRefs": ["skill:science/project/design-investigation"]}, {"title": "P4", "description": "Single.", "skillRefs": ["skill:science/project/run-investigation"]}, {"title": "P5", "description": "Single.", "skillRefs": ["skill:science/project/analyze-results"]}], "edges": []}}
+  ]
+}

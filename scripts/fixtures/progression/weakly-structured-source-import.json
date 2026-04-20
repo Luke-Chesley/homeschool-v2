@@ -1,0 +1,49 @@
+{
+  "id": "weakly-structured-source-import",
+  "title": "Weakly structured source import",
+  "basis": {
+    "gradeLevels": ["elementary"],
+    "learnerPriorKnowledge": "unknown",
+    "totalWeeks": 4,
+    "sessionsPerWeek": 3,
+    "sessionMinutes": 30,
+    "totalSessions": 12,
+    "suggestedPhaseCountMin": 3,
+    "suggestedPhaseCountMax": 5,
+    "skillCatalog": [
+      {"skillRef": "skill:project/orientation/identify-goal", "title": "Identify goal", "ordinal": 1, "instructionalRole": "orientation", "unitRef": "unit:1", "unitTitle": "Launch", "unitOrderIndex": 1},
+      {"skillRef": "skill:project/setup/gather-materials", "title": "Gather materials", "ordinal": 2, "instructionalRole": "setup", "unitRef": "unit:1", "unitTitle": "Launch", "unitOrderIndex": 1},
+      {"skillRef": "skill:project/procedure/try-first-draft", "title": "Try first draft", "ordinal": 3, "instructionalRole": "procedure", "unitRef": "unit:2", "unitTitle": "Practice", "unitOrderIndex": 2},
+      {"skillRef": "skill:project/review/reflect-and-revise", "title": "Reflect and revise", "ordinal": 4, "instructionalRole": "review", "unitRef": "unit:3", "unitTitle": "Revision", "unitOrderIndex": 3}
+    ],
+    "unitAnchors": [
+      {"unitRef": "unit:1", "title": "Launch", "description": "Clarify the task and set up access.", "orderIndex": 1, "estimatedWeeks": 1, "estimatedSessions": 3, "skillRefs": ["skill:project/orientation/identify-goal", "skill:project/setup/gather-materials"]},
+      {"unitRef": "unit:2", "title": "Practice", "description": "Try an initial version.", "orderIndex": 2, "estimatedWeeks": 1, "estimatedSessions": 3, "skillRefs": ["skill:project/procedure/try-first-draft"]},
+      {"unitRef": "unit:3", "title": "Revision", "description": "Reflect and improve.", "orderIndex": 3, "estimatedWeeks": 1, "estimatedSessions": 3, "skillRefs": ["skill:project/review/reflect-and-revise"]}
+    ],
+    "skillNodeIdByRef": {
+      "skill:project/orientation/identify-goal": "node_proj_1",
+      "skill:project/setup/gather-materials": "node_proj_2",
+      "skill:project/procedure/try-first-draft": "node_proj_3",
+      "skill:project/review/reflect-and-revise": "node_proj_4"
+    }
+  },
+  "goodProgression": {
+    "phases": [
+      {"title": "Launch and prepare", "description": "Clarify the project goal and gather what is needed so learners can begin with confidence.", "skillRefs": ["skill:project/orientation/identify-goal", "skill:project/setup/gather-materials"]},
+      {"title": "First attempt", "description": "Move into a manageable first draft rather than over-designing the work before trying it.", "skillRefs": ["skill:project/procedure/try-first-draft"]},
+      {"title": "Reflect and strengthen", "description": "Use reflection and revision to improve the initial attempt and consolidate what was learned.", "skillRefs": ["skill:project/review/reflect-and-revise"]}
+    ],
+    "edges": [
+      {"fromSkillRef": "skill:project/orientation/identify-goal", "toSkillRef": "skill:project/procedure/try-first-draft", "kind": "recommendedBefore"},
+      {"fromSkillRef": "skill:project/setup/gather-materials", "toSkillRef": "skill:project/procedure/try-first-draft", "kind": "hardPrerequisite"},
+      {"fromSkillRef": "skill:project/procedure/try-first-draft", "toSkillRef": "skill:project/review/reflect-and-revise", "kind": "revisitAfter"}
+    ]
+  },
+  "badProgressions": [
+    {"label": "missing-skill", "progression": {"phases": [{"title": "Launch", "description": "Start.", "skillRefs": ["skill:project/orientation/identify-goal", "skill:project/setup/gather-materials"]}, {"title": "Reflect", "description": "Jump to review.", "skillRefs": ["skill:project/review/reflect-and-revise"]}], "edges": []}},
+    {"label": "duplicate-skill", "progression": {"phases": [{"title": "Launch", "description": "Start.", "skillRefs": ["skill:project/orientation/identify-goal", "skill:project/setup/gather-materials"]}, {"title": "Draft", "description": "Repeat setup.", "skillRefs": ["skill:project/setup/gather-materials", "skill:project/procedure/try-first-draft", "skill:project/review/reflect-and-revise"]}], "edges": []}},
+    {"label": "backward-prerequisite", "progression": {"phases": [{"title": "Draft", "description": "Attempt first.", "skillRefs": ["skill:project/procedure/try-first-draft"]}, {"title": "Launch later", "description": "Preparation comes after action.", "skillRefs": ["skill:project/orientation/identify-goal", "skill:project/setup/gather-materials", "skill:project/review/reflect-and-revise"]}], "edges": [{"fromSkillRef": "skill:project/setup/gather-materials", "toSkillRef": "skill:project/procedure/try-first-draft", "kind": "hardPrerequisite"}]}},
+    {"label": "over-fragmented", "progression": {"phases": [{"title": "P1", "description": "Single.", "skillRefs": ["skill:project/orientation/identify-goal"]}, {"title": "P2", "description": "Single.", "skillRefs": ["skill:project/setup/gather-materials"]}, {"title": "P3", "description": "Single.", "skillRefs": ["skill:project/procedure/try-first-draft"]}, {"title": "P4", "description": "Single.", "skillRefs": ["skill:project/review/reflect-and-revise"]}], "edges": []}}
+  ]
+}

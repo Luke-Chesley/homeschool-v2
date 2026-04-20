@@ -23,11 +23,13 @@ import {
 import {
   applyCurriculumArtifactToCurriculumSource,
   getCurriculumSource,
-  getCurriculumTree,
-  listCurriculumUnits,
   setCurriculumLaunchPlan,
 } from "./service";
-import type { CurriculumTreeNode } from "./types";
+import {
+  buildProgressionGenerationBasis,
+  buildProgressionGenerationInput,
+  type ProgressionGenerationBasis,
+} from "./progression-basis";
 
 const MAX_FAILURE_REASON_LENGTH = 120;
 
@@ -68,136 +70,8 @@ function buildFailureResult(params: {
   });
 }
 
-function normalizeLabel(value: string) {
-  return value.trim().replace(/\s+/g, " ");
-}
-
-function slugify(value: string) {
-  return normalizeLabel(value)
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "") || "item";
-}
-
 function readString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
-}
-
-function buildLeafSkillRefMap(units: Array<{ skillRefs: string[] }>) {
-  const byLeaf = new Map<string, string>();
-  const ambiguous = new Set<string>();
-  for (const unit of units) {
-    for (const skillRef of unit.skillRefs) {
-      const leaf = skillRef.split("/").at(-1);
-      if (!leaf) continue;
-      const existing = byLeaf.get(leaf);
-      if (existing && existing !== skillRef) {
-        ambiguous.add(leaf);
-        byLeaf.delete(leaf);
-      } else if (!ambiguous.has(leaf)) {
-        byLeaf.set(leaf, skillRef);
-      }
-    }
-  }
-  return byLeaf;
-}
-
-function readCanonicalSkillRef(node: CurriculumTreeNode, leafSkillRefs: Map<string, string>) {
-  const metadataSkillRef = readString(node.metadata?.canonicalSkillRef)
-    ?? readString(node.metadata?.skillRef)
-    ?? readString(node.sourcePayload?.skillRef);
-  if (metadataSkillRef) {
-    return metadataSkillRef;
-  }
-
-  const leafMatch = leafSkillRefs.get(slugify(node.title));
-  if (leafMatch) {
-    return leafMatch;
-  }
-
-  return `skill:${slugify(node.title)}`;
-}
-
-function collectSkillCatalog(params: {
-  nodes: CurriculumTreeNode[];
-  units: Array<{ skillRefs: string[] }>;
-}) {
-  const leafSkillRefs = buildLeafSkillRefMap(params.units);
-  const rows: Array<{
-    skillRef: string;
-    title: string;
-    domainTitle?: string;
-    strandTitle?: string;
-    goalGroupTitle?: string;
-    ordinal: number;
-  }> = [];
-
-  const walk = (node: CurriculumTreeNode, ancestors: CurriculumTreeNode[]) => {
-    if (node.normalizedType === "skill") {
-      rows.push({
-        skillRef: readCanonicalSkillRef(node, leafSkillRefs),
-        title: node.title,
-        domainTitle: ancestors.find((ancestor) => ancestor.normalizedType === "domain")?.title,
-        strandTitle: ancestors.find((ancestor) => ancestor.normalizedType === "strand")?.title,
-        goalGroupTitle: ancestors.find((ancestor) => ancestor.normalizedType === "goal_group")?.title,
-        ordinal: rows.length + 1,
-      });
-    }
-
-    for (const child of node.children) {
-      walk(child, [...ancestors, node]);
-    }
-  };
-
-  for (const rootNode of params.nodes) {
-    walk(rootNode, []);
-  }
-
-  return rows;
-}
-
-async function buildGenerationBasis(params: { sourceId: string; householdId: string }) {
-  const [source, tree, units] = await Promise.all([
-    getCurriculumSource(params.sourceId, params.householdId),
-    getCurriculumTree(params.sourceId, params.householdId),
-    listCurriculumUnits(params.sourceId),
-  ]);
-
-  if (!source) {
-    throw new Error(`Curriculum source not found: ${params.sourceId}`);
-  }
-  if (!tree) {
-    throw new Error(`Curriculum tree not found: ${params.sourceId}`);
-  }
-  if (units.length === 0) {
-    throw new Error(`Curriculum source ${params.sourceId} has no persisted units.`);
-  }
-
-  const skillCatalog = collectSkillCatalog({
-    nodes: tree.rootNodes,
-    units: units.map((unit) => ({ skillRefs: unit.skillRefs })),
-  });
-  if (skillCatalog.length === 0) {
-    throw new Error(`Curriculum source ${params.sourceId} has no resolved skills for AI planning.`);
-  }
-
-  const unitAnchors = units.map((unit, index) => ({
-    unitRef: unit.unitRef,
-    title: unit.title,
-    description: unit.description ?? "",
-    orderIndex: index + 1,
-    estimatedWeeks: unit.estimatedWeeks,
-    estimatedSessions: unit.estimatedSessions,
-    skillRefs: unit.skillRefs,
-  }));
-
-  return {
-    source,
-    tree,
-    units,
-    skillCatalog,
-    unitAnchors,
-  };
 }
 
 export async function continueCurriculumAiDraftConversation(params: {
@@ -308,6 +182,7 @@ export async function generateCurriculumProgression(params: {
   householdId: string;
   sourceId: string;
   learner: { displayName: string };
+  basis?: ProgressionGenerationBasis;
 }): Promise<{
   progression?: CurriculumAiProgression;
   attemptCount: number;
@@ -315,23 +190,15 @@ export async function generateCurriculumProgression(params: {
   failureReason?: string;
 }> {
   try {
-    const basis = await buildGenerationBasis({
+    const basis = params.basis ?? await buildProgressionGenerationBasis({
       sourceId: params.sourceId,
       householdId: params.householdId,
     });
     const response = await executeProgressionGenerate({
-      input: {
+      input: buildProgressionGenerationInput({
         learnerName: params.learner.displayName,
-        sourceTitle: basis.source.title,
-        sourceSummary: basis.source.description,
-        requestMode: readString(basis.source.curriculumLineage?.requestMode) ?? undefined,
-        sourceKind: basis.source.sourceModel?.sourceKind,
-        deliveryPattern: basis.source.sourceModel?.deliveryPattern,
-        entryStrategy: basis.source.sourceModel?.entryStrategy,
-        continuationMode: basis.source.sourceModel?.continuationMode,
-        skillCatalog: basis.skillCatalog,
-        unitAnchors: basis.unitAnchors,
-      },
+        basis,
+      }),
       organizationId: params.householdId,
     });
 
@@ -355,6 +222,7 @@ export async function generateCurriculumLaunchPlan(params: {
   learner: { displayName: string };
   chosenHorizon: string;
   progression?: CurriculumAiProgression | null;
+  basis?: ProgressionGenerationBasis;
 }): Promise<{
   launchPlan?: CurriculumAiLaunchPlan;
   attemptCount: number;
@@ -362,7 +230,7 @@ export async function generateCurriculumLaunchPlan(params: {
   failureReason?: string;
 }> {
   try {
-    const basis = await buildGenerationBasis({
+    const basis = params.basis ?? await buildProgressionGenerationBasis({
       sourceId: params.sourceId,
       householdId: params.householdId,
     });
@@ -399,37 +267,36 @@ export async function generateCurriculumLaunchPlan(params: {
   }
 }
 
+export function resolveLaunchPlanOpeningSkillNodeIds(params: {
+  basis: ProgressionGenerationBasis;
+  openingSkillRefs: string[];
+}) {
+  const unresolvedSkillRefs = params.openingSkillRefs.filter(
+    (skillRef) => !params.basis.skillNodeIdByRef.has(skillRef),
+  );
+  if (unresolvedSkillRefs.length > 0) {
+    throw new Error(
+      `Launch plan references unresolved openingSkillRefs: ${unresolvedSkillRefs.join(", ")}`,
+    );
+  }
+
+  return [...new Set(params.openingSkillRefs.map((skillRef) => params.basis.skillNodeIdByRef.get(skillRef)!))];
+}
+
 export async function persistCurriculumLaunchPlan(params: {
   householdId: string;
   sourceId: string;
   launchPlan: CurriculumAiLaunchPlan;
 }) {
-  const basis = await buildGenerationBasis({
+  const basis = await buildProgressionGenerationBasis({
     sourceId: params.sourceId,
     householdId: params.householdId,
   });
 
-  const skillNodeIdsByRef = new Map<string, string>();
-  const leafFallback = new Map<string, string>();
-  for (const node of basis.tree.rootNodes) {
-    const stack: CurriculumTreeNode[] = [node];
-    while (stack.length > 0) {
-      const current = stack.pop()!;
-      if (current.normalizedType === "skill") {
-        const skillRef = readCanonicalSkillRef(current, buildLeafSkillRefMap(basis.units));
-        skillNodeIdsByRef.set(skillRef, current.id);
-        const leaf = skillRef.split("/").at(-1);
-        if (leaf && !leafFallback.has(leaf)) {
-          leafFallback.set(leaf, current.id);
-        }
-      }
-      stack.push(...current.children);
-    }
-  }
-
-  const openingSkillNodeIds = params.launchPlan.openingSkillRefs
-    .map((skillRef) => skillNodeIdsByRef.get(skillRef) ?? leafFallback.get(skillRef.split("/").at(-1) ?? ""))
-    .filter((value): value is string => typeof value === "string");
+  const openingSkillNodeIds = resolveLaunchPlanOpeningSkillNodeIds({
+    basis,
+    openingSkillRefs: params.launchPlan.openingSkillRefs,
+  });
 
   if (openingSkillNodeIds.length === 0) {
     throw new Error("Launch plan did not resolve to any persisted skill nodes.");
@@ -450,7 +317,7 @@ export async function persistCurriculumLaunchPlan(params: {
 }
 
 async function buildCurriculumRevisionSnapshot(sourceId: string, householdId: string) {
-  const basis = await buildGenerationBasis({ sourceId, householdId });
+  const basis = await buildProgressionGenerationBasis({ sourceId, householdId });
 
   return {
     source: {

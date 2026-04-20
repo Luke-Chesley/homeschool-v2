@@ -1,0 +1,55 @@
+{
+  "id": "long-social-studies-multi-unit",
+  "title": "Long multi-unit social studies source",
+  "basis": {
+    "gradeLevels": ["middle school"],
+    "learnerPriorKnowledge": "unknown",
+    "totalWeeks": 18,
+    "sessionsPerWeek": 4,
+    "sessionMinutes": 45,
+    "totalSessions": 72,
+    "suggestedPhaseCountMin": 6,
+    "suggestedPhaseCountMax": 10,
+    "skillCatalog": [
+      {"skillRef": "skill:social/orientation/period-overview", "title": "Period overview", "ordinal": 1, "instructionalRole": "orientation", "unitRef": "unit:1", "unitTitle": "Context", "unitOrderIndex": 1},
+      {"skillRef": "skill:social/concept/identify-causes", "title": "Identify causes", "ordinal": 2, "instructionalRole": "concept", "unitRef": "unit:2", "unitTitle": "Causes", "unitOrderIndex": 2},
+      {"skillRef": "skill:social/concept/compare-perspectives", "title": "Compare perspectives", "ordinal": 3, "instructionalRole": "concept", "unitRef": "unit:3", "unitTitle": "Perspectives", "unitOrderIndex": 3},
+      {"skillRef": "skill:social/procedure/evaluate-sources", "title": "Evaluate sources", "ordinal": 4, "instructionalRole": "procedure", "unitRef": "unit:3", "unitTitle": "Perspectives", "unitOrderIndex": 3},
+      {"skillRef": "skill:social/application/argue-interpretation", "title": "Argue interpretation", "ordinal": 5, "instructionalRole": "application", "isAuthenticApplication": true, "unitRef": "unit:4", "unitTitle": "Argument", "unitOrderIndex": 4},
+      {"skillRef": "skill:social/review/revisit-key-claims", "title": "Revisit key claims", "ordinal": 6, "instructionalRole": "review", "unitRef": "unit:5", "unitTitle": "Review", "unitOrderIndex": 5}
+    ],
+    "unitAnchors": [
+      {"unitRef": "unit:1", "title": "Context", "description": "Orient to the period and major events.", "orderIndex": 1, "estimatedWeeks": 2, "estimatedSessions": 8, "skillRefs": ["skill:social/orientation/period-overview"]},
+      {"unitRef": "unit:2", "title": "Causes", "description": "Establish causal reasoning.", "orderIndex": 2, "estimatedWeeks": 3, "estimatedSessions": 12, "skillRefs": ["skill:social/concept/identify-causes"]},
+      {"unitRef": "unit:3", "title": "Perspectives", "description": "Work with sources and interpretations.", "orderIndex": 3, "estimatedWeeks": 4, "estimatedSessions": 16, "skillRefs": ["skill:social/concept/compare-perspectives", "skill:social/procedure/evaluate-sources"]},
+      {"unitRef": "unit:4", "title": "Argument", "description": "Construct arguments from evidence.", "orderIndex": 4, "estimatedWeeks": 4, "estimatedSessions": 16, "skillRefs": ["skill:social/application/argue-interpretation"]},
+      {"unitRef": "unit:5", "title": "Review", "description": "Deliberate retrieval and consolidation.", "orderIndex": 5, "estimatedWeeks": 2, "estimatedSessions": 8, "skillRefs": ["skill:social/review/revisit-key-claims"]}
+    ],
+    "skillNodeIdByRef": {
+      "skill:social/orientation/period-overview": "node_ss_1",
+      "skill:social/concept/identify-causes": "node_ss_2",
+      "skill:social/concept/compare-perspectives": "node_ss_3",
+      "skill:social/procedure/evaluate-sources": "node_ss_4",
+      "skill:social/application/argue-interpretation": "node_ss_5",
+      "skill:social/review/revisit-key-claims": "node_ss_6"
+    }
+  },
+  "goodProgression": {
+    "phases": [
+      {"title": "Context and causal framing", "description": "Orient learners to the period and stabilize the big causal frame before deeper source work.", "skillRefs": ["skill:social/orientation/period-overview", "skill:social/concept/identify-causes"]},
+      {"title": "Perspective and source work", "description": "Analyze multiple viewpoints while learning how to evaluate source quality and claims.", "skillRefs": ["skill:social/concept/compare-perspectives", "skill:social/procedure/evaluate-sources"]},
+      {"title": "Argument and retrieval", "description": "Build historical arguments, then deliberately revisit earlier claims and interpretations for retention and refinement.", "skillRefs": ["skill:social/application/argue-interpretation", "skill:social/review/revisit-key-claims"]}
+    ],
+    "edges": [
+      {"fromSkillRef": "skill:social/concept/identify-causes", "toSkillRef": "skill:social/application/argue-interpretation", "kind": "recommendedBefore"},
+      {"fromSkillRef": "skill:social/procedure/evaluate-sources", "toSkillRef": "skill:social/application/argue-interpretation", "kind": "hardPrerequisite"},
+      {"fromSkillRef": "skill:social/concept/compare-perspectives", "toSkillRef": "skill:social/review/revisit-key-claims", "kind": "revisitAfter"}
+    ]
+  },
+  "badProgressions": [
+    {"label": "missing-skill", "progression": {"phases": [{"title": "Context", "description": "Start.", "skillRefs": ["skill:social/orientation/period-overview", "skill:social/concept/identify-causes"]}, {"title": "Argument", "description": "Jump ahead.", "skillRefs": ["skill:social/application/argue-interpretation"]}, {"title": "Review", "description": "Close.", "skillRefs": ["skill:social/review/revisit-key-claims"]}], "edges": []}},
+    {"label": "duplicate-skill", "progression": {"phases": [{"title": "Sources", "description": "Read.", "skillRefs": ["skill:social/concept/compare-perspectives", "skill:social/procedure/evaluate-sources"]}, {"title": "Argument", "description": "Repeat source evaluation.", "skillRefs": ["skill:social/procedure/evaluate-sources", "skill:social/application/argue-interpretation", "skill:social/orientation/period-overview", "skill:social/concept/identify-causes", "skill:social/review/revisit-key-claims"]}], "edges": []}},
+    {"label": "backward-prerequisite", "progression": {"phases": [{"title": "Argument first", "description": "Application too early.", "skillRefs": ["skill:social/application/argue-interpretation"]}, {"title": "Everything else", "description": "All foundations later.", "skillRefs": ["skill:social/orientation/period-overview", "skill:social/concept/identify-causes", "skill:social/concept/compare-perspectives", "skill:social/procedure/evaluate-sources", "skill:social/review/revisit-key-claims"]}], "edges": [{"fromSkillRef": "skill:social/procedure/evaluate-sources", "toSkillRef": "skill:social/application/argue-interpretation", "kind": "hardPrerequisite"}]}},
+    {"label": "over-fragmented", "progression": {"phases": [{"title": "P1", "description": "Single.", "skillRefs": ["skill:social/orientation/period-overview"]}, {"title": "P2", "description": "Single.", "skillRefs": ["skill:social/concept/identify-causes"]}, {"title": "P3", "description": "Single.", "skillRefs": ["skill:social/concept/compare-perspectives"]}, {"title": "P4", "description": "Single.", "skillRefs": ["skill:social/procedure/evaluate-sources"]}, {"title": "P5", "description": "Single.", "skillRefs": ["skill:social/application/argue-interpretation"]}, {"title": "P6", "description": "Single.", "skillRefs": ["skill:social/review/revisit-key-claims"]}], "edges": []}}
+  ]
+}

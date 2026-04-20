@@ -1,0 +1,51 @@
+{
+  "id": "safety-heavy-practical-life-cooking",
+  "title": "Safety-heavy early childhood practical life / cooking",
+  "basis": {
+    "gradeLevels": ["preschool"],
+    "learnerPriorKnowledge": "unknown",
+    "totalWeeks": 12,
+    "sessionsPerWeek": 5,
+    "sessionMinutes": 30,
+    "totalSessions": 60,
+    "suggestedPhaseCountMin": 5,
+    "suggestedPhaseCountMax": 8,
+    "skillCatalog": [
+      {"skillRef": "skill:cooking/readiness/why-cook", "title": "Why cook with your child", "ordinal": 1, "instructionalRole": "orientation", "unitRef": "unit:1", "unitTitle": "Readiness", "unitOrderIndex": 1},
+      {"skillRef": "skill:cooking/setup/apron-and-tools", "title": "Apron and tools", "ordinal": 2, "instructionalRole": "setup", "unitRef": "unit:1", "unitTitle": "Readiness", "unitOrderIndex": 1},
+      {"skillRef": "skill:cooking/safety/knife-safety", "title": "Knife safety", "ordinal": 3, "instructionalRole": "safety", "safetyCritical": true, "requiresAdultSupport": true, "unitRef": "unit:1", "unitTitle": "Readiness", "unitOrderIndex": 1},
+      {"skillRef": "skill:cooking/procedure/wash-and-pour", "title": "Wash and pour", "ordinal": 4, "instructionalRole": "procedure", "unitRef": "unit:2", "unitTitle": "Foundations", "unitOrderIndex": 2},
+      {"skillRef": "skill:cooking/application/fruit-salad", "title": "Fruit salad", "ordinal": 5, "instructionalRole": "application", "isAuthenticApplication": true, "unitRef": "unit:3", "unitTitle": "Recipes", "unitOrderIndex": 3}
+    ],
+    "unitAnchors": [
+      {"unitRef": "unit:1", "title": "Readiness", "description": "Orient the family, set up the kitchen, and establish safety.", "orderIndex": 1, "estimatedWeeks": 2, "estimatedSessions": 10, "skillRefs": ["skill:cooking/readiness/why-cook", "skill:cooking/setup/apron-and-tools", "skill:cooking/safety/knife-safety"]},
+      {"unitRef": "unit:2", "title": "Foundations", "description": "Practice low-risk kitchen procedures.", "orderIndex": 2, "estimatedWeeks": 3, "estimatedSessions": 15, "skillRefs": ["skill:cooking/procedure/wash-and-pour"]},
+      {"unitRef": "unit:3", "title": "Recipes", "description": "Apply skills in simple food preparation.", "orderIndex": 3, "estimatedWeeks": 3, "estimatedSessions": 15, "skillRefs": ["skill:cooking/application/fruit-salad"]}
+    ],
+    "skillNodeIdByRef": {
+      "skill:cooking/readiness/why-cook": "node_cook_1",
+      "skill:cooking/setup/apron-and-tools": "node_cook_2",
+      "skill:cooking/safety/knife-safety": "node_cook_3",
+      "skill:cooking/procedure/wash-and-pour": "node_cook_4",
+      "skill:cooking/application/fruit-salad": "node_cook_5"
+    }
+  },
+  "goodProgression": {
+    "phases": [
+      {"title": "Orientation and kitchen setup", "description": "Establish purpose, expectations, and the prepared environment with close adult guidance.", "skillRefs": ["skill:cooking/readiness/why-cook", "skill:cooking/setup/apron-and-tools", "skill:cooking/safety/knife-safety"]},
+      {"title": "Foundational procedure practice", "description": "Move into guided, low-risk procedure work before independent food preparation.", "skillRefs": ["skill:cooking/procedure/wash-and-pour"]},
+      {"title": "Authentic preparation", "description": "Apply the earlier setup and procedure skills in a simple real kitchen task with light support.", "skillRefs": ["skill:cooking/application/fruit-salad"]}
+    ],
+    "edges": [
+      {"fromSkillRef": "skill:cooking/safety/knife-safety", "toSkillRef": "skill:cooking/application/fruit-salad", "kind": "hardPrerequisite"},
+      {"fromSkillRef": "skill:cooking/procedure/wash-and-pour", "toSkillRef": "skill:cooking/application/fruit-salad", "kind": "recommendedBefore"},
+      {"fromSkillRef": "skill:cooking/readiness/why-cook", "toSkillRef": "skill:cooking/application/fruit-salad", "kind": "revisitAfter"}
+    ]
+  },
+  "badProgressions": [
+    {"label": "missing-skill", "progression": {"phases": [{"title": "Everything", "description": "Too compressed.", "skillRefs": ["skill:cooking/readiness/why-cook", "skill:cooking/setup/apron-and-tools", "skill:cooking/safety/knife-safety", "skill:cooking/application/fruit-salad"]}], "edges": []}},
+    {"label": "duplicate-skill", "progression": {"phases": [{"title": "Phase 1", "description": "Start.", "skillRefs": ["skill:cooking/readiness/why-cook", "skill:cooking/procedure/wash-and-pour"]}, {"title": "Phase 2", "description": "Repeat.", "skillRefs": ["skill:cooking/procedure/wash-and-pour", "skill:cooking/application/fruit-salad", "skill:cooking/setup/apron-and-tools", "skill:cooking/safety/knife-safety"]}], "edges": []}},
+    {"label": "backward-prerequisite", "progression": {"phases": [{"title": "Application first", "description": "Starts too late.", "skillRefs": ["skill:cooking/application/fruit-salad"]}, {"title": "Basics later", "description": "Setup arrives after use.", "skillRefs": ["skill:cooking/readiness/why-cook", "skill:cooking/setup/apron-and-tools", "skill:cooking/safety/knife-safety", "skill:cooking/procedure/wash-and-pour"]}], "edges": [{"fromSkillRef": "skill:cooking/procedure/wash-and-pour", "toSkillRef": "skill:cooking/application/fruit-salad", "kind": "hardPrerequisite"}]}},
+    {"label": "over-fragmented", "progression": {"phases": [{"title": "P1", "description": "Single skill.", "skillRefs": ["skill:cooking/readiness/why-cook"]}, {"title": "P2", "description": "Single skill.", "skillRefs": ["skill:cooking/setup/apron-and-tools"]}, {"title": "P3", "description": "Single skill.", "skillRefs": ["skill:cooking/safety/knife-safety"]}, {"title": "P4", "description": "Single skill.", "skillRefs": ["skill:cooking/procedure/wash-and-pour"]}, {"title": "P5", "description": "Single skill.", "skillRefs": ["skill:cooking/application/fruit-salad"]}], "edges": []}}
+  ]
+}

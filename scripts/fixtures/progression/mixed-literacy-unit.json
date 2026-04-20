@@ -1,0 +1,49 @@
+{
+  "id": "mixed-literacy-unit",
+  "title": "Mixed literacy unit",
+  "basis": {
+    "gradeLevels": ["elementary"],
+    "learnerPriorKnowledge": "novice",
+    "totalWeeks": 6,
+    "sessionsPerWeek": 4,
+    "sessionMinutes": 35,
+    "totalSessions": 20,
+    "suggestedPhaseCountMin": 3,
+    "suggestedPhaseCountMax": 5,
+    "skillCatalog": [
+      {"skillRef": "skill:literacy/orientation/unit-overview", "title": "Unit overview", "ordinal": 1, "instructionalRole": "orientation", "unitRef": "unit:1", "unitTitle": "Launch", "unitOrderIndex": 1},
+      {"skillRef": "skill:literacy/concept/identify-theme", "title": "Identify theme", "ordinal": 2, "instructionalRole": "concept", "unitRef": "unit:2", "unitTitle": "Reading", "unitOrderIndex": 2},
+      {"skillRef": "skill:literacy/procedure/cite-text-evidence", "title": "Cite text evidence", "ordinal": 3, "instructionalRole": "procedure", "unitRef": "unit:2", "unitTitle": "Reading", "unitOrderIndex": 2},
+      {"skillRef": "skill:literacy/application/write-response", "title": "Write response", "ordinal": 4, "instructionalRole": "application", "isAuthenticApplication": true, "unitRef": "unit:3", "unitTitle": "Writing", "unitOrderIndex": 3}
+    ],
+    "unitAnchors": [
+      {"unitRef": "unit:1", "title": "Launch", "description": "Orient learners to the texts and routines.", "orderIndex": 1, "estimatedWeeks": 1, "estimatedSessions": 4, "skillRefs": ["skill:literacy/orientation/unit-overview"]},
+      {"unitRef": "unit:2", "title": "Reading", "description": "Build interpretive reading skills.", "orderIndex": 2, "estimatedWeeks": 2, "estimatedSessions": 8, "skillRefs": ["skill:literacy/concept/identify-theme", "skill:literacy/procedure/cite-text-evidence"]},
+      {"unitRef": "unit:3", "title": "Writing", "description": "Apply reading insights in a written response.", "orderIndex": 3, "estimatedWeeks": 2, "estimatedSessions": 8, "skillRefs": ["skill:literacy/application/write-response"]}
+    ],
+    "skillNodeIdByRef": {
+      "skill:literacy/orientation/unit-overview": "node_lit_1",
+      "skill:literacy/concept/identify-theme": "node_lit_2",
+      "skill:literacy/procedure/cite-text-evidence": "node_lit_3",
+      "skill:literacy/application/write-response": "node_lit_4"
+    }
+  },
+  "goodProgression": {
+    "phases": [
+      {"title": "Launch the unit", "description": "Orient learners to the unit’s texts, routines, and expectations before deeper analysis.", "skillRefs": ["skill:literacy/orientation/unit-overview"]},
+      {"title": "Interpret and support claims", "description": "Develop theme identification alongside evidence use so interpretation stays grounded in the text.", "skillRefs": ["skill:literacy/concept/identify-theme", "skill:literacy/procedure/cite-text-evidence"]},
+      {"title": "Write and revisit", "description": "Turn the reading work into a written response while revisiting evidence and theme decisions during drafting.", "skillRefs": ["skill:literacy/application/write-response"]}
+    ],
+    "edges": [
+      {"fromSkillRef": "skill:literacy/concept/identify-theme", "toSkillRef": "skill:literacy/application/write-response", "kind": "recommendedBefore"},
+      {"fromSkillRef": "skill:literacy/procedure/cite-text-evidence", "toSkillRef": "skill:literacy/application/write-response", "kind": "hardPrerequisite"},
+      {"fromSkillRef": "skill:literacy/concept/identify-theme", "toSkillRef": "skill:literacy/procedure/cite-text-evidence", "kind": "coPractice"}
+    ]
+  },
+  "badProgressions": [
+    {"label": "missing-skill", "progression": {"phases": [{"title": "Launch", "description": "Start.", "skillRefs": ["skill:literacy/orientation/unit-overview"]}, {"title": "Write", "description": "Jump to product.", "skillRefs": ["skill:literacy/application/write-response"]}], "edges": []}},
+    {"label": "duplicate-skill", "progression": {"phases": [{"title": "Reading", "description": "Read first.", "skillRefs": ["skill:literacy/concept/identify-theme", "skill:literacy/procedure/cite-text-evidence"]}, {"title": "Writing", "description": "Repeat evidence here too.", "skillRefs": ["skill:literacy/procedure/cite-text-evidence", "skill:literacy/application/write-response", "skill:literacy/orientation/unit-overview"]}], "edges": []}},
+    {"label": "backward-prerequisite", "progression": {"phases": [{"title": "Writing", "description": "Product first.", "skillRefs": ["skill:literacy/application/write-response"]}, {"title": "Reading later", "description": "Foundations later.", "skillRefs": ["skill:literacy/orientation/unit-overview", "skill:literacy/concept/identify-theme", "skill:literacy/procedure/cite-text-evidence"]}], "edges": [{"fromSkillRef": "skill:literacy/procedure/cite-text-evidence", "toSkillRef": "skill:literacy/application/write-response", "kind": "hardPrerequisite"}]}},
+    {"label": "over-fragmented", "progression": {"phases": [{"title": "P1", "description": "Single.", "skillRefs": ["skill:literacy/orientation/unit-overview"]}, {"title": "P2", "description": "Single.", "skillRefs": ["skill:literacy/concept/identify-theme"]}, {"title": "P3", "description": "Single.", "skillRefs": ["skill:literacy/procedure/cite-text-evidence"]}, {"title": "P4", "description": "Single.", "skillRefs": ["skill:literacy/application/write-response"]}], "edges": []}}
+  ]
+}
