@@ -18,6 +18,7 @@ export async function GET(request: NextRequest) {
     const date = request.nextUrl.searchParams.get("date");
     const sourceId = request.nextUrl.searchParams.get("sourceId");
     const routeFingerprint = request.nextUrl.searchParams.get("routeFingerprint");
+    const slotId = request.nextUrl.searchParams.get("slotId");
     const lessonSessionId = request.nextUrl.searchParams.get("lessonSessionId");
 
     if (!date || !sourceId || !routeFingerprint) {
@@ -32,6 +33,7 @@ export async function GET(request: NextRequest) {
       organizationId: session.organization.id,
       learnerId: session.activeLearner.id,
       date,
+      slotId,
       sourceId,
       routeFingerprint,
       lessonSessionId,

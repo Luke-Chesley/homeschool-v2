@@ -18,6 +18,7 @@ function isBuildActive(build?: DailyWorkspaceLessonBuild | DailyWorkspaceActivit
 export function useTodayBuildStatusPolling(params: {
   date: string;
   sourceId?: string;
+  slotId?: string | null;
   routeFingerprint: string;
   lessonSessionId?: string | null;
   lessonBuild?: DailyWorkspaceLessonBuild | null;
@@ -58,6 +59,9 @@ export function useTodayBuildStatusPolling(params: {
           sourceId: activeSourceId,
           routeFingerprint: activeRouteFingerprint,
         });
+        if (params.slotId) {
+          searchParams.set("slotId", params.slotId);
+        }
         if (activeLessonSessionId) {
           searchParams.set("lessonSessionId", activeLessonSessionId);
         }
@@ -118,6 +122,7 @@ export function useTodayBuildStatusPolling(params: {
     params.lessonBuild?.updatedAt,
     params.lessonSessionId,
     params.routeFingerprint,
+    params.slotId,
     params.sourceId,
   ]);
 }

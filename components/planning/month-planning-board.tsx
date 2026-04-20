@@ -20,6 +20,7 @@ import { AlertTriangle, ArrowRight, CalendarDays, GripVertical, Layers3 } from "
 
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
+import { UpdateCurriculumScheduleButton } from "@/components/planning/update-curriculum-schedule-button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { MonthlyPlan, MonthlyPlanDay, MonthlyPlanWeek } from "@/lib/planning/types";
 import type { WeeklyRouteBoardItem } from "@/lib/curriculum-routing/types";
@@ -293,6 +294,10 @@ export function MonthPlanningBoard({ month }: MonthPlanningBoardProps) {
   ]);
   const itemsById = new Map(allItems.map((item) => [item.id, item]));
   const columnMeta = createColumnMeta(month);
+  const hasScheduleChanges = allItems.some(
+    (item) =>
+      item.manualOverrideKind !== "none" || item.currentPosition !== item.recommendedPosition,
+  );
 
   const persistMove = async (itemId: string, nextColumns: ColumnsState) => {
     const item = itemsById.get(itemId);
@@ -342,6 +347,43 @@ export function MonthPlanningBoard({ month }: MonthPlanningBoardProps) {
         columnsRef.current = snapshotRef.current;
         setColumns(snapshotRef.current);
       }
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const refreshSchedule = async () => {
+    try {
+      setError(null);
+      setIsSaving(true);
+      setActiveItemId(null);
+
+      const response = await fetch("/api/planning/month-schedule-refresh", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          sourceId: month.sourceId,
+          monthDate: month.monthStartDate,
+        }),
+      });
+
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(payload?.error ?? "Failed to refresh the curriculum schedule.");
+      }
+
+      startTransition(() => {
+        router.refresh();
+      });
+    } catch (refreshError) {
+      console.error(refreshError);
+      setError(
+        refreshError instanceof Error
+          ? refreshError.message
+          : "Could not refresh the curriculum schedule.",
+      );
     } finally {
       setIsSaving(false);
     }
@@ -466,15 +508,23 @@ export function MonthPlanningBoard({ month }: MonthPlanningBoardProps) {
   return (
     <section className="space-y-5">
       <div className="quiet-panel space-y-4 p-4">
-        <div className="space-y-1">
-          <p className="section-meta">Month planning board</p>
-          <h2 className="font-serif text-2xl font-semibold tracking-tight text-foreground">
-            {month.monthLabel}
-          </h2>
-          <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-            The month grid is the draft. Drag compact route cards across weekdays, keep the full
-            month visible, and use the weekly board when you need tighter day-level control.
-          </p>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="space-y-1">
+            <p className="section-meta">Month planning board</p>
+            <h2 className="font-serif text-2xl font-semibold tracking-tight text-foreground">
+              {month.monthLabel}
+            </h2>
+            <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
+              The month grid is the draft. Drag compact route cards across weekdays, keep the full
+              month visible, and use the weekly board when you need tighter day-level control.
+            </p>
+          </div>
+          <UpdateCurriculumScheduleButton
+            hasChanges={hasScheduleChanges}
+            isBusy={isSaving}
+            onRefresh={refreshSchedule}
+            className="lg:max-w-xs"
+          />
         </div>
         <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
           <CalendarDays className="size-3.5" />
@@ -483,6 +533,12 @@ export function MonthPlanningBoard({ month }: MonthPlanningBoardProps) {
           <span>{month.summary.weeksInView} weeks</span>
           <span>•</span>
           <span>{month.summary.scheduledCount} placed</span>
+          {hasScheduleChanges ? (
+            <>
+              <span>•</span>
+              <span>Custom order</span>
+            </>
+          ) : null}
           {month.summary.conflictCount > 0 ? (
             <>
               <span>•</span>

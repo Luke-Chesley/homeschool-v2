@@ -16,11 +16,12 @@ import type {
 import {
   applyTodayPlanItemActionPatch,
   applyTodayPlanItemEvaluationPatch,
-  buildTodaySlotRouteFingerprint,
   buildTodaySlotWorkspace,
   buildTodayWorkspaceSlotState,
   buildTodayWorkspaceSlotSummaries,
+  getTodayWorkspaceSlot,
   resolveTodayWorkspaceSlotId,
+  resolveTodayWorkspaceSlotRouteFingerprint,
   type TodayWorkspaceSlotState,
 } from "@/lib/planning/today-workspace-patches";
 
@@ -29,7 +30,10 @@ import { useTodayBuildStatusPolling } from "./use-today-build-status-polling";
 import { fetchTodayWorkspacePatch } from "./workspace-state-patches";
 
 function buildInitialSlotState(workspace: DailyWorkspace) {
-  const slotId = resolveTodayWorkspaceSlotId(workspace, workspace.leadItem.id);
+  const slotId = resolveTodayWorkspaceSlotId(
+    workspace,
+    workspace.leadItem.planDaySlotId ?? workspace.leadItem.id,
+  );
   if (!slotId) {
     return {};
   }
@@ -46,7 +50,10 @@ export function useTodayWorkspaceState(params: {
   const [workspaceState, setWorkspaceState] = useState(params.workspace);
   const [sourceIdState, setSourceIdState] = useState(params.sourceId);
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(() =>
-    resolveTodayWorkspaceSlotId(params.workspace, params.workspace.leadItem.id),
+    resolveTodayWorkspaceSlotId(
+      params.workspace,
+      params.workspace.leadItem.planDaySlotId ?? params.workspace.leadItem.id,
+    ),
   );
   const [slotStateById, setSlotStateById] = useState<Record<string, TodayWorkspaceSlotState>>(() =>
     buildInitialSlotState(params.workspace),
@@ -56,7 +63,10 @@ export function useTodayWorkspaceState(params: {
     setWorkspaceState(params.workspace);
     setSourceIdState(params.sourceId);
     setSelectedSlotId((current) =>
-      resolveTodayWorkspaceSlotId(params.workspace, current ?? params.workspace.leadItem.id),
+      resolveTodayWorkspaceSlotId(
+        params.workspace,
+        current ?? params.workspace.leadItem.planDaySlotId ?? params.workspace.leadItem.id,
+      ),
     );
     setSlotStateById((current) => ({
       ...current,
@@ -73,28 +83,32 @@ export function useTodayWorkspaceState(params: {
     () => buildTodaySlotWorkspace(workspaceState, activeSlotId, slotStateById[activeSlotId ?? ""]),
     [activeSlotId, slotStateById, workspaceState],
   );
-  const routeFingerprint = activeSlotId
-    ? buildTodaySlotRouteFingerprint(activeSlotId)
-    : workspaceState.items.map((item) => item.id).join("::");
+  const activeSlot = getTodayWorkspaceSlot(workspaceState, activeSlotId);
+  const routeFingerprint =
+    resolveTodayWorkspaceSlotRouteFingerprint(
+      workspaceState,
+      activeSlotId,
+      slotStateById[activeSlotId ?? ""],
+    ) ?? workspaceState.items.map((item) => item.id).join("::");
   const draftState = initialDraftState(slotWorkspace.lessonDraft);
   const repeatTomorrowAllowed = canRepeatToTomorrow(workspaceState.date);
 
   useEffect(() => {
-    if (!activeSlotId || !sourceIdState) {
-      return;
-    }
-
-    const activeItem = workspaceState.items.find((item) => item.id === activeSlotId);
-    if (!activeItem) {
+    if (!activeSlotId || !sourceIdState || !activeSlot) {
       return;
     }
 
     const lessonSessionId =
-      activeItem.sessionRecordId ?? activeItem.workflow?.lessonSessionId ?? undefined;
+      activeSlot.activityBuild?.lessonSessionId ??
+      activeSlot.activityState?.sessionId ??
+      activeSlot.leadItem.sessionRecordId ??
+      activeSlot.leadItem.workflow?.lessonSessionId ??
+      undefined;
     const searchParams = new URLSearchParams({
       date: workspaceState.date,
       sourceId: sourceIdState,
-      routeFingerprint: buildTodaySlotRouteFingerprint(activeSlotId),
+      routeFingerprint,
+      slotId: activeSlot.id,
     });
     if (lessonSessionId) {
       searchParams.set("lessonSessionId", lessonSessionId);
@@ -161,7 +175,7 @@ export function useTodayWorkspaceState(params: {
     return () => {
       cancelled = true;
     };
-  }, [activeSlotId, sourceIdState, workspaceState.date, workspaceState.items]);
+  }, [activeSlot, activeSlotId, routeFingerprint, sourceIdState, workspaceState.date]);
 
   async function refreshWorkspaceFromServer(date: string) {
     try {
@@ -278,6 +292,7 @@ export function useTodayWorkspaceState(params: {
   useTodayBuildStatusPolling({
     date: workspaceState.date,
     sourceId: sourceIdState,
+    slotId: activeSlotId,
     routeFingerprint,
     lessonSessionId:
       slotWorkspace.activityBuild?.lessonSessionId ??

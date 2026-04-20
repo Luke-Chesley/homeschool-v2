@@ -61,6 +61,7 @@ export async function POST(req: NextRequest) {
       organizationId: session.organization.id,
       learnerId: session.activeLearner.id,
       date: result.date,
+      slotId: result.slotId,
       sourceId: result.sourceId,
       routeFingerprint: result.routeFingerprint,
     });

@@ -2,9 +2,25 @@ import { NewCurriculumClientPage } from "@/components/curriculum/new-curriculum-
 import { requireAppSession } from "@/lib/app-session/server";
 import { getHomeschoolHouseholdPreferences } from "@/lib/homeschool/preferences";
 
-export default async function NewCurriculumPage() {
-  const session = await requireAppSession();
-  const preferences = await getHomeschoolHouseholdPreferences(session.organization.id);
+type NewCurriculumPageProps = {
+  searchParams: Promise<{
+    entry?: string | string[];
+  }>;
+};
+
+export default async function NewCurriculumPage({ searchParams }: NewCurriculumPageProps) {
+  const [session, preferences, params] = await Promise.all([
+    requireAppSession(),
+    requireAppSession().then((resolvedSession) =>
+      getHomeschoolHouseholdPreferences(resolvedSession.organization.id),
+    ),
+    searchParams,
+  ]);
+  const initialEntry =
+    typeof params.entry === "string" && params.entry === "conversation"
+      ? "conversation"
+      : "source";
+
   return (
     <NewCurriculumClientPage
       activeLearner={{
@@ -14,6 +30,7 @@ export default async function NewCurriculumPage() {
       }}
       organizationId={session.organization.id}
       defaultSchoolYearLabel={preferences.schoolYearLabel}
+      initialEntry={initialEntry}
     />
   );
 }

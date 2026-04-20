@@ -61,11 +61,12 @@ export function TodayRouteItemsSection({
 
   if (compact) {
     return (
-      <section className="space-y-4 xl:sticky xl:top-32">
-        <div className="border-b border-border/70 pb-4">
-          <p className="text-sm text-muted-foreground">{formatPlannerDate(workspace.date)}</p>
-          <h2 className="font-serif text-2xl">Today</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
+      <section className="space-y-3">
+        <div className="space-y-1">
+          <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+            Queue
+          </p>
+          <p className="text-sm text-muted-foreground">
             {workspace.items.length} items · {totalMinutes} min
           </p>
         </div>
@@ -197,7 +198,11 @@ export function TodayLessonPlanSection({
   slotId,
   draftState,
   buildState,
+  activityBuild,
+  activityState,
+  lessonSessionId,
   onLessonPatch,
+  onActivityPatch,
   onRegenerationNoteChange,
   onExpansionIntentChange,
   onWorkspacePatch,
@@ -210,10 +215,17 @@ export function TodayLessonPlanSection({
   slotId?: string;
   draftState?: DraftState;
   buildState?: DailyWorkspaceLessonBuild | null;
+  activityBuild?: DailyWorkspace["activityBuild"] | null;
+  activityState?: DailyWorkspaceActivityState | null;
+  lessonSessionId?: string;
   onLessonPatch?: (patch: {
     lessonDraft?: DailyWorkspaceLessonDraft | null;
     lessonBuild?: DailyWorkspaceLessonBuild | null;
     activityBuild?: DailyWorkspace["activityBuild"] | null;
+  }) => void;
+  onActivityPatch?: (patch: {
+    activityBuild?: DailyWorkspace["activityBuild"] | null;
+    activityState?: DailyWorkspaceActivityState | null;
   }) => void;
   onRegenerationNoteChange?: (note: string | null) => void;
   onExpansionIntentChange?: (intent: DailyWorkspace["expansionIntent"]) => void;
@@ -222,7 +234,12 @@ export function TodayLessonPlanSection({
   compact?: boolean;
 }) {
   const totalMinutes = workspace.items.reduce((sum, item) => sum + item.estimatedMinutes, 0);
-  const resolvedSlotId = slotId ?? workspace.slots[0]?.id ?? workspace.leadItem.planDaySlotId ?? routeFingerprint;
+  const resolvedSlotId =
+    slotId ??
+    workspace.leadItem.planDaySlotId ??
+    workspace.slots.find((slot) => slot.leadItem.id === workspace.leadItem.id)?.id ??
+    workspace.slots[0]?.id ??
+    routeFingerprint;
   const contextKey = JSON.stringify({
     date: workspace.date,
     sourceId,
@@ -253,9 +270,13 @@ export function TodayLessonPlanSection({
         routeItemTitles={workspace.items.map((item) => item.title)}
         draftState={draftState ?? null}
         buildState={buildState ?? null}
+        activityBuild={activityBuild ?? null}
+        activityState={activityState ?? null}
+        lessonSessionId={lessonSessionId}
         regenerationNote={workspace.lessonRegenerationNote}
         expansionIntent={workspace.expansionIntent}
         onLessonPatch={onLessonPatch}
+        onActivityPatch={onActivityPatch}
         onRegenerationNoteChange={onRegenerationNoteChange}
         onExpansionIntentChange={onExpansionIntentChange}
         onWorkspacePatch={onWorkspacePatch}

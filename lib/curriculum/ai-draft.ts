@@ -34,7 +34,7 @@ export type CurriculumAiCapturedRequirements = z.infer<
 export const CurriculumAiIntakeStateSchema = z.object({
   readiness: z.enum(["gathering", "ready"]),
   summary: z.string().trim().min(1).max(1_200),
-  missingInformation: z.array(z.string().trim().min(1).max(240)).max(6).default([]),
+  missingInformation: z.array(z.string().trim().min(1).max(240)).default([]),
   capturedRequirements: CurriculumAiCapturedRequirementsSchema,
 });
 

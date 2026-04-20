@@ -6,6 +6,7 @@ import { Loader2, Sparkles } from "lucide-react";
 import { LearningCorePromptPreviewCard } from "@/components/debug/LearningCorePromptPreviewCard";
 import { useStudio } from "@/components/studio/studio-provider";
 import { StudioDrawer } from "@/components/studio/StudioDrawer";
+import { LessonDraftActivityControl } from "@/components/planning/today/activity-build-control";
 import {
   LessonDraftRenderer,
   LegacyLessonDraftNotice,
@@ -17,6 +18,7 @@ import { MarkdownContent } from "@/components/ui/markdown-content";
 import type { StructuredLessonDraft } from "@/lib/lesson-draft/types";
 import type {
   DailyWorkspaceActivityBuild,
+  DailyWorkspaceActivityState,
   DailyWorkspaceExpansionIntent,
   DailyWorkspaceExpansionScope,
   DailyWorkspaceLessonBuild,
@@ -27,7 +29,6 @@ import { cn } from "@/lib/utils";
 import {
   expandTodayRouteAction,
   saveExpansionIntentAction,
-  saveLessonRegenerationNoteAction,
   type TodayWorkspacePatch,
 } from "@/app/(parent)/today/actions";
 
@@ -51,14 +52,19 @@ interface LessonPlanPanelProps {
   routeItemTitles: string[];
   draftState?: DraftState;
   buildState?: DailyWorkspaceLessonBuild | null;
-  regenerationNote?: string | null;
+  activityBuild?: DailyWorkspaceActivityBuild | null;
+  activityState?: DailyWorkspaceActivityState | null;
+  lessonSessionId?: string;
   expansionIntent?: DailyWorkspaceExpansionIntent | null;
   onLessonPatch?: (patch: {
     lessonDraft?: DailyWorkspaceLessonDraft | null;
     lessonBuild?: DailyWorkspaceLessonBuild | null;
     activityBuild?: DailyWorkspaceActivityBuild | null;
   }) => void;
-  onRegenerationNoteChange?: (note: string | null) => void;
+  onActivityPatch?: (patch: {
+    activityBuild?: DailyWorkspaceActivityBuild | null;
+    activityState?: DailyWorkspaceActivityState | null;
+  }) => void;
   onExpansionIntentChange?: (intent: DailyWorkspaceExpansionIntent | null) => void;
   onWorkspacePatch?: (patch?: TodayWorkspacePatch) => void;
   showDraftOutput?: boolean;
@@ -100,10 +106,12 @@ export function LessonPlanPanel({
   routeItemTitles,
   draftState,
   buildState,
-  regenerationNote,
+  activityBuild,
+  activityState,
+  lessonSessionId,
   expansionIntent,
   onLessonPatch,
-  onRegenerationNoteChange,
+  onActivityPatch,
   onExpansionIntentChange,
   onWorkspacePatch,
   showDraftOutput = true,
@@ -114,7 +122,6 @@ export function LessonPlanPanel({
   const [activeTrigger, setActiveTrigger] = useState<
     "onboarding_auto" | "today_resume" | "manual" | null
   >(null);
-  const [noteInput, setNoteInput] = useState(regenerationNote ?? "");
   const [supportMessage, setSupportMessage] = useState<string | null>(null);
   const [supportError, setSupportError] = useState<string | null>(null);
   const [savingIntent, setSavingIntent] = useState<DailyWorkspaceExpansionIntent | null>(null);
@@ -152,12 +159,11 @@ export function LessonPlanPanel({
     setState({ status: "idle" });
     setPromptDebugState({ status: "idle" });
     setActiveTrigger(null);
-    setNoteInput(regenerationNote ?? "");
     setSupportMessage(null);
     setSupportError(null);
     setSavingIntent(null);
     setExpandingScope(null);
-  }, [contextKey, regenerationNote]);
+  }, [contextKey]);
 
   const hasDraft = draftState !== null && draftState !== undefined;
   const canViewPromptPreview = studioEnabled && access.canViewPrompts;
@@ -297,32 +303,6 @@ export function LessonPlanPanel({
     }
   }
 
-  async function handleContextRegenerate() {
-    if (!sourceId) {
-      setSupportError("No curriculum source is available for this lesson.");
-      return;
-    }
-
-    setSupportError(null);
-    setSupportMessage(null);
-
-    const saved = await saveLessonRegenerationNoteAction({
-      date,
-      sourceId,
-      routeFingerprint,
-      note: noteInput,
-    });
-
-    if (!saved.ok) {
-      setSupportError(saved.error ?? "Could not save the context note.");
-      return;
-    }
-
-    onRegenerationNoteChange?.(saved.note ?? null);
-    setSupportMessage(saved.message ?? "Saved note for regenerate.");
-    void requestDraft("manual");
-  }
-
   async function handleExpansionIntent(intent: DailyWorkspaceExpansionIntent) {
     if (!sourceId) {
       setSupportError("No curriculum source is available for this lesson.");
@@ -401,8 +381,10 @@ export function LessonPlanPanel({
               <Badge variant="outline">{objectiveCount} targets</Badge>
             </div>
             <div>
-              <h2 className="font-serif text-2xl">Lesson draft</h2>
-              <p className="mt-1 text-sm leading-7 text-muted-foreground">{sourceTitle}</p>
+              <h2 className="font-serif text-2xl">Teach this lesson</h2>
+              <p className="mt-1 text-sm leading-7 text-muted-foreground">
+                Keep the mechanics here. The draft itself stays front and center.
+              </p>
             </div>
           </div>
 
@@ -446,6 +428,27 @@ export function LessonPlanPanel({
                 Prompt preview
               </button>
             ) : null}
+          </div>
+
+          <div className="rounded-lg border border-border/70 bg-background/72 p-4">
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-foreground">Learner handoff</p>
+              <p className="text-sm text-muted-foreground">
+                Open or build the learner-facing activity without leaving today.
+              </p>
+            </div>
+            <div className="mt-3">
+              <LessonDraftActivityControl
+                date={date}
+                sourceId={sourceId}
+                slotId={resolvedSlotId}
+                routeFingerprint={routeFingerprint}
+                activityState={activityState ?? null}
+                sessionId={lessonSessionId}
+                buildState={activityBuild ?? null}
+                onActivityPatch={(patch) => onActivityPatch?.(patch)}
+              />
+            </div>
           </div>
 
           <details className="rounded-lg border border-border/70 bg-background/72 px-4 py-3">
@@ -511,116 +514,87 @@ export function LessonPlanPanel({
             </div>
           ) : null}
 
-          {hasDraft ? (
-            <div className="space-y-3 rounded-lg border border-border/70 bg-background/72 p-4">
-              <div className="space-y-1">
-                <p className="text-sm font-medium text-foreground">Add context and regenerate</p>
-                <p className="text-sm text-muted-foreground">
-                  Save one short note for the next regenerate when you want the draft to feel more
-                  hands-on, shorter, calmer, or more explicit.
-                </p>
-              </div>
-              <textarea
-                value={noteInput}
-                onChange={(event) => setNoteInput(event.target.value)}
-                placeholder="Example: make this more hands-on and keep transitions short."
-                className="min-h-24 w-full rounded-lg border border-border/70 bg-background px-3 py-2 text-sm outline-none ring-0 placeholder:text-muted-foreground/80"
-              />
-              <div className="grid gap-2 sm:flex sm:flex-wrap">
-                <button
-                  type="button"
-                  onClick={handleContextRegenerate}
-                  disabled={state.status === "loading"}
-                  className={cn(
-                    buttonVariants({ variant: "outline", size: "sm" }),
-                    "min-h-11 w-full justify-center sm:min-h-8 sm:w-auto",
-                  )}
-                >
-                  {state.status === "loading" ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : null}
-                  Add context and regenerate
-                </button>
-              </div>
-            </div>
-          ) : null}
-
-          <div className="space-y-3 rounded-lg border border-border/70 bg-background/72 p-4">
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-foreground">Scope intent</p>
-              <p className="text-sm text-muted-foreground">
-                Record whether you want to keep this launch flow bounded to today or expand from
-                this result later.
-              </p>
-            </div>
-            <div className="grid gap-2 sm:flex sm:flex-wrap">
-              <button
-                type="button"
-                onClick={() => handleExpansionIntent("keep_today")}
-                disabled={savingIntent !== null}
-                className={cn(
-                  buttonVariants({
-                    variant: expansionIntent === "keep_today" ? "default" : "outline",
-                    size: "sm",
-                  }),
-                  "min-h-11 w-full justify-center sm:min-h-8 sm:w-auto",
-                )}
-              >
-                {savingIntent === "keep_today" ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : null}
-                Keep this to today
-              </button>
-              <button
-                type="button"
-                onClick={() => handleExpansionIntent("expand_from_here")}
-                disabled={savingIntent !== null}
-                className={cn(
-                  buttonVariants({
-                    variant: expansionIntent === "expand_from_here" ? "default" : "outline",
-                    size: "sm",
-                  }),
-                  "min-h-11 w-full justify-center sm:min-h-8 sm:w-auto",
-                )}
-              >
-                {savingIntent === "expand_from_here" ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : null}
-                Expand from here
-              </button>
-            </div>
-          </div>
-
-          {hasDraft ? (
-            <div className="space-y-3 rounded-lg border border-border/70 bg-background/72 p-4">
-              <div className="space-y-1">
-                <p className="text-sm font-medium text-foreground">Route expansion</p>
-                <p className="text-sm text-muted-foreground">
-                  Schedule more of the already-generated route without replacing today&apos;s
-                  lesson.
-                </p>
-              </div>
-              <div className="grid gap-2 sm:flex sm:flex-wrap">
-                {(["tomorrow", "next_few_days", "current_week"] as const).map((scope) => (
+          <details className="rounded-lg border border-border/70 bg-background/72 px-4 py-3">
+            <summary className="cursor-pointer text-sm font-medium text-foreground">
+              More planning controls
+            </summary>
+            <div className="mt-3 space-y-4">
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-foreground">Scope intent</p>
+                  <p className="text-sm text-muted-foreground">
+                    Record whether today should stay bounded or become the starting point for more route.
+                  </p>
+                </div>
+                <div className="grid gap-2 sm:flex sm:flex-wrap">
                   <button
-                    key={scope}
                     type="button"
-                    onClick={() => handleRouteExpansion(scope)}
-                    disabled={!sourceId || expandingScope !== null}
+                    onClick={() => handleExpansionIntent("keep_today")}
+                    disabled={savingIntent !== null}
                     className={cn(
-                      buttonVariants({ variant: "outline", size: "sm" }),
+                      buttonVariants({
+                        variant: expansionIntent === "keep_today" ? "default" : "outline",
+                        size: "sm",
+                      }),
                       "min-h-11 w-full justify-center sm:min-h-8 sm:w-auto",
                     )}
                   >
-                    {expandingScope === scope ? (
+                    {savingIntent === "keep_today" ? (
                       <Loader2 className="size-4 animate-spin" />
                     ) : null}
-                    {getExpansionButtonLabel(scope)}
+                    Keep this to today
                   </button>
-                ))}
+                  <button
+                    type="button"
+                    onClick={() => handleExpansionIntent("expand_from_here")}
+                    disabled={savingIntent !== null}
+                    className={cn(
+                      buttonVariants({
+                        variant: expansionIntent === "expand_from_here" ? "default" : "outline",
+                        size: "sm",
+                      }),
+                      "min-h-11 w-full justify-center sm:min-h-8 sm:w-auto",
+                    )}
+                  >
+                    {savingIntent === "expand_from_here" ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : null}
+                    Expand from here
+                  </button>
+                </div>
               </div>
+
+              {hasDraft ? (
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-foreground">Route expansion</p>
+                    <p className="text-sm text-muted-foreground">
+                      Schedule more of the saved route without replacing today&apos;s lesson.
+                    </p>
+                  </div>
+                  <div className="grid gap-2 sm:flex sm:flex-wrap">
+                    {(["tomorrow", "next_few_days", "current_week"] as const).map((scope) => (
+                      <button
+                        key={scope}
+                        type="button"
+                        onClick={() => handleRouteExpansion(scope)}
+                        disabled={!sourceId || expandingScope !== null}
+                        className={cn(
+                          buttonVariants({ variant: "outline", size: "sm" }),
+                          "min-h-11 w-full justify-center sm:min-h-8 sm:w-auto",
+                        )}
+                      >
+                        {expandingScope === scope ? (
+                          <Loader2 className="size-4 animate-spin" />
+                        ) : null}
+                        {getExpansionButtonLabel(scope)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </div>
-          ) : null}
+          </details>
 
           {supportMessage ? (
             <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm text-foreground">

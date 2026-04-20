@@ -1,8 +1,11 @@
+import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { Sparkles } from "lucide-react";
 
 import { CurriculumEmptyState } from "@/components/curriculum/curriculum-empty-state";
 import { CurriculumOverview } from "@/components/curriculum/curriculum-overview";
+import { buttonVariants } from "@/components/ui/button";
 import { requireAppSession } from "@/lib/app-session/server";
 import {
   getCurriculumTree,
@@ -10,6 +13,7 @@ import {
   listCurriculumSources,
   setLiveCurriculumSource,
 } from "@/lib/curriculum/service";
+import { cn } from "@/lib/utils";
 
 export const metadata = {
   title: "Curriculum",
@@ -73,6 +77,18 @@ export default async function CurriculumPage() {
         <p className="page-subtitle max-w-3xl">
           Keep one live curriculum source in view so planning, today, and tracking all stay aligned.
         </p>
+        <div className="flex flex-wrap gap-3">
+          <Link href="/curriculum/new" className={buttonVariants({ variant: "outline", size: "sm" })}>
+            Add a source
+          </Link>
+          <Link
+            href="/curriculum/new?entry=conversation"
+            className={cn(buttonVariants({ size: "sm" }), "gap-2")}
+          >
+            <Sparkles className="size-4" />
+            Start conversation
+          </Link>
+        </div>
       </header>
       <CurriculumOverview
         sources={sources}

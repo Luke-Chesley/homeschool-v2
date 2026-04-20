@@ -25,10 +25,10 @@ export function CurriculumEmptyState() {
             <ArrowRight className="size-4" />
           </Link>
           <Link
-            href="/curriculum/new"
+            href="/curriculum/new?entry=conversation"
             className={buttonVariants({ variant: "outline", size: "sm" })}
           >
-            Start from a topic
+            Start conversation
           </Link>
         </div>
         <p className="text-sm text-muted-foreground">

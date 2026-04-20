@@ -16,6 +16,7 @@ import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } 
 import { CSS } from "@dnd-kit/utilities";
 import { Copy, GripVertical } from "lucide-react";
 
+import { UpdateCurriculumScheduleButton } from "@/components/planning/update-curriculum-schedule-button";
 import { buttonVariants } from "@/components/ui/button";
 import type { WeeklyRouteBoard, WeeklyRouteBoardItem } from "@/lib/curriculum-routing";
 import { Badge } from "@/components/ui/badge";
@@ -283,6 +284,10 @@ export function WeeklyRouteBoard({ initialBoard, weekStartDate }: WeeklyRouteBoa
 
   const itemsById = new Map(board.items.map((item) => [item.id, item]));
   const conflictedItemIds = new Set(board.conflicts.flatMap((conflict) => conflict.affectedItemIds));
+  const hasScheduleChanges = board.items.some(
+    (item) =>
+      item.manualOverrideKind !== "none" || item.currentPosition !== item.recommendedPosition,
+  );
 
   const resetFromServerBoard = (nextBoard: WeeklyRouteBoard) => {
     const nextColumns = createColumns(nextBoard.items, weekDates);
@@ -429,6 +434,38 @@ export function WeeklyRouteBoard({ initialBoard, weekStartDate }: WeeklyRouteBoa
     }
   };
 
+  const refreshSchedule = async () => {
+    try {
+      setError(null);
+      setIsSaving(true);
+      setActiveItemId(null);
+
+      const response = await fetch(
+        `/api/planning/weekly-routes/${board.summary.weeklyRouteId}/refresh-schedule`,
+        {
+          method: "POST",
+        },
+      );
+
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(payload?.error ?? "Failed to refresh the curriculum schedule.");
+      }
+
+      const updatedBoard = (await response.json()) as WeeklyRouteBoard;
+      resetFromServerBoard(updatedBoard);
+    } catch (refreshError) {
+      console.error(refreshError);
+      setError(
+        refreshError instanceof Error
+          ? refreshError.message
+          : "Could not refresh the curriculum schedule.",
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const onDragStart = (event: DragStartEvent) => {
     if (isSaving) {
       return;
@@ -549,20 +586,34 @@ export function WeeklyRouteBoard({ initialBoard, weekStartDate }: WeeklyRouteBoa
   return (
     <section className="space-y-5">
       <div className="quiet-panel space-y-4 p-4">
-        <div className="space-y-1">
-          <p className="section-meta">Weekly plan</p>
-          <h2 className="font-serif text-2xl font-semibold tracking-tight text-foreground">
-            Shape the week without rebuilding it.
-          </h2>
-          <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-            Drag work into the right day, pause items that are too much, and leave overflow in a
-            flexible holding area until you are ready to schedule it.
-          </p>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="space-y-1">
+            <p className="section-meta">Weekly plan</p>
+            <h2 className="font-serif text-2xl font-semibold tracking-tight text-foreground">
+              Shape the week without rebuilding it.
+            </h2>
+            <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
+              Drag work into the right day, pause items that are too much, and leave overflow in a
+              flexible holding area until you are ready to schedule it.
+            </p>
+          </div>
+          <UpdateCurriculumScheduleButton
+            hasChanges={hasScheduleChanges}
+            isBusy={isSaving}
+            onRefresh={refreshSchedule}
+            className="lg:max-w-xs"
+          />
         </div>
         <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
           <span>Week of {weekStartDate}</span>
           <span>•</span>
           <span>{board.items.length} items</span>
+          {hasScheduleChanges ? (
+            <>
+              <span>•</span>
+              <span>Custom order</span>
+            </>
+          ) : null}
           {board.conflicts.length > 0 ? (
             <>
               <span>•</span>

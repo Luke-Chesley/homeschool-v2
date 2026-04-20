@@ -21,7 +21,6 @@ import type {
 import type { TodayWorkspaceSlotSummary } from "@/lib/planning/today-workspace-patches";
 import { cn } from "@/lib/utils";
 
-import { TodayLearnerActivityBridge } from "./activity-build-control";
 import { TodayLessonDraftCard } from "./today-lesson-draft-card";
 import {
   TodayLessonPlanSection,
@@ -94,6 +93,8 @@ export function TodayWorkspaceShell({
   const [startNextError, setStartNextError] = useState<string | null>(null);
   const [startNextMessage, setStartNextMessage] = useState<string | null>(null);
   const [isStartingNext, startNextTransition] = useTransition();
+  const activeSlotId =
+    selectedSlotId ?? workspace.leadItem.planDaySlotId ?? workspace.slots[0]?.id ?? null;
 
   if (fullWorkspace.items.length === 0) {
     return (
@@ -150,100 +151,102 @@ export function TodayWorkspaceShell({
   return (
     <div className="space-y-6">
       {slotSummaries.length > 1 || sourceId ? (
-        <Card className="quiet-panel">
-          <div className="space-y-4 p-4">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-              <div className="space-y-1">
-                <p className="text-sm font-medium text-foreground">Lesson slots</p>
-                <p className="text-sm text-muted-foreground">
-                  Switch between today&apos;s same-day lessons. Drafts and activities are tracked per slot.
-                </p>
-              </div>
-              {sourceId ? (
-                <button
-                  type="button"
-                  onClick={handleStartNextLesson}
-                  disabled={isStartingNext}
-                  className={cn(
-                    buttonVariants({ variant: "outline", size: "sm" }),
-                    "min-h-11 w-full justify-center lg:min-h-8 lg:w-auto",
-                  )}
-                >
-                  {isStartingNext ? <Loader2 className="size-4 animate-spin" /> : null}
-                  Pull next lesson into today
-                </button>
-              ) : null}
+        <section className="space-y-4 border-b border-border/70 pb-5">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-foreground">Today’s lesson flow</p>
+              <p className="text-sm text-muted-foreground">
+                Keep the active lesson in focus. Switch slots only when you need the next same-day lesson.
+              </p>
             </div>
-            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-              {slotSummaries.map((slot, index) => (
-                <button
-                  key={slot.id}
-                  type="button"
-                  onClick={() => onSelectSlot(slot.id)}
-                  className={cn(
-                    "rounded-xl border px-4 py-3 text-left transition-colors",
-                    selectedSlotId === slot.id
-                      ? "border-primary bg-primary/5"
-                      : "border-border/70 bg-background/70 hover:border-primary/40",
-                  )}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                        Slot {index + 1}
-                      </p>
-                      <p className="truncate text-sm font-medium text-foreground">{slot.title}</p>
-                    </div>
-                    <span className="text-xs text-muted-foreground">{slot.subject}</span>
-                  </div>
-                  <p className="mt-2 text-xs text-muted-foreground">{getSlotStatusLabel(slot)}</p>
-                </button>
-              ))}
-            </div>
-            {startNextMessage ? (
-              <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm text-foreground">
-                {startNextMessage}
-              </div>
-            ) : null}
-            {startNextError ? (
-              <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">
-                {startNextError}
-              </div>
+            {sourceId ? (
+              <button
+                type="button"
+                onClick={handleStartNextLesson}
+                disabled={isStartingNext}
+                className={cn(
+                  buttonVariants({ variant: "outline", size: "sm" }),
+                  "min-h-11 w-full justify-center lg:min-h-8 lg:w-auto",
+                )}
+              >
+                {isStartingNext ? <Loader2 className="size-4 animate-spin" /> : null}
+                Pull next lesson into today
+              </button>
             ) : null}
           </div>
-        </Card>
+          <div className="flex flex-wrap gap-2">
+            {slotSummaries.map((slot, index) => (
+              <button
+                key={slot.id}
+                type="button"
+                onClick={() => onSelectSlot(slot.id)}
+                className={cn(
+                  "rounded-full border px-4 py-2 text-left transition-colors",
+                  selectedSlotId === slot.id
+                    ? "border-primary bg-primary/6 text-foreground"
+                    : "border-border/70 bg-background/70 text-muted-foreground hover:border-primary/40",
+                )}
+              >
+                <span className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                  Slot {index + 1}
+                </span>
+                <span className="mt-1 block text-sm font-medium text-foreground">{slot.title}</span>
+                <span className="mt-1 block text-xs text-muted-foreground">{getSlotStatusLabel(slot)}</span>
+              </button>
+            ))}
+          </div>
+          {startNextMessage ? (
+            <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm text-foreground">
+              {startNextMessage}
+            </div>
+          ) : null}
+          {startNextError ? (
+            <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">
+              {startNextError}
+            </div>
+          ) : null}
+        </section>
       ) : null}
 
-      <TodayLearnerActivityBridge
-        workspace={workspace}
-        draftState={draftState}
-        sourceId={sourceId}
-        slotId={workspace.leadItem.id}
-        routeFingerprint={routeFingerprint}
-        onActivityPatch={onActivityPatch}
-      />
-
       {draftState ? (
-        <div className="grid gap-6 xl:grid-cols-[18rem_minmax(0,1fr)_20rem] xl:items-start">
-          <TodayRouteItemsSection
-            workspace={workspace}
-            repeatTomorrowAllowed={repeatTomorrowAllowed}
-            compact
-            onActionSaved={onItemActionSaved}
-            onEvaluationSaved={onEvaluationSaved}
-          />
-          <TodayLessonDraftCard
-            workspace={workspace}
-            draftState={draftState}
-            onEvaluationSaved={onEvaluationSaved}
-          />
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_22rem] xl:items-start">
+          <div className="space-y-4">
+            <TodayLessonDraftCard
+              workspace={workspace}
+              draftState={draftState}
+              onEvaluationSaved={onEvaluationSaved}
+            />
+
+            <details className="rounded-[var(--radius)] border border-border/70 bg-card/70">
+              <summary className="cursor-pointer list-none px-4 py-3 text-sm font-medium text-foreground">
+                Today’s queue and actions
+              </summary>
+              <div className="border-t border-border/70 px-4 py-4">
+                <TodayRouteItemsSection
+                  workspace={workspace}
+                  repeatTomorrowAllowed={repeatTomorrowAllowed}
+                  compact
+                  onActionSaved={onItemActionSaved}
+                  onEvaluationSaved={onEvaluationSaved}
+                />
+              </div>
+            </details>
+          </div>
+
           <TodayLessonPlanSection
             workspace={workspace}
             sourceId={sourceId}
+            slotId={activeSlotId ?? undefined}
             routeFingerprint={routeFingerprint}
             draftState={draftState}
             buildState={workspace.lessonBuild}
+            activityBuild={workspace.activityBuild}
+            activityState={workspace.activityState}
+            lessonSessionId={
+              workspace.leadItem.sessionRecordId ?? workspace.leadItem.workflow?.lessonSessionId
+            }
             onLessonPatch={onLessonPatch}
+            onActivityPatch={onActivityPatch}
             onRegenerationNoteChange={onRegenerationNoteChange}
             onExpansionIntentChange={onExpansionIntentChange}
             onWorkspacePatch={onWorkspacePatch}
@@ -252,24 +255,39 @@ export function TodayWorkspaceShell({
           />
         </div>
       ) : (
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(340px,0.85fr)] xl:items-start">
-          <TodayRouteItemsSection
-            workspace={workspace}
-            repeatTomorrowAllowed={repeatTomorrowAllowed}
-            onActionSaved={onItemActionSaved}
-            onEvaluationSaved={onEvaluationSaved}
-          />
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_22rem] xl:items-start">
           <TodayLessonPlanSection
             workspace={workspace}
             sourceId={sourceId}
+            slotId={activeSlotId ?? undefined}
             routeFingerprint={routeFingerprint}
             draftState={null}
             buildState={workspace.lessonBuild}
+            activityBuild={workspace.activityBuild}
+            activityState={workspace.activityState}
+            lessonSessionId={
+              workspace.leadItem.sessionRecordId ?? workspace.leadItem.workflow?.lessonSessionId
+            }
             onLessonPatch={onLessonPatch}
+            onActivityPatch={onActivityPatch}
             onRegenerationNoteChange={onRegenerationNoteChange}
             onExpansionIntentChange={onExpansionIntentChange}
             onWorkspacePatch={onWorkspacePatch}
           />
+          <details className="rounded-[var(--radius)] border border-border/70 bg-card/70" open>
+            <summary className="cursor-pointer list-none px-4 py-3 text-sm font-medium text-foreground">
+              Today’s queue and actions
+            </summary>
+            <div className="border-t border-border/70 px-4 py-4">
+              <TodayRouteItemsSection
+                workspace={workspace}
+                repeatTomorrowAllowed={repeatTomorrowAllowed}
+                compact
+                onActionSaved={onItemActionSaved}
+                onEvaluationSaved={onEvaluationSaved}
+              />
+            </div>
+          </details>
         </div>
       )}
     </div>

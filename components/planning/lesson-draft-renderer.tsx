@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 
+import { LessonBlockHelp } from "@/components/planning/lesson-block-help";
 import type {
   LessonAdaptation,
   LessonBlock,
@@ -123,10 +124,16 @@ function BlockCard({
   block,
   index,
   footer,
+  showInlineHelp,
+  lessonTitle,
+  lessonFocus,
 }: {
   block: LessonBlock;
   index: number;
   footer?: ReactNode;
+  showInlineHelp: boolean;
+  lessonTitle: string;
+  lessonFocus: string;
 }) {
   return (
     <div
@@ -154,50 +161,39 @@ function BlockCard({
           <p className="text-base font-medium leading-5 text-foreground">{block.title}</p>
           <p className="text-sm leading-6 text-muted-foreground">{block.purpose}</p>
         </div>
-
-        {block.check_for ? (
-          <p className="text-sm leading-6 text-muted-foreground">
-            <span className="font-medium text-foreground">Check:</span> {block.check_for}
-          </p>
-        ) : null}
       </div>
 
-      {(block.teacher_action || block.learner_action || (block.materials_needed?.length ?? 0) > 0) ? (
-        <details className="mt-3 rounded-md border border-border/50 bg-muted/15">
-          <summary className="cursor-pointer list-none px-3 py-2 text-xs font-medium text-muted-foreground">
-            Open guidance
-          </summary>
-          <div className="grid gap-3 border-t border-border/50 px-3 py-3 sm:grid-cols-2">
-            <div>
-              <p className="text-xs font-medium text-foreground">You</p>
-              <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                {block.teacher_action}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs font-medium text-foreground">Learner</p>
-              <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                {block.learner_action}
-              </p>
-            </div>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <div className="rounded-lg border border-border/50 bg-muted/12 p-3">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            You do
+          </p>
+          <p className="mt-2 text-sm leading-6 text-foreground">{block.teacher_action}</p>
+        </div>
+        <div className="rounded-lg border border-border/50 bg-muted/12 p-3">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            Learner does
+          </p>
+          <p className="mt-2 text-sm leading-6 text-foreground">{block.learner_action}</p>
+        </div>
+      </div>
 
-            {block.materials_needed && block.materials_needed.length > 0 ? (
-              <div className="sm:col-span-2">
-                <p className="text-xs font-medium text-foreground">Needs</p>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {block.materials_needed.map((m, i) => (
-                    <span
-                      key={i}
-                      className="rounded bg-muted/60 px-2 py-1 text-xs text-muted-foreground"
-                    >
-                      {m}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-          </div>
-        </details>
+      {block.check_for ? (
+        <div className="mt-3 rounded-lg border border-border/50 bg-background/72 p-3">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            Look for
+          </p>
+          <p className="mt-2 text-sm leading-6 text-foreground">{block.check_for}</p>
+        </div>
+      ) : null}
+
+      {showInlineHelp ? (
+        <LessonBlockHelp
+          block={block}
+          blockIndex={index}
+          lessonTitle={lessonTitle}
+          lessonFocus={lessonFocus}
+        />
       ) : null}
 
       {footer ? <div className="mt-3 flex justify-end">{footer}</div> : null}
@@ -350,6 +346,8 @@ export function LessonDraftRenderer({
   className,
   renderBlockFooter,
 }: LessonDraftRendererProps) {
+  const showInlineHelp = mode !== "compact";
+
   return (
     <div className={cn("space-y-6", className)}>
       <LessonHeader draft={draft} />
@@ -370,27 +368,14 @@ export function LessonDraftRenderer({
               block={block}
               index={i}
               footer={renderBlockFooter?.(block, i)}
+              showInlineHelp={showInlineHelp}
+              lessonTitle={draft.title}
+              lessonFocus={draft.lesson_focus}
             />
           ))}
         </div>
       </div>
 
-      {/* Adaptations */}
-      {draft.adaptations.length > 0 ? (
-        <CollapsibleSection label="Adaptations">
-          <div className="grid gap-2 sm:grid-cols-2">
-            {draft.adaptations.map((a, i) => (
-              <AdaptationCard key={i} adaptation={a} index={i} />
-            ))}
-          </div>
-        </CollapsibleSection>
-      ) : null}
-
-      {/* Teacher notes */}
-      <TeacherNotes notes={draft.teacher_notes} />
-
-      {/* Optional modules (only when present) */}
-      {mode === "full" ? <OptionalModules draft={draft} /> : null}
     </div>
   );
 }

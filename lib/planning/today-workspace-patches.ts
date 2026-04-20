@@ -43,32 +43,72 @@ export function buildTodaySlotRouteFingerprint(slotId: string) {
   return `slot:${slotId}`;
 }
 
+export function getTodayWorkspaceSlot(
+  workspace: DailyWorkspace,
+  preferredSlotId?: string | null,
+) {
+  if (preferredSlotId) {
+    const directMatch = workspace.slots.find((slot) => slot.id === preferredSlotId);
+    if (directMatch) {
+      return directMatch;
+    }
+
+    const itemMatch = workspace.slots.find(
+      (slot) =>
+        slot.leadItem.id === preferredSlotId || slot.items.some((item) => item.id === preferredSlotId),
+    );
+    if (itemMatch) {
+      return itemMatch;
+    }
+  }
+
+  if (workspace.leadItem.planDaySlotId) {
+    const leadSlot = workspace.slots.find((slot) => slot.id === workspace.leadItem.planDaySlotId);
+    if (leadSlot) {
+      return leadSlot;
+    }
+  }
+
+  return workspace.slots[0] ?? null;
+}
+
 export function resolveTodayWorkspaceSlotId(
   workspace: DailyWorkspace,
   preferredSlotId?: string | null,
 ) {
-  if (preferredSlotId && workspace.items.some((item) => item.id === preferredSlotId)) {
-    return preferredSlotId;
-  }
+  return getTodayWorkspaceSlot(workspace, preferredSlotId)?.id ?? null;
+}
 
-  return workspace.items[0]?.id ?? null;
+export function resolveTodayWorkspaceSlotRouteFingerprint(
+  workspace: DailyWorkspace,
+  preferredSlotId?: string | null,
+  slotState?: TodayWorkspaceSlotState,
+) {
+  return (
+    slotState?.lessonBuild?.routeFingerprint ??
+    slotState?.lessonDraft?.routeFingerprint ??
+    slotState?.activityBuild?.routeFingerprint ??
+    getTodayWorkspaceSlot(workspace, preferredSlotId)?.routeFingerprint ??
+    null
+  );
 }
 
 export function buildTodayWorkspaceSlotState(
   workspace: DailyWorkspace,
   slotId: string | null,
 ): TodayWorkspaceSlotState {
-  if (!slotId || workspace.leadItem.id !== slotId) {
+  const slot = getTodayWorkspaceSlot(workspace, slotId);
+  if (!slot) {
     return {};
   }
 
   return {
-    lessonDraft: workspace.lessonDraft,
-    lessonBuild: workspace.lessonBuild,
-    activityBuild: workspace.activityBuild,
-    activityState: workspace.activityState,
-    lessonRegenerationNote: workspace.lessonRegenerationNote,
-    expansionIntent: workspace.expansionIntent,
+    lessonDraft: slot.lessonDraft,
+    lessonBuild: slot.lessonBuild,
+    activityBuild: slot.activityBuild,
+    activityState: slot.activityState,
+    lessonRegenerationNote: slot.lessonRegenerationNote,
+    expansionIntent: slot.expansionIntent,
   };
 }
 
@@ -77,55 +117,41 @@ export function buildTodaySlotWorkspace(
   slotId: string | null,
   slotState?: TodayWorkspaceSlotState,
 ) {
-  const resolvedSlotId = resolveTodayWorkspaceSlotId(workspace, slotId);
-  if (!resolvedSlotId) {
+  const slot = getTodayWorkspaceSlot(workspace, slotId);
+  if (!slot) {
     return workspace;
   }
 
-  const selectedItem =
-    workspace.items.find((item) => item.id === resolvedSlotId) ?? workspace.leadItem;
-  const isLeadSlot = workspace.leadItem.id === selectedItem.id;
-
   return {
     ...workspace,
-    leadItem: selectedItem,
-    items: [selectedItem],
-    sessionTargets: selectedItem.objective ? [selectedItem.objective] : [],
+    leadItem: slot.leadItem,
+    items: slot.items,
+    prepChecklist: slot.prepChecklist,
+    sessionTargets: slot.sessionTargets,
+    artifactSlots: slot.artifactSlots,
     lessonDraft:
       slotState?.lessonDraft === undefined
-        ? isLeadSlot
-          ? workspace.lessonDraft
-          : null
+        ? slot.lessonDraft
         : slotState.lessonDraft,
     lessonBuild:
       slotState?.lessonBuild === undefined
-        ? isLeadSlot
-          ? workspace.lessonBuild
-          : null
+        ? slot.lessonBuild
         : slotState.lessonBuild,
     activityBuild:
       slotState?.activityBuild === undefined
-        ? isLeadSlot
-          ? workspace.activityBuild
-          : null
+        ? slot.activityBuild
         : slotState.activityBuild,
     activityState:
       slotState?.activityState === undefined
-        ? isLeadSlot
-          ? workspace.activityState
-          : null
+        ? slot.activityState
         : slotState.activityState,
     lessonRegenerationNote:
       slotState?.lessonRegenerationNote === undefined
-        ? isLeadSlot
-          ? workspace.lessonRegenerationNote
-          : null
+        ? slot.lessonRegenerationNote
         : slotState.lessonRegenerationNote,
     expansionIntent:
       slotState?.expansionIntent === undefined
-        ? isLeadSlot
-          ? workspace.expansionIntent
-          : null
+        ? slot.expansionIntent
         : slotState.expansionIntent,
   } satisfies DailyWorkspace;
 }
@@ -134,30 +160,27 @@ export function buildTodayWorkspaceSlotSummaries(
   workspace: DailyWorkspace,
   slotStates: Record<string, TodayWorkspaceSlotState>,
 ) {
-  return workspace.items.map((item) => {
-    const state = slotStates[item.id];
+  return workspace.slots.map((slot) => {
+    const state = slotStates[slot.id];
     const hasDraft =
       state?.lessonDraft !== undefined
         ? Boolean(state.lessonDraft)
-        : workspace.leadItem.id === item.id && Boolean(workspace.lessonDraft);
+        : Boolean(slot.lessonDraft);
     const lessonBuildStatus =
       state?.lessonBuild !== undefined
         ? state.lessonBuild?.status ?? null
-        : workspace.leadItem.id === item.id
-          ? workspace.lessonBuild?.status ?? null
-          : null;
+        : slot.lessonBuild?.status ?? null;
     const activityStatus =
       state?.activityState !== undefined
         ? state.activityState?.status ?? null
-        : workspace.leadItem.id === item.id
-          ? workspace.activityState?.status ?? null
-          : null;
+        : slot.activityState?.status ?? null;
+    const estimatedMinutes = slot.items.reduce((sum, item) => sum + item.estimatedMinutes, 0);
 
     return {
-      id: item.id,
-      title: item.title,
-      subject: item.subject,
-      estimatedMinutes: item.estimatedMinutes,
+      id: slot.id,
+      title: slot.title,
+      subject: slot.leadItem.subject,
+      estimatedMinutes,
       hasDraft,
       lessonBuildStatus,
       activityStatus,
