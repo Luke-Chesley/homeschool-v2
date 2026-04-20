@@ -12,7 +12,9 @@ import {
   getTodayWorkspaceViewForRender,
   saveTodayExpansionIntent,
   saveTodayLessonRegenerationNote,
+  startNextLessonToday,
 } from "@/lib/planning/today-service";
+import { generateTodayActivity } from "@/lib/planning/today-activity-generation";
 import type {
   DailyWorkspace,
   DailyWorkspaceActivityBuild,
@@ -22,10 +24,10 @@ import type {
 } from "@/lib/planning/types";
 import { expandWeeklyRouteFromToday } from "@/lib/planning/weekly-route-service";
 import { previewLessonDraftActivityPrompt } from "@/lib/learning-core/activity";
+import { buildTodaySlotRouteFingerprint } from "@/lib/planning/today-workspace-patches";
 import { trackProductEvent } from "@/lib/platform/observability";
 import { getLessonEvaluationLabel, type LessonEvaluationLevel } from "@/lib/session-workspace/evaluation";
 import { recordSessionEvaluation } from "@/lib/session-workspace/service";
-import { generateTodayActivity } from "@/lib/planning/today-activity-generation";
 import {
   completeTodayPlanItem,
   partiallyCompleteTodayPlanItem,
@@ -35,10 +37,6 @@ import {
   skipTodayPlanItem,
   swapTodayPlanItemWithAlternate,
 } from "@/lib/planning/today-service";
-
-// ---------------------------------------------------------------------------
-// Lesson-draft activity status
-// ---------------------------------------------------------------------------
 
 export type LessonDraftActivityStatus =
   | "no_draft"
@@ -112,6 +110,11 @@ export interface TodayRouteExpansionResult extends TodayLessonSupportResult {
   workspacePatch?: TodayWorkspacePatch;
 }
 
+export interface TodayStartNextLessonResult extends TodayLessonSupportResult {
+  startedSlotId?: string | null;
+  workspacePatch?: TodayWorkspacePatch;
+}
+
 export interface TodayWorkspacePatch {
   workspace: DailyWorkspace;
   sourceId: string;
@@ -129,26 +132,29 @@ function getExpansionScopeLabel(scope: DailyWorkspaceExpansionScope) {
   }
 }
 
-/**
- * Get the current activity state for today's lesson draft.
- * Drives the UI: no_draft / no_activity / ready / stale.
- */
 export async function getLessonDraftActivityStatusAction(
   input: {
     date: string;
     sourceId: string;
-    routeFingerprint: string;
+    routeFingerprint?: string;
+    slotId?: string | null;
     lessonSessionId?: string | null;
   },
 ): Promise<LessonDraftActivityState> {
   try {
     const session = await requireAppSession();
+    const routeFingerprint = input.routeFingerprint ?? (input.slotId ? buildTodaySlotRouteFingerprint(input.slotId) : null);
+
+    if (!routeFingerprint) {
+      return { ok: false, error: "Missing route fingerprint." };
+    }
+
     const status = await getTodayBuildStatus({
       organizationId: session.organization.id,
       learnerId: session.activeLearner.id,
       date: input.date,
       sourceId: input.sourceId,
-      routeFingerprint: input.routeFingerprint,
+      routeFingerprint,
       lessonSessionId: input.lessonSessionId,
     });
 
@@ -313,8 +319,6 @@ export async function updateTodayPlanItemAction(input: {
           }
         : undefined,
       needsWorkspacePatch: structuralAction,
-      // Back-compat for existing client code while the Today runtime finishes converging on the
-      // narrower "workspace patch" terminology.
       requiresWorkspaceRefresh: structuralAction,
       message: messageByAction[input.action],
     };
@@ -407,20 +411,12 @@ export async function saveTodayPlanItemPortfolioAction(input: {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Generate / regenerate activity for today's lesson draft
-// ---------------------------------------------------------------------------
-
-/**
- * Generate (or regenerate) one activity for today's lesson draft.
- * Idempotent when the draft has not changed.
- * Archives and replaces the activity when the draft changed.
- */
 export async function generateLessonDraftActivityAction(
   input: {
     date: string;
     sourceId: string;
-    routeFingerprint: string;
+    slotId: string;
+    routeFingerprint?: string;
     lessonSessionId?: string | null;
     trigger?: "after_lesson_auto" | "today_resume" | "manual";
   },
@@ -437,6 +433,7 @@ export async function generateLessonDraftActivityAction(
       learnerId: session.activeLearner.id,
       learnerName: session.activeLearner.displayName,
       date: input.date,
+      slotId: input.slotId,
       trigger: input.trigger ?? "manual",
     });
 
@@ -445,7 +442,7 @@ export async function generateLessonDraftActivityAction(
       learnerId: session.activeLearner.id,
       date: input.date,
       sourceId: input.sourceId,
-      routeFingerprint: input.routeFingerprint,
+      routeFingerprint: input.routeFingerprint ?? buildTodaySlotRouteFingerprint(input.slotId),
       lessonSessionId: input.lessonSessionId,
     });
 
@@ -455,10 +452,6 @@ export async function generateLessonDraftActivityAction(
     return { ok: false, error: err instanceof Error ? err.message : "Generation failed" };
   }
 }
-
-// ---------------------------------------------------------------------------
-// Prompt preview for today's lesson draft (debug / transparency)
-// ---------------------------------------------------------------------------
 
 export async function getLessonDraftPromptPreviewAction(
   date: string,
@@ -595,8 +588,6 @@ export async function expandTodayRouteAction(input: {
     };
 
     if (result.status === "expanded") {
-      // This is the one Today action that changes the surrounding schedule structure enough to
-      // matter to other server-rendered surfaces beyond the local client patch.
       revalidatePath("/today");
       revalidatePath("/planning");
 
@@ -650,6 +641,46 @@ export async function expandTodayRouteAction(input: {
     return {
       ok: false,
       error: error instanceof Error ? error.message : "Could not expand the route.",
+    };
+  }
+}
+
+export async function startNextLessonTodayAction(input: {
+  date: string;
+  sourceId: string;
+}): Promise<TodayStartNextLessonResult> {
+  try {
+    const session = await requireAppSession();
+
+    await startNextLessonToday({
+      organizationId: session.organization.id,
+      learnerId: session.activeLearner.id,
+      date: input.date,
+      sourceId: input.sourceId,
+    });
+
+    revalidatePath("/today");
+    revalidatePath("/planning");
+
+    const workspacePatch = await loadTodayWorkspacePatch({
+      organizationId: session.organization.id,
+      learnerId: session.activeLearner.id,
+      learnerName: session.activeLearner.displayName,
+      date: input.date,
+    });
+    const startedSlotId = workspacePatch?.workspace.items.at(-1)?.id ?? null;
+
+    return {
+      ok: true,
+      startedSlotId,
+      workspacePatch: workspacePatch ?? undefined,
+      message: "Pulled the next lesson into today.",
+    };
+  } catch (error) {
+    console.error("[startNextLessonTodayAction]", error);
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Could not add the next lesson to today.",
     };
   }
 }

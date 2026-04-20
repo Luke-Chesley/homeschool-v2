@@ -16,10 +16,14 @@ export function TodayWorkspaceView({ workspace, sourceId }: TodayWorkspaceViewPr
   return (
     <TodayWorkspaceShell
       workspace={state.workspaceState}
+      fullWorkspace={state.fullWorkspaceState}
       sourceId={state.sourceIdState}
       routeFingerprint={state.routeFingerprint}
       draftState={state.draftState}
       repeatTomorrowAllowed={state.repeatTomorrowAllowed}
+      slotSummaries={state.slotSummaries}
+      selectedSlotId={state.selectedSlotId}
+      onSelectSlot={state.setSelectedSlotId}
       onItemActionSaved={state.handleItemActionSaved}
       onEvaluationSaved={state.handleEvaluationSaved}
       onLessonPatch={state.handleLessonPatch}

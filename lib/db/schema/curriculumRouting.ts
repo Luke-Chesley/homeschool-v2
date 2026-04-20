@@ -267,6 +267,7 @@ export const weeklyRouteItems = pgTable(
     recommendedPosition: orderingColumn("recommended_position"),
     currentPosition: orderingColumn("current_position"),
     scheduledDate: date("scheduled_date"),
+    scheduledSlotIndex: integer("scheduled_slot_index"),
     manualOverrideKind: weeklyRouteOverrideKindEnum("manual_override_kind").notNull().default("none"),
     manualOverrideNote: text("manual_override_note"),
     state: weeklyRouteItemStateEnum("state").notNull().default("queued"),

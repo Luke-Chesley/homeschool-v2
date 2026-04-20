@@ -46,6 +46,7 @@ export const WeeklyRouteDailySelectionHandoffSchema = z.object({
   curriculumSkillNodeId: z.string(),
   currentPosition: z.number().int().nonnegative(),
   scheduledDate: z.string().nullable(),
+  scheduledSlotIndex: z.number().int().positive().nullable(),
   state: WeeklyRouteItemStateSchema,
 });
 
@@ -66,6 +67,7 @@ export const WeeklyRouteBoardItemSchema = z.object({
   recommendedPosition: z.number().int().nonnegative(),
   currentPosition: z.number().int().nonnegative(),
   scheduledDate: z.string().nullable(),
+  scheduledSlotIndex: z.number().int().positive().nullable(),
   manualOverrideKind: WeeklyRouteManualOverrideKindSchema,
   manualOverrideNote: z.string().nullable(),
   state: WeeklyRouteItemStateSchema,

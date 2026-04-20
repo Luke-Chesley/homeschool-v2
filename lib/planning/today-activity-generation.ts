@@ -8,7 +8,6 @@ import { computeLessonDraftFingerprint } from "@/lib/lesson-draft/fingerprint";
 import { trackProductEvent } from "@/lib/platform/observability";
 import type { DailyWorkspaceActivityBuildTrigger } from "@/lib/planning/types";
 import {
-  buildTodayLessonDraftFingerprint,
   getTodayWorkspaceView,
   materializeTodayWorkspace,
   markTodayActivityBuildFailed,
@@ -22,6 +21,7 @@ export async function queueTodayActivityAfterLesson(params: {
   learnerId: string;
   learnerName: string;
   date: string;
+  slotId?: string | null;
   trigger: DailyWorkspaceActivityBuildTrigger;
 }) {
   await materializeTodayWorkspace({
@@ -38,24 +38,29 @@ export async function queueTodayActivityAfterLesson(params: {
     date: params.date,
   });
 
-  if (!workspaceResult?.workspace.lessonDraft?.structured || workspaceResult.workspace.items.length === 0) {
+  const slot =
+    (params.slotId
+      ? workspaceResult?.workspace.slots.find((entry) => entry.id === params.slotId)
+      : workspaceResult?.workspace.slots[0]) ?? null;
+  if (!workspaceResult || !slot?.lessonDraft?.structured || slot.items.length === 0) {
     return null;
   }
 
-  const routeFingerprint = buildTodayLessonDraftFingerprint(
-    workspaceResult.workspace.items.map((item) => item.id),
-  );
+  const routeFingerprint = slot.routeFingerprint;
   const lessonSessionId =
-    workspaceResult.workspace.leadItem.sessionRecordId ??
-    workspaceResult.workspace.leadItem.workflow?.lessonSessionId ??
+    slot.leadItem.sessionRecordId ??
+    slot.leadItem.workflow?.lessonSessionId ??
     null;
 
   const build = await queueTodayActivityBuild({
     organizationId: params.organizationId,
     learnerId: params.learnerId,
     date: params.date,
+    slotId: slot.id,
     sourceId: workspaceResult.sourceId,
     routeFingerprint,
+    slotIndex: slot.slotIndex,
+    title: slot.title,
     lessonSessionId,
     trigger: params.trigger,
   });
@@ -67,9 +72,11 @@ export async function queueTodayActivityAfterLesson(params: {
     metadata: {
       trigger: params.trigger,
       sourceId: workspaceResult.sourceId,
+      slotId: slot.id,
+      slotIndex: slot.slotIndex,
       routeFingerprint,
       lessonSessionId,
-      itemCount: workspaceResult.workspace.items.length,
+      itemCount: slot.items.length,
     },
   });
 
@@ -81,6 +88,7 @@ export async function generateTodayActivity(params: {
   learnerId: string;
   learnerName: string;
   date: string;
+  slotId?: string | null;
   trigger: DailyWorkspaceActivityBuildTrigger;
 }) {
   const repos = createRepositories(getDb());
@@ -105,17 +113,23 @@ export async function generateTodayActivity(params: {
     throw new Error("Workspace not found");
   }
 
-  const lessonDraft = workspaceResult.workspace.lessonDraft?.structured;
+  const slot =
+    (params.slotId
+      ? workspaceResult.workspace.slots.find((entry) => entry.id === params.slotId)
+      : workspaceResult.workspace.slots[0]) ?? null;
+  if (!slot) {
+    throw new Error("Lesson slot not found.");
+  }
+
+  const lessonDraft = slot.lessonDraft?.structured;
   if (!lessonDraft) {
     throw new Error("No lesson draft — generate a lesson plan first.");
   }
 
-  const leadItem = workspaceResult.workspace.leadItem;
+  const leadItem = slot.leadItem;
   const lessonSessionId = leadItem.sessionRecordId ?? leadItem.workflow?.lessonSessionId;
   const leadPlanItemId = leadItem.planRecordId ?? leadItem.workflow?.planItemId;
-  const routeFingerprint = buildTodayLessonDraftFingerprint(
-    workspaceResult.workspace.items.map((item) => item.id),
-  );
+  const routeFingerprint = slot.routeFingerprint;
 
   if (!lessonSessionId) {
     throw new Error("Session record not found — try refreshing the page.");
@@ -125,8 +139,11 @@ export async function generateTodayActivity(params: {
     organizationId: params.organizationId,
     learnerId: params.learnerId,
     date: params.date,
+    slotId: slot.id,
     sourceId: workspaceResult.sourceId,
     routeFingerprint,
+    slotIndex: slot.slotIndex,
+    title: slot.title,
     lessonSessionId,
     trigger: params.trigger,
   });
@@ -136,11 +153,13 @@ export async function generateTodayActivity(params: {
     organizationId: params.organizationId,
     learnerId: params.learnerId,
     metadata: {
-      trigger: params.trigger,
-      sourceId: workspaceResult.sourceId,
-      routeFingerprint,
-      lessonSessionId,
-    },
+        trigger: params.trigger,
+        sourceId: workspaceResult.sourceId,
+        slotId: slot.id,
+        slotIndex: slot.slotIndex,
+        routeFingerprint,
+        lessonSessionId,
+      },
   });
 
   try {
@@ -152,7 +171,7 @@ export async function generateTodayActivity(params: {
       lessonDraftFingerprint: computeLessonDraftFingerprint(lessonDraft),
       learnerName: params.learnerName,
       workflowMode,
-      planItems: workspaceResult.workspace.items,
+      planItems: slot.items,
       leadPlanItemId: leadPlanItemId ?? undefined,
     });
 
@@ -160,8 +179,11 @@ export async function generateTodayActivity(params: {
       organizationId: params.organizationId,
       learnerId: params.learnerId,
       date: params.date,
+      slotId: slot.id,
       sourceId: workspaceResult.sourceId,
       routeFingerprint,
+      slotIndex: slot.slotIndex,
+      title: slot.title,
       lessonSessionId,
       activityId: published.activityId,
       trigger: params.trigger,
@@ -174,6 +196,8 @@ export async function generateTodayActivity(params: {
       metadata: {
         trigger: params.trigger,
         sourceId: workspaceResult.sourceId,
+        slotId: slot.id,
+        slotIndex: slot.slotIndex,
         routeFingerprint,
         lessonSessionId,
         activityId: published.activityId,
@@ -189,8 +213,11 @@ export async function generateTodayActivity(params: {
       organizationId: params.organizationId,
       learnerId: params.learnerId,
       date: params.date,
+      slotId: slot.id,
       sourceId: workspaceResult.sourceId,
       routeFingerprint,
+      slotIndex: slot.slotIndex,
+      title: slot.title,
       lessonSessionId,
       trigger: params.trigger,
       error: message,
@@ -203,6 +230,8 @@ export async function generateTodayActivity(params: {
       metadata: {
         trigger: params.trigger,
         sourceId: workspaceResult.sourceId,
+        slotId: slot.id,
+        slotIndex: slot.slotIndex,
         routeFingerprint,
         lessonSessionId,
         error: message,

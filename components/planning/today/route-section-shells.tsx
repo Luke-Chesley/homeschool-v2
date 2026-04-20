@@ -194,6 +194,7 @@ export function TodayLessonPlanSection({
   workspace,
   sourceId,
   routeFingerprint,
+  slotId,
   draftState,
   buildState,
   onLessonPatch,
@@ -206,6 +207,7 @@ export function TodayLessonPlanSection({
   workspace: DailyWorkspace;
   sourceId?: string;
   routeFingerprint: string;
+  slotId?: string;
   draftState?: DraftState;
   buildState?: DailyWorkspaceLessonBuild | null;
   onLessonPatch?: (patch: {
@@ -220,9 +222,11 @@ export function TodayLessonPlanSection({
   compact?: boolean;
 }) {
   const totalMinutes = workspace.items.reduce((sum, item) => sum + item.estimatedMinutes, 0);
+  const resolvedSlotId = slotId ?? workspace.slots[0]?.id ?? workspace.leadItem.planDaySlotId ?? routeFingerprint;
   const contextKey = JSON.stringify({
     date: workspace.date,
     sourceId,
+    slotId: resolvedSlotId,
     leadItemId: workspace.leadItem.id,
     objectives: workspace.sessionTargets,
     routeItems: workspace.items.map((item) => ({
@@ -239,6 +243,7 @@ export function TodayLessonPlanSection({
         key={contextKey}
         date={workspace.date}
         sourceId={sourceId}
+        slotId={resolvedSlotId}
         routeFingerprint={routeFingerprint}
         sourceTitle={workspace.leadItem.sourceLabel}
         routeItemCount={workspace.items.length}

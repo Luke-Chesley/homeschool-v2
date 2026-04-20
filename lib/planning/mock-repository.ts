@@ -910,11 +910,57 @@ function buildDailyWorkspace(date: string): DailyWorkspace {
   const alternatesByPlanItemId = Object.fromEntries(
     day.items.map((item) => [item.id, getAlternatesForPlanItem(item)]),
   );
+  const slot = {
+    id: `slot-${date}-1`,
+    date,
+    sourceId: "source-demo-1",
+    slotIndex: 1,
+    title: "Lesson 1",
+    origin: "system_generated" as const,
+    status: "planned" as const,
+    routeFingerprint: day.items.map((item) => item.id).join("::"),
+    leadItem,
+    items: day.items,
+    prepChecklist: [
+      "Lay out math manipulatives and the writing conference notebook before the first block.",
+      "Pull the carried-over science journal so it does not disappear behind fresh work.",
+      "Hold a two-minute check-in before lunch to decide whether compression is needed.",
+    ],
+    sessionTargets: [
+      "Finish the lead math lesson with written evidence worth saving.",
+      "Capture one concrete revision decision during writing.",
+      "Close the carried-over science note so the weekly record stays trustworthy.",
+    ],
+    artifactSlots: [
+      {
+        label: "Lesson artifacts",
+        status: "open" as const,
+        description: "Reserved space for generated explanations, worksheets, and teacher notes once the artifact pipeline lands.",
+      },
+      {
+        label: "Copilot follow-ups",
+        status: "waiting" as const,
+        description: "Planning and reteach prompts can drop here after the copilot surface is merged.",
+      },
+      {
+        label: "Tracking handoff",
+        status: "suggested" as const,
+        description: "Completion, mastery, and notes should flow from this workspace into the reporting layer.",
+      },
+    ],
+    lessonDraft: null,
+    lessonBuild: null,
+    activityBuild: null,
+    activityState: { status: "no_draft" as const },
+    lessonRegenerationNote: null,
+    expansionIntent: null,
+  };
 
   return {
     date,
     headline: "Run the day with enough structure to adapt in real time.",
     learner,
+    slots: [slot],
     leadItem,
     items: day.items,
     prepChecklist: [

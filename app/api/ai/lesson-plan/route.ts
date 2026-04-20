@@ -10,6 +10,7 @@ const RequestSchema = z.object({
   date: z.string().optional(),
   debug: z.boolean().optional(),
   trigger: z.enum(["onboarding_auto", "today_resume", "manual"]).optional(),
+  slotId: z.string().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -34,10 +35,12 @@ export async function POST(req: NextRequest) {
       learnerId: session.activeLearner.id,
       learnerName: session.activeLearner.displayName,
       date,
+      slotId: parsed.data.slotId,
     });
 
     return NextResponse.json({
       date,
+      slotId: parsed.data.slotId ?? null,
       debug: promptPreview,
     });
   }
@@ -50,6 +53,7 @@ export async function POST(req: NextRequest) {
       learnerId: session.activeLearner.id,
       learnerName: session.activeLearner.displayName,
       date,
+      slotId: parsed.data.slotId,
       trigger,
       forceRegenerate: trigger === "manual",
     });
@@ -71,6 +75,7 @@ export async function POST(req: NextRequest) {
       sourceId: result.sourceId,
       sourceTitle: result.sourceTitle,
       routeFingerprint: result.routeFingerprint,
+      slotId: parsed.data.slotId ?? null,
       date: result.date,
       summary: result.summary,
       lineage: result.lineage,

@@ -21,6 +21,7 @@ import { formatMinutes } from "./types";
 export function LessonDraftActivityControl({
   date,
   sourceId,
+  slotId,
   routeFingerprint,
   activityState,
   sessionId,
@@ -29,6 +30,7 @@ export function LessonDraftActivityControl({
 }: {
   date: string;
   sourceId?: string;
+  slotId: string;
   routeFingerprint: string;
   activityState: DailyWorkspaceActivityState | null;
   sessionId?: string;
@@ -63,6 +65,7 @@ export function LessonDraftActivityControl({
       const result = await generateLessonDraftActivityAction({
         date,
         sourceId: sourceId ?? "",
+        slotId,
         routeFingerprint,
         lessonSessionId: activityState?.sessionId ?? sessionId ?? null,
         trigger,
@@ -205,12 +208,14 @@ export function TodayLearnerActivityBridge({
   workspace,
   draftState,
   sourceId,
+  slotId,
   routeFingerprint,
   onActivityPatch,
 }: {
   workspace: DailyWorkspace;
   draftState: DraftState;
   sourceId?: string;
+  slotId: string;
   routeFingerprint: string;
   onActivityPatch: (patch: {
     activityBuild?: DailyWorkspace["activityBuild"] | null;
@@ -279,6 +284,7 @@ export function TodayLearnerActivityBridge({
             <LessonDraftActivityControl
               date={workspace.date}
               sourceId={sourceId}
+              slotId={slotId}
               routeFingerprint={routeFingerprint}
               activityState={workspace.activityState}
               sessionId={workspace.activityState?.sessionId ?? leadSessionId}

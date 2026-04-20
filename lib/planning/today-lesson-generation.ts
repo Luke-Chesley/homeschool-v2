@@ -8,7 +8,6 @@ import { ACTIVATION_EVENT_NAMES } from "@/lib/homeschool/onboarding/activation-c
 import { trackProductEvent } from "@/lib/platform/observability";
 import type { DailyWorkspaceLessonBuildTrigger } from "@/lib/planning/types";
 import {
-  buildTodayLessonDraftFingerprint,
   getSavedTodayLessonRegenerationNote,
   getTodayWorkspaceView,
   materializeTodayWorkspace,
@@ -91,6 +90,7 @@ async function buildTodayLessonGenerationContext(params: {
   learnerId: string;
   learnerName: string;
   date: string;
+  slotId?: string | null;
 }) {
   const repos = getRepositories();
   const platformSettings = await repos.organizations.findPlatformSettings(params.organizationId);
@@ -114,15 +114,25 @@ async function buildTodayLessonGenerationContext(params: {
     throw new Error("No route items available for lesson plan generation.");
   }
 
+  const slot =
+    (params.slotId
+      ? workspaceResult.workspace.slots.find((entry) => entry.id === params.slotId)
+      : workspaceResult.workspace.slots[0]) ?? null;
+
+  if (!slot || slot.items.length === 0) {
+    throw new Error("No lesson slot is available for lesson plan generation.");
+  }
+
   const source = await getCurriculumSource(workspaceResult.sourceId, params.organizationId);
   const { intake, sourceModel, launchPlan, curriculumLineage } =
     resolveCurriculumLaunchMetadata(source);
   const { workspace, planningContext, sessionTiming, sourceId, sourceTitle } = workspaceResult;
-  const routeFingerprint = buildTodayLessonDraftFingerprint(workspace.items.map((item) => item.id));
+  const routeFingerprint = slot.routeFingerprint;
   const regenerationNote = await getSavedTodayLessonRegenerationNote({
     organizationId: params.organizationId,
     learnerId: params.learnerId,
     date: params.date,
+    slotId: slot.id,
     sourceId,
     routeFingerprint,
   });
@@ -130,15 +140,15 @@ async function buildTodayLessonGenerationContext(params: {
 
   const input = {
     title: sourceTitle,
-    topic: workspace.leadItem.title,
+    topic: slot.leadItem.title,
     resolvedTiming: {
       resolvedTotalMinutes: sessionTiming.resolvedTotalMinutes,
       sourceSessionMinutes: sessionTiming.sourceSessionMinutes,
       lessonOverrideMinutes: sessionTiming.lessonOverrideMinutes,
       timingSource: sessionTiming.timingSource,
     },
-    objectives: workspace.sessionTargets,
-    routeItems: workspace.items.map((item) => ({
+    objectives: slot.sessionTargets,
+    routeItems: slot.items.map((item) => ({
       title: item.title,
       subject: item.subject,
       estimatedMinutes: item.estimatedMinutes,
@@ -146,14 +156,14 @@ async function buildTodayLessonGenerationContext(params: {
       lessonLabel: item.lessonLabel,
       note: item.note,
     })),
-    materials: workspace.items.flatMap((item) => item.materials).slice(0, 8),
+    materials: slot.items.flatMap((item) => item.materials).slice(0, 8),
     context: {
       learnerId: workspace.learner.id,
       learnerName: workspace.learner.name,
       curriculumSourceId: sourceId,
-      lessonId: workspace.leadItem.curriculum?.weeklyRouteItemId,
-      standardIds: workspace.items.flatMap((item) => item.standards),
-      goalIds: workspace.items.flatMap((item) => item.goals),
+      lessonId: slot.leadItem.curriculum?.weeklyRouteItemId,
+      standardIds: slot.items.flatMap((item) => item.standards),
+      goalIds: slot.items.flatMap((item) => item.goals),
       curriculumSnapshot: planningContext?.curriculumSnapshot,
       weeklyPlanningSnapshot: planningContext?.weeklyPlanningSnapshot,
       feedbackNotes: lessonOutcomeFeedback.feedbackNotes,
@@ -195,14 +205,19 @@ async function buildTodayLessonGenerationContext(params: {
       dailyWorkspaceSnapshot: {
         date: workspace.date,
         headline: workspace.headline,
-        leadLesson: {
-          title: workspace.leadItem.title,
-          subject: workspace.leadItem.subject,
-          objective: workspace.leadItem.objective,
-          lessonLabel: workspace.leadItem.lessonLabel,
-          estimatedMinutes: workspace.leadItem.estimatedMinutes,
+        slot: {
+          id: slot.id,
+          slotIndex: slot.slotIndex,
+          title: slot.title,
         },
-        planItems: workspace.items.map((item) => ({
+        leadLesson: {
+          title: slot.leadItem.title,
+          subject: slot.leadItem.subject,
+          objective: slot.leadItem.objective,
+          lessonLabel: slot.leadItem.lessonLabel,
+          estimatedMinutes: slot.leadItem.estimatedMinutes,
+        },
+        planItems: slot.items.map((item) => ({
           title: item.title,
           subject: item.subject,
           objective: item.objective,
@@ -212,19 +227,20 @@ async function buildTodayLessonGenerationContext(params: {
           materials: item.materials,
           copilotPrompts: item.copilotPrompts,
         })),
-        prepChecklist: workspace.prepChecklist,
-        sessionTargets: workspace.sessionTargets,
+        prepChecklist: slot.prepChecklist,
+        sessionTargets: slot.sessionTargets,
         copilotInsertions: workspace.copilotInsertions,
         completionPrompts: workspace.completionPrompts,
         familyNotes: workspace.familyNotes,
       },
     },
-  } as const;
+  };
 
   return {
     repos,
     workflowMode,
     workspaceResult,
+    slot,
     source,
     sourceId,
     sourceTitle,
@@ -241,6 +257,7 @@ export async function previewTodayLessonDraft(params: {
   learnerId: string;
   learnerName: string;
   date: string;
+  slotId?: string | null;
 }) {
   const context = await buildTodayLessonGenerationContext(params);
 
@@ -249,7 +266,7 @@ export async function previewTodayLessonDraft(params: {
     surface: "planning",
     organizationId: params.organizationId,
     learnerId: params.learnerId,
-    planItemIds: context.workspaceResult.workspace.items.map((item) => item.id),
+    planItemIds: context.slot.items.map((item) => item.id),
     workflowMode: context.workflowMode,
   });
 }
@@ -259,21 +276,24 @@ export async function generateTodayLessonDraft(params: {
   learnerId: string;
   learnerName: string;
   date: string;
+  slotId?: string | null;
   trigger: TodayLessonGenerationTrigger;
   forceRegenerate?: boolean;
 }) {
   const context = await buildTodayLessonGenerationContext(params);
-  const existingDraft = context.workspaceResult.workspace.lessonDraft;
+  const existingDraft = context.slot.lessonDraft;
   const lessonBuildMetadata = {
     trigger: params.trigger,
     sourceId: context.sourceId,
+    slotId: context.slot.id,
+    slotIndex: context.slot.slotIndex,
     routeFingerprint: context.routeFingerprint,
     requestedRoute: context.sourceModel?.requestedRoute ?? context.source?.intake?.requestedRoute ?? null,
     routedRoute: context.sourceModel?.routedRoute ?? context.source?.intake?.route ?? null,
     sourceKind: context.sourceModel?.sourceKind ?? null,
     recommendedHorizon:
       context.launchPlan?.chosenHorizon ?? context.sourceModel?.recommendedHorizon ?? null,
-    itemCount: context.workspaceResult.workspace.items.length,
+    itemCount: context.slot.items.length,
   };
 
   if (!params.forceRegenerate && existingDraft?.structured) {
@@ -281,8 +301,11 @@ export async function generateTodayLessonDraft(params: {
       organizationId: params.organizationId,
       learnerId: params.learnerId,
       date: params.date,
+      slotId: context.slot.id,
       sourceId: context.sourceId,
       routeFingerprint: context.routeFingerprint,
+      slotIndex: context.slot.slotIndex,
+      title: context.slot.title,
       trigger: params.trigger,
     });
 
@@ -292,6 +315,7 @@ export async function generateTodayLessonDraft(params: {
       artifactId: null,
       sourceId: context.sourceId,
       sourceTitle: context.sourceTitle,
+      slotId: context.slot.id,
       routeFingerprint: context.routeFingerprint,
       date: params.date,
       summary: buildTodayLessonGenerationSummary({ workspaceResult: context.workspaceResult }),
@@ -305,8 +329,11 @@ export async function generateTodayLessonDraft(params: {
     organizationId: params.organizationId,
     learnerId: params.learnerId,
     date: params.date,
+    slotId: context.slot.id,
     sourceId: context.sourceId,
     routeFingerprint: context.routeFingerprint,
+    slotIndex: context.slot.slotIndex,
+    title: context.slot.title,
     trigger: params.trigger,
   });
 
@@ -323,7 +350,7 @@ export async function generateTodayLessonDraft(params: {
       surface: "planning",
       organizationId: params.organizationId,
       learnerId: params.learnerId,
-      planItemIds: context.workspaceResult.workspace.items.map((item) => item.id),
+      planItemIds: context.slot.items.map((item) => item.id),
       workflowMode: context.workflowMode,
     });
 
@@ -358,7 +385,9 @@ export async function generateTodayLessonDraft(params: {
       },
       costMetadata: {},
       metadata: {
-        routeItemIds: context.workspaceResult.workspace.items.map((item) => item.id),
+        routeItemIds: context.slot.items.map((item) => item.id),
+        slotId: context.slot.id,
+        slotIndex: context.slot.slotIndex,
         trigger: params.trigger,
       },
     });
@@ -367,9 +396,12 @@ export async function generateTodayLessonDraft(params: {
       organizationId: params.organizationId,
       learnerId: params.learnerId,
       date: params.date,
+      slotId: context.slot.id,
       sourceId: context.sourceId,
       sourceTitle: context.sourceTitle,
       routeFingerprint: context.routeFingerprint,
+      slotIndex: context.slot.slotIndex,
+      title: context.slot.title,
       structured: result.artifact,
       promptVersion: result.lineage.skill_version,
     });
@@ -378,8 +410,11 @@ export async function generateTodayLessonDraft(params: {
       organizationId: params.organizationId,
       learnerId: params.learnerId,
       date: params.date,
+      slotId: context.slot.id,
       sourceId: context.sourceId,
       routeFingerprint: context.routeFingerprint,
+      slotIndex: context.slot.slotIndex,
+      title: context.slot.title,
       trigger: params.trigger,
     });
 
@@ -399,6 +434,7 @@ export async function generateTodayLessonDraft(params: {
       learnerId: params.learnerId,
       learnerName: params.learnerName,
       date: params.date,
+      slotId: context.slot.id,
       trigger: "after_lesson_auto",
     });
 
@@ -408,6 +444,7 @@ export async function generateTodayLessonDraft(params: {
       artifactId: artifact.id,
       sourceId: context.sourceId,
       sourceTitle: context.sourceTitle,
+      slotId: context.slot.id,
       routeFingerprint: context.routeFingerprint,
       date: params.date,
       summary: buildTodayLessonGenerationSummary({ workspaceResult: context.workspaceResult }),
@@ -423,8 +460,11 @@ export async function generateTodayLessonDraft(params: {
       organizationId: params.organizationId,
       learnerId: params.learnerId,
       date: params.date,
+      slotId: context.slot.id,
       sourceId: context.sourceId,
       routeFingerprint: context.routeFingerprint,
+      slotIndex: context.slot.slotIndex,
+      title: context.slot.title,
       trigger: params.trigger,
       error: message,
     });

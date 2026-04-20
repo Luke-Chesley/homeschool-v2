@@ -33,7 +33,6 @@ import {
 
 const LESSON_PLAN_PROMPT_PANEL_ID = "lesson-plan-prompt-preview";
 
-// DraftState mirrors the type in today-workspace-view without a cross-import
 type DraftState =
   | { kind: "structured"; draft: StructuredLessonDraft }
   | { kind: "markdown"; markdown: string }
@@ -42,6 +41,7 @@ type DraftState =
 interface LessonPlanPanelProps {
   date: string;
   sourceId?: string;
+  slotId?: string;
   routeFingerprint: string;
   sourceTitle: string;
   routeItemCount: number;
@@ -90,6 +90,7 @@ type PromptDebugState =
 export function LessonPlanPanel({
   date,
   sourceId,
+  slotId,
   routeFingerprint,
   sourceTitle,
   routeItemCount,
@@ -107,6 +108,7 @@ export function LessonPlanPanel({
   onWorkspacePatch,
   showDraftOutput = true,
 }: LessonPlanPanelProps) {
+  const resolvedSlotId = slotId ?? routeFingerprint.replace(/^slot:/, "");
   const [state, setState] = useState<LessonPlanState>({ status: "idle" });
   const [promptDebugState, setPromptDebugState] = useState<PromptDebugState>({ status: "idle" });
   const [activeTrigger, setActiveTrigger] = useState<
@@ -123,6 +125,7 @@ export function LessonPlanPanel({
       JSON.stringify({
         date,
         sourceId,
+        slotId: resolvedSlotId,
         routeFingerprint,
         sourceTitle,
         routeItemCount,
@@ -134,6 +137,7 @@ export function LessonPlanPanel({
     [
       date,
       sourceId,
+      resolvedSlotId,
       routeFingerprint,
       sourceTitle,
       routeItemCount,
@@ -172,7 +176,7 @@ export function LessonPlanPanel({
         : null;
   const lessonAutoBuildKey =
     buildState?.status === "queued"
-      ? `${date}:${sourceId ?? "live"}:${buildState.routeFingerprint}:${buildState.queuedAt ?? buildState.updatedAt}`
+      ? `${date}:${resolvedSlotId}:${buildState.routeFingerprint}:${buildState.queuedAt ?? buildState.updatedAt}`
       : null;
 
   async function requestDraft(
@@ -186,7 +190,7 @@ export function LessonPlanPanel({
       const response = await fetch("/api/ai/lesson-plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date, sourceId, trigger }),
+        body: JSON.stringify({ date, sourceId, slotId: resolvedSlotId, trigger }),
       });
 
       const data = (await response.json()) as
@@ -266,7 +270,7 @@ export function LessonPlanPanel({
       const response = await fetch("/api/ai/lesson-plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date, sourceId, debug: true }),
+        body: JSON.stringify({ date, sourceId, slotId: resolvedSlotId, debug: true }),
       });
 
       const data = (await response.json()) as
@@ -391,6 +395,7 @@ export function LessonPlanPanel({
         <div className="space-y-5 p-5">
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="outline">Slot</Badge>
               <Badge variant="outline">{routeItemCount} items</Badge>
               <Badge variant="outline">{totalMinutes} min</Badge>
               <Badge variant="outline">{objectiveCount} targets</Badge>

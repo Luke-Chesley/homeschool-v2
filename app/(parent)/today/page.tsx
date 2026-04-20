@@ -75,7 +75,7 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
         <p className="section-meta">{formatLongDate(workspace.date)}</p>
         <h1 className="page-title">Today</h1>
         <div className="toolbar-row text-sm text-muted-foreground">
-          <span>{workspace.items.length} items</span>
+          <span>{workspace.items.length} lesson slots</span>
           <span>{sessionTiming.resolvedTotalMinutes} min</span>
         </div>
       </header>

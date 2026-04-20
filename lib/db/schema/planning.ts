@@ -28,6 +28,21 @@ export const planItemStatusEnum = pgEnum("plan_item_status", [
   "carried_over",
 ]);
 
+export const planDaySlotOriginEnum = pgEnum("plan_day_slot_origin", [
+  "manual",
+  "system_generated",
+  "template",
+  "carryover",
+]);
+
+export const planDaySlotStatusEnum = pgEnum("plan_day_slot_status", [
+  "planned",
+  "in_progress",
+  "completed",
+  "skipped",
+  "canceled",
+]);
+
 export const lessonSessionStatusEnum = pgEnum("lesson_session_status", [
   "planned",
   "in_progress",
@@ -127,6 +142,41 @@ export const planDays = pgTable(
   }),
 );
 
+export const planDaySlots = pgTable(
+  "plan_day_slots",
+  {
+    id: text("id").primaryKey().$defaultFn(() => prefixedId("slot")),
+    planId: text("plan_id")
+      .notNull()
+      .references(() => plans.id, { onDelete: "cascade" }),
+    planDayId: text("plan_day_id")
+      .notNull()
+      .references(() => planDays.id, { onDelete: "cascade" }),
+    slotIndex: integer("slot_index").notNull(),
+    title: text("title").notNull(),
+    origin: planDaySlotOriginEnum("origin").notNull().default("manual"),
+    status: planDaySlotStatusEnum("status").notNull().default("planned"),
+    plannedMinutes: integer("planned_minutes"),
+    startsAtMinutes: integer("starts_at_minutes"),
+    endsAtMinutes: integer("ends_at_minutes"),
+    notes: text("notes"),
+    metadata: metadataColumn(),
+    ...timestamps(),
+  },
+  (table) => ({
+    planDaySlotsPlanIdx: index("plan_day_slots_plan_idx").on(table.planId, table.createdAt),
+    planDaySlotsPlanDayIdx: index("plan_day_slots_plan_day_idx").on(
+      table.planDayId,
+      table.slotIndex,
+      table.createdAt,
+    ),
+    planDaySlotsUnique: uniqueIndex("plan_day_slots_day_slot_idx").on(
+      table.planDayId,
+      table.slotIndex,
+    ),
+  }),
+);
+
 export const planItems = pgTable(
   "plan_items",
   {
@@ -137,6 +187,9 @@ export const planItems = pgTable(
     planDayId: text("plan_day_id")
       .notNull()
       .references(() => planDays.id, { onDelete: "cascade" }),
+    planDaySlotId: text("plan_day_slot_id").references(() => planDaySlots.id, {
+      onDelete: "set null",
+    }),
     curriculumItemId: text("curriculum_item_id").references(() => curriculumItems.id, {
       onDelete: "set null",
     }),
@@ -157,9 +210,13 @@ export const planItems = pgTable(
       table.ordering,
       table.createdAt,
     ),
+    planItemsPlanDaySlotIdx: index("plan_items_plan_day_slot_idx").on(
+      table.planDaySlotId,
+      table.ordering,
+      table.createdAt,
+    ),
   }),
 );
-
 export const planItemStandards = pgTable(
   "plan_item_standards",
   {
@@ -191,6 +248,9 @@ export const lessonSessions = pgTable("lesson_sessions", {
     .references(() => learners.id, { onDelete: "cascade" }),
   planId: text("plan_id").references(() => plans.id, { onDelete: "set null" }),
   planDayId: text("plan_day_id").references(() => planDays.id, { onDelete: "set null" }),
+  planDaySlotId: text("plan_day_slot_id").references(() => planDaySlots.id, {
+    onDelete: "set null",
+  }),
   planItemId: text("plan_item_id")
     .notNull()
     .references(() => planItems.id, { onDelete: "cascade" }),

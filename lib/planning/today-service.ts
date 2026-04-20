@@ -20,6 +20,7 @@ import {
   interactiveActivities,
   lessonSessions,
   planDays,
+  planDaySlots,
   planItemCurriculumLinks,
   planItems,
   plans,
@@ -37,6 +38,7 @@ import type {
   DailyWorkspaceActivityBuildTrigger,
   DailyWorkspaceExpansionIntent,
   DailyWorkspace,
+  DailyWorkspaceSlot,
   DailyWorkspaceLessonBuild,
   DailyWorkspaceLessonDraft,
   PlanItem,
@@ -77,12 +79,21 @@ const TODAY_WORKSPACE_FRESHNESS_KEY = "todayWorkspaceFreshness";
 type TodayMaterializedWorkflowEntry = {
   planParentId: string;
   planDayRecordId: string;
+  planDaySlotId: string | null;
+  planDaySlotIndex: number | null;
   planItemId: string;
   lessonSessionId: string | null;
   completionStatus: string | null;
   reviewState: string | null;
   evidenceCount: number;
   activityCount: number;
+};
+
+type TodayRouteSlotSelection = {
+  slotIndex: number;
+  title: string;
+  routeFingerprint: string;
+  routeItems: WeeklyRouteBoard["items"];
 };
 
 type TodayWorkspaceContext = {
@@ -92,6 +103,7 @@ type TodayWorkspaceContext = {
   sessionTiming: LessonTimingContract;
   sessionBudgetMinutes: number;
   board: WeeklyRouteBoard;
+  selectedRouteSlots: TodayRouteSlotSelection[];
   selectedRouteItems: WeeklyRouteBoard["items"];
   nodeById: Map<string, Awaited<ReturnType<typeof listCurriculumNodes>>[number]>;
   planningContext: ReturnType<typeof buildCopilotPlanningContext>;
@@ -126,6 +138,7 @@ type TodayWorkspaceFreshnessState = {
 type TodayPlanItemPayload = {
   planId: string;
   planDayId: string;
+  planDaySlotId: string;
   curriculumItemId: null;
   title: string;
   description: string;
@@ -179,6 +192,10 @@ function isLessonEvaluationLevel(value: unknown): value is LessonEvaluationLevel
 
 export function buildTodayLessonDraftFingerprint(itemIds: string[]) {
   return itemIds.join("::");
+}
+
+function normalizeSlotIndex(value: number | null | undefined) {
+  return typeof value === "number" && value > 0 ? value : 1;
 }
 
 function isLessonBuildStatus(value: unknown): value is DailyWorkspaceLessonBuildStatus {
@@ -584,6 +601,289 @@ async function getOrCreateTodayWorkspaceDay(params: {
   return createdDay;
 }
 
+async function getTodayWorkspaceDaySlots(params: {
+  organizationId: string;
+  learnerId: string;
+  date: string;
+}) {
+  const workspacePlan = await getTodayWorkspacePlan(params.organizationId, params.learnerId);
+  if (!workspacePlan) {
+    return [];
+  }
+
+  const workspaceDay = await getTodayWorkspaceDay(params);
+  if (!workspaceDay) {
+    return [];
+  }
+
+  const db = getDb();
+  return db.query.planDaySlots.findMany({
+    where: eq(planDaySlots.planDayId, workspaceDay.id),
+    orderBy: [asc(planDaySlots.slotIndex), asc(planDaySlots.createdAt)],
+  });
+}
+
+async function getOrCreateTodayWorkspaceDaySlot(params: {
+  organizationId: string;
+  learnerId: string;
+  date: string;
+  slotIndex: number;
+  title: string;
+  origin?: typeof planDaySlots.$inferInsert.origin;
+  sourceId?: string;
+  routeFingerprint?: string;
+}) {
+  const workspacePlan = await getOrCreateTodayWorkspacePlan(params.organizationId, params.learnerId);
+  const workspaceDay = await getOrCreateTodayWorkspaceDay(params);
+  const db = getDb();
+  const existing = await db.query.planDaySlots.findFirst({
+    where: and(
+      eq(planDaySlots.planDayId, workspaceDay.id),
+      eq(planDaySlots.slotIndex, params.slotIndex),
+    ),
+  });
+
+  if (existing) {
+    const nextMetadata = {
+      ...(isRecord(existing.metadata) ? existing.metadata : {}),
+      sourceId: params.sourceId ?? (isRecord(existing.metadata) ? existing.metadata.sourceId : null),
+      routeFingerprint:
+        params.routeFingerprint ??
+        (isRecord(existing.metadata) ? existing.metadata.routeFingerprint : null),
+    };
+    const needsUpdate =
+      existing.title !== params.title ||
+      existing.origin !== (params.origin ?? existing.origin) ||
+      JSON.stringify(existing.metadata ?? null) !== JSON.stringify(nextMetadata);
+
+    if (!needsUpdate) {
+      return existing;
+    }
+
+    const [updated] = await db
+      .update(planDaySlots)
+      .set({
+        title: params.title,
+        origin: params.origin ?? existing.origin,
+        metadata: nextMetadata,
+        updatedAt: new Date(),
+      })
+      .where(eq(planDaySlots.id, existing.id))
+      .returning();
+
+    return updated;
+  }
+
+  const [created] = await db
+    .insert(planDaySlots)
+    .values({
+      planId: workspacePlan.id,
+      planDayId: workspaceDay.id,
+      slotIndex: params.slotIndex,
+      title: params.title,
+      origin: params.origin ?? "system_generated",
+      status: "planned",
+      metadata: {
+        sourceId: params.sourceId ?? null,
+        routeFingerprint: params.routeFingerprint ?? null,
+      },
+    })
+    .returning();
+
+  return created;
+}
+
+function readTodaySlotMetadataState(
+  metadata: unknown,
+  sourceId: string,
+  routeFingerprint: string,
+): TodayWorkspaceMetadataState {
+  if (!isRecord(metadata)) {
+    return {
+      lessonDraft: null,
+      lessonBuild: null,
+      activityBuild: null,
+      lessonRegenerationNote: null,
+      expansionIntent: null,
+    };
+  }
+
+  const resolvedSourceId =
+    typeof metadata.sourceId === "string" ? metadata.sourceId : sourceId;
+  const resolvedRouteFingerprint =
+    typeof metadata.routeFingerprint === "string" ? metadata.routeFingerprint : routeFingerprint;
+
+  return {
+    lessonDraft: readLessonDraftFromMetadata(
+      {
+        [TODAY_LESSON_DRAFTS_KEY]: {
+          [resolvedSourceId]: {
+            [resolvedRouteFingerprint]: metadata.lessonDraft,
+          },
+        },
+      },
+      resolvedSourceId,
+      resolvedRouteFingerprint,
+    ),
+    lessonBuild: readLessonBuildFromMetadata(
+      {
+        [TODAY_LESSON_BUILDS_KEY]: {
+          [resolvedSourceId]: {
+            [resolvedRouteFingerprint]: metadata.lessonBuild,
+          },
+        },
+      },
+      resolvedSourceId,
+      resolvedRouteFingerprint,
+    ),
+    activityBuild: readActivityBuildFromMetadata(
+      {
+        [TODAY_ACTIVITY_BUILDS_KEY]: {
+          [resolvedSourceId]: {
+            [resolvedRouteFingerprint]: metadata.activityBuild,
+          },
+        },
+      },
+      resolvedSourceId,
+      resolvedRouteFingerprint,
+    ),
+    lessonRegenerationNote:
+      typeof metadata.lessonRegenerationNote === "string" ? metadata.lessonRegenerationNote : null,
+    expansionIntent: isExpansionIntent(metadata.expansionIntent) ? metadata.expansionIntent : null,
+  };
+}
+
+function readTodaySlotFreshness(
+  metadata: unknown,
+  sourceId: string,
+  routeFingerprint: string,
+): TodayWorkspaceFreshnessRecord | null {
+  if (!isRecord(metadata) || !isRecord(metadata.freshness)) {
+    return null;
+  }
+
+  const freshness = metadata.freshness;
+  return {
+    sourceId: typeof freshness.sourceId === "string" ? freshness.sourceId : sourceId,
+    routeFingerprint:
+      typeof freshness.routeFingerprint === "string"
+        ? freshness.routeFingerprint
+        : routeFingerprint,
+    itemCount: typeof freshness.itemCount === "number" ? freshness.itemCount : 0,
+    syncedAt:
+      typeof freshness.syncedAt === "string" ? freshness.syncedAt : new Date().toISOString(),
+  };
+}
+
+async function findTodayWorkspaceSlot(params: {
+  organizationId: string;
+  learnerId: string;
+  date: string;
+  slotId?: string | null;
+  sourceId: string;
+  routeFingerprint: string;
+}) {
+  const db = getDb();
+  if (params.slotId) {
+    const slot = await db.query.planDaySlots.findFirst({
+      where: eq(planDaySlots.id, params.slotId),
+    });
+    if (slot) {
+      return slot;
+    }
+  }
+
+  const slots = await getTodayWorkspaceDaySlots(params);
+  return (
+    slots.find((slot) => {
+      const metadata = isRecord(slot.metadata) ? slot.metadata : null;
+      return (
+        metadata?.sourceId === params.sourceId &&
+        metadata?.routeFingerprint === params.routeFingerprint
+      );
+    }) ?? null
+  );
+}
+
+async function readTodayWorkspaceStoredStateForSlot(params: {
+  organizationId: string;
+  learnerId: string;
+  date: string;
+  slotId?: string | null;
+  sourceId: string;
+  routeFingerprint: string;
+}): Promise<TodayWorkspaceStoredState> {
+  const slot = await findTodayWorkspaceSlot(params);
+  if (!slot) {
+    return {
+      metadataState: {
+        lessonDraft: null,
+        lessonBuild: null,
+        activityBuild: null,
+        lessonRegenerationNote: null,
+        expansionIntent: null,
+      },
+      freshness: null,
+    };
+  }
+
+  return {
+    metadataState: readTodaySlotMetadataState(slot.metadata, params.sourceId, params.routeFingerprint),
+    freshness: readTodaySlotFreshness(slot.metadata, params.sourceId, params.routeFingerprint),
+  };
+}
+
+async function updateTodayWorkspaceSlotMetadata(params: {
+  organizationId: string;
+  learnerId: string;
+  date: string;
+  slotId?: string | null;
+  sourceId: string;
+  routeFingerprint: string;
+  slotIndex?: number;
+  title?: string;
+  patch: (metadata: Record<string, unknown>, now: string) => Record<string, unknown>;
+}) {
+  const slot =
+    (await findTodayWorkspaceSlot(params)) ??
+    (params.slotIndex && params.title
+      ? await getOrCreateTodayWorkspaceDaySlot({
+          organizationId: params.organizationId,
+          learnerId: params.learnerId,
+          date: params.date,
+          slotIndex: params.slotIndex,
+          title: params.title,
+          sourceId: params.sourceId,
+          routeFingerprint: params.routeFingerprint,
+        })
+      : null);
+
+  if (!slot) {
+    throw new Error("Today workspace slot not found.");
+  }
+
+  const db = getDb();
+  const now = new Date().toISOString();
+  const currentMetadata = isRecord(slot.metadata) ? slot.metadata : {};
+  const nextMetadata = {
+    ...currentMetadata,
+    sourceId: params.sourceId,
+    routeFingerprint: params.routeFingerprint,
+    ...params.patch(currentMetadata, now),
+  };
+
+  const [updated] = await db
+    .update(planDaySlots)
+    .set({
+      metadata: nextMetadata,
+      updatedAt: new Date(now),
+    })
+    .where(eq(planDaySlots.id, slot.id))
+    .returning();
+
+  return updated;
+}
+
 async function writeTodayWorkspaceFreshness(params: {
   organizationId: string;
   learnerId: string;
@@ -630,6 +930,7 @@ async function readTodayWorkspaceStoredState(params: {
   organizationId: string;
   learnerId: string;
   date: string;
+  slotId?: string | null;
   sourceId: string;
   routeFingerprint: string;
 }): Promise<TodayWorkspaceStoredState> {
@@ -646,48 +947,14 @@ async function readTodayWorkspaceStoredState(params: {
     };
   }
 
-  const day = await getTodayWorkspaceDay(params);
-  if (!day) {
-    return {
-      metadataState: {
-        lessonDraft: null,
-        lessonBuild: null,
-        activityBuild: null,
-        lessonRegenerationNote: null,
-        expansionIntent: null,
-      },
-      freshness: null,
-    };
-  }
-
-  return {
-    metadataState: {
-      lessonDraft: readLessonDraftFromMetadata(day.metadata, params.sourceId, params.routeFingerprint),
-      lessonBuild: readLessonBuildFromMetadata(day.metadata, params.sourceId, params.routeFingerprint),
-      activityBuild: readActivityBuildFromMetadata(day.metadata, params.sourceId, params.routeFingerprint),
-      lessonRegenerationNote: readLessonRegenerationNoteFromMetadata(
-        day.metadata,
-        params.sourceId,
-        params.routeFingerprint,
-      ),
-      expansionIntent: readExpansionIntentFromMetadata(
-        day.metadata,
-        params.sourceId,
-        params.routeFingerprint,
-      ),
-    },
-    freshness: readTodayWorkspaceFreshnessFromMetadata(
-      day.metadata,
-      params.sourceId,
-      params.routeFingerprint,
-    ),
-  };
+  return readTodayWorkspaceStoredStateForSlot(params);
 }
 
 async function readTodayWorkspaceFreshnessState(params: {
   organizationId: string;
   learnerId: string;
   date: string;
+  slotId?: string | null;
   sourceId: string;
   routeFingerprint: string;
   selectedRouteItemCount: number;
@@ -769,6 +1036,7 @@ function buildTodayPlanItemUpdatePatch(
   const isDirty =
     existingPlanItem.planId !== nextValues.planId ||
     existingPlanItem.planDayId !== nextValues.planDayId ||
+    (existingPlanItem.planDaySlotId ?? null) !== nextValues.planDaySlotId ||
     existingPlanItem.curriculumItemId !== nextValues.curriculumItemId ||
     existingPlanItem.title !== nextValues.title ||
     (existingPlanItem.description ?? null) !== (nextValues.description ?? null) ||
@@ -801,7 +1069,7 @@ async function syncTodayPlanItems(params: {
   sourceTitle: string;
   /** Session budget from the canonical timing contract. Used for lesson session scheduledMinutes. */
   sessionBudgetMinutes: number;
-  selectedRouteItems: WeeklyRouteBoard["items"];
+  selectedRouteSlots: TodayRouteSlotSelection[];
   nodeById: Map<string, Awaited<ReturnType<typeof listCurriculumNodes>>[number]>;
 }) {
   return withTodayTiming(
@@ -810,7 +1078,11 @@ async function syncTodayPlanItems(params: {
       organizationId: params.organizationId,
       learnerId: params.learnerId,
       date: params.date,
-      selectedRouteItemCount: params.selectedRouteItems.length,
+      selectedRouteItemCount: params.selectedRouteSlots.reduce(
+        (total, slot) => total + slot.routeItems.length,
+        0,
+      ),
+      selectedSlotCount: params.selectedRouteSlots.length,
     },
     async () => {
       const db = getDb();
@@ -819,11 +1091,29 @@ async function syncTodayPlanItems(params: {
         params.learnerId,
       );
       const workspaceDay = await getOrCreateTodayWorkspaceDay(params);
-      const routeItemIds = params.selectedRouteItems.map((item) => item.id);
+      const routeItemIds = params.selectedRouteSlots.flatMap((slot) =>
+        slot.routeItems.map((item) => item.id),
+      );
 
       if (routeItemIds.length === 0) {
         return new Map<string, TodayMaterializedWorkflowEntry>();
       }
+
+      const slotRows = await Promise.all(
+        params.selectedRouteSlots.map((slot) =>
+          getOrCreateTodayWorkspaceDaySlot({
+            organizationId: params.organizationId,
+            learnerId: params.learnerId,
+            date: params.date,
+            slotIndex: slot.slotIndex,
+            title: slot.title,
+            origin: slot.slotIndex === 1 ? "system_generated" : "manual",
+            sourceId: params.sourceId,
+            routeFingerprint: slot.routeFingerprint,
+          }),
+        ),
+      );
+      const slotByIndex = new Map(slotRows.map((slot) => [slot.slotIndex, slot]));
 
       const existingLinks = await db.query.planItemCurriculumLinks.findMany({
         where: inArray(planItemCurriculumLinks.weeklyRouteItemId, routeItemIds),
@@ -849,7 +1139,12 @@ async function syncTodayPlanItems(params: {
         }
       }
 
-      const routeItemPayloads = params.selectedRouteItems.map((routeItem, index) => {
+      const routeItemPayloads = params.selectedRouteSlots.flatMap((slot) =>
+        slot.routeItems.map((routeItem, index) => {
+        const slotRecord = slotByIndex.get(slot.slotIndex);
+        if (!slotRecord) {
+          throw new Error(`Today workspace slot not found for slotIndex ${slot.slotIndex}.`);
+        }
         const node = params.nodeById.get(routeItem.skillNodeId);
         const scheduledDate = routeItem.scheduledDate ?? params.date;
         const itemEffortMinutes = node?.estimatedMinutes ?? params.sessionBudgetMinutes;
@@ -864,6 +1159,7 @@ async function syncTodayPlanItems(params: {
           values: {
             planId: workspacePlan.id,
             planDayId: workspaceDay.id,
+            planDaySlotId: slotRecord.id,
             curriculumItemId: null,
             title: routeItem.skillTitle,
             description: node?.description ?? routeItem.skillTitle,
@@ -871,7 +1167,7 @@ async function syncTodayPlanItems(params: {
             status: planItemStatus,
             scheduledDate,
             estimatedMinutes: itemEffortMinutes,
-            ordering: index,
+            ordering: slot.slotIndex * 100 + index,
             metadata: {
               sourceLabel: params.sourceTitle,
               lessonLabel,
@@ -880,7 +1176,7 @@ async function syncTodayPlanItems(params: {
             },
           } satisfies TodayPlanItemPayload,
         };
-      });
+      }));
 
       const itemsToCreate = routeItemPayloads.filter(
         ({ routeItem }) => !existingPlanItemByRouteItemId.has(routeItem.id),
@@ -1021,6 +1317,8 @@ async function syncTodayPlanItems(params: {
           materializedByRouteItemId.set(routeItem.id, {
             planParentId: workspacePlan.id,
             planDayRecordId: workspaceDay.id,
+            planDaySlotId: planItemRecord.planDaySlotId ?? null,
+            planDaySlotIndex: routeItem.scheduledSlotIndex ?? null,
             planItemId: planItemRecord.id,
             lessonSessionId: existingSession.id,
             completionStatus: existingSession.completionStatus,
@@ -1041,6 +1339,7 @@ async function syncTodayPlanItems(params: {
             learnerId: params.learnerId,
             planId: workspacePlan.id,
             planDayId: workspaceDay.id,
+            planDaySlotId: planItemRecord.planDaySlotId ?? null,
             planItemId: planItemRecord.id,
             sessionDate: params.date,
             scheduledMinutes: params.sessionBudgetMinutes,
@@ -1064,6 +1363,8 @@ async function syncTodayPlanItems(params: {
         materializedByRouteItemId.set(ensured.routeItemId, {
           planParentId: workspacePlan.id,
           planDayRecordId: workspaceDay.id,
+          planDaySlotId: resolvedPlanItemByRouteItemId.get(ensured.routeItemId)?.planDaySlotId ?? null,
+          planDaySlotIndex: routeItemPayloads.find(({ routeItem }) => routeItem.id === ensured.routeItemId)?.routeItem.scheduledSlotIndex ?? null,
           planItemId: ensured.planItemId,
           lessonSessionId: ensured.session.id,
           completionStatus: ensured.session.completionStatus,
@@ -1199,6 +1500,19 @@ async function loadTodayMaterializedWorkflow(params: {
         where: inArray(planItems.id, linkedPlanItemIds),
       })
     : [];
+  const linkedPlanDaySlotIds = [
+    ...new Set(
+      linkedPlanItems
+        .map((item) => item.planDaySlotId)
+        .filter((value): value is string => Boolean(value)),
+    ),
+  ];
+  const linkedSlots = linkedPlanDaySlotIds.length > 0
+    ? await db.query.planDaySlots.findMany({
+        where: inArray(planDaySlots.id, linkedPlanDaySlotIds),
+      })
+    : [];
+  const slotById = new Map(linkedSlots.map((slot) => [slot.id, slot]));
   const planItemById = new Map(linkedPlanItems.map((item) => [item.id, item]));
 
   const sessionRows = linkedPlanItemIds.length > 0
@@ -1237,6 +1551,10 @@ async function loadTodayMaterializedWorkflow(params: {
     workflowEntries.set(link.weeklyRouteItemId, {
       planParentId: planItem.planId,
       planDayRecordId: planItem.planDayId,
+      planDaySlotId: planItem.planDaySlotId ?? null,
+      planDaySlotIndex: planItem.planDaySlotId
+        ? (slotById.get(planItem.planDaySlotId)?.slotIndex ?? null)
+        : null,
       planItemId: planItem.id,
       lessonSessionId: session?.id ?? null,
       completionStatus: session?.completionStatus ?? null,
@@ -1253,6 +1571,7 @@ export async function getSavedTodayLessonDraft(params: {
   organizationId: string;
   learnerId: string;
   date: string;
+  slotId?: string | null;
   sourceId: string;
   routeFingerprint: string;
 }) {
@@ -1260,18 +1579,14 @@ export async function getSavedTodayLessonDraft(params: {
     return null;
   }
 
-  const day = await getTodayWorkspaceDay(params);
-  if (!day) {
-    return null;
-  }
-
-  return readLessonDraftFromMetadata(day.metadata, params.sourceId, params.routeFingerprint);
+  return (await readTodayWorkspaceStoredState(params)).metadataState.lessonDraft;
 }
 
 export async function getSavedTodayLessonBuild(params: {
   organizationId: string;
   learnerId: string;
   date: string;
+  slotId?: string | null;
   sourceId: string;
   routeFingerprint: string;
 }) {
@@ -1279,18 +1594,14 @@ export async function getSavedTodayLessonBuild(params: {
     return null;
   }
 
-  const day = await getTodayWorkspaceDay(params);
-  if (!day) {
-    return null;
-  }
-
-  return readLessonBuildFromMetadata(day.metadata, params.sourceId, params.routeFingerprint);
+  return (await readTodayWorkspaceStoredState(params)).metadataState.lessonBuild;
 }
 
 export async function getSavedTodayActivityBuild(params: {
   organizationId: string;
   learnerId: string;
   date: string;
+  slotId?: string | null;
   sourceId: string;
   routeFingerprint: string;
 }) {
@@ -1298,18 +1609,14 @@ export async function getSavedTodayActivityBuild(params: {
     return null;
   }
 
-  const day = await getTodayWorkspaceDay(params);
-  if (!day) {
-    return null;
-  }
-
-  return readActivityBuildFromMetadata(day.metadata, params.sourceId, params.routeFingerprint);
+  return (await readTodayWorkspaceStoredState(params)).metadataState.activityBuild;
 }
 
 export async function getSavedTodayLessonRegenerationNote(params: {
   organizationId: string;
   learnerId: string;
   date: string;
+  slotId?: string | null;
   sourceId: string;
   routeFingerprint: string;
 }) {
@@ -1317,18 +1624,14 @@ export async function getSavedTodayLessonRegenerationNote(params: {
     return null;
   }
 
-  const day = await getTodayWorkspaceDay(params);
-  if (!day) {
-    return null;
-  }
-
-  return readLessonRegenerationNoteFromMetadata(day.metadata, params.sourceId, params.routeFingerprint);
+  return (await readTodayWorkspaceStoredState(params)).metadataState.lessonRegenerationNote;
 }
 
 export async function getSavedTodayExpansionIntent(params: {
   organizationId: string;
   learnerId: string;
   date: string;
+  slotId?: string | null;
   sourceId: string;
   routeFingerprint: string;
 }) {
@@ -1336,18 +1639,14 @@ export async function getSavedTodayExpansionIntent(params: {
     return null;
   }
 
-  const day = await getTodayWorkspaceDay(params);
-  if (!day) {
-    return null;
-  }
-
-  return readExpansionIntentFromMetadata(day.metadata, params.sourceId, params.routeFingerprint);
+  return (await readTodayWorkspaceStoredState(params)).metadataState.expansionIntent;
 }
 
 export async function getTodayBuildStatus(params: {
   organizationId: string;
   learnerId: string;
   date: string;
+  slotId?: string | null;
   sourceId: string;
   routeFingerprint: string;
   lessonSessionId?: string | null;
@@ -1383,6 +1682,7 @@ export async function getTodayLessonBuildStatus(params: {
   organizationId: string;
   learnerId: string;
   date: string;
+  slotId?: string | null;
   sourceId: string;
   routeFingerprint: string;
 }) {
@@ -1399,6 +1699,7 @@ export async function getTodayActivityBuildStatus(params: {
   organizationId: string;
   learnerId: string;
   date: string;
+  slotId?: string | null;
   sourceId: string;
   routeFingerprint: string;
   lessonSessionId?: string | null;
@@ -1415,52 +1716,44 @@ async function writeTodayLessonBuild(params: {
   organizationId: string;
   learnerId: string;
   date: string;
+  slotId?: string | null;
   sourceId: string;
   routeFingerprint: string;
+  slotIndex?: number;
+  title?: string;
   patch: (
     current: DailyWorkspaceLessonBuild | null,
     now: string,
   ) => DailyWorkspaceLessonBuild;
 }) {
-  const day = await getOrCreateTodayWorkspaceDay(params);
-  const db = getDb();
-  const metadata = isRecord(day.metadata) ? day.metadata : {};
-  const buildSources = isRecord(metadata[TODAY_LESSON_BUILDS_KEY])
-    ? (metadata[TODAY_LESSON_BUILDS_KEY] as Record<string, unknown>)
-    : {};
-  const sourceBuilds = isRecord(buildSources[params.sourceId])
-    ? (buildSources[params.sourceId] as Record<string, unknown>)
-    : {};
-  const current = readLessonBuildFromMetadata(metadata, params.sourceId, params.routeFingerprint);
-  const now = new Date().toISOString();
-  const next = params.patch(current, now);
+  const current = await getSavedTodayLessonBuild(params);
+  const updatedSlot = await updateTodayWorkspaceSlotMetadata({
+    organizationId: params.organizationId,
+    learnerId: params.learnerId,
+    date: params.date,
+    slotId: params.slotId,
+    sourceId: params.sourceId,
+    routeFingerprint: params.routeFingerprint,
+    slotIndex: params.slotIndex,
+    title: params.title,
+    patch: (metadata, now) => ({
+      lessonBuild: params.patch(current, now),
+    }),
+  });
 
-  await db
-    .update(planDays)
-    .set({
-      metadata: {
-        ...metadata,
-        [TODAY_LESSON_BUILDS_KEY]: {
-          ...buildSources,
-          [params.sourceId]: {
-            ...sourceBuilds,
-            [params.routeFingerprint]: next,
-          },
-        },
-      },
-      updatedAt: new Date(now),
-    })
-    .where(eq(planDays.id, day.id));
-
-  return next;
+  return readTodaySlotMetadataState(updatedSlot.metadata, params.sourceId, params.routeFingerprint)
+    .lessonBuild as DailyWorkspaceLessonBuild;
 }
 
 export async function queueTodayLessonBuild(params: {
   organizationId: string;
   learnerId: string;
   date: string;
+  slotId?: string | null;
   sourceId: string;
   routeFingerprint: string;
+  slotIndex?: number;
+  title?: string;
   trigger: DailyWorkspaceLessonBuildTrigger;
 }) {
   return writeTodayLessonBuild({
@@ -1490,8 +1783,11 @@ export async function markTodayLessonBuildGenerating(params: {
   organizationId: string;
   learnerId: string;
   date: string;
+  slotId?: string | null;
   sourceId: string;
   routeFingerprint: string;
+  slotIndex?: number;
+  title?: string;
   trigger: DailyWorkspaceLessonBuildTrigger;
 }) {
   return writeTodayLessonBuild({
@@ -1515,8 +1811,11 @@ export async function markTodayLessonBuildFailed(params: {
   organizationId: string;
   learnerId: string;
   date: string;
+  slotId?: string | null;
   sourceId: string;
   routeFingerprint: string;
+  slotIndex?: number;
+  title?: string;
   trigger: DailyWorkspaceLessonBuildTrigger;
   error: string;
 }) {
@@ -1541,8 +1840,11 @@ export async function markTodayLessonBuildReady(params: {
   organizationId: string;
   learnerId: string;
   date: string;
+  slotId?: string | null;
   sourceId: string;
   routeFingerprint: string;
+  slotIndex?: number;
+  title?: string;
   trigger: DailyWorkspaceLessonBuildTrigger;
 }) {
   return writeTodayLessonBuild({
@@ -1566,52 +1868,44 @@ async function writeTodayActivityBuild(params: {
   organizationId: string;
   learnerId: string;
   date: string;
+  slotId?: string | null;
   sourceId: string;
   routeFingerprint: string;
+  slotIndex?: number;
+  title?: string;
   patch: (
     current: DailyWorkspaceActivityBuild | null,
     now: string,
   ) => DailyWorkspaceActivityBuild;
 }) {
-  const day = await getOrCreateTodayWorkspaceDay(params);
-  const db = getDb();
-  const metadata = isRecord(day.metadata) ? day.metadata : {};
-  const buildSources = isRecord(metadata[TODAY_ACTIVITY_BUILDS_KEY])
-    ? (metadata[TODAY_ACTIVITY_BUILDS_KEY] as Record<string, unknown>)
-    : {};
-  const sourceBuilds = isRecord(buildSources[params.sourceId])
-    ? (buildSources[params.sourceId] as Record<string, unknown>)
-    : {};
-  const current = readActivityBuildFromMetadata(metadata, params.sourceId, params.routeFingerprint);
-  const now = new Date().toISOString();
-  const next = params.patch(current, now);
+  const current = await getSavedTodayActivityBuild(params);
+  const updatedSlot = await updateTodayWorkspaceSlotMetadata({
+    organizationId: params.organizationId,
+    learnerId: params.learnerId,
+    date: params.date,
+    slotId: params.slotId,
+    sourceId: params.sourceId,
+    routeFingerprint: params.routeFingerprint,
+    slotIndex: params.slotIndex,
+    title: params.title,
+    patch: (metadata, now) => ({
+      activityBuild: params.patch(current, now),
+    }),
+  });
 
-  await db
-    .update(planDays)
-    .set({
-      metadata: {
-        ...metadata,
-        [TODAY_ACTIVITY_BUILDS_KEY]: {
-          ...buildSources,
-          [params.sourceId]: {
-            ...sourceBuilds,
-            [params.routeFingerprint]: next,
-          },
-        },
-      },
-      updatedAt: new Date(now),
-    })
-    .where(eq(planDays.id, day.id));
-
-  return next;
+  return readTodaySlotMetadataState(updatedSlot.metadata, params.sourceId, params.routeFingerprint)
+    .activityBuild as DailyWorkspaceActivityBuild;
 }
 
 export async function queueTodayActivityBuild(params: {
   organizationId: string;
   learnerId: string;
   date: string;
+  slotId?: string | null;
   sourceId: string;
   routeFingerprint: string;
+  slotIndex?: number;
+  title?: string;
   lessonSessionId?: string | null;
   trigger: DailyWorkspaceActivityBuildTrigger;
 }) {
@@ -1638,8 +1932,11 @@ export async function markTodayActivityBuildGenerating(params: {
   organizationId: string;
   learnerId: string;
   date: string;
+  slotId?: string | null;
   sourceId: string;
   routeFingerprint: string;
+  slotIndex?: number;
+  title?: string;
   lessonSessionId?: string | null;
   trigger: DailyWorkspaceActivityBuildTrigger;
 }) {
@@ -1666,8 +1963,11 @@ export async function markTodayActivityBuildFailed(params: {
   organizationId: string;
   learnerId: string;
   date: string;
+  slotId?: string | null;
   sourceId: string;
   routeFingerprint: string;
+  slotIndex?: number;
+  title?: string;
   lessonSessionId?: string | null;
   trigger: DailyWorkspaceActivityBuildTrigger;
   error: string;
@@ -1695,8 +1995,11 @@ export async function markTodayActivityBuildReady(params: {
   organizationId: string;
   learnerId: string;
   date: string;
+  slotId?: string | null;
   sourceId: string;
   routeFingerprint: string;
+  slotIndex?: number;
+  title?: string;
   lessonSessionId?: string | null;
   activityId?: string | null;
   trigger: DailyWorkspaceActivityBuildTrigger;
@@ -1724,37 +2027,26 @@ export async function saveTodayLessonRegenerationNote(params: {
   organizationId: string;
   learnerId: string;
   date: string;
+  slotId?: string | null;
   sourceId: string;
   routeFingerprint: string;
+  slotIndex?: number;
+  title?: string;
   note: string | null;
 }) {
-  const day = await getOrCreateTodayWorkspaceDay(params);
-  const db = getDb();
-  const metadata = isRecord(day.metadata) ? day.metadata : {};
-  const noteSources = isRecord(metadata[TODAY_LESSON_REGEN_NOTES_KEY])
-    ? (metadata[TODAY_LESSON_REGEN_NOTES_KEY] as Record<string, unknown>)
-    : {};
-  const sourceNotes = isRecord(noteSources[params.sourceId])
-    ? (noteSources[params.sourceId] as Record<string, unknown>)
-    : {};
-  const now = new Date().toISOString();
-
-  await db
-    .update(planDays)
-    .set({
-      metadata: {
-        ...metadata,
-        [TODAY_LESSON_REGEN_NOTES_KEY]: {
-          ...noteSources,
-          [params.sourceId]: {
-            ...sourceNotes,
-            [params.routeFingerprint]: params.note,
-          },
-        },
-      },
-      updatedAt: new Date(now),
-    })
-    .where(eq(planDays.id, day.id));
+  await updateTodayWorkspaceSlotMetadata({
+    organizationId: params.organizationId,
+    learnerId: params.learnerId,
+    date: params.date,
+    slotId: params.slotId,
+    sourceId: params.sourceId,
+    routeFingerprint: params.routeFingerprint,
+    slotIndex: params.slotIndex,
+    title: params.title,
+    patch: () => ({
+      lessonRegenerationNote: params.note,
+    }),
+  });
 
   return params.note;
 }
@@ -1763,37 +2055,26 @@ export async function saveTodayExpansionIntent(params: {
   organizationId: string;
   learnerId: string;
   date: string;
+  slotId?: string | null;
   sourceId: string;
   routeFingerprint: string;
+  slotIndex?: number;
+  title?: string;
   intent: DailyWorkspaceExpansionIntent | null;
 }) {
-  const day = await getOrCreateTodayWorkspaceDay(params);
-  const db = getDb();
-  const metadata = isRecord(day.metadata) ? day.metadata : {};
-  const intentSources = isRecord(metadata[TODAY_EXPANSION_INTENTS_KEY])
-    ? (metadata[TODAY_EXPANSION_INTENTS_KEY] as Record<string, unknown>)
-    : {};
-  const sourceIntents = isRecord(intentSources[params.sourceId])
-    ? (intentSources[params.sourceId] as Record<string, unknown>)
-    : {};
-  const now = new Date().toISOString();
-
-  await db
-    .update(planDays)
-    .set({
-      metadata: {
-        ...metadata,
-        [TODAY_EXPANSION_INTENTS_KEY]: {
-          ...intentSources,
-          [params.sourceId]: {
-            ...sourceIntents,
-            [params.routeFingerprint]: params.intent,
-          },
-        },
-      },
-      updatedAt: new Date(now),
-    })
-    .where(eq(planDays.id, day.id));
+  await updateTodayWorkspaceSlotMetadata({
+    organizationId: params.organizationId,
+    learnerId: params.learnerId,
+    date: params.date,
+    slotId: params.slotId,
+    sourceId: params.sourceId,
+    routeFingerprint: params.routeFingerprint,
+    slotIndex: params.slotIndex,
+    title: params.title,
+    patch: () => ({
+      expansionIntent: params.intent,
+    }),
+  });
 
   return params.intent;
 }
@@ -1802,46 +2083,37 @@ export async function saveTodayLessonDraft(params: {
   organizationId: string;
   learnerId: string;
   date: string;
+  slotId?: string | null;
   sourceId: string;
   sourceTitle: string;
   routeFingerprint: string;
+  slotIndex?: number;
+  title?: string;
   structured: StructuredLessonDraft;
   promptVersion?: string;
 }) {
-  const day = await getOrCreateTodayWorkspaceDay(params);
-  const db = getDb();
-  const metadata = isRecord(day.metadata) ? day.metadata : {};
-  const draftSources = isRecord(metadata[TODAY_LESSON_DRAFTS_KEY])
-    ? (metadata[TODAY_LESSON_DRAFTS_KEY] as Record<string, unknown>)
-    : {};
-  const sourceDrafts = isRecord(draftSources[params.sourceId])
-    ? (draftSources[params.sourceId] as Record<string, unknown>)
-    : {};
   const savedAt = new Date().toISOString();
 
-  await db
-    .update(planDays)
-    .set({
-      metadata: {
-        ...metadata,
-        [TODAY_LESSON_DRAFTS_KEY]: {
-          ...draftSources,
-          [params.sourceId]: {
-            ...sourceDrafts,
-            [params.routeFingerprint]: {
-              structured: params.structured,
-              sourceId: params.sourceId,
-              sourceTitle: params.sourceTitle,
-              routeFingerprint: params.routeFingerprint,
-              promptVersion: params.promptVersion ?? null,
-              savedAt,
-            },
-          },
-        },
+  await updateTodayWorkspaceSlotMetadata({
+    organizationId: params.organizationId,
+    learnerId: params.learnerId,
+    date: params.date,
+    slotId: params.slotId,
+    sourceId: params.sourceId,
+    routeFingerprint: params.routeFingerprint,
+    slotIndex: params.slotIndex,
+    title: params.title,
+    patch: () => ({
+      lessonDraft: {
+        structured: params.structured,
+        sourceId: params.sourceId,
+        sourceTitle: params.sourceTitle,
+        routeFingerprint: params.routeFingerprint,
+        promptVersion: params.promptVersion ?? null,
+        savedAt,
       },
-      updatedAt: new Date(savedAt),
-    })
-    .where(eq(planDays.id, day.id));
+    }),
+  });
 
   return {
     structured: params.structured,
@@ -1896,6 +2168,8 @@ function buildPlanItem(
   return {
     id: routeItem.id,
     date,
+    planDaySlotId: workflow?.planDaySlotId ?? undefined,
+    planDaySlotIndex: workflow?.planDaySlotIndex ?? routeItem.scheduledSlotIndex ?? undefined,
     title: routeItem.skillTitle,
     subject,
     kind: "lesson",
@@ -1960,24 +2234,53 @@ function buildWeeklyRouteItem(
     recommendedPosition: routeItem.recommendedPosition,
     currentPosition: routeItem.currentPosition,
     scheduledDate: routeItem.scheduledDate ?? undefined,
+    scheduledSlotIndex: routeItem.scheduledSlotIndex ?? undefined,
     manualOverrideKind: routeItem.manualOverrideKind,
     state: routeItem.state,
   };
 }
 
-function getVisibleRouteItems(board: WeeklyRouteBoard, date: string) {
+function getVisibleRouteSlots(board: WeeklyRouteBoard, date: string): TodayRouteSlotSelection[] {
   const scheduledForToday = board.items
     .filter((item) => item.state !== "removed" && item.scheduledDate === date)
     .sort((left, right) => left.currentPosition - right.currentPosition);
 
   if (scheduledForToday.length > 0) {
-    return scheduledForToday;
+    const grouped = new Map<number, WeeklyRouteBoard["items"]>();
+    for (const item of scheduledForToday) {
+      const slotIndex = normalizeSlotIndex(item.scheduledSlotIndex);
+      const existing = grouped.get(slotIndex) ?? [];
+      existing.push(item);
+      grouped.set(slotIndex, existing);
+    }
+
+    return [...grouped.entries()]
+      .sort((left, right) => left[0] - right[0])
+      .map(([slotIndex, routeItems]) => ({
+        slotIndex,
+        title: `Lesson ${slotIndex}`,
+        routeFingerprint: buildTodayLessonDraftFingerprint(routeItems.map((item) => item.id)),
+        routeItems,
+      }));
   }
 
-  return board.items
+  const routeItems = board.items
     .filter((item) => item.state !== "removed" && item.scheduledDate == null)
     .sort((left, right) => left.currentPosition - right.currentPosition)
     .slice(0, DEFAULT_UNSCHEDULED_ITEM_COUNT);
+
+  if (routeItems.length === 0) {
+    return [];
+  }
+
+  return [
+    {
+      slotIndex: 1,
+      title: "Lesson 1",
+      routeFingerprint: buildTodayLessonDraftFingerprint(routeItems.map((item) => item.id)),
+      routeItems,
+    },
+  ];
 }
 
 function getAlternateItems(board: WeeklyRouteBoard, selectedIds: string[]) {
@@ -2140,7 +2443,8 @@ const resolveTodayWorkspaceContext = cache(
           ),
         ]);
         const nodeById = new Map(nodes.map((node) => [node.id, node]));
-        const selectedRouteItems = getVisibleRouteItems(board, date);
+        const selectedRouteSlots = getVisibleRouteSlots(board, date);
+        const selectedRouteItems = selectedRouteSlots.flatMap((slot) => slot.routeItems);
         const planningContext = buildCopilotPlanningContext({
           board,
           learnerId,
@@ -2156,12 +2460,11 @@ const resolveTodayWorkspaceContext = cache(
           sessionTiming,
           sessionBudgetMinutes,
           board,
+          selectedRouteSlots,
           selectedRouteItems,
           nodeById,
           planningContext,
-          routeFingerprint: buildTodayLessonDraftFingerprint(
-            selectedRouteItems.map((item) => item.id),
-          ),
+          routeFingerprint: selectedRouteSlots[0]?.routeFingerprint ?? "",
         };
       },
     ),
@@ -2171,6 +2474,7 @@ async function readTodayWorkspaceMetadataState(params: {
   organizationId: string;
   learnerId: string;
   date: string;
+  slotId?: string | null;
   sourceId: string;
   routeFingerprint: string;
 }): Promise<TodayWorkspaceMetadataState> {
@@ -2305,17 +2609,8 @@ async function materializeTodayWorkspaceFromContext(params: {
         sourceId: context.sourceId,
         sourceTitle: context.sourceTitle,
         sessionBudgetMinutes: context.sessionBudgetMinutes,
-        selectedRouteItems: context.selectedRouteItems,
+        selectedRouteSlots: context.selectedRouteSlots,
         nodeById: context.nodeById,
-      });
-
-      await writeTodayWorkspaceFreshness({
-        organizationId: params.organizationId,
-        learnerId: params.learnerId,
-        date: params.date,
-        sourceId: context.sourceId,
-        routeFingerprint: context.routeFingerprint,
-        itemCount: context.selectedRouteItems.length,
       });
     },
   );
@@ -2389,6 +2684,7 @@ export async function getTodayWorkspaceViewFromContext(params: {
               lessonLabel: "Empty route",
               planOrigin: "manual",
             },
+            slots: [],
             items: [],
             prepChecklist: [],
             sessionTargets: [],
@@ -2433,8 +2729,9 @@ export async function getTodayWorkspaceViewFromContext(params: {
               context.sourceTitle,
               params.date,
               context.sessionBudgetMinutes,
-              context.nodeById.get(context.board.items[0]!.skillNodeId),
+                context.nodeById.get(context.board.items[0]!.skillNodeId),
             ),
+            slots: [],
             items: [],
             prepChecklist: [],
             sessionTargets: [],
@@ -2460,6 +2757,12 @@ export async function getTodayWorkspaceViewFromContext(params: {
         date: params.date,
         selectedRouteItems: context.selectedRouteItems,
       });
+      const persistedSlots = await getTodayWorkspaceDaySlots({
+        organizationId: params.organizationId,
+        learnerId: params.learnerId,
+        date: params.date,
+      });
+      const persistedSlotByIndex = new Map(persistedSlots.map((slot) => [slot.slotIndex, slot]));
       let selectedPlansWithWorkflow = context.selectedRouteItems.map((item) =>
         buildPlanItem(
           item,
@@ -2470,8 +2773,9 @@ export async function getTodayWorkspaceViewFromContext(params: {
           materializedWorkflow.get(item.id),
         ),
       );
-      selectedPlansWithWorkflow = await loadLatestEvaluationsForPlanItems(
-        selectedPlansWithWorkflow,
+      selectedPlansWithWorkflow = await loadLatestEvaluationsForPlanItems(selectedPlansWithWorkflow);
+      const selectedPlanByRouteItemId = new Map(
+        selectedPlansWithWorkflow.map((planItem) => [planItem.id, planItem]),
       );
 
       const alternateItems = getAlternateItems(
@@ -2494,6 +2798,79 @@ export async function getTodayWorkspaceViewFromContext(params: {
         ]),
       );
 
+      const slotViews: DailyWorkspaceSlot[] = await Promise.all(
+        context.selectedRouteSlots.map(async (routeSlot) => {
+          const persistedSlot = persistedSlotByIndex.get(routeSlot.slotIndex) ?? null;
+          const routeItemIds = new Set(routeSlot.routeItems.map((item) => item.id));
+          const slotItems = selectedPlansWithWorkflow.filter((item) => routeItemIds.has(item.id));
+          const slotMetadata =
+            persistedSlot != null
+              ? readTodaySlotMetadataState(
+                  persistedSlot.metadata,
+                  context.sourceId,
+                  routeSlot.routeFingerprint,
+                )
+              : {
+                  lessonDraft: null,
+                  lessonBuild: null,
+                  activityBuild: null,
+                  lessonRegenerationNote: null,
+                  expansionIntent: null,
+                };
+          const leadItem = slotItems[0] ?? selectedPlanByRouteItemId.get(routeSlot.routeItems[0]?.id ?? "");
+          if (!leadItem) {
+            throw new Error(`Today workspace slot ${routeSlot.slotIndex} has no lead item.`);
+          }
+
+          const activityState = await buildTodayActivityStateFromDraft({
+            lessonDraft: slotMetadata.lessonDraft,
+            lessonSessionId:
+              leadItem.sessionRecordId ?? leadItem.workflow?.lessonSessionId ?? null,
+          });
+
+          return {
+            id: persistedSlot?.id ?? `virtual-slot-${routeSlot.slotIndex}`,
+            date: params.date,
+            sourceId: context.sourceId,
+            slotIndex: routeSlot.slotIndex,
+            title: persistedSlot?.title ?? routeSlot.title,
+            origin: persistedSlot?.origin ?? (routeSlot.slotIndex === 1 ? "system_generated" : "manual"),
+            status: persistedSlot?.status ?? "planned",
+            routeFingerprint: routeSlot.routeFingerprint,
+            leadItem,
+            items: slotItems,
+            prepChecklist: buildPrepChecklist(params.learnerName, context.sourceTitle, slotItems),
+            sessionTargets: buildSessionTargets(slotItems),
+            artifactSlots: buildArtifactSlots(context.sourceTitle, slotItems),
+            lessonDraft: slotMetadata.lessonDraft,
+            lessonBuild: slotMetadata.lessonBuild,
+            activityBuild: slotMetadata.activityBuild,
+            activityState,
+            lessonRegenerationNote: slotMetadata.lessonRegenerationNote,
+            expansionIntent: slotMetadata.expansionIntent,
+          };
+        }),
+      );
+
+      const activeSlot = slotViews[0];
+      const topLevelMetadata =
+        params.metadataState ??
+        (activeSlot
+          ? {
+              lessonDraft: activeSlot.lessonDraft,
+              lessonBuild: activeSlot.lessonBuild,
+              activityBuild: activeSlot.activityBuild,
+              lessonRegenerationNote: activeSlot.lessonRegenerationNote,
+              expansionIntent: activeSlot.expansionIntent,
+            }
+          : {
+              lessonDraft: null,
+              lessonBuild: null,
+              activityBuild: null,
+              lessonRegenerationNote: null,
+              expansionIntent: null,
+            });
+
       const workspace: DailyWorkspace = {
         date: params.date,
         headline: `${context.sourceTitle} route for ${params.learnerName}`,
@@ -2504,37 +2881,42 @@ export async function getTodayWorkspaceViewFromContext(params: {
           pacingPreference: "Current weekly route",
           currentSeason: formatPlannerDate(params.date),
         },
-        leadItem: selectedPlansWithWorkflow[0],
+        slots: slotViews,
+        leadItem: activeSlot?.leadItem ?? selectedPlansWithWorkflow[0],
         items: selectedPlansWithWorkflow,
         prepChecklist: buildPrepChecklist(
           params.learnerName,
           context.sourceTitle,
-          selectedPlansWithWorkflow,
+          activeSlot?.items ?? selectedPlansWithWorkflow,
         ),
-        sessionTargets: buildSessionTargets(selectedPlansWithWorkflow),
-        artifactSlots: buildArtifactSlots(context.sourceTitle, selectedPlansWithWorkflow),
+        sessionTargets: buildSessionTargets(activeSlot?.items ?? selectedPlansWithWorkflow),
+        artifactSlots: buildArtifactSlots(
+          context.sourceTitle,
+          activeSlot?.items ?? selectedPlansWithWorkflow,
+        ),
         copilotInsertions: buildCopilotInsertions(
           params.learnerName,
           context.sourceTitle,
-          selectedPlansWithWorkflow,
+          activeSlot?.items ?? selectedPlansWithWorkflow,
         ),
         completionPrompts: [
           "What did the learner complete today?",
           "What changed in pacing or support?",
           "Which route item should stay in view tomorrow?",
         ],
-        familyNotes: buildFamilyNotes(context.sourceTitle, selectedPlansWithWorkflow),
+        familyNotes: [
+          ...buildFamilyNotes(context.sourceTitle, selectedPlansWithWorkflow),
+          `${slotViews.length} lesson slot${slotViews.length === 1 ? "" : "s"} are available today.`,
+        ],
         recoveryOptions: [],
         alternatesByPlanItemId,
-        lessonDraft: metadataState.lessonDraft,
-        lessonBuild: metadataState.lessonBuild,
-        activityBuild: metadataState.activityBuild,
-        activityState: null,
-        lessonRegenerationNote: metadataState.lessonRegenerationNote,
-        expansionIntent: metadataState.expansionIntent,
+        lessonDraft: topLevelMetadata.lessonDraft,
+        lessonBuild: topLevelMetadata.lessonBuild,
+        activityBuild: topLevelMetadata.activityBuild,
+        activityState: activeSlot?.activityState ?? null,
+        lessonRegenerationNote: topLevelMetadata.lessonRegenerationNote,
+        expansionIntent: topLevelMetadata.expansionIntent,
       };
-
-      workspace.activityState = await buildTodayActivityState(workspace);
 
       return {
         workspace,
@@ -2596,24 +2978,12 @@ export async function getTodayWorkspaceViewForRender(params: {
       if (!context) {
         return null;
       }
-
-      const freshnessState = await readTodayWorkspaceFreshnessState({
+      await materializeTodayWorkspaceFromContext({
         organizationId: params.organizationId,
         learnerId: params.learnerId,
         date: params.date,
-        sourceId: context.sourceId,
-        routeFingerprint: context.routeFingerprint,
-        selectedRouteItemCount: context.selectedRouteItems.length,
+        context,
       });
-
-      if (freshnessState.status !== "fresh") {
-        await materializeTodayWorkspaceFromContext({
-          organizationId: params.organizationId,
-          learnerId: params.learnerId,
-          date: params.date,
-          context,
-        });
-      }
 
       return getTodayWorkspaceViewFromContext({
         organizationId: params.organizationId,
@@ -2621,7 +2991,6 @@ export async function getTodayWorkspaceViewForRender(params: {
         learnerName: params.learnerName,
         date: params.date,
         context,
-        metadataState: freshnessState.storedState.metadataState,
       });
     },
   );
@@ -2715,6 +3084,7 @@ async function resolveTodayPlanItemContext(params: {
   weeklyRouteItemId: string;
   planParentId?: string | null;
   planDayRecordId?: string | null;
+  planDaySlotId?: string | null;
   planRecordId?: string | null;
   sessionRecordId?: string | null;
 }) {
@@ -2749,6 +3119,7 @@ async function resolveTodayPlanItemContext(params: {
   return {
     planId: params.planParentId ?? planItem?.planId ?? null,
     planDayId: params.planDayRecordId ?? planItem?.planDayId ?? null,
+    planDaySlotId: params.planDaySlotId ?? planItem?.planDaySlotId ?? null,
     planItemId: params.planRecordId ?? planItem?.id ?? null,
     session,
     planItem,
@@ -2762,6 +3133,7 @@ export async function completeTodayPlanItem(params: {
   date: string;
   planParentId?: string | null;
   planDayRecordId?: string | null;
+  planDaySlotId?: string | null;
   planRecordId?: string | null;
   estimatedMinutes?: number | null;
   title?: string | null;
@@ -2774,6 +3146,7 @@ export async function completeTodayPlanItem(params: {
       learnerId: params.learnerId,
       planId: context.planId,
       planDayId: context.planDayId,
+      planDaySlotId: context.planDaySlotId,
       planItemId: context.planItemId,
       sessionDate: params.date,
       scheduledMinutes: params.estimatedMinutes ?? context.planItem?.estimatedMinutes ?? null,
@@ -2936,6 +3309,7 @@ export async function partiallyCompleteTodayPlanItem(params: {
   date: string;
   planParentId?: string | null;
   planDayRecordId?: string | null;
+  planDaySlotId?: string | null;
   planRecordId?: string | null;
   estimatedMinutes?: number | null;
   title?: string | null;
@@ -2950,6 +3324,7 @@ export async function partiallyCompleteTodayPlanItem(params: {
       learnerId: params.learnerId,
       planId: context.planId,
       planDayId: context.planDayId,
+      planDaySlotId: context.planDaySlotId,
       planItemId: context.planItemId,
       sessionDate: params.date,
       scheduledMinutes: estimatedMinutes,
@@ -2974,6 +3349,7 @@ export async function partiallyCompleteTodayPlanItem(params: {
     return {
       state: withinWeek ? "scheduled" : "queued",
       scheduledDate: withinWeek ? tomorrow : null,
+      scheduledSlotIndex: withinWeek ? normalizeSlotIndex(current.scheduledSlotIndex) : null,
       manualOverrideKind: current.manualOverrideKind === "none" ? "deferred" : current.manualOverrideKind,
       manualOverrideNote: withinWeek
         ? `Marked partial on ${params.date}; carried into ${tomorrow}.`
@@ -3001,6 +3377,7 @@ export async function pushTodayPlanItemToTomorrow(
     return {
       state: withinWeek ? "scheduled" : "queued",
       scheduledDate: withinWeek ? tomorrow : null,
+      scheduledSlotIndex: withinWeek ? normalizeSlotIndex(current.scheduledSlotIndex) : null,
       manualOverrideKind: current.manualOverrideKind === "none" ? "deferred" : current.manualOverrideKind,
       manualOverrideNote: withinWeek
         ? `Deferred from ${date} to ${tomorrow}.`
@@ -3036,6 +3413,7 @@ export async function removeTodayPlanItem(learnerId: string, weeklyRouteItemId: 
   await updateWeeklyRouteItem(learnerId, weeklyRouteItemId, (current) => ({
     state: "queued",
     scheduledDate: null,
+    scheduledSlotIndex: null,
     manualOverrideKind: current.manualOverrideKind === "none" ? "deferred" : current.manualOverrideKind,
     manualOverrideNote: `Removed from the ${date} workspace.`,
     eventType: "remove_from_week",
@@ -3053,6 +3431,7 @@ export async function skipTodayPlanItem(params: {
   date: string;
   planParentId?: string | null;
   planDayRecordId?: string | null;
+  planDaySlotId?: string | null;
   planRecordId?: string | null;
   estimatedMinutes?: number | null;
   title?: string | null;
@@ -3065,6 +3444,7 @@ export async function skipTodayPlanItem(params: {
       learnerId: params.learnerId,
       planId: context.planId,
       planDayId: context.planDayId,
+      planDaySlotId: context.planDaySlotId,
       planItemId: context.planItemId,
       sessionDate: params.date,
       scheduledMinutes: params.estimatedMinutes ?? context.planItem?.estimatedMinutes ?? null,
@@ -3085,6 +3465,7 @@ export async function skipTodayPlanItem(params: {
   await updateWeeklyRouteItem(params.learnerId, params.weeklyRouteItemId, (current) => ({
     state: "queued",
     scheduledDate: null,
+    scheduledSlotIndex: null,
     manualOverrideKind:
       current.manualOverrideKind === "none" ? "skip_acknowledged" : current.manualOverrideKind,
     manualOverrideNote: `Skipped on ${params.date}.`,
@@ -3104,6 +3485,7 @@ export async function scheduleRouteItemForDate(
   await updateWeeklyRouteItem(learnerId, weeklyRouteItemId, (current) => ({
     state: "scheduled",
     scheduledDate: date,
+    scheduledSlotIndex: normalizeSlotIndex(current.scheduledSlotIndex),
     manualOverrideKind: current.manualOverrideKind === "none" ? "pinned" : current.manualOverrideKind,
     manualOverrideNote: `Scheduled directly for ${date}.`,
     eventType: "pin",
@@ -3112,6 +3494,138 @@ export async function scheduleRouteItemForDate(
       toDate: date,
     },
   }));
+}
+
+export async function startNextLessonToday(params: {
+  organizationId: string;
+  learnerId: string;
+  date: string;
+  sourceId: string;
+}) {
+  const weekStartDate = toWeekStartDate(params.date);
+  const readResult = await getReadOptimizedWeeklyRouteBoardForToday({
+    learnerId: params.learnerId,
+    sourceId: params.sourceId,
+    weekStartDate,
+  });
+  const { board } = readResult.board
+    ? { board: readResult.board }
+    : await getOrCreateWeeklyRouteBoardForLearner({
+        learnerId: params.learnerId,
+        sourceId: params.sourceId,
+        weekStartDate,
+      });
+
+  const todayItems = board.items
+    .filter((item) => item.state !== "removed" && item.state !== "done" && item.scheduledDate === params.date)
+    .sort((left, right) => {
+      const leftSlot = normalizeSlotIndex(left.scheduledSlotIndex);
+      const rightSlot = normalizeSlotIndex(right.scheduledSlotIndex);
+      return leftSlot === rightSlot
+        ? left.currentPosition - right.currentPosition
+        : leftSlot - rightSlot;
+    });
+  const nextSlotIndex =
+    todayItems.reduce((max, item) => Math.max(max, normalizeSlotIndex(item.scheduledSlotIndex)), 0) + 1;
+
+  const futureScheduled = board.items
+    .filter(
+      (item) =>
+        item.state !== "removed" &&
+        item.state !== "done" &&
+        item.scheduledDate != null &&
+        item.scheduledDate > params.date,
+    )
+    .sort((left, right) => {
+      if (left.scheduledDate !== right.scheduledDate) {
+        return (left.scheduledDate ?? "").localeCompare(right.scheduledDate ?? "");
+      }
+
+      const leftSlot = normalizeSlotIndex(left.scheduledSlotIndex);
+      const rightSlot = normalizeSlotIndex(right.scheduledSlotIndex);
+      return leftSlot === rightSlot
+        ? left.currentPosition - right.currentPosition
+        : leftSlot - rightSlot;
+    });
+
+  const targetGroup = futureScheduled.length > 0
+    ? futureScheduled.filter((item) => {
+        const lead = futureScheduled[0]!;
+        return (
+          item.scheduledDate === lead.scheduledDate &&
+          normalizeSlotIndex(item.scheduledSlotIndex) === normalizeSlotIndex(lead.scheduledSlotIndex)
+        );
+      })
+    : board.items
+        .filter(
+          (item) =>
+            item.state !== "removed" &&
+            item.state !== "done" &&
+            item.scheduledDate == null,
+        )
+        .sort((left, right) => left.currentPosition - right.currentPosition)
+        .slice(0, DEFAULT_UNSCHEDULED_ITEM_COUNT);
+
+  if (targetGroup.length === 0) {
+    return {
+      status: "blocked" as const,
+      message: "No later lesson block is available to pull into today.",
+      slotIndex: nextSlotIndex,
+      movedRouteItemIds: [] as string[],
+    };
+  }
+
+  const db = getDb();
+  await db.transaction(async (tx) => {
+    for (const item of targetGroup) {
+      await tx
+        .update(weeklyRouteItems)
+        .set({
+          state: "scheduled",
+          scheduledDate: params.date,
+          scheduledSlotIndex: nextSlotIndex,
+          manualOverrideKind: "reordered",
+          manualOverrideNote: `Pulled forward into lesson ${nextSlotIndex} on ${params.date}.`,
+          updatedAt: new Date(),
+        })
+        .where(eq(weeklyRouteItems.id, item.id));
+
+      await tx.insert(routeOverrideEvents).values({
+        learnerId: params.learnerId,
+        weeklyRouteItemId: item.id,
+        eventType: "reorder",
+        payload: {
+          action: "pull_forward_to_today",
+          fromDate: item.scheduledDate,
+          fromSlotIndex: normalizeSlotIndex(item.scheduledSlotIndex),
+          toDate: params.date,
+          toSlotIndex: nextSlotIndex,
+        },
+        createdByAdultUserId: null,
+      });
+    }
+  });
+
+  await getOrCreateTodayWorkspaceDaySlot({
+    organizationId: params.organizationId,
+    learnerId: params.learnerId,
+    date: params.date,
+    slotIndex: nextSlotIndex,
+    title: `Lesson ${nextSlotIndex}`,
+    origin: "manual",
+    sourceId: params.sourceId,
+    routeFingerprint: buildTodayLessonDraftFingerprint(targetGroup.map((item) => item.id)),
+  });
+
+  return {
+    status: "scheduled" as const,
+    message:
+      targetGroup.length === 1
+        ? `Pulled the next lesson into today as Lesson ${nextSlotIndex}.`
+        : `Pulled ${targetGroup.length} planned skills into today as Lesson ${nextSlotIndex}.`,
+    slotIndex: nextSlotIndex,
+    movedRouteItemIds: targetGroup.map((item) => item.id),
+  };
 }
 
 export async function swapTodayPlanItemWithAlternate(
@@ -3136,6 +3650,7 @@ export async function swapTodayPlanItemWithAlternate(
       .set({
         state: "queued",
         scheduledDate: null,
+        scheduledSlotIndex: null,
         manualOverrideKind: current.routeItem.manualOverrideKind === "none" ? "deferred" : current.routeItem.manualOverrideKind,
         manualOverrideNote: `Swapped out on ${date}.`,
         updatedAt: new Date(),
@@ -3147,6 +3662,7 @@ export async function swapTodayPlanItemWithAlternate(
       .set({
         state: "scheduled",
         scheduledDate: date,
+        scheduledSlotIndex: normalizeSlotIndex(current.routeItem.scheduledSlotIndex),
         manualOverrideKind: "reordered",
         manualOverrideNote: `Swapped in for ${current.routeItem.id} on ${date}.`,
         updatedAt: new Date(),

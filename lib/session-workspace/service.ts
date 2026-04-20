@@ -84,6 +84,7 @@ export async function ensureSessionWorkspace(params: {
   learnerId: string;
   planId: string | null;
   planDayId: string | null;
+  planDaySlotId?: string | null;
   planItemId: string;
   sessionDate: string;
   scheduledMinutes?: number | null;
@@ -98,6 +99,7 @@ export async function ensureSessionWorkspace(params: {
     learnerId: params.learnerId,
     planId: params.planId,
     planDayId: params.planDayId,
+    planDaySlotId: params.planDaySlotId ?? null,
     planItemId: params.planItemId,
     sessionDate: params.sessionDate,
     workspaceType: params.workspaceType ?? "homeschool_day",
@@ -125,6 +127,7 @@ export async function completeSessionWorkspace(params: {
   learnerId: string;
   planId: string | null;
   planDayId: string | null;
+  planDaySlotId?: string | null;
   planItemId: string;
   sessionDate: string;
   scheduledMinutes?: number | null;
@@ -152,6 +155,7 @@ export async function completeSessionWorkspace(params: {
     learnerId: params.learnerId,
     planId: params.planId,
     planDayId: params.planDayId,
+    planDaySlotId: params.planDaySlotId ?? null,
     planItemId: params.planItemId,
     sessionDate: params.sessionDate,
     scheduledMinutes: params.scheduledMinutes,

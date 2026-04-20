@@ -58,6 +58,8 @@ export interface PlanItem {
   id: string;
   date: string;
   ordering?: number;
+  planDaySlotId?: string;
+  planDaySlotIndex?: number;
   startTime?: string;
   title: string;
   subject: string;
@@ -114,6 +116,7 @@ export interface WeeklyRouteItem {
   recommendedPosition: number;
   currentPosition: number;
   scheduledDate?: string;
+  scheduledSlotIndex?: number;
   manualOverrideKind: WeeklyRouteOverrideKind;
   state: WeeklyRouteItemState;
 }
@@ -300,6 +303,19 @@ export interface DailyWorkspaceActivityState {
   activityId?: string;
 }
 
+export type DailyWorkspaceSlotOrigin =
+  | "manual"
+  | "system_generated"
+  | "template"
+  | "carryover";
+
+export type DailyWorkspaceSlotStatus =
+  | "planned"
+  | "in_progress"
+  | "completed"
+  | "skipped"
+  | "canceled";
+
 export type DailyWorkspaceExpansionIntent =
   | "keep_today"
   | "expand_from_here";
@@ -309,10 +325,33 @@ export type DailyWorkspaceExpansionScope =
   | "next_few_days"
   | "current_week";
 
+export interface DailyWorkspaceSlot {
+  id: string;
+  date: string;
+  sourceId: string;
+  slotIndex: number;
+  title: string;
+  origin: DailyWorkspaceSlotOrigin;
+  status: DailyWorkspaceSlotStatus;
+  routeFingerprint: string;
+  leadItem: PlanItem;
+  items: PlanItem[];
+  prepChecklist: string[];
+  sessionTargets: string[];
+  artifactSlots: DailyWorkspaceArtifactSlot[];
+  lessonDraft: DailyWorkspaceLessonDraft | null;
+  lessonBuild: DailyWorkspaceLessonBuild | null;
+  activityBuild: DailyWorkspaceActivityBuild | null;
+  activityState: DailyWorkspaceActivityState | null;
+  lessonRegenerationNote: string | null;
+  expansionIntent: DailyWorkspaceExpansionIntent | null;
+}
+
 export interface DailyWorkspace {
   date: string;
   headline: string;
   learner: LearnerSummary;
+  slots: DailyWorkspaceSlot[];
   leadItem: PlanItem;
   items: PlanItem[];
   prepChecklist: string[];

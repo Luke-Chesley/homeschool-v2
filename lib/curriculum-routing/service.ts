@@ -68,6 +68,7 @@ type RouteItemProjection = {
   skillNodeId: string;
   currentPosition: number;
   scheduledDate: string | null;
+  scheduledSlotIndex: number | null;
   state: WeeklyRouteItemState;
   manualOverrideKind: WeeklyRouteManualOverrideKind;
 };
@@ -242,6 +243,7 @@ function mapDailySelection(item: WeeklyRouteBoardItem): WeeklyRouteDailySelectio
     curriculumSkillNodeId: item.skillNodeId,
     currentPosition: item.currentPosition,
     scheduledDate: item.scheduledDate,
+    scheduledSlotIndex: item.scheduledSlotIndex ?? null,
     state: item.state,
   };
 }
@@ -523,6 +525,7 @@ async function buildRouteBoard(route: WeeklyRouteRecord): Promise<WeeklyRouteBoa
       recommendedPosition: item.recommendedPosition,
       currentPosition: item.currentPosition,
       scheduledDate: item.scheduledDate,
+      scheduledSlotIndex: item.scheduledSlotIndex,
       manualOverrideKind: item.manualOverrideKind,
       manualOverrideNote: item.manualOverrideNote,
       state: item.state,
@@ -535,6 +538,7 @@ async function buildRouteBoard(route: WeeklyRouteRecord): Promise<WeeklyRouteBoa
         curriculumSkillNodeId: item.skillNodeId,
         currentPosition: item.currentPosition,
         scheduledDate: item.scheduledDate,
+        scheduledSlotIndex: item.scheduledSlotIndex,
         state: item.state,
       },
     };
@@ -1136,6 +1140,7 @@ async function persistGeneratedRoute(params: {
           recommendedPosition: index,
           currentPosition: index,
           scheduledDate: scheduledDates[index] ?? null,
+          scheduledSlotIndex: scheduledDates[index] ? 1 : null,
           manualOverrideKind: "none",
           manualOverrideNote: null,
           state: scheduledDates[index] ? "scheduled" : "queued",
@@ -1307,6 +1312,7 @@ function toProjection(items: WeeklyRouteBoardItem[]): RouteItemProjection[] {
       skillNodeId: item.skillNodeId,
       currentPosition: item.currentPosition,
       scheduledDate: item.scheduledDate,
+      scheduledSlotIndex: item.scheduledSlotIndex,
       state: item.state,
       manualOverrideKind: item.manualOverrideKind,
     }))
@@ -1328,6 +1334,8 @@ function projectionToBoardItems(
       const projectedItem: WeeklyRouteBoardItem = {
         ...base,
         currentPosition: projected.currentPosition,
+        scheduledDate: projected.scheduledDate,
+        scheduledSlotIndex: projected.scheduledSlotIndex,
         state: projected.state,
         manualOverrideKind: projected.manualOverrideKind,
       };
