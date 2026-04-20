@@ -241,7 +241,9 @@ export function TodayWorkspaceShell({
             activityBuild={workspace.activityBuild}
             activityState={workspace.activityState}
             lessonSessionId={
-              workspace.leadItem.sessionRecordId ?? workspace.leadItem.workflow?.lessonSessionId
+              workspace.leadItem.sessionRecordId ??
+              workspace.leadItem.workflow?.lessonSessionId ??
+              undefined
             }
             onLessonPatch={onLessonPatch}
             onActivityPatch={onActivityPatch}
@@ -263,7 +265,9 @@ export function TodayWorkspaceShell({
             activityBuild={workspace.activityBuild}
             activityState={workspace.activityState}
             lessonSessionId={
-              workspace.leadItem.sessionRecordId ?? workspace.leadItem.workflow?.lessonSessionId
+              workspace.leadItem.sessionRecordId ??
+              workspace.leadItem.workflow?.lessonSessionId ??
+              undefined
             }
             onLessonPatch={onLessonPatch}
             onActivityPatch={onActivityPatch}
