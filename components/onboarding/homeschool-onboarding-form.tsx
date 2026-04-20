@@ -16,6 +16,10 @@ import type {
   IntakeSourcePackageModality,
   NormalizedIntakeSourcePackage,
 } from "@/lib/homeschool/intake/types";
+import {
+  COMMON_SOURCE_UPLOAD_ACCEPT,
+  resolveUploadModality,
+} from "@/lib/homeschool/intake/upload-formats";
 import { createBrowserSupabaseClient } from "@/lib/platform/supabase-browser";
 import { storageBuckets } from "@/lib/storage/buckets";
 import { buildOrganizationStoragePath } from "@/lib/storage/paths";
@@ -59,9 +63,6 @@ const intakeOptions: Array<{ value: FastPathIntakeRoute; label: string }> = [
 ];
 
 const DEFAULT_INTAKE_ROUTE: FastPathIntakeRoute = "single_lesson";
-const UPLOAD_ACCEPT =
-  "image/*,application/pdf,.pdf,.txt,.md,.csv,.json,.html,.htm,application/json,text/plain,text/csv,text/markdown";
-
 const horizonLabels: Record<CurriculumGenerationHorizon, string> = {
   single_day: "Today",
   few_days: "Next few lessons",
@@ -102,28 +103,6 @@ function routeLabel(value: FastPathIntakeRoute) {
 
 function sourceInputPlaceholder() {
   return "Paste a lesson, weekly plan, outline, chapter pages, topic idea, or anything else you already have.";
-}
-
-function resolveUploadModality(
-  file: File,
-  source: "camera" | "upload",
-): Exclude<IntakeSourcePackageModality, "text" | "outline"> {
-  const fileName = file.name.toLowerCase();
-  const mimeType = file.type.toLowerCase();
-
-  if (source === "camera") {
-    return "photo";
-  }
-
-  if (mimeType.startsWith("image/")) {
-    return "image";
-  }
-
-  if (mimeType === "application/pdf" || fileName.endsWith(".pdf")) {
-    return "pdf";
-  }
-
-  return "file";
 }
 
 function selectedSourceLabel(mode: IntakeSourcePackageModality, inputMode: "text" | "upload") {
@@ -569,7 +548,7 @@ export function HomeschoolOnboardingForm(props: {
                 <input
                   ref={uploadInputRef}
                   type="file"
-                  accept={UPLOAD_ACCEPT}
+                  accept={COMMON_SOURCE_UPLOAD_ACCEPT}
                   onChange={(event) =>
                     handleUploadSelection(event.target.files?.[0] ?? null, "upload")
                   }

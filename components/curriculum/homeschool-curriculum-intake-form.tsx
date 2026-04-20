@@ -6,27 +6,17 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type {
-  IntakeSourcePackageModality,
   NormalizedIntakeSourcePackage,
 } from "@/lib/homeschool/intake/types";
+import {
+  COMMON_SOURCE_UPLOAD_ACCEPT,
+  resolveUploadModality,
+} from "@/lib/homeschool/intake/upload-formats";
 import { createBrowserSupabaseClient } from "@/lib/platform/supabase-browser";
 import { storageBuckets } from "@/lib/storage/buckets";
 import { buildLearnerStoragePath } from "@/lib/storage/paths";
 
-const UPLOAD_ACCEPT =
-  "application/pdf,.pdf,.txt,.md,.csv,.json,.html,.htm,application/json,text/plain,text/csv,text/markdown,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,application/vnd.openxmlformats-officedocument.presentationml.presentation,.pptx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx";
 const MAX_VERCEL_MULTIPART_UPLOAD_BYTES = 4 * 1024 * 1024;
-
-function resolveUploadModality(file: File): Exclude<IntakeSourcePackageModality, "text" | "outline"> {
-  const fileName = file.name.toLowerCase();
-  const mimeType = file.type.toLowerCase();
-
-  if (mimeType === "application/pdf" || fileName.endsWith(".pdf")) {
-    return "pdf";
-  }
-
-  return "file";
-}
 
 function summarizePackageStatus(pkg: NormalizedIntakeSourcePackage) {
   if (pkg.assetCount > 0) {
@@ -430,7 +420,7 @@ export function HomeschoolCurriculumIntakeForm(props: {
               <input
                 ref={uploadInputRef}
                 type="file"
-                accept={UPLOAD_ACCEPT}
+                accept={COMMON_SOURCE_UPLOAD_ACCEPT}
                 className="hidden"
                 onChange={(event) => handleUploadSelection(event.target.files?.[0] ?? null)}
               />

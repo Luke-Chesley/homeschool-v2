@@ -7,6 +7,7 @@ import { buildOrganizationStoragePath } from "@/lib/storage/paths";
 import { getAdminStorageClient } from "@/lib/storage/client";
 import { storageBuckets } from "@/lib/storage/buckets";
 
+import { buildBase64DataUrl, normalizeImageForVisionModel } from "./model-input";
 import {
   type CreateTextIntakeSourcePackageRequest,
   type IntakeSourceAsset,
@@ -18,6 +19,7 @@ import {
   LearningCoreInputFileSchema,
   NormalizedIntakeSourcePackageSchema,
 } from "./types";
+import { isImageLikeUpload, normalizeUploadMimeType } from "./upload-formats";
 
 const NORMALIZED_TEXT_LIMIT = 12_000;
 
@@ -191,8 +193,24 @@ export function toIntakeSourcePackageContext(
 function assetSupportsDirectModelFileInput(params: {
   modality: IntakeSourcePackageModality;
   mimeType: string;
+  fileName: string;
 }) {
-  return params.modality !== "photo" && params.modality !== "image" && !params.mimeType.startsWith("image/");
+  return !(
+    params.modality === "photo" ||
+    params.modality === "image" ||
+    isImageLikeUpload({
+      name: params.fileName,
+      type: params.mimeType,
+    })
+  );
+}
+
+function assetUsesVisionModelInput(params: {
+  modality: IntakeSourcePackageModality;
+  mimeType: string;
+  fileName: string;
+}) {
+  return !assetSupportsDirectModelFileInput(params);
 }
 
 function buildDirectFileContext(params: {
@@ -209,12 +227,21 @@ function buildDirectFileContext(params: {
     return `Uploaded PDF: ${params.fileName}`;
   }
 
+  if (params.modality === "photo") {
+    return `Uploaded photo: ${params.fileName}`;
+  }
+
+  if (params.modality === "image") {
+    return `Uploaded image: ${params.fileName}`;
+  }
+
   return `Uploaded file: ${params.fileName}`;
 }
 
 async function buildInlineLearningCoreFileData(params: {
   bucket: ReturnType<ReturnType<typeof getAdminStorageClient>["from"]>;
   asset: IntakeSourceAsset;
+  mimeType?: string;
 }) {
   const downloaded = await params.bucket.download(params.asset.storagePath);
 
@@ -226,7 +253,52 @@ async function buildInlineLearningCoreFileData(params: {
   }
 
   const bytes = Buffer.from(await downloaded.data.arrayBuffer());
-  return `data:${params.asset.mimeType};base64,${bytes.toString("base64")}`;
+  const mimeTypeCandidate = params.mimeType ?? normalizeUploadMimeType(params.asset.mimeType);
+  const mimeType = mimeTypeCandidate || "application/octet-stream";
+  return buildBase64DataUrl(
+    bytes,
+    mimeType,
+  );
+}
+
+async function buildVisionLearningCoreInputFile(params: {
+  bucket: ReturnType<ReturnType<typeof getAdminStorageClient>["from"]>;
+  pkg: NormalizedIntakeSourcePackage;
+  asset: IntakeSourceAsset;
+}) {
+  const downloaded = await params.bucket.download(params.asset.storagePath);
+
+  if (downloaded.error || !downloaded.data) {
+    throw new Error(
+      downloaded.error?.message ??
+        `Could not load ${params.asset.fileName} from storage for model input.`,
+    );
+  }
+
+  let normalizedAsset;
+  try {
+    normalizedAsset = await normalizeImageForVisionModel({
+      bytes: Buffer.from(await downloaded.data.arrayBuffer()),
+      fileName: params.asset.fileName,
+      mimeType: params.asset.mimeType,
+    });
+  } catch (error) {
+    throw new Error(
+      error instanceof Error
+        ? `Could not normalize ${params.asset.fileName} for model input: ${error.message}`
+        : `Could not normalize ${params.asset.fileName} for model input.`,
+    );
+  }
+
+  return LearningCoreInputFileSchema.parse({
+    assetId: params.asset.id,
+    packageId: params.pkg.id,
+    title: params.pkg.title,
+    modality: params.pkg.modality,
+    fileName: normalizedAsset.fileName,
+    mimeType: normalizedAsset.mimeType,
+    fileData: buildBase64DataUrl(normalizedAsset.bytes, normalizedAsset.mimeType),
+  });
 }
 
 async function extractAssetText(params: {
@@ -239,25 +311,13 @@ async function extractAssetText(params: {
   extractionStatus: IntakeSourceAssetExtractionStatus;
   extractionMethod: string;
 }> {
-  const note = params.note?.trim() ?? "";
-  const mimeType = params.mimeType.toLowerCase();
-
-  if (params.modality === "photo" || params.modality === "image" || mimeType.startsWith("image/")) {
-    if (!note) {
-      throw new Error("Add a short note so the photo upload has usable launch context.");
-    }
-
-    return {
-      extractedText: note,
-      extractionStatus: "requires_review",
-      extractionMethod: "user_note_only",
-    };
-  }
+  const mimeType = normalizeUploadMimeType(params.mimeType);
 
   if (
-    assetSupportsDirectModelFileInput({
+    assetUsesVisionModelInput({
       modality: params.modality,
       mimeType,
+      fileName: params.fileName,
     })
   ) {
     return {
@@ -267,18 +327,18 @@ async function extractAssetText(params: {
         note: params.note,
       }),
       extractionStatus: "ready",
-      extractionMethod: "direct_model_file_input",
+      extractionMethod: "direct_model_image_input",
     };
   }
 
-  if (!note) {
-    throw new Error("Add a short note so this uploaded file has usable launch context.");
-  }
-
   return {
-    extractedText: note,
-    extractionStatus: "requires_review",
-    extractionMethod: "user_note_fallback",
+    extractedText: buildDirectFileContext({
+      modality: params.modality,
+      fileName: params.fileName,
+      note: params.note,
+    }),
+    extractionStatus: "ready",
+    extractionMethod: "direct_model_file_input",
   };
 }
 
@@ -302,16 +362,24 @@ export async function createLearningCoreInputFilesFromSourcePackages(
 
   for (const pkg of packages) {
     for (const asset of pkg.assets) {
+      const bucket = storage.from(asset.storageBucket);
+
       if (
-        !assetSupportsDirectModelFileInput({
+        assetUsesVisionModelInput({
           modality: pkg.modality,
-          mimeType: asset.mimeType.toLowerCase(),
+          mimeType: asset.mimeType,
+          fileName: asset.fileName,
         })
       ) {
+        files.push(
+          await buildVisionLearningCoreInputFile({
+            bucket,
+            pkg,
+            asset,
+          }),
+        );
         continue;
       }
-
-      const bucket = storage.from(asset.storageBucket);
 
       files.push(
         LearningCoreInputFileSchema.parse({
@@ -397,15 +465,17 @@ async function finalizeAssetBackedIntakeSourcePackage(params: {
   });
 
   try {
+    const note = params.note?.trim() || null;
     const extracted = await extractAssetText({
       modality: params.modality,
       mimeType: params.mimeType,
       fileName: params.fileName,
       note: params.note,
     });
+    const supplementalNote = note && note !== extracted.extractedText.trim() ? note : null;
     const normalizedText = combineNormalizedText([
       extracted.extractedText,
-      params.note?.trim() || null,
+      supplementalNote,
     ]);
 
     if (!normalizedText) {
@@ -418,7 +488,7 @@ async function finalizeAssetBackedIntakeSourcePackage(params: {
       normalizedText,
       assetCount: 1,
     });
-    const title = titleFromText(params.note?.trim() || extracted.extractedText || params.fileName);
+    const title = titleFromText(note || params.fileName);
     const sourceFingerprint = buildFingerprint([
       params.modality,
       normalizedText,
@@ -441,17 +511,17 @@ async function finalizeAssetBackedIntakeSourcePackage(params: {
     });
 
     await repos.aiIntake.updatePackage(packageRecord.id, {
-      title,
-      status: "ready",
-      normalizedText,
-      sourceFingerprint,
-      metadata: {
-        note: params.note?.trim() || null,
-        detectedChunks,
-        summary,
-        extractionMethod: extracted.extractionMethod,
-        originalFileName: params.fileName,
-      },
+        title,
+        status: "ready",
+        normalizedText,
+        sourceFingerprint,
+        metadata: {
+          note,
+          detectedChunks,
+          summary,
+          extractionMethod: extracted.extractionMethod,
+          originalFileName: params.fileName,
+        },
     });
   } catch (error) {
     await repos.aiIntake.updatePackage(packageRecord.id, {
