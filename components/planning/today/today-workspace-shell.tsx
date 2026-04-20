@@ -62,7 +62,6 @@ export function TodayWorkspaceShell({
   onEvaluationSaved,
   onLessonPatch,
   onActivityPatch,
-  onRegenerationNoteChange,
   onExpansionIntentChange,
   onWorkspacePatch,
 }: {
@@ -86,7 +85,6 @@ export function TodayWorkspaceShell({
     activityBuild?: DailyWorkspace["activityBuild"] | null;
     activityState?: DailyWorkspaceActivityState | null;
   }) => void;
-  onRegenerationNoteChange: (note: string | null) => void;
   onExpansionIntentChange: (intent: DailyWorkspace["expansionIntent"]) => void;
   onWorkspacePatch: (patch?: TodayWorkspacePatch) => void;
 }) {
@@ -247,7 +245,6 @@ export function TodayWorkspaceShell({
             }
             onLessonPatch={onLessonPatch}
             onActivityPatch={onActivityPatch}
-            onRegenerationNoteChange={onRegenerationNoteChange}
             onExpansionIntentChange={onExpansionIntentChange}
             onWorkspacePatch={onWorkspacePatch}
             showDraftOutput={false}
@@ -270,7 +267,6 @@ export function TodayWorkspaceShell({
             }
             onLessonPatch={onLessonPatch}
             onActivityPatch={onActivityPatch}
-            onRegenerationNoteChange={onRegenerationNoteChange}
             onExpansionIntentChange={onExpansionIntentChange}
             onWorkspacePatch={onWorkspacePatch}
           />

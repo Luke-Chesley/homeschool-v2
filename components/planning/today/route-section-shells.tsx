@@ -203,7 +203,6 @@ export function TodayLessonPlanSection({
   lessonSessionId,
   onLessonPatch,
   onActivityPatch,
-  onRegenerationNoteChange,
   onExpansionIntentChange,
   onWorkspacePatch,
   showDraftOutput = true,
@@ -227,7 +226,6 @@ export function TodayLessonPlanSection({
     activityBuild?: DailyWorkspace["activityBuild"] | null;
     activityState?: DailyWorkspaceActivityState | null;
   }) => void;
-  onRegenerationNoteChange?: (note: string | null) => void;
   onExpansionIntentChange?: (intent: DailyWorkspace["expansionIntent"]) => void;
   onWorkspacePatch?: (patch?: TodayWorkspacePatch) => void;
   showDraftOutput?: boolean;
@@ -273,11 +271,9 @@ export function TodayLessonPlanSection({
         activityBuild={activityBuild ?? null}
         activityState={activityState ?? null}
         lessonSessionId={lessonSessionId}
-        regenerationNote={workspace.lessonRegenerationNote}
         expansionIntent={workspace.expansionIntent}
         onLessonPatch={onLessonPatch}
         onActivityPatch={onActivityPatch}
-        onRegenerationNoteChange={onRegenerationNoteChange}
         onExpansionIntentChange={onExpansionIntentChange}
         onWorkspacePatch={onWorkspacePatch}
         showDraftOutput={showDraftOutput}

@@ -28,7 +28,6 @@ export function TodayWorkspaceView({ workspace, sourceId }: TodayWorkspaceViewPr
       onEvaluationSaved={state.handleEvaluationSaved}
       onLessonPatch={state.handleLessonPatch}
       onActivityPatch={state.handleActivityPatch}
-      onRegenerationNoteChange={state.handleRegenerationNoteChange}
       onExpansionIntentChange={state.handleExpansionIntentChange}
       onWorkspacePatch={state.handleWorkspacePatch}
     />
