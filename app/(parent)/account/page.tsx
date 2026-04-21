@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { ProgramSetupCard } from "@/components/tracking/program-setup-card";
+import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { ActiveLearnerSwitcher } from "@/components/users/active-learner-switcher";
 import { requireAppSession } from "@/lib/app-session/server";
 import { listRequirementProfiles } from "@/lib/compliance/profiles";
@@ -133,6 +134,25 @@ export default async function AccountPage() {
         {dashboard ? (
           <ProgramSetupCard program={dashboard.program} profileOptions={profileOptions} />
         ) : null}
+
+        <section className="quiet-panel space-y-4 p-6">
+          <div className="space-y-1">
+            <h2 className="text-lg font-semibold text-foreground">Appearance</h2>
+            <p className="text-sm leading-6 text-muted-foreground">
+              Choose the workspace theme for this browser.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/60 bg-background/75 p-4">
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-foreground">Theme</p>
+              <p className="text-sm leading-6 text-muted-foreground">
+                Switch between light and dark mode without changing household settings.
+              </p>
+            </div>
+            <ThemeToggle />
+          </div>
+        </section>
 
         <section className="quiet-panel space-y-3 p-6">
           <h2 className="text-lg font-semibold text-foreground">Billing</h2>

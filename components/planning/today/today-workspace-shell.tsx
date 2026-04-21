@@ -365,7 +365,21 @@ export function TodayWorkspaceShell({
           />
         </div>
       ) : (
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_22rem] xl:items-start">
+        <div className="grid gap-6 xl:grid-cols-[22rem_minmax(0,1fr)] xl:items-start">
+          <details className="rounded-[var(--radius)] border border-border/70 bg-card/70" open>
+            <summary className="cursor-pointer list-none px-4 py-3 text-sm font-medium text-foreground">
+              {queueSummaryLabel}
+            </summary>
+            <div className="border-t border-border/70 px-4 py-4">
+              <TodayRouteItemsSection
+                workspace={workspace}
+                repeatTomorrowAllowed={repeatTomorrowAllowed}
+                compact
+                onActionSaved={onItemActionSaved}
+                onEvaluationSaved={onEvaluationSaved}
+              />
+            </div>
+          </details>
           <TodayLessonPlanSection
             workspace={workspace}
             sourceId={sourceId}
@@ -389,20 +403,6 @@ export function TodayWorkspaceShell({
             daySkillCount={daySummary.skillCount}
             daySlotCount={daySummary.lessonSlotCount}
           />
-          <details className="rounded-[var(--radius)] border border-border/70 bg-card/70" open>
-            <summary className="cursor-pointer list-none px-4 py-3 text-sm font-medium text-foreground">
-              {queueSummaryLabel}
-            </summary>
-            <div className="border-t border-border/70 px-4 py-4">
-              <TodayRouteItemsSection
-                workspace={workspace}
-                repeatTomorrowAllowed={repeatTomorrowAllowed}
-                compact
-                onActionSaved={onItemActionSaved}
-                onEvaluationSaved={onEvaluationSaved}
-              />
-            </div>
-          </details>
         </div>
       )}
     </div>

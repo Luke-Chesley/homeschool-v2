@@ -6,7 +6,6 @@ import { LogOut } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { StudioToggle } from "@/components/studio/StudioToggle";
-import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { ActiveLearnerSwitcher } from "@/components/users/active-learner-switcher";
 import { cn } from "@/lib/utils";
@@ -200,7 +199,6 @@ export function GlobalPageTabs() {
               </form>
             </>
           ) : null}
-          <ThemeToggle />
         </div>
       </div>
     </div>
