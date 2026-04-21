@@ -178,22 +178,6 @@ export function TodayWorkspaceShell({
                 className="inline-flex w-full rounded-full border border-border/70 bg-muted/40 p-1 sm:w-auto"
               >
                 <button
-                  id="today-lesson-flow-tab"
-                  type="button"
-                  role="tab"
-                  aria-selected={headerView === "flow"}
-                  aria-controls="today-lesson-flow-panel"
-                  onClick={() => setHeaderView("flow")}
-                  className={cn(
-                    "rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
-                    headerView === "flow"
-                      ? "bg-card text-foreground shadow-[var(--shadow-card)]"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  Lesson flow
-                </button>
-                <button
                   id="today-skills-tab"
                   type="button"
                   role="tab"
@@ -208,6 +192,22 @@ export function TodayWorkspaceShell({
                   )}
                 >
                   Today&apos;s skills
+                </button>
+                <button
+                  id="today-lesson-flow-tab"
+                  type="button"
+                  role="tab"
+                  aria-selected={headerView === "flow"}
+                  aria-controls="today-lesson-flow-panel"
+                  onClick={() => setHeaderView("flow")}
+                  className={cn(
+                    "rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
+                    headerView === "flow"
+                      ? "bg-card text-foreground shadow-[var(--shadow-card)]"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  Lesson flow
                 </button>
               </div>
               <div className="space-y-1">
