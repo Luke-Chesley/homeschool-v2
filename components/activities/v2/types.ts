@@ -4,6 +4,11 @@
 
 import type { ComponentSpec } from "@/lib/activities/components";
 import type { ActivityComponentFeedback } from "@/lib/activities/feedback";
+import type {
+  ActivityAssetComponentType,
+  ActivityAssetKind,
+  StoredActivityAttachment,
+} from "@/lib/activities/uploads";
 import type { InteractiveWidgetPayload } from "@/lib/activities/widgets";
 import type { WidgetLearnerAction, WidgetTransitionArtifact } from "@/lib/activities/widget-transition";
 
@@ -29,6 +34,20 @@ export interface ComponentRendererProps<T extends ComponentSpec = ComponentSpec>
     learnerAction: WidgetLearnerAction,
     currentValue: unknown,
   ) => Promise<WidgetTransitionArtifact | null>;
+  /** Optional hook for durable component asset uploads */
+  onRequestAssetUpload?: (
+    componentId: string,
+    componentType: ActivityAssetComponentType,
+    kind: ActivityAssetKind,
+    file: File,
+  ) => Promise<StoredActivityAttachment>;
+  /** Optional hook for removing a previously uploaded durable asset */
+  onRequestAssetDelete?: (
+    componentId: string,
+    componentType: ActivityAssetComponentType,
+    kind: ActivityAssetKind,
+    asset: StoredActivityAttachment,
+  ) => Promise<void>;
   /** True when the activity has been submitted */
   disabled?: boolean;
   /** Hint strategy from adaptationRules */

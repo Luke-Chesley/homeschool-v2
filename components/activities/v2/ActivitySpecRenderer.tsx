@@ -17,6 +17,11 @@ import { cn } from "@/lib/utils";
 import { renderComponent } from "./ComponentRegistry";
 import { isInteractiveComponentSpec, type ComponentSpec } from "@/lib/activities/components";
 import type { ActivityComponentFeedback } from "@/lib/activities/feedback";
+import type {
+  ActivityAssetComponentType,
+  ActivityAssetKind,
+  StoredActivityAttachment,
+} from "@/lib/activities/uploads";
 import type { ActivitySpec } from "@/lib/activities/spec";
 import type { InteractiveWidgetComponent, InteractiveWidgetPayload } from "@/lib/activities/widgets";
 import { readBoardMove, type WidgetLearnerAction, type WidgetTransitionArtifact } from "@/lib/activities/widget-transition";
@@ -50,6 +55,18 @@ export interface ActivitySpecRendererProps {
     learnerAction: WidgetLearnerAction,
     currentValue: unknown,
   ) => Promise<WidgetTransitionArtifact | null>;
+  onComponentAssetUploadRequest?: (
+    componentId: string,
+    componentType: ActivityAssetComponentType,
+    kind: ActivityAssetKind,
+    file: File,
+  ) => Promise<StoredActivityAttachment>;
+  onComponentAssetDeleteRequest?: (
+    componentId: string,
+    componentType: ActivityAssetComponentType,
+    kind: ActivityAssetKind,
+    asset: StoredActivityAttachment,
+  ) => Promise<void>;
   onSubmit?: (evidence: ActivitySpecEvidence) => void;
   submitting?: boolean;
   submitted?: boolean;
@@ -66,6 +83,8 @@ export function ActivitySpecRenderer({
   onEvidenceChange,
   onComponentFeedbackRequest,
   onComponentTransitionRequest,
+  onComponentAssetUploadRequest,
+  onComponentAssetDeleteRequest,
   onSubmit,
   submitting,
   submitted,
@@ -304,6 +323,8 @@ export function ActivitySpecRenderer({
                       feedback: feedbackByComponent[component.id] ?? null,
                       onRequestFeedback: handleComponentFeedback,
                       onRequestTransition: handleComponentTransition,
+                      onRequestAssetUpload: onComponentAssetUploadRequest,
+                      onRequestAssetDelete: onComponentAssetDeleteRequest,
                       disabled: submitted,
                       hintStrategy,
                     })}

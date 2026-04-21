@@ -5,6 +5,7 @@ import { createRepositories } from "@/lib/db";
 import { getDb } from "@/lib/db/server";
 import { ACTIVATION_EVENT_NAMES } from "@/lib/homeschool/onboarding/activation-contracts";
 import { computeLessonDraftFingerprint } from "@/lib/lesson-draft/fingerprint";
+import { summarizeActivityBuildError } from "@/lib/planning/activity-build-errors";
 import { trackProductEvent } from "@/lib/platform/observability";
 import type { DailyWorkspaceActivityBuildTrigger } from "@/lib/planning/types";
 import {
@@ -207,7 +208,7 @@ export async function generateTodayActivity(params: {
 
     return published;
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Activity generation failed.";
+    const summary = summarizeActivityBuildError(error);
 
     await markTodayActivityBuildFailed({
       organizationId: params.organizationId,
@@ -220,7 +221,7 @@ export async function generateTodayActivity(params: {
       title: slot.title,
       lessonSessionId,
       trigger: params.trigger,
-      error: message,
+      error: summary.userMessage,
     });
 
     await trackProductEvent({
@@ -234,10 +235,12 @@ export async function generateTodayActivity(params: {
         slotIndex: slot.slotIndex,
         routeFingerprint,
         lessonSessionId,
-        error: message,
+        error: summary.userMessage,
+        errorKind: summary.kind,
+        rawError: summary.rawMessage,
       },
     });
 
-    throw error;
+    throw new Error(summary.userMessage, { cause: error });
   }
 }

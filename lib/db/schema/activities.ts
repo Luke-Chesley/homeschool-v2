@@ -1,4 +1,5 @@
-import { type AnyPgColumn, index, integer, pgEnum, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { type AnyPgColumn, index, integer, jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 
 import { learners } from "@/lib/db/schema/learners";
 import { organizations } from "@/lib/db/schema/organizations";
@@ -250,8 +251,8 @@ export const activityEvidence = pgTable(
     value: metadataColumn("value"),
     /** Human-readable summary */
     summary: text("summary"),
-    linkedObjectiveIds: metadataColumn("linked_objective_ids"),
-    linkedSkillIds: metadataColumn("linked_skill_ids"),
+    linkedObjectiveIds: jsonb("linked_objective_ids").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    linkedSkillIds: jsonb("linked_skill_ids").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
     reviewState: text("review_state").notNull().default("not_required"),
     capturedAt: timestamp("captured_at", { withTimezone: true }),
     metadata: metadataColumn(),

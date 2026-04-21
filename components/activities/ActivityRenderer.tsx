@@ -18,6 +18,11 @@ import type {
   HybridComponent,
 } from "@/lib/activities/types";
 import type { ActivityComponentFeedback } from "@/lib/activities/feedback";
+import type {
+  ActivityAssetComponentType,
+  ActivityAssetKind,
+  StoredActivityAttachment,
+} from "@/lib/activities/uploads";
 import { isActivitySpec } from "@/lib/activities/spec";
 import type { ActivitySpec } from "@/lib/activities/spec";
 import type { InteractiveWidgetPayload } from "@/lib/activities/widgets";
@@ -51,6 +56,18 @@ export interface ActivityRendererProps {
     learnerAction: WidgetLearnerAction,
     currentValue: unknown,
   ) => Promise<WidgetTransitionArtifact | null>;
+  onComponentAssetUploadRequest?: (
+    componentId: string,
+    componentType: ActivityAssetComponentType,
+    kind: ActivityAssetKind,
+    file: File,
+  ) => Promise<StoredActivityAttachment>;
+  onComponentAssetDeleteRequest?: (
+    componentId: string,
+    componentType: ActivityAssetComponentType,
+    kind: ActivityAssetKind,
+    asset: StoredActivityAttachment,
+  ) => Promise<void>;
   onSubmit?: (answers: AttemptAnswer[]) => void;
   submitting?: boolean;
   submitted?: boolean;
@@ -63,6 +80,8 @@ export function ActivityRenderer({
   onAnswerChange,
   onComponentFeedbackRequest,
   onComponentTransitionRequest,
+  onComponentAssetUploadRequest,
+  onComponentAssetDeleteRequest,
   onSubmit,
   submitting,
   submitted,
@@ -90,6 +109,8 @@ export function ActivityRenderer({
         }}
         onComponentFeedbackRequest={onComponentFeedbackRequest}
         onComponentTransitionRequest={onComponentTransitionRequest}
+        onComponentAssetUploadRequest={onComponentAssetUploadRequest}
+        onComponentAssetDeleteRequest={onComponentAssetDeleteRequest}
         onSubmit={(evidence) => {
           const answers = Object.entries(evidence).map(([questionId, value]) => ({
             questionId,
