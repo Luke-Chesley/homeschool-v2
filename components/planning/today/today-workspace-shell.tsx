@@ -19,6 +19,10 @@ import type {
   DailyWorkspaceLessonBuild,
   DailyWorkspaceLessonDraft,
 } from "@/lib/planning/types";
+import {
+  buildTodayWorkspaceDaySummary,
+  resolveTodayWorkspaceSlotSummaryDetail,
+} from "@/lib/planning/today-workspace-summary";
 import type { TodayWorkspaceSlotSummary } from "@/lib/planning/today-workspace-patches";
 import { cn } from "@/lib/utils";
 
@@ -97,9 +101,11 @@ export function TodayWorkspaceShell({
   const [isStartingNext, startNextTransition] = useTransition();
   const activeSlotId =
     selectedSlotId ?? workspace.leadItem.planDaySlotId ?? workspace.slots[0]?.id ?? null;
-  const slotMetaById = new Map(
-    fullWorkspace.slots.map((slot) => [slot.id, { title: slot.title }]),
-  );
+  const daySummary = buildTodayWorkspaceDaySummary(fullWorkspace);
+  const activeSlotSummary = resolveTodayWorkspaceSlotSummaryDetail(fullWorkspace, activeSlotId);
+  const queueSummaryLabel = activeSlotSummary?.slotTitle
+    ? `${activeSlotSummary.slotTitle} queue and actions`
+    : "Active lesson queue and actions";
 
   if (fullWorkspace.items.length === 0) {
     return (
@@ -160,7 +166,6 @@ export function TodayWorkspaceShell({
     }
 
     onSelectSlot(slotId);
-    setHeaderView("flow");
   }
 
   return (
@@ -269,34 +274,38 @@ export function TodayWorkspaceShell({
               aria-labelledby="today-skills-tab"
               className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3"
             >
-              {fullWorkspace.items.map((item) => {
-                const slotMeta = item.planDaySlotId ? slotMetaById.get(item.planDaySlotId) : null;
-
+              {daySummary.skills.map((skill) => {
                 return (
                   <button
-                    key={item.id}
+                    key={skill.item.id}
                     type="button"
-                    disabled={!item.planDaySlotId}
-                    onClick={() => handleSkillSelect(item.planDaySlotId)}
+                    disabled={!skill.slotId}
+                    onClick={() => handleSkillSelect(skill.slotId ?? undefined)}
                     className={cn(
                       "rounded-xl border border-border/70 bg-background/72 p-4 text-left transition-colors",
-                      item.planDaySlotId && activeSlotId === item.planDaySlotId
+                      skill.slotId && activeSlotId === skill.slotId
                         ? "border-primary/50 bg-primary/6"
                         : "hover:border-primary/35 hover:bg-card",
-                      !item.planDaySlotId && "cursor-default",
+                      !skill.slotId && "cursor-default",
                     )}
                   >
                     <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                      <Badge variant="secondary">{item.subject}</Badge>
-                      <span>{formatMinutes(item.estimatedMinutes)}</span>
-                      {slotMeta ? <span>{slotMeta.title}</span> : null}
+                      <Badge variant="secondary">{skill.item.subject}</Badge>
+                      <span>{formatMinutes(skill.item.estimatedMinutes)}</span>
+                      {skill.slotTitle ? <span>{skill.slotTitle}</span> : null}
                     </div>
                     <div className="mt-3 space-y-1">
-                      <p className="text-sm font-medium leading-5 text-foreground">{item.title}</p>
-                      <p className="line-clamp-2 text-xs text-muted-foreground">{item.objective}</p>
+                      <p className="text-sm font-medium leading-5 text-foreground">
+                        {skill.item.title}
+                      </p>
+                      <p className="line-clamp-2 text-xs text-muted-foreground">
+                        {skill.item.objective}
+                      </p>
                     </div>
-                    {item.lessonLabel ? (
-                      <p className="mt-3 text-xs text-muted-foreground">{item.lessonLabel}</p>
+                    {skill.item.lessonLabel ? (
+                      <p className="mt-3 text-xs text-muted-foreground">
+                        {skill.item.lessonLabel}
+                      </p>
                     ) : null}
                   </button>
                 );
@@ -327,7 +336,7 @@ export function TodayWorkspaceShell({
 
             <details className="rounded-[var(--radius)] border border-border/70 bg-card/70">
               <summary className="cursor-pointer list-none px-4 py-3 text-sm font-medium text-foreground">
-                Today’s queue and actions
+                {queueSummaryLabel}
               </summary>
               <div className="border-t border-border/70 px-4 py-4">
                 <TodayRouteItemsSection
@@ -361,6 +370,10 @@ export function TodayWorkspaceShell({
             onWorkspacePatch={onWorkspacePatch}
             showDraftOutput={false}
             compact
+            slotLabel={activeSlotSummary?.slotTitle}
+            slotPosition={activeSlotSummary?.slotIndex}
+            daySkillCount={daySummary.skillCount}
+            daySlotCount={daySummary.lessonSlotCount}
           />
         </div>
       ) : (
@@ -383,10 +396,14 @@ export function TodayWorkspaceShell({
             onActivityPatch={onActivityPatch}
             onExpansionIntentChange={onExpansionIntentChange}
             onWorkspacePatch={onWorkspacePatch}
+            slotLabel={activeSlotSummary?.slotTitle}
+            slotPosition={activeSlotSummary?.slotIndex}
+            daySkillCount={daySummary.skillCount}
+            daySlotCount={daySummary.lessonSlotCount}
           />
           <details className="rounded-[var(--radius)] border border-border/70 bg-card/70" open>
             <summary className="cursor-pointer list-none px-4 py-3 text-sm font-medium text-foreground">
-              Today’s queue and actions
+              {queueSummaryLabel}
             </summary>
             <div className="border-t border-border/70 px-4 py-4">
               <TodayRouteItemsSection

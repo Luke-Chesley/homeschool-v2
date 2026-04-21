@@ -9,11 +9,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireAppSession } from "@/lib/app-session/server";
 import { getOrganizationTodayTrackerBaseline } from "@/lib/beta/service";
 import { getTodayWorkspaceViewForRender } from "@/lib/planning/today-service";
+import { buildTodayWorkspaceDaySummary } from "@/lib/planning/today-workspace-summary";
 
 interface TodayPageProps {
   searchParams: Promise<{
     date?: string | string[];
   }>;
+}
+
+function formatCount(count: number, singular: string, plural = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : plural}`;
 }
 
 function formatLongDate(date: string) {
@@ -62,6 +67,7 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
   }
 
   const { workspace, sessionTiming, sourceId } = workspaceResult;
+  const daySummary = buildTodayWorkspaceDaySummary(workspace);
 
   return (
     <PlanningShell>
@@ -75,8 +81,9 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
         <p className="section-meta">{formatLongDate(workspace.date)}</p>
         <h1 className="page-title">Today</h1>
         <div className="toolbar-row text-sm text-muted-foreground">
-          <span>{workspace.items.length} lesson slots</span>
-          <span>{sessionTiming.resolvedTotalMinutes} min</span>
+          <span>{formatCount(daySummary.skillCount, "skill")}</span>
+          <span>{formatCount(daySummary.lessonSlotCount, "lesson slot")}</span>
+          <span>{daySummary.totalMinutes || sessionTiming.resolvedTotalMinutes} min</span>
         </div>
       </header>
       <OnboardingLaunchFlash />

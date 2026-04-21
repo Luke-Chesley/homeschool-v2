@@ -196,6 +196,10 @@ export function TodayLessonPlanSection({
   sourceId,
   routeFingerprint,
   slotId,
+  slotLabel,
+  slotPosition,
+  daySkillCount,
+  daySlotCount,
   draftState,
   buildState,
   activityBuild,
@@ -212,6 +216,10 @@ export function TodayLessonPlanSection({
   sourceId?: string;
   routeFingerprint: string;
   slotId?: string;
+  slotLabel?: string;
+  slotPosition?: number;
+  daySkillCount?: number;
+  daySlotCount?: number;
   draftState?: DraftState;
   buildState?: DailyWorkspaceLessonBuild | null;
   activityBuild?: DailyWorkspace["activityBuild"] | null;
@@ -259,10 +267,14 @@ export function TodayLessonPlanSection({
         date={workspace.date}
         sourceId={sourceId}
         slotId={resolvedSlotId}
+        slotLabel={slotLabel}
+        slotPosition={slotPosition}
         routeFingerprint={routeFingerprint}
         sourceTitle={workspace.leadItem.sourceLabel}
         routeItemCount={workspace.items.length}
         totalMinutes={totalMinutes}
+        daySkillCount={daySkillCount}
+        daySlotCount={daySlotCount}
         objectiveCount={workspace.sessionTargets.length}
         objectives={workspace.sessionTargets}
         routeItemTitles={workspace.items.map((item) => item.title)}

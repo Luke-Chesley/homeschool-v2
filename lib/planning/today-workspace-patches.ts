@@ -31,12 +31,74 @@ export interface TodayWorkspaceSlotSummary {
   activityStatus: DailyWorkspaceActivityState["status"] | null;
 }
 
-function withLeadItem(workspace: DailyWorkspace, items: DailyWorkspace["items"]) {
+type WorkspaceItem = DailyWorkspace["items"][number];
+type WorkspaceSlot = DailyWorkspace["slots"][number];
+
+function rebuildWorkspace(
+  workspace: DailyWorkspace,
+  items: WorkspaceItem[],
+  slots: WorkspaceSlot[],
+) {
+  const leadItem =
+    items.find((item) => item.id === workspace.leadItem.id) ??
+    slots[0]?.leadItem ??
+    items[0] ??
+    workspace.leadItem;
+  const leadSlot =
+    (leadItem.planDaySlotId
+      ? slots.find((slot) => slot.id === leadItem.planDaySlotId)
+      : null) ??
+    slots.find((slot) => slot.items.some((item) => item.id === leadItem.id)) ??
+    slots[0] ??
+    null;
+
   return {
     ...workspace,
+    slots,
     items,
-    leadItem: items[0] ?? workspace.leadItem,
+    leadItem,
+    prepChecklist: leadSlot?.prepChecklist ?? workspace.prepChecklist,
+    sessionTargets: leadSlot?.sessionTargets ?? workspace.sessionTargets,
+    artifactSlots: leadSlot?.artifactSlots ?? workspace.artifactSlots,
+    lessonDraft: leadSlot?.lessonDraft ?? workspace.lessonDraft,
+    lessonBuild: leadSlot?.lessonBuild ?? workspace.lessonBuild,
+    activityBuild: leadSlot?.activityBuild ?? workspace.activityBuild,
+    activityState: leadSlot?.activityState ?? workspace.activityState,
+    lessonRegenerationNote:
+      leadSlot?.lessonRegenerationNote ?? workspace.lessonRegenerationNote,
+    expansionIntent: leadSlot?.expansionIntent ?? workspace.expansionIntent,
   };
+}
+
+function mapWorkspaceItems(
+  workspace: DailyWorkspace,
+  mapItem: (item: WorkspaceItem) => WorkspaceItem | null,
+) {
+  const items = workspace.items.flatMap((item) => {
+    const nextItem = mapItem(item);
+    return nextItem ? [nextItem] : [];
+  });
+  const slots = workspace.slots.flatMap((slot) => {
+    const slotItems = slot.items.flatMap((item) => {
+      const nextItem = mapItem(item);
+      return nextItem ? [nextItem] : [];
+    });
+
+    if (slotItems.length === 0) {
+      return [];
+    }
+
+    return [
+      {
+        ...slot,
+        items: slotItems,
+        leadItem:
+          slotItems.find((item) => item.id === slot.leadItem.id) ?? slotItems[0],
+      },
+    ];
+  });
+
+  return rebuildWorkspace(workspace, items, slots);
 }
 
 export function buildTodaySlotRouteFingerprint(slotId: string) {
@@ -207,9 +269,9 @@ export function applyTodayPlanItemActionPatch(
 
   if (result.optimisticPatch?.removePlanItemIds?.length) {
     const removePlanItemIds = new Set(result.optimisticPatch.removePlanItemIds);
-    nextWorkspace = withLeadItem(
+    nextWorkspace = mapWorkspaceItems(
       nextWorkspace,
-      nextWorkspace.items.filter((item) => !removePlanItemIds.has(item.id)),
+      (item) => (removePlanItemIds.has(item.id) ? null : item),
     );
   }
 
@@ -217,11 +279,9 @@ export function applyTodayPlanItemActionPatch(
     return nextWorkspace;
   }
 
-  const items = nextWorkspace.items.map((item) =>
+  return mapWorkspaceItems(nextWorkspace, (item) =>
     item.id === result.planItemId ? { ...item, ...result.itemPatch } : item,
   );
-
-  return withLeadItem(nextWorkspace, items);
 }
 
 export function applyTodayPlanItemEvaluationPatch(
@@ -234,7 +294,7 @@ export function applyTodayPlanItemEvaluationPatch(
 
   const evaluation = result.evaluation;
 
-  const items = current.items.map((item) =>
+  return mapWorkspaceItems(current, (item) =>
     item.id === result.planItemId
       ? {
           ...item,
@@ -247,8 +307,6 @@ export function applyTodayPlanItemEvaluationPatch(
         }
       : item,
   );
-
-  return withLeadItem(current, items);
 }
 
 export function applyTodayLessonPatch(
