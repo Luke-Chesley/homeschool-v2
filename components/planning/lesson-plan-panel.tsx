@@ -43,10 +43,14 @@ interface LessonPlanPanelProps {
   date: string;
   sourceId?: string;
   slotId?: string;
+  slotLabel?: string;
+  slotPosition?: number;
   routeFingerprint: string;
   sourceTitle: string;
   routeItemCount: number;
   totalMinutes: number;
+  daySkillCount?: number;
+  daySlotCount?: number;
   objectiveCount: number;
   objectives: string[];
   routeItemTitles: string[];
@@ -97,10 +101,14 @@ export function LessonPlanPanel({
   date,
   sourceId,
   slotId,
+  slotLabel,
+  slotPosition,
   routeFingerprint,
   sourceTitle,
   routeItemCount,
   totalMinutes,
+  daySkillCount,
+  daySlotCount,
   objectiveCount,
   objectives,
   routeItemTitles,
@@ -184,6 +192,14 @@ export function LessonPlanPanel({
     buildState?.status === "queued"
       ? `${date}:${resolvedSlotId}:${buildState.routeFingerprint}:${buildState.queuedAt ?? buildState.updatedAt}`
       : null;
+  const resolvedLessonLabel =
+    slotLabel ?? (slotPosition ? `Lesson ${slotPosition}` : "Lesson");
+  const lessonContextCopy =
+    daySkillCount && daySkillCount > routeItemCount
+      ? daySlotCount && daySlotCount > 1 && slotPosition
+        ? `${resolvedLessonLabel} is ${slotPosition} of ${daySlotCount} scheduled lessons and covers ${routeItemCount} of ${daySkillCount} skills planned for today.`
+        : `${resolvedLessonLabel} covers ${routeItemCount} of ${daySkillCount} skills planned for today.`
+      : "Keep the mechanics here. The draft itself stays front and center.";
 
   async function requestDraft(
     trigger: "onboarding_auto" | "today_resume" | "manual",
@@ -375,15 +391,22 @@ export function LessonPlanPanel({
         <div className="space-y-5 p-5">
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="outline">Slot</Badge>
-              <Badge variant="outline">{routeItemCount} items</Badge>
+              <Badge variant="outline">{resolvedLessonLabel}</Badge>
+              <Badge variant="outline">
+                {routeItemCount} skill{routeItemCount === 1 ? "" : "s"}
+              </Badge>
+              {daySkillCount && daySkillCount > routeItemCount ? (
+                <Badge variant="outline">
+                  {daySkillCount} skills today
+                </Badge>
+              ) : null}
               <Badge variant="outline">{totalMinutes} min</Badge>
               <Badge variant="outline">{objectiveCount} targets</Badge>
             </div>
             <div>
               <h2 className="font-serif text-2xl">Teach this lesson</h2>
               <p className="mt-1 text-sm leading-7 text-muted-foreground">
-                Keep the mechanics here. The draft itself stays front and center.
+                {lessonContextCopy}
               </p>
             </div>
           </div>
