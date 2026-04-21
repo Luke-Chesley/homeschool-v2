@@ -2,6 +2,7 @@ import type {
   WeeklyRouteItemState,
   WeeklyRouteManualOverrideKind,
 } from "@/lib/curriculum-routing/types";
+import { hasExplicitSeparateLessonSlotNote } from "@/lib/planning/lesson-slot-grouping";
 
 const WEEKDAY_COUNT = 7;
 const FIXED_STATES = new Set<WeeklyRouteItemState>(["done", "in_progress"]);
@@ -89,7 +90,7 @@ function isExplicitTodaySlot(item: ScheduleRefreshItem, nextScheduledDate: strin
     return false;
   }
 
-  return item.manualOverrideNote?.startsWith("Pulled forward into lesson ") ?? false;
+  return hasExplicitSeparateLessonSlotNote(item.manualOverrideNote);
 }
 
 function deriveOverrideKind(
