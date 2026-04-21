@@ -2,7 +2,6 @@
 
 import dynamic from "next/dynamic";
 
-import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import type {
   DailyWorkspace,
@@ -20,10 +19,7 @@ import {
 import { TodayItemLearnerLink, TodayPlanItemActionButtons } from "./item-action-control";
 import type { DraftState } from "./types";
 import {
-  formatMinutes,
   formatPlannerDate,
-  getReviewLabel,
-  getStatusLabel,
 } from "./types";
 
 const DeferredLessonPlanPanel = dynamic(
@@ -72,27 +68,16 @@ export function TodayRouteItemsSection({
         </div>
 
         <div className="space-y-2">
-          {workspace.items.map((item, index) => {
+          {workspace.items.map((item) => {
             const alternate = workspace.alternatesByPlanItemId[item.id]?.[0];
 
             return (
               <Card key={item.id} className="quiet-panel">
                 <div className="space-y-3 p-4">
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <span>{String(index + 1).padStart(2, "0")}</span>
-                    <Badge variant="outline">{item.subject}</Badge>
-                    <span>{formatMinutes(item.estimatedMinutes)}</span>
-                  </div>
                   <div className="space-y-1">
                     <h3 className="text-sm font-medium leading-5 text-foreground">{item.title}</h3>
                     <p className="text-xs text-muted-foreground">{item.objective}</p>
                   </div>
-                  {item.workflow ? (
-                    <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                      <span>{item.workflow.evidenceCount} evidence</span>
-                      {item.workflow.activityCount ? <span>{item.workflow.activityCount} activity</span> : null}
-                    </div>
-                  ) : null}
                   <div className="pt-1">
                     <TodayItemLearnerLink item={item} />
                   </div>
@@ -128,7 +113,7 @@ export function TodayRouteItemsSection({
       </div>
 
       <div className="space-y-3">
-        {workspace.items.map((item, index) => {
+        {workspace.items.map((item) => {
           const alternate = workspace.alternatesByPlanItemId[item.id]?.[0];
 
           return (
@@ -144,31 +129,10 @@ export function TodayRouteItemsSection({
               <div className="flex flex-col gap-4 p-5">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0 space-y-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm text-muted-foreground">
-                        {String(index + 1).padStart(2, "0")}
-                      </span>
-                      <Badge variant="outline">{item.subject}</Badge>
-                      <Badge variant="outline">{formatMinutes(item.estimatedMinutes)}</Badge>
-                      {item.status !== "ready" ? <Badge>{getStatusLabel(item.status)}</Badge> : null}
-                      {item.completionStatus && item.completionStatus !== "not_started" ? (
-                        <Badge variant="secondary">{getStatusLabel(item.completionStatus)}</Badge>
-                      ) : null}
-                      {getReviewLabel(item.reviewState) ? (
-                        <Badge variant="outline">{getReviewLabel(item.reviewState)}</Badge>
-                      ) : null}
-                    </div>
                     <div className="space-y-1">
                       <h3 className="font-serif text-xl leading-tight">{item.title}</h3>
                       <p className="text-sm text-muted-foreground">{item.objective}</p>
                     </div>
-                    <p className="text-xs text-muted-foreground">{item.lessonLabel}</p>
-                    {item.workflow ? (
-                      <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                        <span>{item.workflow.evidenceCount} evidence</span>
-                        {item.workflow.activityCount ? <span>{item.workflow.activityCount} activity</span> : null}
-                      </div>
-                    ) : null}
                     {item.note ? <p className="text-sm text-muted-foreground">{item.note}</p> : null}
                     <TodayItemLearnerLink item={item} />
                   </div>

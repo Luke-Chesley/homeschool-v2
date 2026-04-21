@@ -5,7 +5,6 @@ import { useState, useTransition } from "react";
 import { Loader2 } from "lucide-react";
 
 import { buttonVariants } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import {
   startNextLessonTodayAction,
@@ -31,7 +30,7 @@ import {
   TodayLessonPlanSection,
   TodayRouteItemsSection,
 } from "./route-section-shells";
-import { formatMinutes, type DraftState } from "./types";
+import type { DraftState } from "./types";
 
 function getSlotStatusLabel(slot: TodayWorkspaceSlotSummary) {
   if (slot.activityStatus === "ready") {
@@ -106,7 +105,6 @@ export function TodayWorkspaceShell({
   const queueSummaryLabel = activeSlotSummary?.slotTitle
     ? `${activeSlotSummary.slotTitle} queue and actions`
     : "Active lesson queue and actions";
-
   if (fullWorkspace.items.length === 0) {
     return (
       <Card className="quiet-panel max-w-4xl border-dashed">
@@ -289,12 +287,7 @@ export function TodayWorkspaceShell({
                       !skill.slotId && "cursor-default",
                     )}
                   >
-                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                      <Badge variant="secondary">{skill.item.subject}</Badge>
-                      <span>{formatMinutes(skill.item.estimatedMinutes)}</span>
-                      {skill.slotTitle ? <span>{skill.slotTitle}</span> : null}
-                    </div>
-                    <div className="mt-3 space-y-1">
+                    <div className="space-y-1">
                       <p className="text-sm font-medium leading-5 text-foreground">
                         {skill.item.title}
                       </p>
@@ -302,11 +295,6 @@ export function TodayWorkspaceShell({
                         {skill.item.objective}
                       </p>
                     </div>
-                    {skill.item.lessonLabel ? (
-                      <p className="mt-3 text-xs text-muted-foreground">
-                        {skill.item.lessonLabel}
-                      </p>
-                    ) : null}
                   </button>
                 );
               })}

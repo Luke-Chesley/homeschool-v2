@@ -435,7 +435,7 @@ export function LessonPlanPanel({
               </button>
             ) : null}
 
-            {canViewPromptPreview ? (
+            {canViewPromptPreview && hasDraft ? (
               <button
                 type="button"
                 onClick={handlePromptPreview}
@@ -453,42 +453,46 @@ export function LessonPlanPanel({
             ) : null}
           </div>
 
-          <div className="rounded-lg border border-border/70 bg-background/72 p-4">
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-foreground">Learner handoff</p>
-              <p className="text-sm text-muted-foreground">
-                Open or build the learner-facing activity without leaving today.
-              </p>
-            </div>
-            <div className="mt-3">
-              <LessonDraftActivityControl
-                date={date}
-                sourceId={sourceId}
-                slotId={resolvedSlotId}
-                routeFingerprint={routeFingerprint}
-                activityState={activityState ?? null}
-                sessionId={lessonSessionId}
-                buildState={activityBuild ?? null}
-                onActivityPatch={(patch) => onActivityPatch?.(patch)}
-              />
-            </div>
-          </div>
+          {hasDraft ? (
+            <>
+              <div className="rounded-lg border border-border/70 bg-background/72 p-4">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-foreground">Learner handoff</p>
+                  <p className="text-sm text-muted-foreground">
+                    Open or build the learner-facing activity without leaving today.
+                  </p>
+                </div>
+                <div className="mt-3">
+                  <LessonDraftActivityControl
+                    date={date}
+                    sourceId={sourceId}
+                    slotId={resolvedSlotId}
+                    routeFingerprint={routeFingerprint}
+                    activityState={activityState ?? null}
+                    sessionId={lessonSessionId}
+                    buildState={activityBuild ?? null}
+                    onActivityPatch={(patch) => onActivityPatch?.(patch)}
+                  />
+                </div>
+              </div>
 
-          <details className="rounded-lg border border-border/70 bg-background/72 px-4 py-3">
-            <summary className="cursor-pointer text-sm font-medium text-foreground">
-              Context
-            </summary>
-            <div className="mt-3 space-y-3 text-sm text-muted-foreground">
-              <div>
-                <span className="font-medium text-foreground">Route:</span>{" "}
-                {routeItemTitles.length > 0 ? routeItemTitles.join(" · ") : "No route items"}
-              </div>
-              <div>
-                <span className="font-medium text-foreground">Targets:</span>{" "}
-                {objectives.length > 0 ? objectives.join(" · ") : "None"}
-              </div>
-            </div>
-          </details>
+              <details className="rounded-lg border border-border/70 bg-background/72 px-4 py-3">
+                <summary className="cursor-pointer text-sm font-medium text-foreground">
+                  Context
+                </summary>
+                <div className="mt-3 space-y-3 text-sm text-muted-foreground">
+                  <div>
+                    <span className="font-medium text-foreground">Route:</span>{" "}
+                    {routeItemTitles.length > 0 ? routeItemTitles.join(" · ") : "No route items"}
+                  </div>
+                  <div>
+                    <span className="font-medium text-foreground">Targets:</span>{" "}
+                    {objectives.length > 0 ? objectives.join(" · ") : "None"}
+                  </div>
+                </div>
+              </details>
+            </>
+          ) : null}
 
           {buildErrorMessage ? (
             <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-4 text-sm text-destructive">
@@ -531,104 +535,102 @@ export function LessonPlanPanel({
                 Retry the build here. The bounded route is still saved and ready to use.
               </p>
             </div>
-          ) : showDraftOutput && !hasDraft ? (
-            <div className="rounded-lg border border-dashed border-border/70 bg-background p-4 text-sm text-muted-foreground">
-              Generate a draft when today’s route is set.
-            </div>
           ) : null}
 
-          <details className="rounded-lg border border-border/70 bg-background/72 px-4 py-3">
-            <summary className="cursor-pointer text-sm font-medium text-foreground">
-              More planning controls
-            </summary>
-            <div className="mt-3 space-y-4">
-              <div className="space-y-3">
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-foreground">Scope intent</p>
-                  <p className="text-sm text-muted-foreground">
-                    Record whether today should stay bounded or become the starting point for more route.
-                  </p>
-                </div>
-                <div className="grid gap-2 sm:flex sm:flex-wrap">
-                  <button
-                    type="button"
-                    onClick={() => handleExpansionIntent("keep_today")}
-                    disabled={savingIntent !== null}
-                    className={cn(
-                      buttonVariants({
-                        variant: expansionIntent === "keep_today" ? "default" : "outline",
-                        size: "sm",
-                      }),
-                      "min-h-11 w-full justify-center sm:min-h-8 sm:w-auto",
-                    )}
-                  >
-                    {savingIntent === "keep_today" ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : null}
-                    Keep this to today
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleExpansionIntent("expand_from_here")}
-                    disabled={savingIntent !== null}
-                    className={cn(
-                      buttonVariants({
-                        variant: expansionIntent === "expand_from_here" ? "default" : "outline",
-                        size: "sm",
-                      }),
-                      "min-h-11 w-full justify-center sm:min-h-8 sm:w-auto",
-                    )}
-                  >
-                    {savingIntent === "expand_from_here" ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : null}
-                    Expand from here
-                  </button>
-                </div>
-              </div>
-
-              {hasDraft ? (
-                <div className="space-y-3">
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium text-foreground">Route expansion</p>
-                    <p className="text-sm text-muted-foreground">
-                      Schedule more of the saved route without replacing today&apos;s lesson.
-                    </p>
-                  </div>
-                  <div className="grid gap-2 sm:flex sm:flex-wrap">
-                    {(["tomorrow", "next_few_days", "current_week"] as const).map((scope) => (
+          {hasDraft ? (
+            <>
+              <details className="rounded-lg border border-border/70 bg-background/72 px-4 py-3">
+                <summary className="cursor-pointer text-sm font-medium text-foreground">
+                  More planning controls
+                </summary>
+                <div className="mt-3 space-y-4">
+                  <div className="space-y-3">
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium text-foreground">Scope intent</p>
+                      <p className="text-sm text-muted-foreground">
+                        Record whether today should stay bounded or become the starting point for more route.
+                      </p>
+                    </div>
+                    <div className="grid gap-2 sm:flex sm:flex-wrap">
                       <button
-                        key={scope}
                         type="button"
-                        onClick={() => handleRouteExpansion(scope)}
-                        disabled={!sourceId || expandingScope !== null}
+                        onClick={() => handleExpansionIntent("keep_today")}
+                        disabled={savingIntent !== null}
                         className={cn(
-                          buttonVariants({ variant: "outline", size: "sm" }),
+                          buttonVariants({
+                            variant: expansionIntent === "keep_today" ? "default" : "outline",
+                            size: "sm",
+                          }),
                           "min-h-11 w-full justify-center sm:min-h-8 sm:w-auto",
                         )}
                       >
-                        {expandingScope === scope ? (
+                        {savingIntent === "keep_today" ? (
                           <Loader2 className="size-4 animate-spin" />
                         ) : null}
-                        {getExpansionButtonLabel(scope)}
+                        Keep this to today
                       </button>
-                    ))}
+                      <button
+                        type="button"
+                        onClick={() => handleExpansionIntent("expand_from_here")}
+                        disabled={savingIntent !== null}
+                        className={cn(
+                          buttonVariants({
+                            variant: expansionIntent === "expand_from_here" ? "default" : "outline",
+                            size: "sm",
+                          }),
+                          "min-h-11 w-full justify-center sm:min-h-8 sm:w-auto",
+                        )}
+                      >
+                        {savingIntent === "expand_from_here" ? (
+                          <Loader2 className="size-4 animate-spin" />
+                        ) : null}
+                        Expand from here
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium text-foreground">Route expansion</p>
+                      <p className="text-sm text-muted-foreground">
+                        Schedule more of the saved route without replacing today&apos;s lesson.
+                      </p>
+                    </div>
+                    <div className="grid gap-2 sm:flex sm:flex-wrap">
+                      {(["tomorrow", "next_few_days", "current_week"] as const).map((scope) => (
+                        <button
+                          key={scope}
+                          type="button"
+                          onClick={() => handleRouteExpansion(scope)}
+                          disabled={!sourceId || expandingScope !== null}
+                          className={cn(
+                            buttonVariants({ variant: "outline", size: "sm" }),
+                            "min-h-11 w-full justify-center sm:min-h-8 sm:w-auto",
+                          )}
+                        >
+                          {expandingScope === scope ? (
+                            <Loader2 className="size-4 animate-spin" />
+                          ) : null}
+                          {getExpansionButtonLabel(scope)}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
+              </details>
+
+              {supportMessage ? (
+                <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm text-foreground">
+                  {supportMessage}
+                </div>
               ) : null}
-            </div>
-          </details>
 
-          {supportMessage ? (
-            <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm text-foreground">
-              {supportMessage}
-            </div>
-          ) : null}
-
-          {supportError ? (
-            <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">
-              {supportError}
-            </div>
+              {supportError ? (
+                <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">
+                  {supportError}
+                </div>
+              ) : null}
+            </>
           ) : null}
         </div>
       </Card>
