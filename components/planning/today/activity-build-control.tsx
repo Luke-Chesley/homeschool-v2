@@ -139,11 +139,11 @@ export function LessonDraftActivityControl({
       ) : null}
 
       {isReady ? (
-        <div className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm dark:border-emerald-900 dark:bg-emerald-950/30">
-          <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-300" />
+        <div className="flex items-start gap-2 rounded-lg border border-secondary/35 bg-secondary/12 p-3 text-sm">
+          <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-secondary-foreground" />
           <div className="space-y-1">
-            <p className="font-medium text-emerald-800 dark:text-emerald-100">Activity ready</p>
-            <p className="text-xs text-emerald-700 dark:text-emerald-200">
+            <p className="font-medium text-foreground">Activity ready</p>
+            <p className="text-xs text-muted-foreground">
               The learner-facing activity is ready to open from today.
             </p>
           </div>
@@ -151,11 +151,11 @@ export function LessonDraftActivityControl({
       ) : null}
 
       {isStale ? (
-        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-800 dark:bg-amber-950/30">
-          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+        <div className="flex items-start gap-2 rounded-lg border border-primary/25 bg-primary/8 p-3 text-sm">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-primary" />
           <div className="space-y-1">
-            <p className="font-medium text-amber-800 dark:text-amber-200">Activity is stale</p>
-            <p className="text-xs text-amber-700 dark:text-amber-300">
+            <p className="font-medium text-foreground">Activity is stale</p>
+            <p className="text-xs text-muted-foreground">
               The lesson draft changed after this activity was generated. Regenerate to reflect the
               current lesson.
             </p>

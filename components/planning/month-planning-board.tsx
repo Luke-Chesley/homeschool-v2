@@ -16,7 +16,7 @@ import {
 } from "@dnd-kit/core";
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { AlertTriangle, ArrowRight, CalendarDays, GripVertical, Layers3 } from "lucide-react";
+import { AlertTriangle, ArrowRight, CalendarDays, ChevronDown, GripVertical, Layers3 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
@@ -42,6 +42,18 @@ interface ColumnMeta {
 
 function formatMinutes(minutes: number | null | undefined) {
   return `${minutes ?? 0} min`;
+}
+
+function getStateLabel(state: WeeklyRouteBoardItem["state"]) {
+  if (state === "queued") return "Backlog";
+  if (state === "scheduled") return "Planned";
+  if (state === "in_progress") return "Working";
+  if (state === "done") return "Done";
+  return "Paused";
+}
+
+function getSkillContextLabel(item: WeeklyRouteBoardItem) {
+  return item.skillPath.split(/[·/]/)[0]?.trim() || item.skillPath;
 }
 
 function createColumns(month: MonthlyPlan): ColumnsState {
@@ -106,6 +118,7 @@ function SortableMonthItem({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.id,
   });
+  const [expanded, setExpanded] = useState(false);
 
   return (
     <div
@@ -115,24 +128,93 @@ function SortableMonthItem({
         transition,
       }}
       className={cn(
-        "rounded-xl border border-border/75 bg-card/95 px-2.5 py-2 shadow-sm",
+        "relative rounded-xl border border-border/75 bg-card/95 px-2.5 py-2.5 shadow-sm",
+        expanded && "z-20",
         isDragging && "opacity-70 shadow-md",
       )}
     >
-      <div className="flex items-start gap-2">
-        <p className="min-w-0 flex-1 text-xs font-medium leading-5 text-foreground line-clamp-2">
-          {item.skillTitle}
-        </p>
-        <button
-          type="button"
-          aria-label={`Drag ${item.skillTitle}`}
-          disabled={isSaving}
-          className="shrink-0 rounded-md border border-border/70 p-1 text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed"
-          {...attributes}
-          {...listeners}
-        >
-          <GripVertical className="size-3.5" />
-        </button>
+      <div className="space-y-2">
+        <div className="flex items-start gap-1.5">
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
+              <Badge variant="secondary" className="rounded-full px-1.5 py-0.5">
+                {getSkillContextLabel(item)}
+              </Badge>
+              {item.estimatedMinutes != null && item.estimatedMinutes > 0 ? (
+                <span>{formatMinutes(item.estimatedMinutes)}</span>
+              ) : null}
+            </div>
+            <p
+              className={cn(
+                "text-xs font-medium leading-5 text-foreground",
+                expanded ? "line-clamp-none" : "line-clamp-2",
+              )}
+            >
+              {item.skillTitle}
+            </p>
+            <p className="text-[11px] leading-4 text-muted-foreground">
+              {getStateLabel(item.state)}
+              {item.manualOverrideKind !== "none" ? ` · ${item.manualOverrideKind.replace("_", " ")}` : ""}
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              aria-expanded={expanded}
+              aria-controls={`month-item-details-${item.id}`}
+              aria-label={expanded ? `Collapse details for ${item.skillTitle}` : `Expand details for ${item.skillTitle}`}
+              className="inline-flex size-7 items-center justify-center rounded-md border border-border/70 text-muted-foreground transition-colors hover:text-foreground"
+              onClick={() => setExpanded((current) => !current)}
+            >
+              <ChevronDown className={cn("size-3 transition-transform", expanded && "rotate-180")} />
+            </button>
+            <button
+              type="button"
+              aria-label={`Drag ${item.skillTitle}`}
+              disabled={isSaving}
+              className="shrink-0 rounded-md border border-border/70 p-1 text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed"
+              {...attributes}
+              {...listeners}
+            >
+              <GripVertical className="size-3.5" />
+            </button>
+          </div>
+        </div>
+
+        {expanded ? (
+          <div
+            id={`month-item-details-${item.id}`}
+            className="absolute left-0 top-full z-30 mt-2 w-[min(18rem,calc(100vw-5rem))] space-y-3 rounded-xl border border-border/70 bg-card px-3 py-3 shadow-[var(--shadow-card)]"
+          >
+            <div className="space-y-1">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                Skill path
+              </p>
+              <p className="text-[11px] leading-5 break-words text-muted-foreground">{item.skillPath}</p>
+            </div>
+            <div className="flex flex-wrap gap-1">
+              <Badge variant="outline" className="rounded-full">
+                {getStateLabel(item.state)}
+              </Badge>
+              {item.manualOverrideKind !== "none" ? (
+                <Badge variant="secondary" className="rounded-full">
+                  {item.manualOverrideKind.replace("_", " ")}
+                </Badge>
+              ) : null}
+            </div>
+            <div className="space-y-1">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                Position
+              </p>
+              <p className="text-[11px] leading-5 text-muted-foreground">
+                Now {item.currentPosition + 1}
+                {item.recommendedPosition !== item.currentPosition
+                  ? ` · recommended ${item.recommendedPosition + 1}`
+                  : ""}
+              </p>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -515,8 +597,8 @@ export function MonthPlanningBoard({ month }: MonthPlanningBoardProps) {
               {month.monthLabel}
             </h2>
             <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-              The month grid is the draft. Drag compact route cards across weekdays, keep the full
-              month visible, and use the weekly board when you need tighter day-level control.
+              The month grid is the draft. Drag route cards across weekdays, keep the full month
+              visible, and expand a card inline when you need more context before moving it.
             </p>
           </div>
           <UpdateCurriculumScheduleButton
@@ -616,8 +698,8 @@ export function MonthPlanningBoard({ month }: MonthPlanningBoardProps) {
             <div className="flex items-start gap-3 rounded-[1.4rem] border border-border/70 bg-card/75 p-4">
               <Layers3 className="mt-1 size-4 text-primary" />
               <div>
-                <p className="font-semibold text-foreground">Compact daily cards</p>
-                <p>Each day keeps just the route title, so the full month stays readable.</p>
+                <p className="font-semibold text-foreground">Expandable daily cards</p>
+                <p>Every card shows the key label immediately, then opens inline when you need the rest.</p>
               </div>
             </div>
             <div className="flex items-start gap-3 rounded-[1.4rem] border border-border/70 bg-card/75 p-4">

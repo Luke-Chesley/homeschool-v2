@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 import { Loader2 } from "lucide-react";
 
 import { buttonVariants } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import {
   startNextLessonTodayAction,
@@ -26,7 +27,7 @@ import {
   TodayLessonPlanSection,
   TodayRouteItemsSection,
 } from "./route-section-shells";
-import type { DraftState } from "./types";
+import { formatMinutes, type DraftState } from "./types";
 
 function getSlotStatusLabel(slot: TodayWorkspaceSlotSummary) {
   if (slot.activityStatus === "ready") {
@@ -47,6 +48,8 @@ function getSlotStatusLabel(slot: TodayWorkspaceSlotSummary) {
 
   return `${slot.estimatedMinutes} min`;
 }
+
+type TodayHeaderView = "flow" | "skills";
 
 export function TodayWorkspaceShell({
   workspace,
@@ -90,9 +93,13 @@ export function TodayWorkspaceShell({
 }) {
   const [startNextError, setStartNextError] = useState<string | null>(null);
   const [startNextMessage, setStartNextMessage] = useState<string | null>(null);
+  const [headerView, setHeaderView] = useState<TodayHeaderView>("skills");
   const [isStartingNext, startNextTransition] = useTransition();
   const activeSlotId =
     selectedSlotId ?? workspace.leadItem.planDaySlotId ?? workspace.slots[0]?.id ?? null;
+  const slotMetaById = new Map(
+    fullWorkspace.slots.map((slot) => [slot.id, { title: slot.title }]),
+  );
 
   if (fullWorkspace.items.length === 0) {
     return (
@@ -141,9 +148,19 @@ export function TodayWorkspaceShell({
       onWorkspacePatch(result.workspacePatch);
       if (result.startedSlotId) {
         onSelectSlot(result.startedSlotId);
+        setHeaderView("flow");
       }
       setStartNextMessage(result.message ?? "Pulled the next lesson into today.");
     });
+  }
+
+  function handleSkillSelect(slotId?: string) {
+    if (!slotId) {
+      return;
+    }
+
+    onSelectSlot(slotId);
+    setHeaderView("flow");
   }
 
   return (
@@ -151,11 +168,55 @@ export function TodayWorkspaceShell({
       {slotSummaries.length > 1 || sourceId ? (
         <section className="space-y-4 border-b border-border/70 pb-5">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-foreground">Today’s lesson flow</p>
-              <p className="text-sm text-muted-foreground">
-                Keep the active lesson in focus. Switch slots only when you need the next same-day lesson.
-              </p>
+            <div className="space-y-3">
+              <div
+                role="tablist"
+                aria-label="Today view selector"
+                className="inline-flex w-full rounded-full border border-border/70 bg-muted/40 p-1 sm:w-auto"
+              >
+                <button
+                  id="today-lesson-flow-tab"
+                  type="button"
+                  role="tab"
+                  aria-selected={headerView === "flow"}
+                  aria-controls="today-lesson-flow-panel"
+                  onClick={() => setHeaderView("flow")}
+                  className={cn(
+                    "rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
+                    headerView === "flow"
+                      ? "bg-card text-foreground shadow-[var(--shadow-card)]"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  Lesson flow
+                </button>
+                <button
+                  id="today-skills-tab"
+                  type="button"
+                  role="tab"
+                  aria-selected={headerView === "skills"}
+                  aria-controls="today-skills-panel"
+                  onClick={() => setHeaderView("skills")}
+                  className={cn(
+                    "rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
+                    headerView === "skills"
+                      ? "bg-card text-foreground shadow-[var(--shadow-card)]"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  Today&apos;s skills
+                </button>
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-foreground">
+                  {headerView === "flow" ? "Today’s lesson flow" : "Today’s skills"}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {headerView === "flow"
+                    ? "Keep the active lesson in focus. Switch slots only when you need the next same-day lesson."
+                    : "Review every scheduled skill for today without opening the full planning view."}
+                </p>
+              </div>
             </div>
             {sourceId ? (
               <button
@@ -172,27 +233,76 @@ export function TodayWorkspaceShell({
               </button>
             ) : null}
           </div>
-          <div className="flex flex-wrap gap-2">
-            {slotSummaries.map((slot, index) => (
-              <button
-                key={slot.id}
-                type="button"
-                onClick={() => onSelectSlot(slot.id)}
-                className={cn(
-                  "rounded-full border px-4 py-2 text-left transition-colors",
-                  selectedSlotId === slot.id
-                    ? "border-primary bg-primary/6 text-foreground"
-                    : "border-border/70 bg-background/70 text-muted-foreground hover:border-primary/40",
-                )}
-              >
-                <span className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
-                  Slot {index + 1}
-                </span>
-                <span className="mt-1 block text-sm font-medium text-foreground">{slot.title}</span>
-                <span className="mt-1 block text-xs text-muted-foreground">{getSlotStatusLabel(slot)}</span>
-              </button>
-            ))}
-          </div>
+          {headerView === "flow" ? (
+            <div
+              id="today-lesson-flow-panel"
+              role="tabpanel"
+              aria-labelledby="today-lesson-flow-tab"
+              className="flex flex-wrap gap-2"
+            >
+              {slotSummaries.map((slot, index) => (
+                <button
+                  key={slot.id}
+                  type="button"
+                  onClick={() => onSelectSlot(slot.id)}
+                  className={cn(
+                    "rounded-full border px-4 py-2 text-left transition-colors",
+                    activeSlotId === slot.id
+                      ? "border-primary bg-primary/6 text-foreground"
+                      : "border-border/70 bg-background/70 text-muted-foreground hover:border-primary/40",
+                  )}
+                >
+                  <span className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                    Slot {index + 1}
+                  </span>
+                  <span className="mt-1 block text-sm font-medium text-foreground">{slot.title}</span>
+                  <span className="mt-1 block text-xs text-muted-foreground">
+                    {getSlotStatusLabel(slot)}
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div
+              id="today-skills-panel"
+              role="tabpanel"
+              aria-labelledby="today-skills-tab"
+              className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3"
+            >
+              {fullWorkspace.items.map((item) => {
+                const slotMeta = item.planDaySlotId ? slotMetaById.get(item.planDaySlotId) : null;
+
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    disabled={!item.planDaySlotId}
+                    onClick={() => handleSkillSelect(item.planDaySlotId)}
+                    className={cn(
+                      "rounded-xl border border-border/70 bg-background/72 p-4 text-left transition-colors",
+                      item.planDaySlotId && activeSlotId === item.planDaySlotId
+                        ? "border-primary/50 bg-primary/6"
+                        : "hover:border-primary/35 hover:bg-card",
+                      !item.planDaySlotId && "cursor-default",
+                    )}
+                  >
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                      <Badge variant="secondary">{item.subject}</Badge>
+                      <span>{formatMinutes(item.estimatedMinutes)}</span>
+                      {slotMeta ? <span>{slotMeta.title}</span> : null}
+                    </div>
+                    <div className="mt-3 space-y-1">
+                      <p className="text-sm font-medium leading-5 text-foreground">{item.title}</p>
+                      <p className="line-clamp-2 text-xs text-muted-foreground">{item.objective}</p>
+                    </div>
+                    {item.lessonLabel ? (
+                      <p className="mt-3 text-xs text-muted-foreground">{item.lessonLabel}</p>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+          )}
           {startNextMessage ? (
             <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm text-foreground">
               {startNextMessage}
