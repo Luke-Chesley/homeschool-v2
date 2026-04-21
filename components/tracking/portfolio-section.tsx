@@ -12,7 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import type { TrackingDashboard } from "@/lib/tracking/types";
 
 function inputClassName() {
-  return "rounded-md border border-input bg-background/90 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring";
+  return "field-shell h-11 rounded-2xl px-4 text-sm shadow-none";
 }
 
 export function PortfolioSection({ dashboard }: { dashboard: TrackingDashboard }) {
@@ -63,7 +63,7 @@ export function PortfolioSection({ dashboard }: { dashboard: TrackingDashboard }
 
   return (
     <section className="grid gap-6 xl:grid-cols-[minmax(300px,0.9fr)_minmax(0,1.1fr)]">
-      <Card className="quiet-panel shadow-none">
+      <Card variant="glass">
         <CardHeader>
           <CardTitle>Portfolio</CardTitle>
           <CardDescription>
@@ -128,7 +128,7 @@ export function PortfolioSection({ dashboard }: { dashboard: TrackingDashboard }
               <label className="text-sm font-medium text-foreground" htmlFor="portfolio-note">
                 Note
               </label>
-              <textarea id="portfolio-note" name="note" rows={4} className={inputClassName()} placeholder="Why this belongs in the portfolio" />
+              <textarea id="portfolio-note" name="note" rows={4} className="field-shell-textarea min-h-28 rounded-2xl px-4 py-3 text-sm shadow-none" placeholder="Why this belongs in the portfolio" />
             </div>
 
             <div className="flex flex-col gap-1.5">
@@ -138,7 +138,7 @@ export function PortfolioSection({ dashboard }: { dashboard: TrackingDashboard }
               <input id="portfolio-file" name="file" type="file" className="text-sm text-muted-foreground" />
             </div>
 
-            <Button type="submit">Add to portfolio</Button>
+            <Button type="submit" className="rounded-full">Add to portfolio</Button>
             {uploadMessage ? <p className="text-sm text-muted-foreground">{uploadMessage}</p> : null}
             {uploadError ? (
               <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">{uploadError}</p>
@@ -147,7 +147,7 @@ export function PortfolioSection({ dashboard }: { dashboard: TrackingDashboard }
         </CardContent>
       </Card>
 
-      <Card className="quiet-panel shadow-none">
+      <Card variant="glass">
         <CardHeader>
           <CardTitle>Saved evidence</CardTitle>
           <CardDescription>
@@ -163,10 +163,10 @@ export function PortfolioSection({ dashboard }: { dashboard: TrackingDashboard }
                   key={option}
                   type="button"
                   onClick={() => setFilter(option)}
-                  className={`rounded-lg border px-3 py-1.5 text-sm ${
+                  className={`rounded-full border px-3.5 py-2 text-sm ${
                     active
                       ? "border-primary bg-primary/10 text-primary"
-                      : "border-border bg-background text-muted-foreground hover:text-foreground"
+                      : "border-border/70 bg-background text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   {option === "all" ? "All evidence" : option === "saved" ? "Saved" : "Inbox"}
@@ -176,12 +176,12 @@ export function PortfolioSection({ dashboard }: { dashboard: TrackingDashboard }
           </div>
 
           {visibleEvidence.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-border/70 px-4 py-8 text-sm text-muted-foreground">
+            <div className="rounded-[1.4rem] border border-dashed border-border/70 bg-background/60 px-4 py-8 text-sm text-muted-foreground">
               No evidence matches this filter yet.
             </div>
           ) : (
             visibleEvidence.map((item) => (
-              <div key={item.id} className="rounded-xl border border-border/60 bg-background/75 p-4">
+              <div key={item.id} className="rounded-[1.35rem] border border-border/60 bg-background/75 p-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <p className="font-medium text-foreground">{item.title}</p>
@@ -195,6 +195,7 @@ export function PortfolioSection({ dashboard }: { dashboard: TrackingDashboard }
                         size="sm"
                         onClick={() => updatePortfolioStatus(item.id, "saved")}
                         disabled={submittingEvidenceId === item.id}
+                        className="rounded-full"
                       >
                         {submittingEvidenceId === item.id ? "Saving..." : "Save to portfolio"}
                       </Button>
@@ -204,6 +205,7 @@ export function PortfolioSection({ dashboard }: { dashboard: TrackingDashboard }
                         size="sm"
                         onClick={() => updatePortfolioStatus(item.id, "archived")}
                         disabled={submittingEvidenceId === item.id}
+                        className="rounded-full"
                       >
                         {submittingEvidenceId === item.id ? "Saving..." : "Archive"}
                       </Button>

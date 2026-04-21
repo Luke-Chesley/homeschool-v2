@@ -1,4 +1,6 @@
 import * as React from "react";
+import { Bot, UserRound } from "lucide-react";
+
 import { cn } from "@/lib/utils";
 import type { ChatMessage as ChatMessageType } from "@/lib/ai/types";
 
@@ -9,6 +11,9 @@ interface Props {
 export function ChatMessage({ message }: Props) {
   const isUser = message.role === "user";
   const isAssistant = message.role === "assistant";
+  const createdAtLabel = message.createdAt
+    ? new Date(message.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+    : "Now";
 
   if (message.role === "system") return null;
 
@@ -19,29 +24,33 @@ export function ChatMessage({ message }: Props) {
         isUser && "flex-row-reverse"
       )}
     >
-      {/* Avatar */}
       <div
         className={cn(
-          "shrink-0 flex size-8 items-center justify-center rounded-md text-xs font-medium",
+          "flex size-10 shrink-0 items-center justify-center rounded-2xl border shadow-[var(--shadow-soft)]",
           isUser
-            ? "bg-primary/15 text-primary"
-            : "bg-secondary/25 text-secondary-foreground"
+            ? "border-primary/20 bg-primary/12 text-primary"
+            : "border-border/70 bg-[var(--glass-panel)] text-foreground"
         )}
       >
-        {isUser ? "You" : "AI"}
+        {isUser ? <UserRound className="size-4" /> : <Bot className="size-4" />}
       </div>
 
-      {/* Bubble */}
-      <div
-        className={cn(
-          "max-w-[85%] rounded-lg px-4 py-3 text-sm leading-relaxed break-words",
-          isUser
-            ? "bg-primary/10 text-foreground"
-            : "border border-border/60 bg-card text-foreground",
-          isAssistant && "whitespace-pre-wrap"
-        )}
-      >
-        {message.content}
+      <div className={cn("max-w-[88%] min-w-0 space-y-2", isUser && "items-end text-right")}>
+        <div className={cn("flex items-center gap-2 text-xs uppercase tracking-[0.14em] text-muted-foreground", isUser && "justify-end")}>
+          <span className="font-semibold text-foreground/85">{isUser ? "Parent" : "Copilot"}</span>
+          <span>{createdAtLabel}</span>
+        </div>
+        <div
+          className={cn(
+            "rounded-[1.4rem] border px-4 py-3.5 text-sm leading-7 break-words shadow-[var(--shadow-soft)]",
+            isUser
+              ? "border-primary/18 bg-primary/10 text-foreground"
+              : "border-border/70 bg-[var(--glass-panel)] text-foreground",
+            isAssistant && "whitespace-pre-wrap"
+          )}
+        >
+          {message.content}
+        </div>
       </div>
     </div>
   );

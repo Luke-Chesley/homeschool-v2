@@ -8,6 +8,10 @@
  */
 
 import * as React from "react";
+
+import { Bot, Sparkles } from "lucide-react";
+
+import { PromptChip } from "@/components/ui/prompt-chip";
 import { cn } from "@/lib/utils";
 import { ChatMessage } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
@@ -19,6 +23,13 @@ import {
   type CopilotAction,
   type CopilotContext,
 } from "@/lib/ai/types";
+
+const starterPrompts = [
+  "Lighten Thursday by moving one item to Friday.",
+  "Generate today's lesson draft from the current route.",
+  "Write a short note about what stalled this week.",
+  "Which route item should we defer if tomorrow needs to be lighter?",
+] as const;
 
 interface Props {
   sessionId?: string;
@@ -267,32 +278,53 @@ export function CopilotChat({ sessionId: initialSessionId, initialMessages = [],
 
   return (
     <div className={cn("flex min-w-0 flex-col h-full", className)}>
-      <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-5 py-5 sm:px-6">
+      <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-5 py-5 sm:px-6">
         {messages.length === 0 && (
-          <div className="flex h-full flex-col items-start justify-center gap-5">
-            <div className="max-w-2xl space-y-2">
-              <p className="font-serif text-3xl text-foreground">Ask for the next move.</p>
-              <p className="text-sm leading-7 text-muted-foreground">
-                Keep requests grounded in the learner, today&apos;s plan, or the current week. Copilot works
-                best when the question is specific enough to turn into a real next action.
-              </p>
+          <div className="flex h-full flex-col justify-center gap-6">
+            <div className="glass-panel max-w-3xl space-y-4">
+              <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/76 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                <Bot className="size-3.5" />
+                Copilot ready
+              </div>
+              <div className="space-y-2">
+                <p className="font-serif text-3xl text-foreground sm:text-[2.4rem]">Ask for the next move.</p>
+                <p className="max-w-2xl text-sm leading-7 text-muted-foreground">
+                  Keep requests grounded in the learner, today&apos;s plan, or the current week. Copilot works
+                  best when the question is specific enough to turn into a real next action.
+                </p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-2xl border border-border/70 bg-background/72 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Learner</p>
+                  <p className="mt-2 text-sm font-medium text-foreground">{context?.learnerName ?? "Not attached"}</p>
+                </div>
+                <div className="rounded-2xl border border-border/70 bg-background/72 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Today</p>
+                  <p className="mt-2 text-sm font-medium text-foreground">
+                    {context?.dailyWorkspaceSnapshot ? "Attached to this chat" : "No day context yet"}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-border/70 bg-background/72 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Week</p>
+                  <p className="mt-2 text-sm font-medium text-foreground">
+                    {context?.weeklyPlanningSnapshot ? "Attached to this chat" : "No week context yet"}
+                  </p>
+                </div>
+              </div>
             </div>
-            <div className="mt-1 flex flex-wrap gap-2">
-              {[
-                "Lighten Thursday by moving one item to Friday.",
-                "Generate today's lesson draft from the current route.",
-                "Write a short note about what stalled this week.",
-                "Which route item should we defer if tomorrow needs to be lighter?",
-              ].map((prompt) => (
-                <button
-                  key={prompt}
-                  type="button"
-                  onClick={() => sendMessage(prompt)}
-                  className="rounded-md border border-border/70 bg-background px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/45 hover:text-foreground"
-                >
-                  {prompt}
-                </button>
-              ))}
+
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                <Sparkles className="size-3.5" />
+                Suggested prompts
+              </div>
+              <div className="flex flex-wrap gap-2.5">
+                {starterPrompts.map((prompt) => (
+                  <PromptChip key={prompt} onClick={() => sendMessage(prompt)}>
+                    {prompt}
+                  </PromptChip>
+                ))}
+              </div>
             </div>
           </div>
         )}
@@ -303,10 +335,10 @@ export function CopilotChat({ sessionId: initialSessionId, initialMessages = [],
 
         {streamingContent !== null && (
           <div className="flex gap-3">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-secondary/25 text-xs font-medium text-secondary-foreground">
-              AI
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl border border-border/70 bg-[var(--glass-panel)] text-foreground shadow-[var(--shadow-soft)]">
+              <Bot className="size-4" />
             </div>
-            <div className="max-w-[85%] rounded-lg border border-border/60 bg-card px-4 py-3 text-sm leading-7 break-words whitespace-pre-wrap">
+            <div className="max-w-[88%] rounded-[1.4rem] border border-border/70 bg-[var(--glass-panel)] px-4 py-3.5 text-sm leading-7 break-words whitespace-pre-wrap shadow-[var(--shadow-soft)]">
               {streamingContent}
               <span className="inline-block w-1.5 h-4 bg-primary/60 ml-0.5 animate-pulse" />
             </div>
@@ -314,8 +346,10 @@ export function CopilotChat({ sessionId: initialSessionId, initialMessages = [],
         )}
 
         {actions.length > 0 && (
-          <div className="flex flex-col gap-2">
-            <p className="px-2 text-xs font-medium text-muted-foreground">Suggested actions</p>
+          <div className="flex flex-col gap-3">
+            <p className="px-1 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+              Suggested actions
+            </p>
             {actions.map((action) => (
               <CopilotActionCard
                 key={action.id}
@@ -336,7 +370,7 @@ export function CopilotChat({ sessionId: initialSessionId, initialMessages = [],
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="border-t border-border/60 p-4 sm:px-6">
+      <div className="border-t border-border/60 bg-background/70 p-4 sm:px-6">
         <ChatInput onSend={sendMessage} disabled={loading} />
       </div>
     </div>

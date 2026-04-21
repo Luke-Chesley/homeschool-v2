@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Home, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -47,8 +48,12 @@ export function AuthSetupForm({ defaultOrganizationName, email }: AuthSetupFormP
   }
 
   return (
-    <Card className="quiet-panel border-border/70 bg-card/88">
+    <Card variant="glass" className="overflow-hidden">
       <CardHeader>
+        <div className="inline-flex w-fit items-center gap-2 rounded-full border border-border/70 bg-background/76 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+          <Home className="size-3.5" />
+          Household setup
+        </div>
         <CardTitle>Create household workspace</CardTitle>
         <CardDescription>
           Create the first household workspace tied to {email ?? "this account"}.
@@ -64,7 +69,7 @@ export function AuthSetupForm({ defaultOrganizationName, email }: AuthSetupFormP
               id="organization-name"
               value={organizationName}
               onChange={(event) => setOrganizationName(event.target.value)}
-              className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+              className="field-shell h-12 w-full rounded-2xl px-4 text-sm shadow-none"
               placeholder="Rivera Homeschool"
               required
             />
@@ -74,7 +79,8 @@ export function AuthSetupForm({ defaultOrganizationName, email }: AuthSetupFormP
             <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>
           ) : null}
 
-          <Button type="submit" className="w-full" disabled={submitting || !organizationName.trim()}>
+          <Button type="submit" className="w-full rounded-2xl gap-2" disabled={submitting || !organizationName.trim()}>
+            <Sparkles className="size-4" />
             {submitting ? "Creating workspace..." : "Create workspace"}
           </Button>
         </form>

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRef, useState } from "react";
 import {
   closestCorners,
@@ -14,7 +15,7 @@ import {
 } from "@dnd-kit/core";
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ChevronDown, Copy, GripVertical, SlidersHorizontal } from "lucide-react";
+import { ArrowLeft, ArrowRight, ChevronDown, Copy, GripVertical, SlidersHorizontal } from "lucide-react";
 
 import { UpdateCurriculumScheduleButton } from "@/components/planning/update-curriculum-schedule-button";
 import { buttonVariants } from "@/components/ui/button";
@@ -28,6 +29,11 @@ type ColumnsState = Record<ColumnId, string[]>;
 interface WeeklyRouteBoardProps {
   initialBoard: WeeklyRouteBoard;
   weekStartDate: string;
+  navigation?: {
+    previousHref: string;
+    nextHref: string;
+    rangeLabel: string;
+  };
 }
 
 const STATE_OPTIONS: Array<{ value: WeeklyRouteBoardItem["state"]; label: string }> = [
@@ -44,18 +50,6 @@ function getStateLabel(state: WeeklyRouteBoardItem["state"]) {
 
 function getSkillContextLabel(item: WeeklyRouteBoardItem) {
   return item.skillPath.split(/[·/]/)[0]?.trim() || item.skillPath;
-}
-
-function getScheduledLabel(scheduledDate: string | null) {
-  if (!scheduledDate) {
-    return "Backlog";
-  }
-
-  return new Intl.DateTimeFormat("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  }).format(new Date(`${scheduledDate}T12:00:00.000Z`));
 }
 
 function getMinutesLabel(minutes: number | null) {
@@ -85,7 +79,11 @@ function getColumnLabel(columnId: ColumnId) {
     return "Flex / unscheduled";
   }
 
-  return new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+  }).format(
     new Date(`${columnId}T12:00:00.000Z`),
   );
 }
@@ -156,19 +154,23 @@ function SortableRouteItem({
         transition,
       }}
       className={cn(
-        "min-w-0 rounded-xl border border-border/60 bg-background/88 p-3 shadow-sm",
-        isDragging && "opacity-70 shadow-md",
+        "min-w-0 rounded-[calc(var(--radius)+0.1rem)] border border-border/60 bg-card/84 p-3.5 shadow-[var(--shadow-soft)] transition-[transform,box-shadow,border-color,background-color] duration-[var(--motion-base)] ease-[var(--ease-standard)] hover:-translate-y-px hover:shadow-[var(--shadow-card)]",
+        isDragging && "border-primary/30 bg-card opacity-70 shadow-[var(--shadow-active)]",
       )}
     >
       <div className="space-y-3">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1 space-y-2">
             <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-              <Badge variant="secondary" className="rounded-full px-2 py-0.5">
+              <Badge
+                variant="secondary"
+                className="max-w-[14rem] rounded-full px-2 py-0.5 truncate whitespace-nowrap"
+                title={getSkillContextLabel(item)}
+              >
                 {getSkillContextLabel(item)}
               </Badge>
               {minutesLabel ? <span>{minutesLabel}</span> : null}
-              <span>{getScheduledLabel(item.scheduledDate)}</span>
+              {!item.scheduledDate ? <span>Backlog</span> : null}
             </div>
             <p className="text-sm font-semibold leading-5 break-words">{item.skillTitle}</p>
             <div className="flex flex-wrap gap-1">
@@ -191,7 +193,7 @@ function SortableRouteItem({
           <button
             type="button"
             aria-label={`Drag ${item.skillTitle}`}
-            className="shrink-0 rounded-md border border-border/70 p-1 text-muted-foreground transition-colors hover:text-foreground"
+            className="shrink-0 rounded-xl border border-border/70 bg-background/72 p-1.5 text-muted-foreground transition-colors hover:border-border hover:text-foreground"
             {...attributes}
             {...listeners}
           >
@@ -231,7 +233,7 @@ function SortableRouteItem({
         {detailsOpen ? (
           <div
             id={`route-item-details-${item.id}`}
-            className="space-y-3 rounded-xl border border-border/70 bg-card/72 p-3"
+            className="space-y-3 rounded-[calc(var(--radius)-0.05rem)] border border-border/70 bg-background/74 p-3"
           >
             <div className="space-y-3 text-xs text-muted-foreground">
               <div className="space-y-1">
@@ -263,7 +265,7 @@ function SortableRouteItem({
         {actionsOpen ? (
           <div
             id={`route-item-actions-${item.id}`}
-            className="space-y-3 rounded-xl border border-border/70 bg-card/72 p-3"
+            className="space-y-3 rounded-[calc(var(--radius)-0.05rem)] border border-border/70 bg-background/74 p-3"
           >
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-foreground" htmlFor={`route-state-${item.id}`}>
@@ -273,7 +275,7 @@ function SortableRouteItem({
                 id={`route-state-${item.id}`}
                 disabled={isSaving}
                 value={item.state}
-                className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground"
+                className="field-shell h-10"
                 onChange={(event) =>
                   void onChangeState(item.id, event.currentTarget.value as WeeklyRouteBoardItem["state"])
                 }
@@ -340,10 +342,10 @@ function RouteColumn({
       data-weekly-column={columnId}
       className={cn(
         "quiet-panel min-h-56 min-w-0 space-y-4 p-4",
-        isOver && "border-primary/40 bg-primary/5",
+        isOver && "border-primary/40 bg-primary/6 shadow-[var(--shadow-active)]",
       )}
     >
-      <div className="space-y-1">
+      <div className="space-y-1 border-b border-border/60 pb-3">
         <p className="text-sm font-semibold text-foreground">{getColumnLabel(columnId)}</p>
         <p className="text-xs text-muted-foreground">
           {items.length} planned items
@@ -353,8 +355,8 @@ function RouteColumn({
       <div ref={setNodeRef} className="min-w-0 space-y-2">
         <SortableContext items={items.map((item) => item.id)} strategy={verticalListSortingStrategy}>
           {items.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-border/70 px-3 py-4 text-center text-xs text-muted-foreground">
-              Drop items here
+            <div className="rounded-[calc(var(--radius)-0.05rem)] border border-dashed border-border/80 bg-background/52 px-3 py-5 text-center text-xs text-muted-foreground">
+              Drop items here to build this day.
             </div>
           ) : (
             items.map((item) => (
@@ -379,7 +381,7 @@ function RouteColumn({
   );
 }
 
-export function WeeklyRouteBoard({ initialBoard, weekStartDate }: WeeklyRouteBoardProps) {
+export function WeeklyRouteBoard({ initialBoard, weekStartDate, navigation }: WeeklyRouteBoardProps) {
   const weekDates = getWeekdayDates(weekStartDate);
   const columnOrder = ["unassigned", ...weekDates];
   const initialColumns = createColumns(initialBoard.items, weekDates);
@@ -702,17 +704,28 @@ export function WeeklyRouteBoard({ initialBoard, weekStartDate }: WeeklyRouteBoa
 
   return (
     <section className="space-y-5">
-      <div className="quiet-panel space-y-4 p-4">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="space-y-1">
-            <p className="section-meta">Weekly plan</p>
-            <h2 className="font-serif text-2xl font-semibold tracking-tight text-foreground">
-              Shape the week without rebuilding it.
-            </h2>
-            <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-              Drag work into the right day, pause items that are too much, and leave overflow in a
-              flexible holding area until you are ready to schedule it.
-            </p>
+      <div className="flex flex-col gap-3 border-b border-border/70 pb-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-wrap items-center gap-2">
+            {navigation ? (
+              <>
+                <Link href={navigation.previousHref} className={buttonVariants({ variant: "outline", size: "sm" })}>
+                  <ArrowLeft className="size-4" />
+                  Previous week
+                </Link>
+                <div className="rounded-full border border-border/70 bg-background/72 px-3 py-1.5 text-sm text-foreground">
+                  {navigation.rangeLabel}
+                </div>
+                <Link href={navigation.nextHref} className={buttonVariants({ variant: "outline", size: "sm" })}>
+                  Next week
+                  <ArrowRight className="size-4" />
+                </Link>
+              </>
+            ) : (
+              <div className="rounded-full border border-border/70 bg-background/72 px-3 py-1.5 text-sm text-foreground">
+                Week of {weekStartDate}
+              </div>
+            )}
           </div>
           <UpdateCurriculumScheduleButton
             hasChanges={hasScheduleChanges}
@@ -750,7 +763,7 @@ export function WeeklyRouteBoard({ initialBoard, weekStartDate }: WeeklyRouteBoa
           {error}
         </p>
       ) : null}
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
+      <div className="grid gap-4">
         <DndContext
           id={`weekly-route-board-${weekStartDate}`}
           sensors={sensors}
@@ -783,36 +796,11 @@ export function WeeklyRouteBoard({ initialBoard, weekStartDate }: WeeklyRouteBoa
             })}
           </div>
         </DndContext>
-        <aside className="quiet-panel space-y-4 p-4">
-          <div className="space-y-1">
-            <p className="text-sm font-semibold text-foreground">How to use this board</p>
-            <p className="text-sm leading-6 text-muted-foreground">
-              Keep the week realistic. Leave cards compact while you sort the calendar, then open
-              details or actions only on the items that need a closer decision.
-            </p>
-          </div>
-          <div className="space-y-2">
-            {STATE_OPTIONS.map((option) => (
-              <div key={option.value} className="rounded-xl border border-border/60 bg-background/72 px-3 py-2">
-                <p className="text-sm font-medium text-foreground">{option.label}</p>
-                <p className="text-xs text-muted-foreground">
-                  {option.value === "queued"
-                    ? "Not assigned to a day yet."
-                    : option.value === "scheduled"
-                      ? "Committed to the week but not started."
-                      : option.value === "in_progress"
-                        ? "Already underway."
-                        : option.value === "done"
-                          ? "Completed for now."
-                          : "Temporarily off the board."}
-                </p>
-              </div>
-            ))}
-          </div>
-          {activeItemId ? (
-            <p className="text-xs text-muted-foreground">Dragging item {activeItemId}…</p>
-          ) : null}
-        </aside>
+        {activeItemId ? (
+          <p className="rounded-2xl border border-primary/20 bg-primary/6 px-3 py-2 text-xs text-muted-foreground">
+            Dragging item {activeItemId}…
+          </p>
+        ) : null}
       </div>
     </section>
   );

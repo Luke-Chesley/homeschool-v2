@@ -105,6 +105,18 @@ export function TodayWorkspaceShell({
   const queueSummaryLabel = activeSlotSummary?.slotTitle
     ? `${activeSlotSummary.slotTitle} queue and actions`
     : "Active lesson queue and actions";
+  const readinessLabel = fullWorkspace.lessonDraft
+    ? "Lesson draft ready to review."
+    : fullWorkspace.lessonBuild?.status === "generating" ||
+        fullWorkspace.lessonBuild?.status === "queued"
+      ? "Lesson draft is building now."
+      : "Generate the lesson draft to start the day.";
+  const nextStepLabel = fullWorkspace.lessonDraft
+    ? "Review the draft, then run the queue in order."
+    : "Generate the lesson draft so the day becomes teachable.";
+  const totalMinutes = daySummary.totalMinutes
+    ? `${daySummary.totalMinutes} min`
+    : `${fullWorkspace.items.reduce((sum, item) => sum + item.estimatedMinutes, 0)} min`;
   if (fullWorkspace.items.length === 0) {
     return (
       <Card className="quiet-panel max-w-4xl border-dashed">
@@ -171,44 +183,69 @@ export function TodayWorkspaceShell({
       {slotSummaries.length > 1 || sourceId ? (
         <section className="space-y-4 border-b border-border/70 pb-5">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-            <div className="space-y-3">
-              <div
-                role="tablist"
-                aria-label="Today view selector"
-                className="inline-flex w-full rounded-full border border-border/70 bg-muted/40 p-1 sm:w-auto"
-              >
-                <button
-                  id="today-skills-tab"
-                  type="button"
-                  role="tab"
-                  aria-selected={headerView === "skills"}
-                  aria-controls="today-skills-panel"
-                  onClick={() => setHeaderView("skills")}
-                  className={cn(
-                    "rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
-                    headerView === "skills"
-                      ? "bg-card text-foreground shadow-[var(--shadow-card)]"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
+            <div className="min-w-0 space-y-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <div
+                  role="tablist"
+                  aria-label="Today view selector"
+                  className="inline-flex w-full rounded-full border border-border/70 bg-muted/40 p-1 sm:w-auto"
                 >
-                  Today&apos;s skills
-                </button>
-                <button
-                  id="today-lesson-flow-tab"
-                  type="button"
-                  role="tab"
-                  aria-selected={headerView === "flow"}
-                  aria-controls="today-lesson-flow-panel"
-                  onClick={() => setHeaderView("flow")}
-                  className={cn(
-                    "rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
-                    headerView === "flow"
-                      ? "bg-card text-foreground shadow-[var(--shadow-card)]"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  Lesson flow
-                </button>
+                  <button
+                    id="today-skills-tab"
+                    type="button"
+                    role="tab"
+                    aria-selected={headerView === "skills"}
+                    aria-controls="today-skills-panel"
+                    onClick={() => setHeaderView("skills")}
+                    className={cn(
+                      "rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
+                      headerView === "skills"
+                        ? "bg-card text-foreground shadow-[var(--shadow-card)]"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    Today&apos;s skills
+                  </button>
+                  <button
+                    id="today-lesson-flow-tab"
+                    type="button"
+                    role="tab"
+                    aria-selected={headerView === "flow"}
+                    aria-controls="today-lesson-flow-panel"
+                    onClick={() => setHeaderView("flow")}
+                    className={cn(
+                      "rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
+                      headerView === "flow"
+                        ? "bg-card text-foreground shadow-[var(--shadow-card)]"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    Lesson flow
+                  </button>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                  <span className="rounded-full border border-border/70 bg-background/72 px-3 py-1.5">
+                    {daySummary.skillCount} {daySummary.skillCount === 1 ? "skill" : "skills"}
+                  </span>
+                  <span className="rounded-full border border-border/70 bg-background/72 px-3 py-1.5">
+                    {daySummary.lessonSlotCount}{" "}
+                    {daySummary.lessonSlotCount === 1 ? "lesson block" : "lesson blocks"}
+                  </span>
+                  <span className="rounded-full border border-border/70 bg-background/72 px-3 py-1.5">
+                    {totalMinutes}
+                  </span>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <span className="rounded-full border border-primary/20 bg-primary/6 px-3 py-1.5 font-medium text-foreground">
+                  {readinessLabel}
+                </span>
+                <span className="rounded-full border border-border/70 bg-background/72 px-3 py-1.5 text-muted-foreground">
+                  {fullWorkspace.learner.name}
+                </span>
+                <span className="max-w-full truncate rounded-full border border-border/70 bg-background/72 px-3 py-1.5 text-muted-foreground sm:max-w-[28rem]">
+                  {fullWorkspace.leadItem.sourceLabel}
+                </span>
               </div>
               <div className="space-y-1">
                 <p className="text-sm font-medium text-foreground">
@@ -217,7 +254,8 @@ export function TodayWorkspaceShell({
                 <p className="text-sm text-muted-foreground">
                   {headerView === "flow"
                     ? "Keep the active lesson in focus. Switch slots only when you need the next same-day lesson."
-                    : "Review every scheduled skill for today without opening the full planning view."}
+                    : "Review every scheduled skill for today without opening the full planning view."}{" "}
+                  <span className="text-foreground/90">{nextStepLabel}</span>
                 </p>
               </div>
             </div>

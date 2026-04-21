@@ -6,6 +6,7 @@ import { LogOut } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { StudioToggle } from "@/components/studio/StudioToggle";
+import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { ActiveLearnerSwitcher } from "@/components/users/active-learner-switcher";
 import { cn } from "@/lib/utils";
@@ -120,7 +121,10 @@ export function GlobalPageTabs() {
         </div>
         <div className="flex min-w-0 items-center justify-center">
           {inWorkspace ? (
-            <nav className="hidden min-w-0 items-center gap-6 overflow-x-auto md:flex" aria-label="Workspace sections">
+            <nav
+              className="hidden min-w-0 items-center gap-2 overflow-x-auto rounded-full border border-border/70 bg-card/76 px-2 py-1 md:flex"
+              aria-label="Workspace sections"
+            >
               {workspaceTabs.map((tab) => {
                 const active = isActive(pathname, tab.href, tab.matchPrefix);
 
@@ -129,8 +133,10 @@ export function GlobalPageTabs() {
                     key={tab.href}
                     href={tab.href}
                     className={cn(
-                      "inline-flex shrink-0 items-center text-sm transition-colors",
-                      active ? "font-medium text-foreground" : "text-muted-foreground hover:text-foreground",
+                      "inline-flex shrink-0 items-center rounded-full px-3 py-1.5 text-sm transition-colors",
+                      active
+                        ? "bg-background text-foreground shadow-[var(--shadow-soft)]"
+                        : "text-muted-foreground hover:text-foreground",
                     )}
                   >
                     {tab.label}
@@ -170,7 +176,7 @@ export function GlobalPageTabs() {
                     <>
                       <span className="text-muted-foreground"> for </span>
                       <span
-                        className="inline-flex max-w-[14rem] truncate rounded-full border border-border/70 bg-background/70 px-2.5 py-0.5 align-middle text-foreground"
+                        className="inline-flex max-w-[14rem] truncate rounded-full border border-border/70 bg-card/78 px-2.5 py-0.5 align-middle text-foreground"
                         title={activeLearnerName}
                       >
                         {activeLearnerName}
@@ -187,11 +193,14 @@ export function GlobalPageTabs() {
                       label={switchLabel}
                       className="min-w-[12rem] gap-0"
                       labelClassName="sr-only"
-                      selectClassName="h-9 rounded-full bg-card/72"
+                      selectClassName="h-9 rounded-full bg-card/78"
                     />
                   </>
                 ) : null}
                 <div className="h-4 w-px bg-border/80" />
+              </div>
+              <div className="hidden lg:block">
+                <ThemeToggle compact />
               </div>
               <div className="hidden lg:block">
                 <StudioToggle />
@@ -203,7 +212,11 @@ export function GlobalPageTabs() {
                 </Button>
               </form>
             </>
-          ) : null}
+          ) : (
+            <div className="flex items-center gap-2">
+              <ThemeToggle compact />
+            </div>
+          )}
         </div>
       </div>
     </div>

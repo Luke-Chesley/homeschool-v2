@@ -47,9 +47,9 @@ function CurriculumNodeRow({
         type="button"
         onClick={hasChildren ? () => onToggle(node.id) : undefined}
         className={cn(
-          "flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left transition-colors",
-          hasChildren ? "hover:bg-muted/60" : "cursor-default",
-          isSkill ? "border border-primary/20 bg-primary/5" : "border border-transparent",
+          "flex w-full items-start gap-3 rounded-[calc(var(--radius)-0.1rem)] px-3 py-2.5 text-left transition-[transform,background-color,border-color,box-shadow] duration-[var(--motion-base)] ease-[var(--ease-standard)]",
+          hasChildren ? "hover:-translate-y-px hover:bg-card/82 hover:shadow-[var(--shadow-soft)]" : "cursor-default",
+          isSkill ? "border border-primary/20 bg-primary/6" : "border border-transparent",
         )}
         style={{ marginLeft: `${depth * 14}px` }}
       >
@@ -63,12 +63,19 @@ function CurriculumNodeRow({
           <span className="mt-1 size-4 shrink-0" />
         )}
 
-        <Icon className={cn("mt-1 size-4 shrink-0", isSkill ? "text-primary" : "text-muted-foreground")} />
+        <div
+          className={cn(
+            "mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-xl border border-border/70 bg-background/76",
+            isSkill && "border-primary/20 bg-primary/10 text-primary",
+          )}
+        >
+          <Icon className={cn("size-4 shrink-0", isSkill ? "text-primary" : "text-muted-foreground")} />
+        </div>
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <p className={cn("text-sm", isSkill ? "font-semibold" : "font-medium")}>{node.title}</p>
-            <Badge variant={isSkill ? "secondary" : "outline"} className="text-[10px] uppercase tracking-[0.14em]">
+            <Badge variant={isSkill ? "secondary" : "glass"} className="text-[10px] uppercase tracking-[0.14em]">
               {typeLabel[node.normalizedType]}
             </Badge>
           </div>

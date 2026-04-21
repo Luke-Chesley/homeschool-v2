@@ -16,7 +16,7 @@ import {
 } from "@dnd-kit/core";
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { AlertTriangle, ArrowRight, CalendarDays, ChevronDown, GripVertical, Layers3 } from "lucide-react";
+import { ArrowRight, ChevronDown, GripVertical } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
@@ -137,12 +137,13 @@ function SortableMonthItem({
         <div className="flex items-start gap-1.5">
           <div className="min-w-0 flex-1 space-y-1.5">
             <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
-              <Badge variant="secondary" className="rounded-full px-1.5 py-0.5">
+              <Badge
+                variant="secondary"
+                className="max-w-[calc(100%-2.5rem)] rounded-full px-1.5 py-0.5 truncate whitespace-nowrap"
+                title={getSkillContextLabel(item)}
+              >
                 {getSkillContextLabel(item)}
               </Badge>
-              {item.estimatedMinutes != null && item.estimatedMinutes > 0 ? (
-                <span>{formatMinutes(item.estimatedMinutes)}</span>
-              ) : null}
             </div>
             <p
               className={cn(
@@ -152,10 +153,16 @@ function SortableMonthItem({
             >
               {item.skillTitle}
             </p>
-            <p className="text-[11px] leading-4 text-muted-foreground">
-              {getStateLabel(item.state)}
-              {item.manualOverrideKind !== "none" ? ` · ${item.manualOverrideKind.replace("_", " ")}` : ""}
-            </p>
+            <div className="flex flex-wrap gap-1">
+              <Badge variant="outline" className="rounded-full px-1.5 py-0 text-[10px]">
+                {getStateLabel(item.state)}
+              </Badge>
+              {item.manualOverrideKind !== "none" ? (
+                <Badge variant="secondary" className="rounded-full px-1.5 py-0 text-[10px]">
+                  {item.manualOverrideKind.replace("_", " ")}
+                </Badge>
+              ) : null}
+            </div>
           </div>
           <div className="flex shrink-0 items-center gap-1">
             <button
@@ -237,7 +244,7 @@ function DayCell({
   return (
     <div
       className={cn(
-        "flex min-h-40 min-w-0 flex-col rounded-[1.4rem] border p-3 transition-colors",
+        "flex min-h-36 min-w-0 flex-col rounded-[1.4rem] border p-3 transition-colors",
         day.inMonth ? "border-border/75 bg-card/82" : "border-border/55 bg-background/55",
         day.isWeekend && "bg-background/40",
         day.isDroppable && isOver && "border-primary/45 bg-primary/6",
@@ -274,18 +281,20 @@ function DayCell({
         </div>
       </div>
 
-      <div ref={setNodeRef} className="mt-3 flex-1 space-y-2">
+        <div ref={setNodeRef} className="mt-3 flex-1 space-y-2">
         <SortableContext items={items.map((item) => item.id)} strategy={verticalListSortingStrategy}>
           {items.length === 0 ? (
             <div
               className={cn(
                 "rounded-xl border border-dashed px-2.5 py-4 text-center text-[11px] leading-5",
-                day.isWeekend
+                !day.inMonth
+                  ? "border-border/45 text-muted-foreground/55"
+                  : day.isWeekend
                   ? "border-border/50 text-muted-foreground/80"
                   : "border-border/70 text-muted-foreground",
               )}
             >
-              {day.isWeekend ? "Weekend" : "Drop cards here"}
+              {!day.inMonth ? "" : day.isWeekend ? "Weekend" : "Drop cards here"}
             </div>
           ) : (
             items.map((item) => <SortableMonthItem key={item.id} item={item} isSaving={isSaving} />)
@@ -586,20 +595,36 @@ export function MonthPlanningBoard({ month }: MonthPlanningBoardProps) {
   };
 
   const firstWeek = month.weeks[0];
+  const visibleBacklogWeeks = month.weeks.filter((week) => week.unassignedItems.length > 0);
 
   return (
     <section className="space-y-5">
-      <div className="quiet-panel space-y-4 p-4">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="space-y-1">
-            <p className="section-meta">Month planning board</p>
-            <h2 className="font-serif text-2xl font-semibold tracking-tight text-foreground">
-              {month.monthLabel}
-            </h2>
-            <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-              The month grid is the draft. Drag route cards across weekdays, keep the full month
-              visible, and expand a card inline when you need more context before moving it.
-            </p>
+      <div className="flex flex-col gap-3 border-b border-border/70 pb-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+            <span>{month.summary.daysInMonth} days</span>
+            <span>•</span>
+            <span>{month.summary.weeksInView} weeks</span>
+            <span>•</span>
+            <span>{month.summary.scheduledCount} placed</span>
+            {hasScheduleChanges ? (
+              <>
+                <span>•</span>
+                <span>Custom order</span>
+              </>
+            ) : null}
+            {month.summary.conflictCount > 0 ? (
+              <>
+                <span>•</span>
+                <span className="text-destructive">{month.summary.conflictCount} conflicts</span>
+              </>
+            ) : null}
+            {isSaving ? (
+              <>
+                <span>•</span>
+                <span>Saving changes…</span>
+              </>
+            ) : null}
           </div>
           <UpdateCurriculumScheduleButton
             hasChanges={hasScheduleChanges}
@@ -607,32 +632,6 @@ export function MonthPlanningBoard({ month }: MonthPlanningBoardProps) {
             onRefresh={refreshSchedule}
             className="lg:max-w-xs"
           />
-        </div>
-        <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-          <CalendarDays className="size-3.5" />
-          <span>{month.summary.daysInMonth} days</span>
-          <span>•</span>
-          <span>{month.summary.weeksInView} weeks</span>
-          <span>•</span>
-          <span>{month.summary.scheduledCount} placed</span>
-          {hasScheduleChanges ? (
-            <>
-              <span>•</span>
-              <span>Custom order</span>
-            </>
-          ) : null}
-          {month.summary.conflictCount > 0 ? (
-            <>
-              <span>•</span>
-              <span className="text-destructive">{month.summary.conflictCount} conflicts</span>
-            </>
-          ) : null}
-          {isSaving ? (
-            <>
-              <span>•</span>
-              <span>Saving changes…</span>
-            </>
-          ) : null}
         </div>
       </div>
 
@@ -642,7 +641,7 @@ export function MonthPlanningBoard({ month }: MonthPlanningBoardProps) {
         </p>
       ) : null}
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
+      <div className="grid gap-4">
         <DndContext
           id={`month-planning-board-${month.monthStartDate}`}
           sensors={sensors}
@@ -654,7 +653,7 @@ export function MonthPlanningBoard({ month }: MonthPlanningBoardProps) {
           <Card className="border-border/75 bg-background/90">
             <CardContent>
               <div className="overflow-x-auto pb-2">
-                <div className="min-w-0 space-y-3 xl:min-w-[980px]">
+                <div className="min-w-[980px] space-y-3 lg:min-w-[1120px]">
                   <div className="grid grid-cols-7 gap-3">
                     {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((label) => (
                       <div
@@ -686,69 +685,45 @@ export function MonthPlanningBoard({ month }: MonthPlanningBoardProps) {
             </CardContent>
           </Card>
         </DndContext>
-
-        <div className="grid gap-6 self-start">
-          <aside className="quiet-panel space-y-4 p-4">
-            <div className="space-y-1">
-              <p className="text-sm font-semibold text-foreground">Month posture</p>
-              <p className="text-sm leading-6 text-muted-foreground">
-                Keep weekdays interactive and keep weekends visible, so you can inspect the full month at a glance.
-              </p>
-            </div>
-            <div className="flex items-start gap-3 rounded-[1.4rem] border border-border/70 bg-card/75 p-4">
-              <Layers3 className="mt-1 size-4 text-primary" />
-              <div>
-                <p className="font-semibold text-foreground">Expandable daily cards</p>
-                <p>Every card shows the key label immediately, then opens inline when you need the rest.</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3 rounded-[1.4rem] border border-border/70 bg-card/75 p-4">
-              <AlertTriangle className="mt-1 size-4 text-primary" />
-              <div>
-                <p className="font-semibold text-foreground">Weekend context</p>
-                <p>Weekend boxes are visible for context, but scheduling still follows weekdays.</p>
-              </div>
-            </div>
-            {firstWeek ? (
-              <Link
-                href={`/planning?weekStartDate=${firstWeek.weekStartDate}`}
-                className={cn(buttonVariants({ variant: "default" }), "w-full")}
-              >
-                Open the first week
-                <ArrowRight className="size-4" />
-              </Link>
-            ) : null}
-            {activeItemId ? (
-              <p className="text-xs text-muted-foreground">Dragging item {activeItemId}…</p>
-            ) : null}
-          </aside>
-          <Card className="border-border/75 bg-card/90">
-            <CardHeader>
-              <CardDescription>Weekly backlog</CardDescription>
-              <CardTitle>Unassigned cards</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {month.weeks.map((week) => {
-                  const columnId = `unassigned:${week.weeklyRouteId}`;
-                  const items = (columns[columnId] ?? [])
-                    .map((itemId) => itemsById.get(itemId))
-                    .filter((item): item is WeeklyRouteBoardItem => item != null);
-
-                  return (
-                    <BacklogBucket
-                      key={week.weekStartDate}
-                      week={week}
-                      items={items}
-                      isSaving={isSaving}
-                    />
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
       </div>
+      {visibleBacklogWeeks.length > 0 ? (
+        <Card className="border-border/75 bg-card/90">
+          <CardHeader>
+            <CardDescription>Weekly backlog</CardDescription>
+            <CardTitle>Unassigned cards</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-3 lg:grid-cols-2">
+              {visibleBacklogWeeks.map((week) => {
+                const columnId = `unassigned:${week.weeklyRouteId}`;
+                const items = (columns[columnId] ?? [])
+                  .map((itemId) => itemsById.get(itemId))
+                  .filter((item): item is WeeklyRouteBoardItem => item != null);
+
+                return (
+                  <BacklogBucket
+                    key={week.weekStartDate}
+                    week={week}
+                    items={items}
+                    isSaving={isSaving}
+                  />
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+      {firstWeek ? (
+        <div className="flex justify-start">
+          <Link
+            href={`/planning?weekStartDate=${firstWeek.weekStartDate}`}
+            className={cn(buttonVariants({ variant: "outline" }), "rounded-full")}
+          >
+            Open the first week
+            <ArrowRight className="size-4" />
+          </Link>
+        </div>
+      ) : null}
     </section>
   );
 }

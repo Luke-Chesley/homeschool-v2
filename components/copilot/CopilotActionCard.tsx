@@ -2,6 +2,8 @@
 
 import * as React from "react";
 import { AlertCircle, BookOpen, Calendar, CheckCircle, FileText, Loader2, X } from "lucide-react";
+
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -50,18 +52,26 @@ export function CopilotActionCard({ action, onApply, onDismiss }: Props) {
 
   return (
     <Card
+      variant="glass"
       className={cn(
-        "transition-opacity",
+        "overflow-hidden transition-opacity",
         isDismissed && "opacity-40"
       )}
     >
-      <CardContent className="flex items-start gap-3 px-4 py-4">
-        <Icon className="size-4 shrink-0 text-primary/70 mt-0.5" />
+      <CardContent className="flex items-start gap-4 px-5 py-5">
+        <div className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-2xl border border-border/70 bg-background/75 text-primary shadow-[var(--shadow-soft)]">
+          <Icon className="size-4 shrink-0" />
+        </div>
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-            {config.label}
-          </p>
-          <p className="mt-0.5 text-sm font-medium">{action.label}</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              {config.label}
+            </p>
+            <Badge variant={isApplied ? "success" : isFailed ? "warning" : "glass"}>
+              {action.status.replaceAll("_", " ")}
+            </Badge>
+          </div>
+          <p className="mt-1 text-sm font-medium text-foreground">{action.label}</p>
           <p className="mt-1 text-sm leading-6 text-muted-foreground">{action.description}</p>
           <p className="mt-2 text-xs text-muted-foreground">{renderSummary()}</p>
           {action.rationale ? (
@@ -75,7 +85,7 @@ export function CopilotActionCard({ action, onApply, onDismiss }: Props) {
             </p>
           ) : null}
           {action.result?.message ? (
-            <p className="mt-3 text-xs font-medium text-emerald-700">{action.result.message}</p>
+            <p className="mt-3 text-xs font-medium text-[color:var(--success)]">{action.result.message}</p>
           ) : null}
           {action.error ? (
             <p className="mt-3 flex items-start gap-2 text-xs font-medium text-destructive">
@@ -90,7 +100,7 @@ export function CopilotActionCard({ action, onApply, onDismiss }: Props) {
               <Button
                 size="sm"
                 variant="outline"
-                className="h-7 px-2 text-xs gap-1"
+                className="h-8 gap-1 rounded-full px-3 text-xs"
                 onClick={() => onApply(action)}
                 disabled={!canApply}
               >
@@ -102,7 +112,7 @@ export function CopilotActionCard({ action, onApply, onDismiss }: Props) {
               <Button
                 size="sm"
                 variant="ghost"
-                className="h-7 px-2 text-xs"
+                className="h-8 rounded-full px-3 text-xs"
                 onClick={() => onDismiss(action)}
               >
                 <X className="size-3" />
@@ -117,7 +127,7 @@ export function CopilotActionCard({ action, onApply, onDismiss }: Props) {
           </span>
         )}
         {isApplied && (
-          <span className="text-xs text-emerald-600 font-medium shrink-0">Applied</span>
+          <span className="text-xs font-medium text-[color:var(--success)] shrink-0">Applied</span>
         )}
         {isDismissed && (
           <span className="text-xs font-medium text-muted-foreground shrink-0">Dismissed</span>

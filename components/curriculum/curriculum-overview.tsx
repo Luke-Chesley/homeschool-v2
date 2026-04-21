@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Map, Sparkles, Waypoints } from "lucide-react";
 
 import { buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { MetricCard } from "@/components/ui/metric-card";
 import type { CurriculumSource, CurriculumTree as CurriculumTreeData } from "@/lib/curriculum/types";
 import { cn } from "@/lib/utils";
 
@@ -24,75 +25,79 @@ export function CurriculumOverview({
   tree,
 }: CurriculumOverviewProps) {
   return (
-    <div className="grid gap-6 xl:grid-cols-[300px_minmax(0,1fr)]">
+    <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
       <div className="space-y-4">
         <CurriculumSourceSelector
           sources={sources}
           activeSourceId={activeSourceId}
           onActivateSource={onActivateSource}
         />
-        <Card className="quiet-panel">
-          <div className="space-y-3 p-4 text-sm">
-            <p className="font-medium text-foreground">{tree.source.title}</p>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="rounded-lg border border-border/70 bg-background/70 px-3 py-2">
-                <div className="text-xs text-muted-foreground">Nodes</div>
-                <div className="mt-1 font-medium text-foreground">{tree.nodeCount}</div>
-              </div>
-              <div className="rounded-lg border border-border/70 bg-background/70 px-3 py-2">
-                <div className="text-xs text-muted-foreground">Skills</div>
-                <div className="mt-1 font-medium text-foreground">{tree.skillCount}</div>
-              </div>
-            </div>
-            <div className="rounded-lg border border-border/70 bg-background/70 px-3 py-2">
-              <div className="text-xs text-muted-foreground">Import</div>
-              <div className="mt-1 font-medium text-foreground">v{tree.source.importVersion}</div>
-            </div>
-          </div>
-        </Card>
+        <MetricCard
+          label="Curriculum nodes"
+          value={tree.nodeCount}
+          hint={`${tree.skillCount} teachable skills are available in the live tree.`}
+          icon={Waypoints}
+        />
+        <MetricCard
+          label="Import version"
+          value={`v${tree.source.importVersion}`}
+          hint="Use this to confirm you are looking at the latest normalized source."
+          icon={Sparkles}
+          tone="secondary"
+        />
       </div>
 
-      <Card className="reading-surface">
-        <div className="space-y-4 p-5">
-          <div className="space-y-3">
-            <div>
-              <h2 className="font-serif text-2xl">{tree.source.title}</h2>
-              <p className="text-sm leading-7 text-muted-foreground">
-                Browse the structure here, then open the visual map when you want to inspect
-                branch relationships more closely.
-              </p>
-            </div>
-            <div className="rounded-xl border border-border/70 bg-background/70 p-4">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      <div className="grid gap-6">
+        <Card className="reading-surface">
+          <div className="space-y-5 p-5">
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,0.72fr)]">
+              <div className="space-y-3">
+                <div className="toolbar-row">
+                  <span className="rounded-full border border-primary/20 bg-primary/8 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">
+                    Live source
+                  </span>
+                </div>
+                <div>
+                  <h2 className="font-serif text-[2rem] leading-tight tracking-[-0.03em] text-foreground">
+                    {tree.source.title}
+                  </h2>
+                  <p className="mt-2 text-sm leading-7 text-muted-foreground">
+                    Browse the structure here, then open the visual map when you want a clearer view of branch relationships and flow.
+                  </p>
+                </div>
+              </div>
+
+              <div className="context-rail space-y-3">
                 <div className="space-y-1">
                   <p className="text-sm font-semibold text-foreground">Visual map</p>
-                  <p className="text-sm text-muted-foreground">
-                    Open the visual map to inspect connected nodes, hierarchy, and branch flow in
-                    one place.
+                  <p className="text-sm leading-6 text-muted-foreground">
+                    Open the connected map when you want hierarchy and branch flow in one glance.
                   </p>
                 </div>
                 <Link
                   href={`/curriculum/graph?sourceId=${activeSourceId}`}
                   className={cn(buttonVariants({ size: "sm" }), "w-full justify-center lg:w-auto")}
                 >
+                  <Map className="size-4" />
                   Open visual map
                   <ArrowRight className="size-4" />
                 </Link>
               </div>
             </div>
+
+            {tree.rootNodes.length === 0 ? (
+              <p className="empty-state-panel text-sm text-muted-foreground">
+                This source has no normalized nodes yet.
+              </p>
+            ) : (
+              <CurriculumTree tree={tree} />
+            )}
           </div>
+        </Card>
 
-          {tree.rootNodes.length === 0 ? (
-            <p className="rounded-lg border border-dashed border-border/70 px-4 py-8 text-center text-sm text-muted-foreground">
-              This source has no normalized nodes yet.
-            </p>
-          ) : (
-            <CurriculumTree tree={tree} />
-          )}
-        </div>
-      </Card>
+        <CurriculumRefinementWidget sourceId={activeSourceId} sourceTitle={tree.source.title} />
+      </div>
 
-      <CurriculumRefinementWidget sourceId={activeSourceId} sourceTitle={tree.source.title} />
     </div>
   );
 }

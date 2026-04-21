@@ -24,7 +24,7 @@ const evaluationTone: Record<string, string> = {
 
 function EmptyState({ title, body }: { title: string; body: string }) {
   return (
-    <div className="rounded-xl border border-dashed border-border/70 px-4 py-8 text-sm text-muted-foreground">
+    <div className="rounded-[1.4rem] border border-dashed border-border/70 bg-background/60 px-4 py-8 text-sm text-muted-foreground">
       <p className="font-medium text-foreground">{title}</p>
       <p className="mt-2 leading-6">{body}</p>
     </div>
@@ -35,7 +35,7 @@ export function ProgressSection({ dashboard }: { dashboard: TrackingDashboard })
   return (
     <section className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
       <div className="grid gap-6">
-        <Card className="quiet-panel shadow-none">
+        <Card variant="glass">
           <CardHeader>
             <CardTitle>Progress snapshots</CardTitle>
             <CardDescription>
@@ -50,7 +50,7 @@ export function ProgressSection({ dashboard }: { dashboard: TrackingDashboard })
               />
             ) : (
               dashboard.progressSnapshots.map((snapshot) => (
-                <div key={snapshot.id} className="rounded-xl border border-border/60 bg-background/75 p-4">
+                <div key={snapshot.id} className="rounded-[1.35rem] border border-border/60 bg-background/75 p-4">
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className="font-medium text-foreground">{snapshot.periodLabel}</p>
@@ -78,7 +78,7 @@ export function ProgressSection({ dashboard }: { dashboard: TrackingDashboard })
           </CardContent>
         </Card>
 
-        <Card className="quiet-panel shadow-none">
+        <Card variant="glass">
           <CardHeader>
             <CardTitle>Subject coverage</CardTitle>
             <CardDescription>
@@ -93,7 +93,7 @@ export function ProgressSection({ dashboard }: { dashboard: TrackingDashboard })
               />
             ) : (
               dashboard.subjectCoverage.map((row) => (
-                <div key={row.subjectKey} className="rounded-xl border border-border/60 bg-background/75 p-4">
+                <div key={row.subjectKey} className="rounded-[1.35rem] border border-border/60 bg-background/75 p-4">
                   <div className="flex items-center justify-between gap-3">
                     <p className="font-medium text-foreground">{row.label}</p>
                     <Badge variant="outline">{row.coverageStatus.replaceAll("_", " ")}</Badge>
@@ -107,7 +107,7 @@ export function ProgressSection({ dashboard }: { dashboard: TrackingDashboard })
           </CardContent>
         </Card>
 
-        <Card className="quiet-panel shadow-none">
+        <Card variant="glass">
           <CardHeader>
             <CardTitle>Outcome history</CardTitle>
             <CardDescription>See what was planned, what happened, and what now supports the record.</CardDescription>
@@ -120,7 +120,7 @@ export function ProgressSection({ dashboard }: { dashboard: TrackingDashboard })
               />
             ) : (
               dashboard.outcomes.map((outcome) => (
-                <div key={outcome.id} className="rounded-xl border border-border/60 bg-background/75 p-4">
+                <div key={outcome.id} className="rounded-[1.35rem] border border-border/60 bg-background/75 p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="font-medium text-foreground">{outcome.title}</p>
@@ -155,7 +155,7 @@ export function ProgressSection({ dashboard }: { dashboard: TrackingDashboard })
       </div>
 
       <div className="grid gap-6">
-        <Card className="quiet-panel shadow-none">
+        <Card variant="glass">
           <CardHeader>
             <CardTitle>Lesson evaluations</CardTitle>
             <CardDescription>Quick lesson-level reads that help later snapshots feel grounded.</CardDescription>
@@ -168,7 +168,7 @@ export function ProgressSection({ dashboard }: { dashboard: TrackingDashboard })
               />
             ) : (
               dashboard.evaluations.map((evaluation) => (
-                <div key={evaluation.id} className="rounded-xl border border-border/60 bg-background/75 p-4">
+                <div key={evaluation.id} className="rounded-[1.35rem] border border-border/60 bg-background/75 p-4">
                   <div className="flex items-center justify-between gap-3">
                     <p className="font-medium text-foreground">{evaluation.title}</p>
                     <Badge variant="outline" className={evaluationTone[evaluation.level]}>
@@ -183,7 +183,7 @@ export function ProgressSection({ dashboard }: { dashboard: TrackingDashboard })
           </CardContent>
         </Card>
 
-        <Card className="quiet-panel shadow-none">
+        <Card variant="glass">
           <CardHeader>
             <CardTitle>Observations and recommendations</CardTitle>
             <CardDescription>Keep the narrative trail close to the work, not in a separate memo.</CardDescription>
@@ -197,7 +197,7 @@ export function ProgressSection({ dashboard }: { dashboard: TrackingDashboard })
             ) : (
               <>
                 {dashboard.observations.map((observation) => (
-                  <div key={observation.id} className="rounded-xl border border-border/60 bg-background/75 p-4">
+                  <div key={observation.id} className="rounded-[1.35rem] border border-border/60 bg-background/75 p-4">
                     <div className="flex items-center justify-between gap-3">
                       <p className="font-medium text-foreground">{observation.title}</p>
                       <Badge variant="outline">{observation.tone.replaceAll("_", " ")}</Badge>
@@ -208,7 +208,7 @@ export function ProgressSection({ dashboard }: { dashboard: TrackingDashboard })
                 ))}
 
                 {dashboard.recommendations.map((recommendation) => (
-                  <div key={recommendation.id} className="rounded-xl border border-border/60 bg-background/75 p-4">
+                  <div key={recommendation.id} className="rounded-[1.35rem] border border-border/60 bg-background/75 p-4">
                     <div className="flex items-center justify-between gap-3">
                       <p className="font-medium text-foreground">{recommendation.title}</p>
                       <Badge variant="outline">{recommendation.status}</Badge>

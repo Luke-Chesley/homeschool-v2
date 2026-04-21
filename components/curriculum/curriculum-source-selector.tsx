@@ -17,10 +17,10 @@ export function CurriculumSourceSelector({
   onActivateSource,
 }: CurriculumSourceSelectorProps) {
   return (
-    <Card className="quiet-panel min-w-0 border-border/60 bg-card/78 shadow-none">
+    <Card variant="glass" className="min-w-0 border-border/60">
       <div className="min-w-0 space-y-4 p-4">
         <div className="space-y-1">
-          <p className="section-meta">Live curriculum</p>
+          <p className="section-meta">Source list</p>
           <p className="text-sm text-muted-foreground">
             Planning, today, and tracking all read from the source marked live here.
           </p>
@@ -32,14 +32,21 @@ export function CurriculumSourceSelector({
             <div
               key={source.id}
               className={cn(
-                "flex w-full min-w-0 items-center justify-between gap-3 rounded-xl border px-3 py-3",
+                "flex w-full min-w-0 items-start justify-between gap-3 rounded-[calc(var(--radius)-0.05rem)] border px-3 py-3.5 transition-[transform,box-shadow,border-color,background-color] duration-[var(--motion-base)] ease-[var(--ease-standard)] hover:-translate-y-px hover:shadow-[var(--shadow-soft)]",
                 selected
-                  ? "border-primary/25 bg-primary/8"
+                  ? "border-primary/25 bg-primary/8 shadow-[var(--shadow-soft)]"
                   : "border-border/60 bg-background/80",
               )}
             >
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-foreground">{source.title}</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="truncate text-sm font-semibold text-foreground">{source.title}</p>
+                  {selected ? (
+                    <span className="rounded-full border border-primary/20 bg-primary/8 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-primary">
+                      Live
+                    </span>
+                  ) : null}
+                </div>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {source.kind.replace("_", " ")} · v{source.importVersion}
                 </p>

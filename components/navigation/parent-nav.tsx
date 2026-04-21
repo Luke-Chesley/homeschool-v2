@@ -23,14 +23,12 @@ export function ParentNav({ className, onNavigate }: ParentNavProps) {
   const pathname = usePathname();
 
   return (
-    <nav className={cn("flex flex-col gap-1", className)} aria-label="Parent workspace">
+    <nav className={cn("flex flex-col gap-2", className)} aria-label="Parent workspace">
       {parentPrimaryNav.map((item) => {
         const active = isActive(pathname, item.href, item.matchPrefix);
         const classes = cn(
-          "group flex items-center gap-3 rounded-md px-3.5 py-3 text-left transition-colors",
-          active
-            ? "bg-muted text-foreground"
-            : "text-foreground/78 hover:bg-muted/60 hover:text-foreground",
+          "shell-nav-item",
+          active ? "shell-nav-item-active text-foreground" : "shell-nav-item-inactive text-foreground/82",
           item.disabled && "cursor-not-allowed opacity-70",
         );
 
@@ -38,15 +36,18 @@ export function ParentNav({ className, onNavigate }: ParentNavProps) {
           <>
             <div
               className={cn(
-                "flex size-9 shrink-0 items-center justify-center rounded-md transition-colors",
-                active
-                  ? "bg-foreground text-background"
-                  : "bg-muted/70 text-foreground/70 group-hover:text-foreground",
+                "shell-nav-icon",
+                !active && "group-hover:border-border group-hover:bg-background/82",
               )}
             >
               <item.icon className="size-[1.05rem]" />
             </div>
-            <span className="block min-w-0 text-[1.05rem] font-medium">{item.label}</span>
+            <div className="min-w-0 flex-1">
+              <span className="block min-w-0 text-[0.98rem] font-semibold">{item.label}</span>
+              <span className="mt-1 block min-w-0 text-sm leading-5 text-muted-foreground">
+                {item.description}
+              </span>
+            </div>
           </>
         );
 

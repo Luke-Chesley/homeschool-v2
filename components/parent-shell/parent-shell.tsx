@@ -31,7 +31,7 @@ export function ParentShell({
 
   return (
     <div className="flex min-h-[calc(100dvh-var(--global-tabs-height))] w-full bg-background">
-      <aside className="hidden w-[16rem] shrink-0 border-r border-border/70 bg-background/72 lg:block">
+      <aside className="hidden w-[18rem] shrink-0 border-r border-border/70 bg-background/46 lg:block">
         <div className="sticky top-[var(--global-tabs-height)] h-[calc(100dvh-var(--global-tabs-height))] overflow-y-auto">
           <ParentSidebar
             activeLearnerName={activeLearnerName}

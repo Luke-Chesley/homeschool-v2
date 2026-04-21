@@ -15,7 +15,7 @@ const attendanceOptions = [
 ] as const;
 
 function inputClassName() {
-  return "rounded-md border border-input bg-background/90 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring";
+  return "field-shell h-11 rounded-2xl px-4 text-sm shadow-none";
 }
 
 export function AttendanceCard(props: {
@@ -60,7 +60,7 @@ export function AttendanceCard(props: {
   }
 
   return (
-    <Card className="quiet-panel shadow-none">
+    <Card variant="glass">
       <CardHeader>
         <CardTitle>Attendance</CardTitle>
         <CardDescription>
@@ -69,21 +69,21 @@ export function AttendanceCard(props: {
       </CardHeader>
       <CardContent className="space-y-5">
         <div className="grid gap-3 md:grid-cols-3">
-          <div className="rounded-xl border border-border/60 bg-background/75 p-4">
+          <div className="rounded-[1.35rem] border border-border/60 bg-background/75 p-4">
             <p className="text-xs text-muted-foreground">Progress</p>
             <p className="mt-2 text-lg font-semibold text-foreground">{props.summary.progressLabel}</p>
           </div>
-          <div className="rounded-xl border border-border/60 bg-background/75 p-4">
+          <div className="rounded-[1.35rem] border border-border/60 bg-background/75 p-4">
             <p className="text-xs text-muted-foreground">Readiness</p>
             <p className="mt-2 text-lg font-semibold text-foreground">{props.summary.readinessLabel}</p>
           </div>
-          <div className="rounded-xl border border-border/60 bg-background/75 p-4">
+          <div className="rounded-[1.35rem] border border-border/60 bg-background/75 p-4">
             <p className="text-xs text-muted-foreground">Non-instructional days</p>
             <p className="mt-2 text-lg font-semibold text-foreground">{props.summary.nonInstructionalDays}</p>
           </div>
         </div>
 
-        <div className="grid gap-4 rounded-xl border border-border/60 bg-background/75 p-4 lg:grid-cols-[minmax(0,0.75fr)_minmax(0,1fr)]">
+        <div className="grid gap-4 rounded-[1.5rem] border border-border/60 bg-background/75 p-4 lg:grid-cols-[minmax(0,0.75fr)_minmax(0,1fr)]">
           <div className="space-y-3">
             <div className="flex flex-wrap gap-2">
               {attendanceOptions.map((option) => {
@@ -93,10 +93,10 @@ export function AttendanceCard(props: {
                     key={option.value}
                     type="button"
                     onClick={() => setSelectedStatus(option.value)}
-                    className={`rounded-lg border px-3 py-1.5 text-sm ${
+                    className={`rounded-full border px-3.5 py-2 text-sm ${
                       active
                         ? "border-primary bg-primary/10 text-primary"
-                        : "border-border bg-background text-muted-foreground hover:text-foreground"
+                        : "border-border/70 bg-background text-muted-foreground hover:text-foreground"
                     }`}
                   >
                     {option.label}
@@ -132,7 +132,7 @@ export function AttendanceCard(props: {
               </div>
             </div>
 
-            <Button onClick={saveAttendance} disabled={submitting || !props.complianceProgramId}>
+            <Button className="rounded-full" onClick={saveAttendance} disabled={submitting || !props.complianceProgramId}>
               {submitting ? "Saving attendance..." : "Save today"}
             </Button>
             {!props.complianceProgramId ? (
@@ -149,7 +149,7 @@ export function AttendanceCard(props: {
               props.records.slice(0, 21).map((record) => (
                 <div
                   key={record.id}
-                  className="rounded-xl border border-border/60 bg-background px-3 py-3 text-sm"
+                  className="rounded-[1.2rem] border border-border/60 bg-background px-3 py-3 text-sm"
                 >
                   <div className="flex items-center justify-between gap-3">
                     <span className="font-medium text-foreground">{record.date}</span>

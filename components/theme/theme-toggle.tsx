@@ -15,7 +15,7 @@ function applyTheme(theme: ThemeMode) {
   document.documentElement.classList.toggle("dark", theme === "dark");
 }
 
-export function ThemeToggle() {
+export function ThemeToggle({ compact = false }: { compact?: boolean }) {
   const [theme, setTheme] = useState<ThemeMode>("light");
 
   useEffect(() => {
@@ -48,7 +48,7 @@ export function ThemeToggle() {
       type="button"
       variant="outline"
       size="sm"
-      className="h-9 rounded-full px-3"
+      className={compact ? "h-9 rounded-full px-2.5" : "h-10 rounded-full px-3.5"}
       aria-label={`Switch to ${nextTheme} mode`}
       onClick={() => {
         window.localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
@@ -57,7 +57,7 @@ export function ThemeToggle() {
       }}
     >
       {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
-      <span>{theme === "dark" ? "Light mode" : "Dark mode"}</span>
+      {compact ? null : <span>{theme === "dark" ? "Light mode" : "Dark mode"}</span>}
     </Button>
   );
 }

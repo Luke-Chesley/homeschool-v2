@@ -10,7 +10,7 @@ import type { RequirementProfile } from "@/lib/compliance/types";
 import type { TrackingComplianceProgram } from "@/lib/tracking/types";
 
 function fieldClassName() {
-  return "min-w-0 w-full rounded-md border border-input bg-background/90 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring";
+  return "field-shell min-w-0 h-11 w-full rounded-2xl px-4 text-sm shadow-none";
 }
 
 export function ProgramSetupCard(props: {
@@ -68,7 +68,7 @@ export function ProgramSetupCard(props: {
   }
 
   return (
-    <Card className="quiet-panel shadow-none">
+    <Card variant="glass">
       <CardHeader>
         <CardTitle>Tracking setup</CardTitle>
         <CardDescription>
@@ -159,10 +159,10 @@ export function ProgramSetupCard(props: {
                     key={option}
                     type="button"
                     onClick={() => setGradeBand(option)}
-                    className={`rounded-lg border px-3 py-1.5 text-sm ${
+                    className={`rounded-full border px-3.5 py-2 text-sm ${
                       active
                         ? "border-primary bg-primary/10 text-primary"
-                        : "border-border bg-background text-muted-foreground hover:text-foreground"
+                        : "border-border/70 bg-background/72 text-muted-foreground hover:text-foreground"
                     }`}
                   >
                     {option === "elementary" ? "Elementary" : "Secondary"}
@@ -188,7 +188,7 @@ export function ProgramSetupCard(props: {
           ) : null}
 
           <div className="flex flex-wrap items-center gap-3 lg:col-span-2">
-            <Button type="submit" disabled={submitting}>
+            <Button type="submit" className="rounded-full" disabled={submitting}>
               {submitting ? "Saving setup..." : "Save tracking setup"}
             </Button>
             {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}

@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { ArrowRight, Loader2, ShieldCheck } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -104,10 +104,18 @@ export function AuthCredentialsForm({ mode }: AuthCredentialsFormProps) {
     }
   }
 
+  function fieldClassName() {
+    return "field-shell h-12 w-full rounded-2xl px-4 text-sm shadow-none";
+  }
+
   return (
-    <Card className="quiet-panel border-border/70 bg-card/88">
+    <Card variant="glass" className="overflow-hidden">
       <CardHeader>
-        <CardTitle>{mode === "login" ? "Sign in" : "Create account"}</CardTitle>
+        <div className="inline-flex w-fit items-center gap-2 rounded-full border border-border/70 bg-background/76 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+          <ShieldCheck className="size-3.5" />
+          {mode === "login" ? "Welcome back" : "Create adult account"}
+        </div>
+        <CardTitle className="mt-3">{mode === "login" ? "Sign in" : "Create account"}</CardTitle>
         <CardDescription>
           {mode === "login"
             ? "Use the adult account that owns the household workspace."
@@ -125,7 +133,7 @@ export function AuthCredentialsForm({ mode }: AuthCredentialsFormProps) {
                 id="full-name"
                 value={fullName}
                 onChange={(event) => setFullName(event.target.value)}
-                className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+                className={fieldClassName()}
                 placeholder="Avery Rivera"
                 autoComplete="name"
               />
@@ -141,7 +149,7 @@ export function AuthCredentialsForm({ mode }: AuthCredentialsFormProps) {
               type="text"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+              className={fieldClassName()}
               placeholder="parent@example.com"
               autoComplete="email"
               autoCapitalize="none"
@@ -160,7 +168,7 @@ export function AuthCredentialsForm({ mode }: AuthCredentialsFormProps) {
               type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+              className={fieldClassName()}
               placeholder="At least 6 characters"
               autoComplete={mode === "login" ? "current-password" : "new-password"}
               minLength={6}
@@ -176,7 +184,7 @@ export function AuthCredentialsForm({ mode }: AuthCredentialsFormProps) {
             <p className="rounded-md bg-primary/10 px-3 py-2 text-sm text-foreground">{notice}</p>
           ) : null}
 
-          <Button type="submit" className="w-full gap-2" disabled={submitting}>
+          <Button type="submit" className="w-full gap-2 rounded-2xl" disabled={submitting}>
             {submitting ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
             {submitting
               ? mode === "login"
@@ -185,6 +193,7 @@ export function AuthCredentialsForm({ mode }: AuthCredentialsFormProps) {
               : mode === "login"
                 ? "Sign in"
                 : "Create account"}
+            {!submitting ? <ArrowRight className="size-4" /> : null}
           </Button>
         </form>
 

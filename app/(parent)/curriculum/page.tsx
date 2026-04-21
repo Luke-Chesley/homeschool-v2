@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { Sparkles } from "lucide-react";
+import { BookOpen, Sparkles } from "lucide-react";
 
 import { CurriculumEmptyState } from "@/components/curriculum/curriculum-empty-state";
 import { CurriculumOverview } from "@/components/curriculum/curriculum-overview";
 import { buttonVariants } from "@/components/ui/button";
+import { EmptyStatePanel } from "@/components/ui/empty-state-panel";
 import { requireAppSession } from "@/lib/app-session/server";
 import {
   getCurriculumTree,
@@ -64,7 +65,11 @@ export default async function CurriculumPage() {
   if (!tree) {
     return (
       <main className="page-shell page-stack">
-        <p className="text-sm text-muted-foreground">The live curriculum source could not be loaded.</p>
+        <EmptyStatePanel
+          title="The live curriculum source could not be loaded."
+          body="Try reopening the source list and setting the live curriculum again."
+          icon={BookOpen}
+        />
       </main>
     );
   }
@@ -72,22 +77,36 @@ export default async function CurriculumPage() {
   return (
     <main className="page-shell page-stack">
       <header className="page-header">
-        <p className="section-meta">Curriculum</p>
-        <h1 className="page-title">Curriculum sources</h1>
-        <p className="page-subtitle max-w-3xl">
-          Keep one live curriculum source in view so planning, today, and tracking all stay aligned.
-        </p>
-        <div className="flex flex-wrap gap-3">
-          <Link href="/curriculum/new" className={buttonVariants({ variant: "outline", size: "sm" })}>
-            Add a source
-          </Link>
-          <Link
-            href="/curriculum/new?entry=conversation"
-            className={cn(buttonVariants({ size: "sm" }), "gap-2")}
-          >
-            <Sparkles className="size-4" />
-            Start conversation
-          </Link>
+        <div className="dashboard-grid gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(19rem,0.8fr)]">
+          <div className="space-y-4">
+            <p className="section-meta">Curriculum</p>
+            <div className="space-y-3">
+              <h1 className="page-title">Keep the live curriculum clear.</h1>
+              <p className="page-subtitle max-w-3xl">
+                Review sources, make the right one live, and keep planning, Today, and tracking aligned to the same structure.
+              </p>
+            </div>
+            <div className="toolbar-row">
+              <Link href="/curriculum/new" className={buttonVariants({ variant: "outline", size: "sm" })}>
+                Add a source
+              </Link>
+              <Link
+                href="/curriculum/new?entry=conversation"
+                className={cn(buttonVariants({ size: "sm" }), "gap-2")}
+              >
+                <Sparkles className="size-4" />
+                Start conversation
+              </Link>
+            </div>
+          </div>
+
+          <aside className="context-rail space-y-3">
+            <p className="section-meta">Current emphasis</p>
+            <p className="text-lg font-semibold text-foreground">{tree.source.title}</p>
+            <p className="text-sm leading-6 text-muted-foreground">
+              The live source should be the one you want shaping this week&apos;s plan and today&apos;s queue.
+            </p>
+          </aside>
         </div>
       </header>
       <CurriculumOverview

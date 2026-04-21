@@ -112,15 +112,16 @@ function buildMonthWeek(
   }
 
   const days: MonthlyPlanDay[] = weekDates.map((date) => {
-    const items = itemsByDate.get(date) ?? [];
+    const inMonth = isInMonth(date, monthStartDate);
+    const items = inMonth ? (itemsByDate.get(date) ?? []) : [];
     return {
       date,
       label: formatDayLabel(date),
       shortLabel: formatShortDayLabel(date),
       dayNumber: parseDateOrThrow(date).getUTCDate(),
-      inMonth: isInMonth(date, monthStartDate),
+      inMonth,
       isWeekend: isWeekend(date),
-      isDroppable: !isWeekend(date),
+      isDroppable: inMonth && !isWeekend(date),
       weekStartDate,
       weeklyRouteId: board.summary.weeklyRouteId,
       items,
@@ -128,8 +129,14 @@ function buildMonthWeek(
     };
   });
 
+  const visibleItemIds = new Set(days.flatMap((day) => day.items.map((item) => item.id)));
   const scheduledItems = days.flatMap((day) => day.items);
-  const overrideCount = board.items.filter((item) => item.manualOverrideKind !== "none").length;
+  const overrideCount = board.items.filter(
+    (item) => visibleItemIds.has(item.id) && item.manualOverrideKind !== "none",
+  ).length;
+  const conflictCount = board.conflicts.filter((conflict) =>
+    conflict.affectedItemIds.some((itemId) => visibleItemIds.has(itemId)),
+  ).length;
 
   return {
     weekStartDate,
@@ -140,7 +147,7 @@ function buildMonthWeek(
     scheduledMinutes: sumMinutes(scheduledItems),
     scheduledCount: scheduledItems.length,
     overrideCount,
-    conflictCount: board.conflicts.length,
+    conflictCount,
   };
 }
 

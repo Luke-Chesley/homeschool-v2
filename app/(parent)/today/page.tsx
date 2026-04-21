@@ -1,11 +1,12 @@
 import Link from "next/link";
+import { ArrowRight, BookOpen } from "lucide-react";
 
 import { PlanningShell } from "@/components/planning/planning-shell";
 import { TodayOpenTracker } from "@/components/planning/TodayOpenTracker";
 import { OnboardingLaunchFlash } from "@/components/planning/today/onboarding-launch-flash";
 import { TodayWorkspaceView } from "@/components/planning/today-workspace-view";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { EmptyStatePanel } from "@/components/ui/empty-state-panel";
 import { requireAppSession } from "@/lib/app-session/server";
 import { getOrganizationTodayTrackerBaseline } from "@/lib/beta/service";
 import { getTodayWorkspaceViewForRender } from "@/lib/planning/today-service";
@@ -49,19 +50,40 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
   if (!workspaceResult) {
     return (
       <PlanningShell>
-        <Card>
-          <CardHeader>
-            <CardTitle>No curriculum source</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Import a source before building the day.
-            </p>
+        <EmptyStatePanel
+          title="Build the first teachable day."
+          body="Add a curriculum source first so Today can turn it into a workable lesson, a clear queue, and a calmer week."
+          icon={BookOpen}
+        >
+          <div className="grid gap-3 md:grid-cols-3">
+            <Link href="/curriculum" className="quiet-panel-muted p-4 text-left transition-colors hover:bg-card/80">
+              <p className="text-sm font-semibold text-foreground">Add curriculum</p>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                Import a source or start a curriculum conversation.
+              </p>
+            </Link>
+            <Link href="/planning" className="quiet-panel-muted p-4 text-left transition-colors hover:bg-card/80">
+              <p className="text-sm font-semibold text-foreground">Open planning</p>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                Review the weekly board once a source is live.
+              </p>
+            </Link>
+            <div className="quiet-panel-muted p-4 text-left">
+              <p className="text-sm font-semibold text-foreground">Stay lightweight</p>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                Start with one learner, one source, and one good day.
+              </p>
+            </div>
+          </div>
+          <div className="mt-5">
             <Button asChild>
-              <Link href="/curriculum">Open curriculum</Link>
+              <Link href="/curriculum">
+                Open curriculum
+                <ArrowRight className="size-4" />
+              </Link>
             </Button>
-          </CardContent>
-        </Card>
+          </div>
+        </EmptyStatePanel>
       </PlanningShell>
     );
   }
@@ -77,13 +99,13 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
         date={workspace.date}
         onboardingStartedAt={trackerBaseline.onboardingStartedAt}
       />
-      <header className="page-header gap-1 pb-3">
+      <header className="space-y-3 border-b border-border/70 pb-5">
         <p className="section-meta">{formatLongDate(workspace.date)}</p>
         <h1 className="page-title">Today</h1>
-        <div className="toolbar-row text-sm text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
           <span>{formatCount(daySummary.skillCount, "skill")}</span>
           <span>{formatCount(daySummary.lessonSlotCount, "lesson slot")}</span>
-          <span>{daySummary.totalMinutes || sessionTiming.resolvedTotalMinutes} min</span>
+          <span>{`${daySummary.totalMinutes || sessionTiming.resolvedTotalMinutes} min`}</span>
         </div>
       </header>
       <OnboardingLaunchFlash />

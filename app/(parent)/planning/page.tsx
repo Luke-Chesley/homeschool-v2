@@ -1,12 +1,13 @@
 import Link from "next/link";
+import { ArrowRight, CalendarRange } from "lucide-react";
 
 import { PlanningShell } from "@/components/planning/planning-shell";
 import { WeeklyRouteBoard } from "@/components/planning/weekly-route-board";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { EmptyStatePanel } from "@/components/ui/empty-state-panel";
 import { requireAppSession } from "@/lib/app-session/server";
 import { getLiveCurriculumSource } from "@/lib/curriculum/service";
-import { buildHomeschoolPlannerSummary, getHomeschoolPlannerPolicy } from "@/lib/homeschool/planner";
+import { buildHomeschoolPlannerSummary } from "@/lib/homeschool/planner";
 import { getOrCreateWeeklyRouteBoardForLearner } from "@/lib/planning/weekly-route-service";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -37,6 +38,24 @@ function getWeekDate(weekStartDate: string, offset: number) {
   return parsed.toISOString().slice(0, 10);
 }
 
+function formatWeekRange(weekStartDate: string) {
+  const start = new Date(`${weekStartDate}T12:00:00.000Z`);
+  const end = new Date(`${weekStartDate}T12:00:00.000Z`);
+  end.setUTCDate(end.getUTCDate() + 6);
+
+  const sameMonth = start.getUTCMonth() === end.getUTCMonth();
+  const startLabel = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+  }).format(start);
+  const endLabel = new Intl.DateTimeFormat("en-US", {
+    month: sameMonth ? undefined : "short",
+    day: "numeric",
+  }).format(end);
+
+  return `${startLabel} - ${endLabel}`;
+}
+
 interface PlanningPageProps {
   searchParams: Promise<PlanningPageSearchParams>;
 }
@@ -48,19 +67,40 @@ export default async function PlanningPage({ searchParams }: PlanningPageProps) 
   if (!liveSource) {
     return (
       <PlanningShell>
-        <Card>
-          <CardHeader>
-            <CardTitle>No curriculum source</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              Add a source before building the week.
-            </p>
-            <Button asChild className="mt-4">
-              <Link href="/curriculum">Open curriculum</Link>
+        <EmptyStatePanel
+          title="Planning starts with one live source."
+          body="Set a curriculum source live first so the week board can place real skills instead of empty columns."
+          icon={CalendarRange}
+        >
+          <div className="grid gap-3 md:grid-cols-3">
+            <Link href="/curriculum" className="quiet-panel-muted p-4 text-left transition-colors hover:bg-card/80">
+              <p className="text-sm font-semibold text-foreground">Choose a source</p>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                Make one curriculum source live for planning and Today.
+              </p>
+            </Link>
+            <div className="quiet-panel-muted p-4 text-left">
+              <p className="text-sm font-semibold text-foreground">Build the week lightly</p>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                Start with a realistic target, then drag only what belongs this week.
+              </p>
+            </div>
+            <div className="quiet-panel-muted p-4 text-left">
+              <p className="text-sm font-semibold text-foreground">Let overflow stay flexible</p>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                Backlog items can wait until the week can actually absorb them.
+              </p>
+            </div>
+          </div>
+          <div className="mt-5">
+            <Button asChild>
+              <Link href="/curriculum">
+                Open curriculum
+                <ArrowRight className="size-4" />
+              </Link>
             </Button>
-          </CardContent>
-        </Card>
+          </div>
+        </EmptyStatePanel>
       </PlanningShell>
     );
   }
@@ -70,7 +110,6 @@ export default async function PlanningPage({ searchParams }: PlanningPageProps) 
     sourceId: liveSource.id,
     weekStartDate: params.weekStartDate,
   });
-  const plannerPolicy = getHomeschoolPlannerPolicy();
   const plannerSummary = buildHomeschoolPlannerSummary(board);
   const weekViewHref = `/planning${params.weekStartDate ? `?weekStartDate=${encodeURIComponent(params.weekStartDate)}` : ""}`;
   const focusDate =
@@ -78,59 +117,41 @@ export default async function PlanningPage({ searchParams }: PlanningPageProps) 
     parseDateValue(params.day) ??
     getWeekDate(weekStartDate, 3);
   const monthViewHref = `/planning/month?month=${encodeURIComponent(focusDate)}`;
+  const previousWeekHref = `/planning?weekStartDate=${encodeURIComponent(getWeekDate(weekStartDate, -7))}`;
+  const nextWeekHref = `/planning?weekStartDate=${encodeURIComponent(getWeekDate(weekStartDate, 7))}`;
 
   return (
     <PlanningShell>
       <header className="page-header">
-        <p className="section-meta">Live curriculum · {liveSource.title}</p>
-        <h1 className="page-title">Build a week you can actually run.</h1>
-        <p className="page-subtitle">{plannerSummary.guidance}</p>
-        <div className="toolbar-row">
-          <div className="flex flex-wrap gap-2">
-            <Link href={weekViewHref} className={buttonVariants({ variant: "default", size: "sm" })}>
-              Week view
-            </Link>
-            <Link href={monthViewHref} className={cn(buttonVariants({ variant: "outline", size: "sm" }), "min-w-fit")}>
-              Month view
-            </Link>
-          </div>
+        <p className="section-meta">Planning</p>
+        <div className="space-y-3">
+          <h1 className="page-title">Build a week you can actually run.</h1>
+          <p className="page-subtitle">{plannerSummary.guidance}</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link href={weekViewHref} className={buttonVariants({ variant: "default", size: "sm" })}>
+            Week view
+          </Link>
+          <Link href={monthViewHref} className={cn(buttonVariants({ variant: "outline", size: "sm" }), "min-w-fit")}>
+            Month view
+          </Link>
           <Link href="/curriculum" className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
             Change curriculum
           </Link>
+          <span className="text-sm text-muted-foreground">{liveSource.title}</span>
         </div>
       </header>
 
-      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <Card className="quiet-panel">
-          <div className="space-y-1 p-4">
-            <p className="text-sm text-muted-foreground">Scheduled</p>
-            <p className="text-2xl font-semibold text-foreground">{plannerSummary.scheduledCount}</p>
-          </div>
-        </Card>
-        <Card className="quiet-panel">
-          <div className="space-y-1 p-4">
-            <p className="text-sm text-muted-foreground">Unscheduled</p>
-            <p className="text-2xl font-semibold text-foreground">{plannerSummary.unscheduledCount}</p>
-          </div>
-        </Card>
-        <Card className="quiet-panel">
-          <div className="space-y-1 p-4">
-            <p className="text-sm text-muted-foreground">Done already</p>
-            <p className="text-2xl font-semibold text-foreground">{plannerSummary.doneCount}</p>
-          </div>
-        </Card>
-        <Card className="quiet-panel">
-          <div className="space-y-1 p-4">
-            <p className="text-sm text-muted-foreground">Planner policy</p>
-            <p className="text-base font-semibold text-foreground">
-              {plannerPolicy.maxItemsPerDay} items/day target
-            </p>
-          </div>
-        </Card>
-      </section>
-
       <div className="grid gap-4">
-        <WeeklyRouteBoard initialBoard={board} weekStartDate={weekStartDate} />
+        <WeeklyRouteBoard
+          initialBoard={board}
+          weekStartDate={weekStartDate}
+          navigation={{
+            previousHref: previousWeekHref,
+            nextHref: nextWeekHref,
+            rangeLabel: formatWeekRange(weekStartDate),
+          }}
+        />
       </div>
     </PlanningShell>
   );

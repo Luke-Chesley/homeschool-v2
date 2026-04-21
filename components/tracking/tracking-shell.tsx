@@ -38,16 +38,16 @@ export function TrackingShell({
         <p className="section-meta">Tracking</p>
         <h1 className="page-title">{title}</h1>
         <p className="page-subtitle max-w-3xl">{description}</p>
-        <div className="toolbar-row gap-4 pt-1">
+        <div className="control-bar mt-1">
           {navItems.map(({ href, label, view, icon: Icon }) => (
             <Link
               key={href}
               href={href}
               className={cn(
-                "inline-flex items-center gap-2 rounded-lg border border-transparent px-2.5 py-1.5 text-sm transition-colors",
+                "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition-colors",
                 currentView === view
-                  ? "border-border bg-card text-foreground"
-                  : "text-muted-foreground hover:border-border/70 hover:bg-background/60 hover:text-foreground",
+                  ? "border-border bg-card text-foreground shadow-[var(--shadow-soft)]"
+                  : "border-transparent text-muted-foreground hover:border-border/70 hover:bg-background/60 hover:text-foreground",
               )}
             >
               <Icon className="size-4" />
