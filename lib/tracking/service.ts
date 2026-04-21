@@ -1137,3 +1137,39 @@ export async function updateRecommendationDecision(params: {
 
   return updated ?? null;
 }
+
+export async function recordObservationNote(params: {
+  organizationId: string;
+  learnerId: string;
+  authorAdultUserId: string | null;
+  noteType: "general" | "mastery" | "adaptation_signal";
+  body: string;
+  title?: string | null;
+  planItemId?: string | null;
+  lessonSessionId?: string | null;
+  metadata?: Record<string, unknown> | null;
+}) {
+  const db = getDb();
+  const [note] = await db
+    .insert(observationNotes)
+    .values({
+      organizationId: params.organizationId,
+      learnerId: params.learnerId,
+      authorAdultUserId: params.authorAdultUserId,
+      noteType: params.noteType,
+      body: params.body,
+      planItemId: params.planItemId ?? null,
+      lessonSessionId: params.lessonSessionId ?? null,
+      metadata: {
+        ...(params.metadata ?? {}),
+        title: params.title ?? null,
+      },
+    })
+    .returning();
+
+  if (!note) {
+    throw new Error("Could not save the tracking note.");
+  }
+
+  return note;
+}

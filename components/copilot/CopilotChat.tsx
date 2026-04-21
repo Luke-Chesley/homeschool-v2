@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * CopilotChat — streaming chat UI for the parent workspace copilot.
+ * CopilotChat - streaming chat UI for the parent workspace copilot.
  *
  * Streams responses from /api/ai/chat via Server-Sent Events.
  * Actions returned by the AI are rendered as CopilotActionCards.
@@ -12,13 +12,29 @@ import { cn } from "@/lib/utils";
 import { ChatMessage } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
 import { CopilotActionCard } from "./CopilotActionCard";
-import type { ChatMessage as ChatMessageType, CopilotAction, CopilotContext } from "@/lib/ai/types";
+import {
+  CopilotActionSchema,
+  CopilotStreamEventSchema,
+  type ChatMessage as ChatMessageType,
+  type CopilotAction,
+  type CopilotContext,
+} from "@/lib/ai/types";
 
 interface Props {
   sessionId?: string;
   initialMessages?: ChatMessageType[];
   context?: CopilotContext;
   className?: string;
+}
+
+function mergeActionsById(current: CopilotAction[], next: CopilotAction[]) {
+  const merged = new Map(current.map((action) => [action.id, action]));
+
+  for (const action of next) {
+    merged.set(action.id, action);
+  }
+
+  return [...merged.values()];
 }
 
 export function CopilotChat({ sessionId: initialSessionId, initialMessages = [], context, className }: Props) {
@@ -34,6 +50,101 @@ export function CopilotChat({ sessionId: initialSessionId, initialMessages = [],
   React.useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, streamingContent]);
+
+  async function mutateAction(
+    action: CopilotAction,
+    endpoint: "/api/copilot/actions/apply" | "/api/copilot/actions/dismiss",
+    optimisticStatus: CopilotAction["status"],
+  ) {
+    if (!sessionId) {
+      throw new Error("Start a Copilot conversation before applying actions.");
+    }
+
+    const previousStatus = action.status;
+    setActions((prev) =>
+      prev.map((current) =>
+        current.id === action.id
+          ? {
+              ...current,
+              status: optimisticStatus,
+              error: null,
+            }
+          : current,
+      ),
+    );
+
+    let payload: unknown = null;
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId,
+          actionId: action.id,
+        }),
+      });
+
+      try {
+        payload = await response.json();
+      } catch {
+        payload = null;
+      }
+
+      const parsedAction =
+        payload &&
+        typeof payload === "object" &&
+        "action" in payload &&
+        payload.action !== undefined
+          ? CopilotActionSchema.safeParse(payload.action)
+          : null;
+
+      if (parsedAction?.success) {
+        setActions((prev) => mergeActionsById(prev, [parsedAction.data]));
+      }
+
+      if (!response.ok) {
+        const message =
+          payload &&
+          typeof payload === "object" &&
+          "error" in payload &&
+          typeof payload.error === "string"
+            ? payload.error
+            : "Copilot action failed.";
+
+        if (!parsedAction?.success) {
+          setActions((prev) =>
+            prev.map((current) =>
+              current.id === action.id
+                ? {
+                    ...current,
+                    status: endpoint === "/api/copilot/actions/dismiss" ? previousStatus : "failed",
+                    error: message,
+                  }
+                : current,
+            ),
+          );
+        }
+
+        throw new Error(message);
+      }
+    } catch (error) {
+      if (endpoint === "/api/copilot/actions/dismiss") {
+        setActions((prev) =>
+          prev.map((current) =>
+            current.id === action.id
+              ? {
+                  ...current,
+                  status: previousStatus,
+                  error: error instanceof Error ? error.message : "Could not dismiss the action.",
+                }
+              : current,
+          ),
+        );
+      }
+
+      throw error;
+    }
+  }
 
   async function sendMessage(content: string) {
     const userMessage: ChatMessageType = {
@@ -66,52 +177,69 @@ export function CopilotChat({ sessionId: initialSessionId, initialMessages = [],
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let accumulated = "";
+      let buffer = "";
 
       while (true) {
         const { value, done } = await reader.read();
-        if (done) break;
+        if (value) {
+          buffer += decoder.decode(value, { stream: true });
+        }
 
-        const text = decoder.decode(value);
-        const lines = text.split("\n");
+        let boundary = buffer.indexOf("\n\n");
+        while (boundary >= 0) {
+          const rawEvent = buffer.slice(0, boundary).trim();
+          buffer = buffer.slice(boundary + 2);
+          boundary = buffer.indexOf("\n\n");
 
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          const json = line.slice(6);
-          if (!json.trim()) continue;
-
-          let event: any;
-          try {
-            event = JSON.parse(json);
-          } catch {
-            // Skip malformed events
+          const dataLine = rawEvent
+            .split("\n")
+            .find((line) => line.startsWith("data: "));
+          if (!dataLine) {
             continue;
           }
 
-          if (event.sessionId && !sessionId) {
-            setSessionId(event.sessionId);
+          let parsedJson: unknown;
+          try {
+            parsedJson = JSON.parse(dataLine.slice(6));
+          } catch {
+            continue;
           }
 
-          if (event.delta) {
-            accumulated += event.delta;
-            setStreamingContent(accumulated);
+          const event = CopilotStreamEventSchema.safeParse(parsedJson);
+          if (!event.success) {
+            continue;
           }
 
-          if (event.error) {
-            throw new Error(event.error);
-          }
+          const streamEvent = event.data;
 
-          if (event.done) {
-            setMessages((prev) => [
-              ...prev,
-              {
-                role: "assistant" as const,
-                content: accumulated,
-                createdAt: new Date().toISOString(),
-              },
-            ]);
-            setStreamingContent(null);
+          switch (streamEvent.type) {
+            case "session":
+              setSessionId(streamEvent.sessionId);
+              continue;
+            case "delta":
+              accumulated += streamEvent.delta;
+              setStreamingContent(accumulated);
+              continue;
+            case "actions":
+              setActions((prev) => mergeActionsById(prev, streamEvent.actions));
+              continue;
+            case "error":
+              throw new Error(streamEvent.error);
+            case "done":
+              setMessages((prev) => [
+                ...prev,
+                {
+                  role: "assistant" as const,
+                  content: accumulated,
+                  createdAt: new Date().toISOString(),
+                },
+              ]);
+              setStreamingContent(null);
+              break;
           }
         }
+
+        if (done) break;
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to send message");
@@ -121,18 +249,20 @@ export function CopilotChat({ sessionId: initialSessionId, initialMessages = [],
     }
   }
 
-  function handleApplyAction(action: CopilotAction) {
-    setActions((prev) =>
-      prev.map((a) => (a.id === action.id ? { ...a, status: "applied" as const } : a))
-    );
-    // Integration point: dispatch action to relevant domain (planning, curriculum, etc.)
-    console.info("[copilot] Action applied:", action.kind, action.label);
+  async function handleApplyAction(action: CopilotAction) {
+    try {
+      await mutateAction(action, "/api/copilot/actions/apply", "applying");
+    } catch {
+      // Action-specific error state is already reflected in the action card.
+    }
   }
 
-  function handleDismissAction(action: CopilotAction) {
-    setActions((prev) =>
-      prev.map((a) => (a.id === action.id ? { ...a, status: "dismissed" as const } : a))
-    );
+  async function handleDismissAction(action: CopilotAction) {
+    try {
+      await mutateAction(action, "/api/copilot/actions/dismiss", "dismissed");
+    } catch {
+      // Action-specific error state is already reflected in the action card.
+    }
   }
 
   return (
@@ -149,10 +279,10 @@ export function CopilotChat({ sessionId: initialSessionId, initialMessages = [],
             </div>
             <div className="mt-1 flex flex-wrap gap-2">
               {[
-                "Draft a lesson on fractions for grade 4",
-                "What standards cover place value?",
-                "Suggest activities for a reluctant reader",
-                "Review our progress this week",
+                "Lighten Thursday by moving one item to Friday.",
+                "Generate today's lesson draft from the current route.",
+                "Write a short note about what stalled this week.",
+                "Which route item should we defer if tomorrow needs to be lighter?",
               ].map((prompt) => (
                 <button
                   key={prompt}

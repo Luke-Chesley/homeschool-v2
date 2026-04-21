@@ -24,15 +24,12 @@
 - additional curriculum inputs:
 - notes:
 
-## Monetization
+## Founder-Led Beta Signals
 
-- billing-offer views:
-- trial starts:
-- checkout starts:
-- checkout completed:
-- subscription activated:
-- founder commitments:
-- reasons for non-conversion:
+- households that asked to keep using the product:
+- households that reached a second week of real use:
+- strongest founder follow-up signal:
+- reasons the wedge did not stick:
 
 ## Top Friction
 

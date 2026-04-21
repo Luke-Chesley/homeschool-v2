@@ -332,6 +332,138 @@ test("executeSourceInterpret parses a topic seed result", async () => {
   assert.equal(result.artifact.deliveryPattern, "mixed");
 });
 
+test("executeSourceInterpret parses a chapter excerpt as bounded launch material", async () => {
+  const { result } = await executeWithMockedSourceInterpret({
+    input: {
+      learnerName: "Ava",
+      requestedRoute: "outline",
+      inputModalities: ["pdf"],
+      rawText: "Chapter 5 excerpt about ecosystems and food webs.",
+      extractedText: "Chapter 5 excerpt about ecosystems and food webs.",
+      extractedStructure: { detectedChunks: ["Food webs", "Producers and consumers"] },
+      assetRefs: ["asset-1"],
+      sourcePackages: [
+        buildSourcePackage({
+          title: "Chapter 5 excerpt",
+          detectedChunks: ["Food webs", "Producers and consumers"],
+        }),
+      ],
+      sourceFiles: [buildSourceFile({ title: "Chapter 5 excerpt", fileName: "chapter-5.pdf" })],
+      titleCandidate: "Ecosystems excerpt",
+    },
+    artifact: buildArtifact({
+      sourceKind: "bounded_material",
+      entryStrategy: "use_as_is",
+      continuationMode: "none",
+      deliveryPattern: "concept_first",
+      recommendedHorizon: "few_days",
+      suggestedTitle: "Ecosystems excerpt",
+      detectedChunks: ["Food webs", "Producers and consumers"],
+    }),
+  });
+
+  assert.equal(result.artifact.sourceKind, "bounded_material");
+  assert.equal(result.artifact.entryStrategy, "use_as_is");
+  assert.equal(result.artifact.recommendedHorizon, "few_days");
+});
+
+test("executeSourceInterpret parses a shell request without pretending source scope exists", async () => {
+  const { result } = await executeWithMockedSourceInterpret({
+    input: {
+      learnerName: "Ava",
+      requestedRoute: "manual_shell",
+      inputModalities: ["text"],
+      rawText: "Build a gentle kindergarten shell around nature walks and read-alouds.",
+      extractedText: "Build a gentle kindergarten shell around nature walks and read-alouds.",
+      extractedStructure: null,
+      assetRefs: [],
+      sourcePackages: [],
+      sourceFiles: [],
+      titleCandidate: "Kindergarten shell",
+    },
+    artifact: buildArtifact({
+      sourceKind: "shell_request",
+      entryStrategy: "scaffold_only",
+      continuationMode: "manual_review",
+      deliveryPattern: "mixed",
+      recommendedHorizon: "starter_module",
+      suggestedTitle: "Kindergarten shell",
+      detectedChunks: ["nature walks", "read-alouds"],
+    }),
+  });
+
+  assert.equal(result.artifact.sourceKind, "shell_request");
+  assert.equal(result.artifact.entryStrategy, "scaffold_only");
+  assert.equal(result.artifact.continuationMode, "manual_review");
+});
+
+test("executeSourceInterpret preserves an explicit range inside a larger source", async () => {
+  const { result } = await executeWithMockedSourceInterpret({
+    input: {
+      learnerName: "Ava",
+      requestedRoute: "outline",
+      inputModalities: ["pdf"],
+      rawText: "Use chapters 4 through 6 from this biology text for the next stretch.",
+      extractedText: "Use chapters 4 through 6 from this biology text for the next stretch.",
+      extractedStructure: { detectedChunks: ["Chapter 4", "Chapter 5", "Chapter 6"] },
+      assetRefs: ["asset-1"],
+      sourcePackages: [
+        buildSourcePackage({
+          title: "Biology text",
+          detectedChunks: ["Chapter 4", "Chapter 5", "Chapter 6"],
+        }),
+      ],
+      sourceFiles: [buildSourceFile({ title: "Biology text", fileName: "biology-text.pdf" })],
+      titleCandidate: "Biology chapters 4-6",
+    },
+    artifact: buildArtifact({
+      sourceKind: "comprehensive_source",
+      entryStrategy: "explicit_range",
+      entryLabel: "chapters 4-6",
+      continuationMode: "sequential",
+      deliveryPattern: "concept_first",
+      recommendedHorizon: "one_week",
+      suggestedTitle: "Biology chapters 4-6",
+      detectedChunks: ["Chapter 4", "Chapter 5", "Chapter 6"],
+      assumptions: ["Keep the opening bounded to the explicit chapter range before continuing."],
+    }),
+  });
+
+  assert.equal(result.artifact.sourceKind, "comprehensive_source");
+  assert.equal(result.artifact.entryStrategy, "explicit_range");
+  assert.equal(result.artifact.entryLabel, "chapters 4-6");
+});
+
+test("executeSourceInterpret parses a practical-skills sequence without collapsing it to one day", async () => {
+  const { result } = await executeWithMockedSourceInterpret({
+    input: {
+      learnerName: "Ava",
+      requestedRoute: "outline",
+      inputModalities: ["outline"],
+      rawText: "Knife safety\nMeasuring ingredients\nStovetop basics",
+      extractedText: "Knife safety\nMeasuring ingredients\nStovetop basics",
+      extractedStructure: { headings: ["Knife safety", "Measuring ingredients", "Stovetop basics"] },
+      assetRefs: [],
+      sourcePackages: [],
+      sourceFiles: [],
+      titleCandidate: "Kitchen independence",
+    },
+    artifact: buildArtifact({
+      sourceKind: "structured_sequence",
+      entryStrategy: "sequential_start",
+      continuationMode: "sequential",
+      deliveryPattern: "task_first",
+      recommendedHorizon: "one_week",
+      suggestedTitle: "Kitchen independence",
+      detectedChunks: ["Knife safety", "Measuring ingredients", "Stovetop basics"],
+    }),
+  });
+
+  assert.equal(result.artifact.sourceKind, "structured_sequence");
+  assert.equal(result.artifact.deliveryPattern, "task_first");
+  assert.equal(result.artifact.recommendedHorizon, "one_week");
+});
+
 test("executeSourceInterpret parses an ambiguous conservative result", async () => {
   const { result } = await executeWithMockedSourceInterpret({
     input: {

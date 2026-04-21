@@ -21,24 +21,166 @@ export const ChatMessageSchema = z.object({
 export type ChatMessage = z.infer<typeof ChatMessageSchema>;
 
 export const CopilotActionKindSchema = z.enum([
-  "plan.add_lesson",
-  "plan.adjust_schedule",
-  "artifact.create",
-  "recommendation.create",
-  "standards.map",
+  "planning.adjust_day_load",
+  "planning.defer_or_move_item",
+  "planning.generate_today_lesson",
+  "tracking.record_note",
 ]);
 export type CopilotActionKind = z.infer<typeof CopilotActionKindSchema>;
 
-export const CopilotActionSchema = z.object({
+export const CopilotActionConfidenceSchema = z.enum(["low", "medium", "high"]);
+export type CopilotActionConfidence = z.infer<typeof CopilotActionConfidenceSchema>;
+
+export const CopilotActionStatusSchema = z.enum([
+  "pending",
+  "applying",
+  "applied",
+  "failed",
+  "dismissed",
+]);
+export type CopilotActionStatus = z.infer<typeof CopilotActionStatusSchema>;
+
+export const CopilotActionTargetSchema = z.object({
+  entityType: z.enum([
+    "weekly_route_item",
+    "planning_day",
+    "today_lesson",
+    "lesson_session",
+    "tracking_note",
+  ]),
+  entityId: z.string().min(1).optional(),
+  secondaryEntityId: z.string().min(1).optional(),
+  date: z.string().optional(),
+});
+export type CopilotActionTarget = z.infer<typeof CopilotActionTargetSchema>;
+
+const PlanningRouteMovePayloadSchema = z.object({
+  weeklyRouteId: z.string().min(1),
+  weeklyRouteItemId: z.string().min(1),
+  currentDate: z.string().nullable().optional(),
+  targetDate: z.string().nullable().optional(),
+  targetIndex: z.number().int().nonnegative().default(0),
+  reason: z.string().trim().min(1).max(500),
+});
+
+export const GenerateTodayLessonPayloadSchema = z.object({
+  date: z.string().min(1),
+  slotId: z.string().nullable().optional(),
+  reason: z.string().trim().min(1).max(500),
+});
+export type GenerateTodayLessonPayload = z.infer<typeof GenerateTodayLessonPayloadSchema>;
+
+export const TrackingRecordNotePayloadSchema = z.object({
+  title: z.string().trim().min(1).max(120).optional(),
+  body: z.string().trim().min(1).max(2_000),
+  noteType: z.enum(["general", "mastery", "adaptation_signal"]).default("general"),
+  planItemId: z.string().nullable().optional(),
+  lessonSessionId: z.string().nullable().optional(),
+});
+export type TrackingRecordNotePayload = z.infer<typeof TrackingRecordNotePayloadSchema>;
+
+const CopilotActionDraftBaseSchema = z.object({
   id: z.string(),
   kind: CopilotActionKindSchema,
   label: z.string(),
-  payload: z.record(z.string(), z.unknown()),
-  status: z.enum(["pending", "applied", "dismissed"]).default("pending"),
+  description: z.string().min(1),
+  rationale: z.string().min(1).optional(),
+  confidence: CopilotActionConfidenceSchema.optional(),
+  requiresApproval: z.boolean().default(true),
+  target: CopilotActionTargetSchema.optional(),
+});
+
+export const PlanningAdjustDayLoadActionDraftSchema = CopilotActionDraftBaseSchema.extend({
+  kind: z.literal("planning.adjust_day_load"),
+  payload: PlanningRouteMovePayloadSchema,
+});
+
+export const PlanningDeferOrMoveItemActionDraftSchema = CopilotActionDraftBaseSchema.extend({
+  kind: z.literal("planning.defer_or_move_item"),
+  payload: PlanningRouteMovePayloadSchema,
+});
+
+export const PlanningGenerateTodayLessonActionDraftSchema = CopilotActionDraftBaseSchema.extend({
+  kind: z.literal("planning.generate_today_lesson"),
+  payload: GenerateTodayLessonPayloadSchema,
+});
+
+export const TrackingRecordNoteActionDraftSchema = CopilotActionDraftBaseSchema.extend({
+  kind: z.literal("tracking.record_note"),
+  payload: TrackingRecordNotePayloadSchema,
+});
+
+export const CopilotActionDraftSchema = z.discriminatedUnion("kind", [
+  PlanningAdjustDayLoadActionDraftSchema,
+  PlanningDeferOrMoveItemActionDraftSchema,
+  PlanningGenerateTodayLessonActionDraftSchema,
+  TrackingRecordNoteActionDraftSchema,
+]);
+export type CopilotActionDraft = z.infer<typeof CopilotActionDraftSchema>;
+
+const CopilotActionLifecycleSchema = z.object({
+  status: CopilotActionStatusSchema.default("pending"),
   createdAt: z.string().datetime(),
   lineageId: z.string().optional(),
+  error: z.string().nullable().optional(),
+  result: z
+    .object({
+      message: z.string().min(1),
+      affectedPaths: z.array(z.string()).default([]),
+      data: z.record(z.string(), z.unknown()).optional(),
+    })
+    .nullable()
+    .optional(),
 });
+
+export const CopilotActionSchema = z.discriminatedUnion("kind", [
+  PlanningAdjustDayLoadActionDraftSchema.merge(CopilotActionLifecycleSchema),
+  PlanningDeferOrMoveItemActionDraftSchema.merge(CopilotActionLifecycleSchema),
+  PlanningGenerateTodayLessonActionDraftSchema.merge(CopilotActionLifecycleSchema),
+  TrackingRecordNoteActionDraftSchema.merge(CopilotActionLifecycleSchema),
+]);
 export type CopilotAction = z.infer<typeof CopilotActionSchema>;
+
+export const CopilotChatArtifactSchema = z.object({
+  answer: z.string().min(1),
+  actions: z.array(CopilotActionDraftSchema).default([]),
+});
+export type CopilotChatArtifact = z.infer<typeof CopilotChatArtifactSchema>;
+
+export const CopilotActionMutationRequestSchema = z.object({
+  sessionId: z.string().min(1),
+  actionId: z.string().min(1),
+});
+export type CopilotActionMutationRequest = z.infer<typeof CopilotActionMutationRequestSchema>;
+
+export const CopilotActionMutationResponseSchema = z.object({
+  ok: z.literal(true),
+  action: CopilotActionSchema,
+});
+export type CopilotActionMutationResponse = z.infer<typeof CopilotActionMutationResponseSchema>;
+
+export const CopilotStreamEventSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("session"),
+    sessionId: z.string().min(1),
+  }),
+  z.object({
+    type: z.literal("delta"),
+    delta: z.string(),
+  }),
+  z.object({
+    type: z.literal("actions"),
+    actions: z.array(CopilotActionSchema),
+  }),
+  z.object({
+    type: z.literal("done"),
+  }),
+  z.object({
+    type: z.literal("error"),
+    error: z.string().min(1),
+  }),
+]);
+export type CopilotStreamEvent = z.infer<typeof CopilotStreamEventSchema>;
 
 export const CurriculumSnapshotSchema = z.object({
   sourceId: z.string().optional(),

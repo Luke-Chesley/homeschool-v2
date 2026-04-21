@@ -12,7 +12,8 @@ The Curriculum Artifact is the durable structured output returned by `learning-c
 - **Canonical Source Files:**
   - `learning-core/learning_core/skills/curriculum_generate/SKILL.md`
   - `learning-core/learning_core/contracts/curriculum.py`
-  - `lib/curriculum/ai-draft-service.ts`
+  - `lib/learning-core/curriculum.ts`
+  - `lib/homeschool/onboarding/curriculum.ts`
 
 ## Consumers
 - **Entrypoints:**

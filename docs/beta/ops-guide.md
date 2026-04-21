@@ -26,7 +26,7 @@ Run the activation beta against the real homeschool wedge and keep support, QA, 
 
 ## Blocker Rules
 
-- a blocker is any issue that breaks onboarding, Today, learner switching, or billing intent for a beta household
+- a blocker is any issue that breaks onboarding, curriculum creation, Today, learner switching, or records flow for a beta household
 - rough edges can stay open only if they do not break the daily operating flow
 
 ## Review Output

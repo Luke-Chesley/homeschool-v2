@@ -110,7 +110,7 @@ export default async function CopilotPage({ searchParams }: Props) {
               <div className="space-y-2 text-muted-foreground">
                 <p>Draft today&apos;s lesson.</p>
                 <p>Trim tomorrow&apos;s workload.</p>
-                <p>Map a skill to standards.</p>
+                <p>Capture a note about what changed this week.</p>
                 <p>Adjust the week after missed work.</p>
               </div>
             </div>

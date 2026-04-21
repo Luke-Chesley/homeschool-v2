@@ -6,7 +6,13 @@ import { createRepositories } from "@/lib/db";
 import { ensureLocalDemoData } from "@/lib/db/fixtures/local-demo-persistence";
 import { getDb } from "@/lib/db/server";
 import { conversationThreads, conversationMessages, copilotActions } from "@/lib/db/schema";
-import type { ChatMessage, CopilotAction, CopilotContext } from "./types";
+import type {
+  ChatMessage,
+  CopilotAction,
+  CopilotActionDraft,
+  CopilotActionStatus,
+  CopilotContext,
+} from "./types";
 
 export interface CopilotSession {
   id: string;
@@ -35,6 +41,34 @@ function toIsoString(value: Date | string) {
   return typeof value === "string" ? value : value.toISOString();
 }
 
+function isActionStatus(value: unknown): value is CopilotActionStatus {
+  return (
+    value === "pending" ||
+    value === "applying" ||
+    value === "applied" ||
+    value === "failed" ||
+    value === "dismissed"
+  );
+}
+
+function isActionConfidence(value: unknown): value is CopilotAction["confidence"] {
+  return value === "low" || value === "medium" || value === "high";
+}
+
+function getActionResult(value: unknown): CopilotAction["result"] {
+  if (!isRecord(value) || typeof value.message !== "string") {
+    return null;
+  }
+
+  return {
+    message: value.message,
+    affectedPaths: Array.isArray(value.affectedPaths)
+      ? value.affectedPaths.filter((item): item is string => typeof item === "string")
+      : [],
+    data: isRecord(value.data) ? value.data : undefined,
+  };
+}
+
 function getThreadContext(thread: ThreadRecord): CopilotContext | undefined {
   if (isRecord(thread.metadata) && isRecord(thread.metadata.context)) {
     return thread.metadata.context as CopilotContext;
@@ -54,13 +88,13 @@ function mapMessage(message: MessageRecord): ChatMessage {
 function getDomainActionStatus(action: ActionRecord): CopilotAction["status"] {
   if (isRecord(action.metadata) && typeof action.metadata.domainStatus === "string") {
     const domainStatus = action.metadata.domainStatus;
-    if (
-      domainStatus === "pending" ||
-      domainStatus === "applied" ||
-      domainStatus === "dismissed"
-    ) {
+    if (isActionStatus(domainStatus)) {
       return domainStatus;
     }
+  }
+
+  if (action.status === "running") {
+    return "applying";
   }
 
   if (action.status === "completed") {
@@ -68,7 +102,7 @@ function getDomainActionStatus(action: ActionRecord): CopilotAction["status"] {
   }
 
   if (action.status === "failed") {
-    return "dismissed";
+    return "failed";
   }
 
   return "pending";
@@ -76,30 +110,111 @@ function getDomainActionStatus(action: ActionRecord): CopilotAction["status"] {
 
 function mapDbActionStatus(status: CopilotAction["status"]): ActionRecord["status"] {
   switch (status) {
+    case "applying":
+      return "running";
     case "applied":
       return "completed";
     case "dismissed":
+    case "failed":
       return "failed";
     default:
       return "queued";
   }
 }
 
-function mapAction(action: ActionRecord): CopilotAction {
-  const metadata = isRecord(action.metadata) ? action.metadata : {};
+function getMappedActionTarget(metadata: Record<string, unknown>): CopilotAction["target"] {
+  if (!isRecord(metadata.target)) {
+    return undefined;
+  }
+
+  const entityType = metadata.target.entityType;
+  if (
+    entityType !== "weekly_route_item" &&
+    entityType !== "planning_day" &&
+    entityType !== "today_lesson" &&
+    entityType !== "lesson_session" &&
+    entityType !== "tracking_note"
+  ) {
+    return undefined;
+  }
 
   return {
+    entityType,
+    entityId:
+      typeof metadata.target.entityId === "string" ? metadata.target.entityId : undefined,
+    secondaryEntityId:
+      typeof metadata.target.secondaryEntityId === "string"
+        ? metadata.target.secondaryEntityId
+        : undefined,
+    date: typeof metadata.target.date === "string" ? metadata.target.date : undefined,
+  };
+}
+
+function getMappedActionBase(action: ActionRecord, metadata: Record<string, unknown>) {
+  return {
     id: action.id,
-    kind: action.actionType as CopilotAction["kind"],
     label:
       typeof metadata.label === "string"
         ? metadata.label
         : action.targetType ?? action.actionType,
-    payload: isRecord(action.input) ? action.input : {},
+    description:
+      typeof metadata.description === "string"
+        ? metadata.description
+        : typeof metadata.label === "string"
+          ? metadata.label
+          : action.targetType ?? action.actionType,
+    rationale: typeof metadata.rationale === "string" ? metadata.rationale : undefined,
+    confidence: isActionConfidence(metadata.confidence) ? metadata.confidence : undefined,
+    requiresApproval: metadata.requiresApproval !== false,
+    target: getMappedActionTarget(metadata),
     status: getDomainActionStatus(action),
     createdAt: toIsoString(action.createdAt),
     lineageId: typeof metadata.lineageId === "string" ? metadata.lineageId : undefined,
+    error: typeof metadata.error === "string" ? metadata.error : null,
+    result: getActionResult(action.output),
   };
+}
+
+function mapAction(action: ActionRecord): CopilotAction | null {
+  const metadata = isRecord(action.metadata) ? action.metadata : {};
+  const base = getMappedActionBase(action, metadata);
+
+  switch (action.actionType) {
+    case "planning.adjust_day_load":
+      return {
+        ...base,
+        kind: "planning.adjust_day_load",
+        payload: (isRecord(action.input)
+          ? action.input
+          : {}) as Extract<CopilotAction, { kind: "planning.adjust_day_load" }>["payload"],
+      };
+    case "planning.defer_or_move_item":
+      return {
+        ...base,
+        kind: "planning.defer_or_move_item",
+        payload: (isRecord(action.input)
+          ? action.input
+          : {}) as Extract<CopilotAction, { kind: "planning.defer_or_move_item" }>["payload"],
+      };
+    case "planning.generate_today_lesson":
+      return {
+        ...base,
+        kind: "planning.generate_today_lesson",
+        payload: (isRecord(action.input)
+          ? action.input
+          : {}) as Extract<CopilotAction, { kind: "planning.generate_today_lesson" }>["payload"],
+      };
+    case "tracking.record_note":
+      return {
+        ...base,
+        kind: "tracking.record_note",
+        payload: (isRecord(action.input)
+          ? action.input
+          : {}) as Extract<CopilotAction, { kind: "tracking.record_note" }>["payload"],
+      };
+    default:
+      return null;
+  }
 }
 
 function getScopeType(context?: CopilotContext): ThreadRecord["scopeType"] {
@@ -141,7 +256,9 @@ class DbCopilotStore {
       title: thread.title ?? "New conversation",
       messages: messages.map(mapMessage),
       context: getThreadContext(thread),
-      actions: actions.map(mapAction),
+      actions: actions
+        .map(mapAction)
+        .filter((action): action is CopilotAction => action !== null),
       createdAt: toIsoString(thread.createdAt),
       updatedAt: toIsoString(thread.updatedAt),
     };
@@ -231,8 +348,9 @@ class DbCopilotStore {
 
   async appendAction(
     sessionId: string,
-    action: Omit<CopilotAction, "id" | "createdAt" | "status">,
+    action: CopilotActionDraft,
     options: { householdId: string; learnerId?: string | null },
+    extra?: { lineageId?: string },
   ): Promise<CopilotAction> {
     await ensureLocalDemoData();
 
@@ -252,24 +370,41 @@ class DbCopilotStore {
       actionType: action.kind,
       status: "queued",
       targetType: action.label,
-      targetId: null,
+      targetId:
+        action.target?.entityId ??
+        ("weeklyRouteItemId" in action.payload ? action.payload.weeklyRouteItemId : null),
       input: action.payload,
       output: {},
       metadata: {
         label: action.label,
-        lineageId: action.lineageId ?? null,
+        description: action.description,
+        rationale: action.rationale ?? null,
+        confidence: action.confidence ?? null,
+        requiresApproval: action.requiresApproval,
+        target: action.target ?? null,
+        suggestionId: action.id,
+        lineageId: extra?.lineageId ?? null,
         domainStatus: "pending",
       },
     });
     await getCopilotRepo().updateThread(sessionId, {});
 
-    return mapAction(created);
+    const mapped = mapAction(created);
+    if (!mapped) {
+      throw new Error(`Unsupported action kind persisted: ${created.actionType}`);
+    }
+
+    return mapped;
   }
 
   async updateActionStatus(
     sessionId: string,
     actionId: string,
-    status: CopilotAction["status"],
+    input: {
+      status: CopilotAction["status"];
+      result?: CopilotAction["result"];
+      error?: string | null;
+    },
     options: { householdId: string; learnerId?: string | null },
   ): Promise<CopilotAction> {
     await ensureLocalDemoData();
@@ -291,10 +426,12 @@ class DbCopilotStore {
 
     const metadata = isRecord(action.metadata) ? action.metadata : {};
     const updated = await getCopilotRepo().updateAction(actionId, {
-      status: mapDbActionStatus(status),
+      status: mapDbActionStatus(input.status),
+      output: input.result ?? action.output,
       metadata: {
         ...metadata,
-        domainStatus: status,
+        domainStatus: input.status,
+        error: input.error ?? null,
       },
     });
     await getCopilotRepo().updateThread(sessionId, {});
@@ -303,7 +440,12 @@ class DbCopilotStore {
       throw new Error(`Action not found: ${actionId}`);
     }
 
-    return mapAction(updated);
+    const mapped = mapAction(updated);
+    if (!mapped) {
+      throw new Error(`Unsupported action kind persisted: ${updated.actionType}`);
+    }
+
+    return mapped;
   }
 }
 

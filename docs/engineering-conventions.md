@@ -19,6 +19,33 @@ The product promise depends on a calm, fast Today surface. The app should feel i
 
 Do not blur those roles.
 
+## Cross-repo AI boundary
+
+Keep the app and AI runtime responsibilities separate.
+
+- `homeschool-v2` owns product state, approvals, persistence, scheduling, and UI.
+- `learning-core` owns named AI operations, prompt construction, provider and model selection, prompt previews, lineage, and traces.
+- Source-entry curriculum creation should follow the current chain: `source_interpret` -> `curriculum_generate` -> app-owned import and planning handoff.
+- Do not move extracted prompt, provider, or model logic back into app routes, components, or server actions.
+
+## Copilot rules
+
+Copilot is a bounded product surface, not an unrestricted mutation channel.
+
+- Copilot context is assembled by the app and sent to `learning-core` through typed envelopes.
+- Any meaningful product mutation must go through an explicit app-side handler or dispatcher.
+- Do not treat freeform chat text as permission to mutate planning, curriculum, tracking, or reporting state.
+- If Copilot suggests an action, the action contract must stay narrow, typed, and reviewable.
+
+## Eval expectations for AI-boundary changes
+
+When changing onboarding, curriculum generation, Copilot, or other `learning-core`-backed flows:
+
+- update the current-state docs in `README.md` or `docs/CURRENT_PRODUCT_AND_RUNTIME_MODEL.md` when the mental model changes
+- keep the shared cross-repo architecture docs in sync when the boundary or handoff changes
+- add or extend a repeatable check for the affected path instead of relying only on ad hoc manual testing
+- treat billing-related surfaces as deferred unless the task is explicitly about billing
+
 ## 1. Read paths must stay read-first
 
 Pages and read helpers should prefer read-only assembly.

@@ -1,5 +1,9 @@
 # Homeschool Workspace Full Implementation Plan
 
+> Status: broad implementation plan and future-state inventory.
+> This document intentionally mixes ideas beyond the current homeschool beta, including broader platform shape, future Copilot behavior, and older runtime assumptions.
+> For the current operational architecture, use [CURRENT_PRODUCT_AND_RUNTIME_MODEL.md](./CURRENT_PRODUCT_AND_RUNTIME_MODEL.md).
+
 ## Summary
 
 Build a multi-tenant AI-assisted homeschool workspace with two connected product surfaces:

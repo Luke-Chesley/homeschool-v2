@@ -1,5 +1,8 @@
 # Vision
 
+> Status: aspirational product direction, not the operational source of truth for the current homeschool beta.
+> For the live product and runtime model, use [CURRENT_PRODUCT_AND_RUNTIME_MODEL.md](./CURRENT_PRODUCT_AND_RUNTIME_MODEL.md) and the shared cross-repo traces under `../docs/architecture/`.
+
 ## Users
 
 - homeschooling parent

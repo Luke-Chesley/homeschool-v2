@@ -30,6 +30,28 @@ const RequestSchema = z.object({
   context: CopilotContextSchema.optional(),
 });
 
+function chunkAssistantAnswer(text: string, maxChunkLength = 140) {
+  const tokens = text.split(/(\s+)/).filter((token) => token.length > 0);
+  const chunks: string[] = [];
+  let current = "";
+
+  for (const token of tokens) {
+    if (current.length + token.length > maxChunkLength && current.trim().length > 0) {
+      chunks.push(current);
+      current = token;
+      continue;
+    }
+
+    current += token;
+  }
+
+  if (current.length > 0) {
+    chunks.push(current);
+  }
+
+  return chunks.length > 0 ? chunks : [text];
+}
+
 export async function POST(req: NextRequest) {
   let body: unknown;
   try {
@@ -94,14 +116,15 @@ export async function POST(req: NextRequest) {
   }
 
   const encoder = new TextEncoder();
-  let fullResponse = "";
 
   const stream = new ReadableStream({
     async start(controller) {
+      const emit = (event: Record<string, unknown>) => {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+      };
+
       try {
-        controller.enqueue(
-          encoder.encode(`data: ${JSON.stringify({ sessionId: activeSessionId })}\n\n`)
-        );
+        emit({ type: "session", sessionId: activeSessionId });
 
         const result = await executeCopilotChat({
           messages: messages as ChatMessage[],
@@ -110,30 +133,51 @@ export async function POST(req: NextRequest) {
           learnerId: appSession.activeLearner.id,
         });
 
-        const delta = result.artifact.answer;
-        fullResponse += delta;
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ delta })}\n\n`));
+        const fullResponse = result.artifact.answer;
 
-        await store.appendMessage(activeSessionId!, {
-          role: "assistant",
-          content: fullResponse,
-          createdAt: new Date().toISOString(),
-        }, {
-          householdId: appSession.organization.id,
-          learnerId: appSession.activeLearner.id,
-        });
+        await store.appendMessage(
+          activeSessionId!,
+          {
+            role: "assistant",
+            content: fullResponse,
+            createdAt: new Date().toISOString(),
+          },
+          {
+            householdId: appSession.organization.id,
+            learnerId: appSession.activeLearner.id,
+          },
+        );
 
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true })}\n\n`));
+        const persistedActions = await Promise.all(
+          result.artifact.actions.map((action) =>
+            store.appendAction(
+              activeSessionId!,
+              action,
+              {
+                householdId: appSession.organization.id,
+                learnerId: appSession.activeLearner.id,
+              },
+              { lineageId: result.trace.request_id },
+            ),
+          ),
+        );
+
+        for (const delta of chunkAssistantAnswer(fullResponse)) {
+          emit({ type: "delta", delta });
+        }
+
+        if (persistedActions.length > 0) {
+          emit({ type: "actions", actions: persistedActions });
+        }
+
+        emit({ type: "done" });
         controller.close();
       } catch (err) {
         console.error("[api/ai/chat] Streaming error:", err);
-        controller.enqueue(
-          encoder.encode(
-            `data: ${JSON.stringify({
-              error: err instanceof Error ? err.message : "Stream failed",
-            })}\n\n`
-          )
-        );
+        emit({
+          type: "error",
+          error: err instanceof Error ? err.message : "Stream failed",
+        });
         controller.close();
       }
     },

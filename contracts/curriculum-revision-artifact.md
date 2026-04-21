@@ -12,7 +12,7 @@ The Curriculum Revision Artifact is the structured response returned by `learnin
 - **Canonical Source Files:**
   - `learning-core/learning_core/skills/curriculum_revise/SKILL.md`
   - `learning-core/learning_core/contracts/curriculum.py`
-  - `lib/curriculum/ai-draft-service.ts`
+  - `lib/learning-core/curriculum.ts`
 
 ## Consumers
 - **Entrypoints:**

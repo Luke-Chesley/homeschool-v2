@@ -11,6 +11,7 @@ Keep documents here focused on:
 
 Current guides:
 - [Local QA Pipeline](/home/luke/Desktop/learning/homeschool-v2/docs/qa/local-qa-pipeline.md)
+- [Beta Launch Scorecard](/home/luke/Desktop/learning/homeschool-v2/docs/qa/BETA_LAUNCH_SCORECARD.md)
 - [QA Flow Inventory](/home/luke/Desktop/learning/homeschool-v2/docs/qa/qa-flow-inventory.md)
 - [QA Report Template](/home/luke/Desktop/learning/homeschool-v2/docs/qa/qa-report-template.md)
 - [Persona Test Matrix](/home/luke/Desktop/learning/homeschool-v2/docs/qa/persona-test-matrix.md)

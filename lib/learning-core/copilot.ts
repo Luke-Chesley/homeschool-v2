@@ -1,15 +1,13 @@
 import "@/lib/server-only";
 
-import { z } from "zod";
-
-import type { ChatMessage, CopilotContext } from "@/lib/ai/types";
+import {
+  CopilotChatArtifactSchema,
+  type ChatMessage,
+  type CopilotContext,
+} from "@/lib/ai/types";
 
 import { buildLearningCoreEnvelope } from "./envelope";
 import { executeLearningCoreOperation, previewLearningCoreOperation } from "./operations";
-
-const CopilotChatArtifactSchema = z.object({
-  answer: z.string().min(1),
-});
 
 export async function previewCopilotChat(params: {
   messages: ChatMessage[];

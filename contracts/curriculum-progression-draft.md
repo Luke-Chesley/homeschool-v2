@@ -15,7 +15,7 @@ The Curriculum Progression Draft is the structured output returned by `learning-
 
 ## Consumers
 - **Entrypoints:**
-  - `lib/curriculum/ai-draft-service.ts`
+  - `lib/learning-core/curriculum.ts`
   - `lib/curriculum/progression-regeneration.ts`
 - **Processing Logic:**
   - The app resolves `skillRef` values back to persisted curriculum nodes before storing progression data.

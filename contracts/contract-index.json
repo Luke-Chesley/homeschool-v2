@@ -54,7 +54,8 @@
       "canonicalSources": [
         "learning-core/learning_core/skills/curriculum_generate/SKILL.md",
         "learning-core/learning_core/contracts/curriculum.py",
-        "lib/curriculum/ai-draft-service.ts"
+        "lib/learning-core/curriculum.ts",
+        "lib/homeschool/onboarding/curriculum.ts"
       ],
       "producerEntrypoints": [
         "learning-core: POST /v1/operations/curriculum_generate/execute"
@@ -74,7 +75,7 @@
       "canonicalSources": [
         "learning-core/learning_core/skills/curriculum_revise/SKILL.md",
         "learning-core/learning_core/contracts/curriculum.py",
-        "lib/curriculum/ai-draft-service.ts"
+        "lib/learning-core/curriculum.ts"
       ],
       "producerEntrypoints": [
         "learning-core: POST /v1/operations/curriculum_revise/execute"
@@ -120,7 +121,7 @@
         "lib/learning-core/curriculum.ts"
       ],
       "producerEntrypoints": [
-        "lib/curriculum/ai-draft-service.ts",
+        "lib/learning-core/curriculum.ts",
         "lib/curriculum/progression-regeneration.ts"
       ],
       "consumerEntrypoints": [
@@ -143,7 +144,7 @@
         "learning-core: POST /v1/operations/progression_generate/execute"
       ],
       "consumerEntrypoints": [
-        "lib/curriculum/ai-draft-service.ts",
+        "lib/learning-core/curriculum.ts",
         "lib/curriculum/progression-regeneration.ts"
       ],
       "versionFields": [

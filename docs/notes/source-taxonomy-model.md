@@ -6,16 +6,15 @@ Fast onboarding now follows one source-first chain:
 
 - `source_interpret`
 - `curriculum_generate` with `requestMode: "source_entry"`
-- planning / progression / day 1 from `launchPlan`
+- planning / progression / day 1 from downstream app handoff
 
 Regular curriculum creation uses the same `curriculum_generate` skill in `conversation_intake` mode.
 
 ## Canonical interpretation fields
 
-Durable curriculum metadata now centers on three canonical blocks:
+Durable curriculum metadata now centers on the interpretation and lineage metadata that survive app persistence:
 
 - `sourceModel`
-- `launchPlan`
 - `curriculumLineage`
 
 `sourceModel` stores the interpretation fields:
@@ -39,7 +38,7 @@ The canonical `sourceKind` values are:
 
 `comprehensive_source` is the important new bucket for a whole book, workbook, long PDF, teacher guide, or other source that is clearly larger than the initial launch window. It means “start from a bounded opening slice and keep the rest available,” not “generate the whole curriculum now.”
 
-That durable curriculum should preserve later units for continuation while `launchPlan` bounds the opening route and day-1 handoff.
+That durable curriculum should preserve later units for continuation while the app chooses the initial opening slice for planning and day-1 handoff.
 
 ## Horizon semantics
 
@@ -53,7 +52,8 @@ The canonical values are:
 - `two_weeks`
 - `starter_module`
 
-`chosenHorizon` now lives on `launchPlan` because it is the explicit bounded launch decision after internal clamping. It is not a legacy alias. New code should treat `sourceModel.recommendedHorizon` as the model recommendation and `launchPlan.chosenHorizon` as the final bounded launch window.
+`recommendedHorizon` is the model recommendation.
+Any narrower opening-window decision is downstream app behavior and should not be mistaken for part of the canonical `curriculum_generate` artifact.
 
 ## No User Horizon Choice
 
@@ -77,8 +77,6 @@ Large sources need a continuation breadcrumb even when the first launch stays sm
 - `sourceModel.recommendedHorizon`
 - `sourceModel.deliveryPattern`
 - `sourceModel.detectedChunks`
-- `launchPlan.chosenHorizon`
-- launch-slice fields such as `launchPlan.initialSliceUsed`, `launchPlan.initialSliceLabel`, `launchPlan.openingLessonRefs`, and `launchPlan.openingSkillRefs`
 - `curriculumLineage`
 
 This metadata is intentionally lightweight. It exists so later “continue from source” work can resume from the next bounded slice without re-deriving the source interpretation from scratch.

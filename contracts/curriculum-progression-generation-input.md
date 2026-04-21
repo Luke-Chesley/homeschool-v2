@@ -9,7 +9,7 @@ This contract describes the structured request envelope `homeschool-v2` sends to
 
 ## Producers
 - **Entrypoints:**
-  - `lib/curriculum/ai-draft-service.ts`
+  - `lib/learning-core/curriculum.ts`
   - `lib/curriculum/progression-regeneration.ts`
 - **Canonical Source Files:**
   - `learning-core/learning_core/contracts/operation.py`

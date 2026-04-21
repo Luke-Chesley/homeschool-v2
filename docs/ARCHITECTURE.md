@@ -1,5 +1,8 @@
 # Architecture
 
+> Status: historical stack and repo-shape note from before the current strict `learning-core` boundary.
+> For the current operational product/runtime model, use [CURRENT_PRODUCT_AND_RUNTIME_MODEL.md](./CURRENT_PRODUCT_AND_RUNTIME_MODEL.md).
+
 ## High-Level Choice
 
 V2 should be a single Next.js application, not a split Django + CRA repo.

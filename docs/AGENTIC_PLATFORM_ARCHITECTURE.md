@@ -1,5 +1,9 @@
 # Agentic Platform Architecture
 
+> Status: future-oriented architecture exploration.
+> It is not the source of truth for the current homeschool beta, and some sections intentionally describe deferred concepts such as broader platform generalization or more integrated Copilot action systems.
+> For the current product/runtime model, use [CURRENT_PRODUCT_AND_RUNTIME_MODEL.md](./CURRENT_PRODUCT_AND_RUNTIME_MODEL.md).
+
 ## Purpose
 
 This document describes how the platform could evolve from an AI-assisted planning product into an agentic learning operations system.
