@@ -17,13 +17,13 @@ export function OnboardingLaunchFlash() {
   }
 
   return (
-    <div className="mb-4 rounded-2xl border border-emerald-200/70 bg-emerald-50/80 px-4 py-3 text-sm text-emerald-950">
+    <div className="mb-4 rounded-2xl border border-secondary/35 bg-secondary/12 px-4 py-3 text-sm text-foreground">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <p className="font-medium">Onboarding setup ready</p>
           <p className="break-words">{summary.summaryText}</p>
           {summary.scopeSummary ? (
-            <p className="text-emerald-900/80 break-words">{summary.scopeSummary}</p>
+            <p className="break-words text-muted-foreground">{summary.scopeSummary}</p>
           ) : null}
         </div>
         <Button
@@ -31,7 +31,7 @@ export function OnboardingLaunchFlash() {
           variant="ghost"
           size="sm"
           onClick={() => setSummary(null)}
-          className="shrink-0 text-emerald-950 hover:bg-emerald-100"
+          className="shrink-0 text-foreground hover:bg-secondary/20"
         >
           Dismiss
         </Button>

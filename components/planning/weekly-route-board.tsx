@@ -14,7 +14,7 @@ import {
 } from "@dnd-kit/core";
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Copy, GripVertical } from "lucide-react";
+import { ChevronDown, Copy, GripVertical, SlidersHorizontal } from "lucide-react";
 
 import { UpdateCurriculumScheduleButton } from "@/components/planning/update-curriculum-schedule-button";
 import { buttonVariants } from "@/components/ui/button";
@@ -37,6 +37,30 @@ const STATE_OPTIONS: Array<{ value: WeeklyRouteBoardItem["state"]; label: string
   { value: "done", label: "Done" },
   { value: "removed", label: "Paused" },
 ];
+
+function getStateLabel(state: WeeklyRouteBoardItem["state"]) {
+  return STATE_OPTIONS.find((option) => option.value === state)?.label ?? state;
+}
+
+function getSkillContextLabel(item: WeeklyRouteBoardItem) {
+  return item.skillPath.split(/[·/]/)[0]?.trim() || item.skillPath;
+}
+
+function getScheduledLabel(scheduledDate: string | null) {
+  if (!scheduledDate) {
+    return "Backlog";
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  }).format(new Date(`${scheduledDate}T12:00:00.000Z`));
+}
+
+function getMinutesLabel(minutes: number | null) {
+  return minutes == null || minutes === 0 ? null : `${minutes} min`;
+}
 
 function parseDateOrThrow(value: string) {
   const parsed = new Date(`${value}T12:00:00.000Z`);
@@ -118,6 +142,11 @@ function SortableRouteItem({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.id,
   });
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const prerequisiteCount =
+    item.explicitPrerequisiteSkillNodeIds.length + item.predecessorSkillNodeIds.length;
+  const minutesLabel = getMinutesLabel(item.estimatedMinutes);
 
   return (
     <div
@@ -131,72 +160,156 @@ function SortableRouteItem({
         isDragging && "opacity-70 shadow-md",
       )}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 flex-1 space-y-2">
-          <p className="text-sm font-semibold leading-5 break-words">{item.skillTitle}</p>
-          <p className="truncate text-xs text-muted-foreground">{item.skillPath}</p>
-          <div className="flex flex-wrap items-center gap-2">
-            <label className="text-xs text-muted-foreground" htmlFor={`route-state-${item.id}`}>
-              State
-            </label>
-            <select
-              id={`route-state-${item.id}`}
-              disabled={isSaving}
-              value={item.state}
-              className="h-8 rounded-md border border-input bg-background px-2 text-sm text-foreground"
-              onChange={(event) =>
-                void onChangeState(item.id, event.currentTarget.value as WeeklyRouteBoardItem["state"])
-              }
-            >
-              {STATE_OPTIONS.map(({ value, label }) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="flex flex-wrap gap-1">
-            {item.manualOverrideKind !== "none" ? (
-              <Badge variant="secondary" className="rounded-full">
-                {item.manualOverrideKind.replace("_", " ")}
+      <div className="space-y-3">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1 space-y-2">
+            <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+              <Badge variant="secondary" className="rounded-full px-2 py-0.5">
+                {getSkillContextLabel(item)}
               </Badge>
-            ) : null}
-            {conflicted ? (
-              <Badge variant="outline" className="rounded-full text-destructive">
-                Conflict
+              {minutesLabel ? <span>{minutesLabel}</span> : null}
+              <span>{getScheduledLabel(item.scheduledDate)}</span>
+            </div>
+            <p className="text-sm font-semibold leading-5 break-words">{item.skillTitle}</p>
+            <div className="flex flex-wrap gap-1">
+              <Badge variant="outline" className="rounded-full">
+                {getStateLabel(item.state)}
               </Badge>
-            ) : null}
+              {item.manualOverrideKind !== "none" ? (
+                <Badge variant="secondary" className="rounded-full">
+                  {item.manualOverrideKind.replace("_", " ")}
+                </Badge>
+              ) : null}
+              {conflicted ? (
+                <Badge variant="outline" className="rounded-full text-destructive">
+                  Conflict
+                </Badge>
+              ) : null}
+            </div>
           </div>
-          {canRepeat ? (
-            <button
-              type="button"
-              disabled={isSaving}
-              className={cn(
-                buttonVariants({ variant: "outline", size: "sm" }),
-                "mt-1 w-fit gap-2 rounded-full",
-              )}
-              onClick={() => {
-                if (!item.scheduledDate) {
-                  return;
-                }
-                void onDuplicate(item.id, addDays(item.scheduledDate, 1));
-              }}
-            >
-              <Copy className="size-4" />
-              Repeat
-            </button>
-          ) : null}
+
+          <button
+            type="button"
+            aria-label={`Drag ${item.skillTitle}`}
+            className="shrink-0 rounded-md border border-border/70 p-1 text-muted-foreground transition-colors hover:text-foreground"
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical className="size-4" />
+          </button>
         </div>
 
-        <button
-          type="button"
-          aria-label={`Drag ${item.skillTitle}`}
-          className="shrink-0 rounded-md border border-border/70 p-1 text-muted-foreground transition-colors hover:text-foreground"
-          {...attributes}
-          {...listeners}
-        >
-          <GripVertical className="size-4" />
-        </button>
+        <div className="flex flex-wrap gap-2 border-t border-border/60 pt-2">
+          <button
+            type="button"
+            aria-expanded={detailsOpen}
+            aria-controls={`route-item-details-${item.id}`}
+            className={cn(
+              buttonVariants({ variant: "ghost", size: "sm" }),
+              "h-8 rounded-full px-3 text-xs",
+            )}
+            onClick={() => setDetailsOpen((current) => !current)}
+          >
+            Details
+            <ChevronDown className={cn("size-3.5 transition-transform", detailsOpen && "rotate-180")} />
+          </button>
+          <button
+            type="button"
+            aria-expanded={actionsOpen}
+            aria-controls={`route-item-actions-${item.id}`}
+            className={cn(
+              buttonVariants({ variant: "outline", size: "sm" }),
+              "h-8 rounded-full px-3 text-xs",
+            )}
+            onClick={() => setActionsOpen((current) => !current)}
+          >
+            <SlidersHorizontal className="size-3.5" />
+            Actions
+          </button>
+        </div>
+
+        {detailsOpen ? (
+          <div
+            id={`route-item-details-${item.id}`}
+            className="space-y-3 rounded-xl border border-border/70 bg-card/72 p-3"
+          >
+            <div className="space-y-3 text-xs text-muted-foreground">
+              <div className="space-y-1">
+                <p className="font-medium text-foreground">Path</p>
+                <p className="leading-5 break-words">{item.skillPath}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="font-medium text-foreground">Prerequisites</p>
+                <p className="leading-5">
+                  {prerequisiteCount === 0 ? "No blockers recorded." : `${prerequisiteCount} prerequisite links`}
+                </p>
+              </div>
+              <div className="space-y-1">
+                <p className="font-medium text-foreground">Position</p>
+                <p className="leading-5">
+                  Now {item.currentPosition + 1} · Recommended {item.recommendedPosition + 1}
+                </p>
+              </div>
+            </div>
+            {item.manualOverrideNote ? (
+              <div className="rounded-lg border border-border/60 bg-background/72 px-3 py-2">
+                <p className="text-xs font-medium text-foreground">Planner note</p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">{item.manualOverrideNote}</p>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {actionsOpen ? (
+          <div
+            id={`route-item-actions-${item.id}`}
+            className="space-y-3 rounded-xl border border-border/70 bg-card/72 p-3"
+          >
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-foreground" htmlFor={`route-state-${item.id}`}>
+                State
+              </label>
+              <select
+                id={`route-state-${item.id}`}
+                disabled={isSaving}
+                value={item.state}
+                className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground"
+                onChange={(event) =>
+                  void onChangeState(item.id, event.currentTarget.value as WeeklyRouteBoardItem["state"])
+                }
+              >
+                {STATE_OPTIONS.map(({ value, label }) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {canRepeat ? (
+                <button
+                  type="button"
+                  disabled={isSaving}
+                  className={cn(buttonVariants({ variant: "outline", size: "sm" }), "gap-2 rounded-full")}
+                  onClick={() => {
+                    if (!item.scheduledDate) {
+                      return;
+                    }
+                    void onDuplicate(item.id, addDays(item.scheduledDate, 1));
+                  }}
+                >
+                  <Copy className="size-4" />
+                  Repeat tomorrow
+                </button>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Repeat is available once this item is placed on a weekday.
+                </p>
+              )}
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -220,23 +333,27 @@ function RouteColumn({
   onDuplicate: (itemId: string, targetScheduledDate: string) => Promise<void>;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: columnId });
+  const scheduledMinutes = items.reduce((sum, item) => sum + (item.estimatedMinutes ?? 0), 0);
 
   return (
     <section
       data-weekly-column={columnId}
       className={cn(
-        "quiet-panel min-h-72 min-w-0 space-y-4 p-4",
+        "quiet-panel min-h-56 min-w-0 space-y-4 p-4",
         isOver && "border-primary/40 bg-primary/5",
       )}
     >
       <div className="space-y-1">
         <p className="text-sm font-semibold text-foreground">{getColumnLabel(columnId)}</p>
-        <p className="text-xs text-muted-foreground">{items.length} planned items</p>
+        <p className="text-xs text-muted-foreground">
+          {items.length} planned items
+          {scheduledMinutes > 0 ? ` · ${scheduledMinutes} min` : ""}
+        </p>
       </div>
       <div ref={setNodeRef} className="min-w-0 space-y-2">
         <SortableContext items={items.map((item) => item.id)} strategy={verticalListSortingStrategy}>
           {items.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-border/70 px-3 py-6 text-center text-xs text-muted-foreground">
+            <div className="rounded-xl border border-dashed border-border/70 px-3 py-4 text-center text-xs text-muted-foreground">
               Drop items here
             </div>
           ) : (
@@ -670,8 +787,8 @@ export function WeeklyRouteBoard({ initialBoard, weekStartDate }: WeeklyRouteBoa
           <div className="space-y-1">
             <p className="text-sm font-semibold text-foreground">How to use this board</p>
             <p className="text-sm leading-6 text-muted-foreground">
-              Keep the week realistic. Use backlog for overflow, planned for intentional placement,
-              working for active items, and paused when you want to preserve a skill without losing it.
+              Keep the week realistic. Leave cards compact while you sort the calendar, then open
+              details or actions only on the items that need a closer decision.
             </p>
           </div>
           <div className="space-y-2">
