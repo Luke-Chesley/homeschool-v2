@@ -3,6 +3,7 @@ import { and, asc, eq, inArray, lt, ne } from "drizzle-orm";
 import { getDb } from "@/lib/db/server";
 import { getEnabledPlanningDayOffsets } from "./planning-days";
 import { normalizeTargetItemsPerDay } from "./defaults";
+import { resolveEffectiveScheduledSlotIndex } from "@/lib/planning/lesson-slot-grouping";
 import {
   curriculumNodes,
   curriculumSources,
@@ -131,7 +132,6 @@ export function buildSuggestedSchedulePlacements(params: {
   enabledDayOffsets: number[];
 }): SuggestedSchedulePlacement[] {
   const scheduledDates = buildSuggestedScheduledDates(params);
-  const nextSlotIndexByDate = new Map<string, number>();
 
   return scheduledDates.map((scheduledDate) => {
     if (!scheduledDate) {
@@ -141,12 +141,9 @@ export function buildSuggestedSchedulePlacements(params: {
       };
     }
 
-    const scheduledSlotIndex = nextSlotIndexByDate.get(scheduledDate) ?? 1;
-    nextSlotIndexByDate.set(scheduledDate, scheduledSlotIndex + 1);
-
     return {
       scheduledDate,
-      scheduledSlotIndex,
+      scheduledSlotIndex: 1,
     };
   });
 }
@@ -544,6 +541,10 @@ async function buildRouteBoard(route: WeeklyRouteRecord): Promise<WeeklyRouteBoa
   const items: WeeklyRouteBoardItem[] = rows.map(({ item, node }) => {
     const canonicalPosition = getCanonicalPosition(node, canonicalFallbackBySkillNodeId.get(node.id) ?? 0);
     const status = statusBySkillNodeId.get(item.skillNodeId) ?? "not_started";
+    const scheduledSlotIndex = resolveEffectiveScheduledSlotIndex({
+      scheduledSlotIndex: item.scheduledSlotIndex,
+      manualOverrideNote: item.manualOverrideNote,
+    });
 
     const boardItem: WeeklyRouteBoardItem = {
       id: item.id,
@@ -558,7 +559,7 @@ async function buildRouteBoard(route: WeeklyRouteRecord): Promise<WeeklyRouteBoa
       recommendedPosition: item.recommendedPosition,
       currentPosition: item.currentPosition,
       scheduledDate: item.scheduledDate,
-      scheduledSlotIndex: item.scheduledSlotIndex,
+      scheduledSlotIndex,
       manualOverrideKind: item.manualOverrideKind,
       manualOverrideNote: item.manualOverrideNote,
       state: item.state,
@@ -571,7 +572,7 @@ async function buildRouteBoard(route: WeeklyRouteRecord): Promise<WeeklyRouteBoa
         curriculumSkillNodeId: item.skillNodeId,
         currentPosition: item.currentPosition,
         scheduledDate: item.scheduledDate,
-        scheduledSlotIndex: item.scheduledSlotIndex,
+        scheduledSlotIndex,
         state: item.state,
       },
     };

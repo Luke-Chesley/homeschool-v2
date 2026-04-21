@@ -141,12 +141,7 @@ export function buildSuggestedWeeklyAssignments(params: {
     .filter((date): date is string => date != null);
   const targetItemsPerDay = normalizeTargetItemsPerDay(params.targetItemsPerDay);
   const occupiedCountByDate = new Map<string, number>();
-  const nextSlotIndexByDate = new Map<string, number>();
   const occupiedSkillDateKeys = new Set<string>();
-
-  for (const date of weekdayDates) {
-    nextSlotIndexByDate.set(date, 1);
-  }
 
   for (const row of params.rows) {
     if (row.scheduledDate == null || !weekdayDates.includes(row.scheduledDate)) {
@@ -155,10 +150,6 @@ export function buildSuggestedWeeklyAssignments(params: {
 
     occupiedCountByDate.set(row.scheduledDate, (occupiedCountByDate.get(row.scheduledDate) ?? 0) + 1);
     occupiedSkillDateKeys.add(`${row.skillNodeId}::${row.scheduledDate}`);
-    nextSlotIndexByDate.set(
-      row.scheduledDate,
-      Math.max(nextSlotIndexByDate.get(row.scheduledDate) ?? 1, (row.scheduledSlotIndex ?? 0) + 1),
-    );
   }
 
   const unscheduledRows = params.rows.filter(
@@ -178,14 +169,12 @@ export function buildSuggestedWeeklyAssignments(params: {
       continue;
     }
 
-    const scheduledSlotIndex = nextSlotIndexByDate.get(nextDate) ?? 1;
     assignments.push({
       id: row.id,
       scheduledDate: nextDate,
-      scheduledSlotIndex,
+      scheduledSlotIndex: 1,
     });
     occupiedCountByDate.set(nextDate, (occupiedCountByDate.get(nextDate) ?? 0) + 1);
-    nextSlotIndexByDate.set(nextDate, scheduledSlotIndex + 1);
     occupiedSkillDateKeys.add(`${row.skillNodeId}::${nextDate}`);
   }
 
