@@ -15,6 +15,12 @@ const publicTabs = [
   { href: "/auth/login", label: "Sign in", matchPrefix: "/auth" },
 ] as const;
 
+const workspaceTabs = [
+  { href: "/today", label: "Today", matchPrefix: "/today" },
+  { href: "/users", label: "Learners", matchPrefix: "/users" },
+  { href: "/account", label: "Account", matchPrefix: "/account" },
+] as const;
+
 const workspaceLabels: Array<{ match: string; label: string }> = [
   { match: "/today", label: "Today" },
   { match: "/planning", label: "Planning" },
@@ -97,9 +103,9 @@ export function GlobalPageTabs() {
   const activeLearnerId = session?.activeLearner?.id ?? null;
   const activeLearnerName = session?.activeLearner?.displayName ?? null;
   const hasMultipleLearners = learners.length > 1;
-  const hasWorkspaceLabel = !!workspaceLabel;
   const hasActiveLearner = !!activeLearnerName;
   const switchLabel = hasMultipleLearners ? "Switch learners" : "Switch learner";
+  const contextLabel = workspaceLabel ?? "Workspace";
 
   return (
     <div
@@ -114,37 +120,24 @@ export function GlobalPageTabs() {
         </div>
         <div className="flex min-w-0 items-center justify-center">
           {inWorkspace ? (
-            <div className="hidden min-w-0 items-center gap-3 md:flex">
-              <div className="min-w-0 items-center gap-2 truncate text-sm lg:flex">
-                <Link
-                  href="/today"
-                  className="shrink-0 font-medium text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  Workspace
-                </Link>
-                {hasWorkspaceLabel ? (
-                  <>
-                    <span className="text-muted-foreground/70">/</span>
-                    <span className="truncate font-medium text-foreground">{workspaceLabel}</span>
-                  </>
-                ) : null}
-                {hasActiveLearner && !hasMultipleLearners ? (
-                  <>
-                    <span className="text-muted-foreground/70">/</span>
-                    <span className="truncate text-muted-foreground">{activeLearnerName}</span>
-                  </>
-                ) : null}
-              </div>
-              {hasMultipleLearners ? (
-                <ActiveLearnerSwitcher
-                  learners={learners}
-                  activeLearnerId={activeLearnerId}
-                  label={switchLabel}
-                  className="min-w-[12rem]"
-                  selectClassName="h-9"
-                />
-              ) : null}
-            </div>
+            <nav className="hidden min-w-0 items-center gap-6 overflow-x-auto md:flex" aria-label="Workspace sections">
+              {workspaceTabs.map((tab) => {
+                const active = isActive(pathname, tab.href, tab.matchPrefix);
+
+                return (
+                  <Link
+                    key={tab.href}
+                    href={tab.href}
+                    className={cn(
+                      "inline-flex shrink-0 items-center text-sm transition-colors",
+                      active ? "font-medium text-foreground" : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {tab.label}
+                  </Link>
+                );
+              })}
+            </nav>
           ) : (
             <nav className="flex min-w-0 items-center gap-6 overflow-x-auto" aria-label="Global sections">
               {publicTabs.map((tab) => {
@@ -169,25 +162,37 @@ export function GlobalPageTabs() {
         <div className="flex items-center justify-end gap-3 lg:gap-5">
           {inWorkspace ? (
             <>
-              <Link
-                href="/today"
-                className="hidden text-sm font-medium text-muted-foreground transition-colors hover:text-foreground lg:inline-flex"
-              >
-                Workspace
-              </Link>
-              <Link
-                href="/users"
-                className="hidden text-sm font-medium text-muted-foreground transition-colors hover:text-foreground lg:inline-flex"
-              >
-                Learners
-              </Link>
-              <Link
-                href="/account"
-                className="hidden text-sm font-medium text-muted-foreground transition-colors hover:text-foreground lg:inline-flex"
-              >
-                Account
-              </Link>
-              <div className="hidden h-4 w-px bg-border/80 lg:block" />
+              <div className="hidden min-w-0 items-center gap-3 lg:flex">
+                <div className="min-w-0 truncate text-sm">
+                  <span className="text-muted-foreground">Viewing </span>
+                  <span className="font-medium text-foreground">{contextLabel}</span>
+                  {hasActiveLearner && !hasMultipleLearners ? (
+                    <>
+                      <span className="text-muted-foreground"> for </span>
+                      <span
+                        className="inline-flex max-w-[14rem] truncate rounded-full border border-border/70 bg-background/70 px-2.5 py-0.5 align-middle text-foreground"
+                        title={activeLearnerName}
+                      >
+                        {activeLearnerName}
+                      </span>
+                    </>
+                  ) : null}
+                </div>
+                {hasMultipleLearners ? (
+                  <>
+                    <span className="text-sm text-muted-foreground">for</span>
+                    <ActiveLearnerSwitcher
+                      learners={learners}
+                      activeLearnerId={activeLearnerId}
+                      label={switchLabel}
+                      className="min-w-[12rem] gap-0"
+                      labelClassName="sr-only"
+                      selectClassName="h-9 rounded-full bg-card/72"
+                    />
+                  </>
+                ) : null}
+                <div className="h-4 w-px bg-border/80" />
+              </div>
               <div className="hidden lg:block">
                 <StudioToggle />
               </div>

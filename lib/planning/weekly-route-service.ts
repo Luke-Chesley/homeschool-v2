@@ -9,6 +9,7 @@ import {
   type WeeklyRouteBoard,
 } from "@/lib/curriculum-routing";
 import { normalizeTargetItemsPerDay } from "@/lib/curriculum-routing/defaults";
+import { hasExplicitSeparateLessonSlotNote } from "@/lib/planning/lesson-slot-grouping";
 import { getDb } from "@/lib/db/server";
 import {
   buildAdaptiveScheduleSlots,
@@ -32,8 +33,11 @@ type WeeklyRouteBoardMaintenanceReason =
   | "missing_route"
   | "empty_board"
   | "unscheduled_items"
+  | "capacity_drift"
   | "prior_week_overlap"
   | "read_safe";
+
+const ACTIVE_ROUTE_STATES = new Set<WeeklyRouteItemRow["state"]>(["queued", "scheduled", "in_progress"]);
 
 const WEEKDAY_COUNT = 7;
 const WEEKLY_REFRESH_HORIZON_WEEKS = 6;
@@ -113,6 +117,49 @@ async function shouldRegenerateForPriorWeekOverlap(route: WeeklyRouteRecord, boa
   return board.items.some(
     (item) => item.state !== "removed" && priorPlannedSkillNodeIds.has(item.skillNodeId),
   );
+}
+
+function shouldRegenerateForCapacityDrift(params: {
+  board: WeeklyRouteBoard;
+  profile: typeof learnerRouteProfiles.$inferSelect | null | undefined;
+}) {
+  const { board, profile } = params;
+
+  if (board.items.length === 0) {
+    return false;
+  }
+
+  if (
+    board.items.some(
+      (item) =>
+        item.manualOverrideKind !== "none" ||
+        hasExplicitSeparateLessonSlotNote(item.manualOverrideNote),
+    )
+  ) {
+    return false;
+  }
+
+  const activeItems = board.items.filter((item) => ACTIVE_ROUTE_STATES.has(item.state));
+  if (activeItems.length > board.summary.targetItemsPerWeek) {
+    return true;
+  }
+
+  const targetItemsPerDay = getTargetItemsPerDay(profile);
+  const scheduledCountByDate = new Map<string, number>();
+
+  for (const item of activeItems) {
+    if (item.scheduledDate == null) {
+      continue;
+    }
+
+    const nextCount = (scheduledCountByDate.get(item.scheduledDate) ?? 0) + 1;
+    if (nextCount > targetItemsPerDay) {
+      return true;
+    }
+    scheduledCountByDate.set(item.scheduledDate, nextCount);
+  }
+
+  return false;
 }
 
 export interface SuggestedWeeklyAssignmentItem {
@@ -420,6 +467,16 @@ export async function getOrCreateWeeklyRouteBoardForLearner(params: {
       return { weekStartDate, board: regenerated };
     }
 
+    if (state.maintenanceReason === "capacity_drift") {
+      const regenerated = await generateWeeklyRoute({
+        learnerId: params.learnerId,
+        sourceId: params.sourceId,
+        weekStartDate,
+      });
+
+      return { weekStartDate, board: regenerated };
+    }
+
     return { weekStartDate, board: existing };
   }
 
@@ -465,6 +522,12 @@ async function inspectWeeklyRouteBoardMaintenanceState(params: {
     sourceId: params.sourceId,
     weekStartDate,
   });
+  const profile = await getDb().query.learnerRouteProfiles.findFirst({
+    where: and(
+      eq(learnerRouteProfiles.learnerId, params.learnerId),
+      eq(learnerRouteProfiles.sourceId, params.sourceId),
+    ),
+  });
 
   let maintenanceReason: WeeklyRouteBoardMaintenanceReason;
   if (!existing) {
@@ -473,6 +536,8 @@ async function inspectWeeklyRouteBoardMaintenanceState(params: {
     maintenanceReason = "empty_board";
   } else if (existing.items.some((item) => item.state !== "removed" && item.scheduledDate == null)) {
     maintenanceReason = "unscheduled_items";
+  } else if (shouldRegenerateForCapacityDrift({ board: existing, profile })) {
+    maintenanceReason = "capacity_drift";
   } else if (route && (await shouldRegenerateForPriorWeekOverlap(route, existing))) {
     maintenanceReason = "prior_week_overlap";
   } else {

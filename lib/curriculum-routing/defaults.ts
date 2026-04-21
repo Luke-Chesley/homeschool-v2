@@ -1,4 +1,4 @@
-export const DEFAULT_TARGET_ITEMS_PER_DAY = 2;
+export const DEFAULT_TARGET_ITEMS_PER_DAY = 1;
 
 export function normalizeTargetItemsPerDay(value: number | null | undefined) {
   const normalized =
