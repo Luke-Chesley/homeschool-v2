@@ -3,6 +3,7 @@ import "@/lib/server-only";
 import type { ActivityComponentFeedback, RequestActivityComponentFeedback } from "./feedback";
 import type { RequestActivityComponentTransition } from "./widget-transition";
 import { getAttemptStore } from "./attempt-store";
+import { collectUploadedActivityAssets } from "./uploads";
 import type { ActivityAttempt, ActivityOutcome, ActivitySession, AttemptAnswer } from "./types";
 import { parseActivityDefinition } from "./types";
 import { parseActivitySpec, isActivitySpec, ActivitySpecSchema } from "./spec";
@@ -513,6 +514,7 @@ async function reportOutcome(outcome: ActivityOutcome): Promise<void> {
     repos.activities.findActivityById(outcome.activityId),
     outcome.lessonId ? repos.planning.findLessonSessionById(outcome.lessonId) : Promise.resolve(null),
   ]);
+  const attempt = await getAttemptStore().get(outcome.attemptId);
 
   const scorePercent = toScorePercent(outcome.score);
   const completedAt = toOutcomeCompletedAt(outcome.completedAt);
@@ -521,6 +523,7 @@ async function reportOutcome(outcome: ActivityOutcome): Promise<void> {
     activityId: outcome.activityId,
     repos,
   });
+  const standardNodes = await repos.standards.listNodesByCodes(outcome.standardIds);
 
   const progressRecord = await repos.tracking.createProgressRecord({
     learnerId: outcome.learnerId,
@@ -558,6 +561,8 @@ async function reportOutcome(outcome: ActivityOutcome): Promise<void> {
     progressClassification.progressStatus === "needs_review"
       ? "awaiting_review"
       : "submitted";
+  const parsedActivitySpec =
+    activity && isActivitySpec(activity.definition) ? parseActivitySpec(activity.definition) : null;
 
   const evidenceRecord = await repos.tracking.createEvidenceRecord({
     organizationId: learner.organizationId,
@@ -581,6 +586,80 @@ async function reportOutcome(outcome: ActivityOutcome): Promise<void> {
       masterySignal: progressClassification.masterySignal,
     },
   });
+
+  const uploadedAssets =
+    parsedActivitySpec
+      ? collectUploadedActivityAssets({
+          spec: parsedActivitySpec,
+          evidence: attempt?.uiState,
+        })
+      : [];
+
+  const uploadedEvidenceRecords = [];
+  for (const uploadedAsset of uploadedAssets) {
+    const title = uploadedAsset.asset.name.trim() || uploadedAsset.prompt;
+    const body = [uploadedAsset.prompt, uploadedAsset.note].filter(Boolean).join("\n\n") || null;
+    const evidenceKind =
+      uploadedAsset.componentType === "image_capture" ? "image_artifact" : "file_artifact";
+    const evidenceType =
+      uploadedAsset.componentType === "image_capture" ? "photo" : "file_upload";
+
+    await repos.activities.createEvidence({
+      organizationId: learner.organizationId,
+      learnerId: outcome.learnerId,
+      activityId: outcome.activityId,
+      attemptId: outcome.attemptId,
+      lessonSessionId: outcome.lessonId ?? null,
+      componentId: uploadedAsset.componentId,
+      componentType: uploadedAsset.componentType,
+      evidenceKind,
+      value: {
+        prompt: uploadedAsset.prompt,
+        note: uploadedAsset.note,
+        asset: uploadedAsset.asset,
+      },
+      summary: title,
+      linkedObjectiveIds: standardNodes.map((node) => node.id),
+      linkedSkillIds: curriculumLink.linkage ? [curriculumLink.linkage.skillNodeId] : [],
+      reviewState,
+      capturedAt: completedAt,
+      metadata: {
+        source: "activity-upload",
+        planItemId: curriculumLink.planItemId,
+        storageBucket: uploadedAsset.asset.storageBucket,
+        storagePath: uploadedAsset.asset.storagePath,
+      },
+    });
+
+    const uploadedEvidenceRecord = await repos.tracking.createEvidenceRecord({
+      organizationId: learner.organizationId,
+      learnerId: outcome.learnerId,
+      lessonSessionId: outcome.lessonId ?? null,
+      planItemId: curriculumLink.planItemId,
+      activityAttemptId: outcome.attemptId,
+      progressRecordId: progressRecord.id,
+      artifactId: null,
+      evidenceType,
+      reviewState,
+      title,
+      body,
+      storagePath: uploadedAsset.asset.storagePath,
+      audience: "shared",
+      createdByAdultUserId: null,
+      metadata: {
+        source: "activity-upload",
+        componentId: uploadedAsset.componentId,
+        componentType: uploadedAsset.componentType,
+        prompt: uploadedAsset.prompt,
+        note: uploadedAsset.note,
+        storageBucket: uploadedAsset.asset.storageBucket,
+        mimeType: uploadedAsset.asset.mimeType ?? null,
+        sizeBytes: uploadedAsset.asset.sizeBytes ?? null,
+      },
+    });
+
+    uploadedEvidenceRecords.push(uploadedEvidenceRecord);
+  }
 
   if (reviewState === "awaiting_review") {
     await repos.tracking.enqueueReviewItem({
@@ -703,7 +782,6 @@ async function reportOutcome(outcome: ActivityOutcome): Promise<void> {
     }
   }
 
-  const standardNodes = await repos.standards.listNodesByCodes(outcome.standardIds);
   for (const node of standardNodes) {
     await repos.tracking.attachStandard({
       progressRecordId: progressRecord.id,
@@ -722,6 +800,17 @@ async function reportOutcome(outcome: ActivityOutcome): Promise<void> {
         standardCode: node.code,
       },
     });
+
+    for (const uploadedEvidenceRecord of uploadedEvidenceRecords) {
+      await repos.tracking.attachObjectiveToEvidence({
+        evidenceRecordId: uploadedEvidenceRecord.id,
+        standardNodeId: node.id,
+        metadata: {
+          source: "activity-upload",
+          standardCode: node.code,
+        },
+      });
+    }
   }
 
   if (outcome.lessonId) {

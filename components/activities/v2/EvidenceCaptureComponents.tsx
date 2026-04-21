@@ -7,7 +7,7 @@
  */
 
 import * as React from "react";
-import { Upload, Camera, Mic, CheckCircle2 } from "lucide-react";
+import { AlertCircle, Camera, CheckCircle2, Loader2, Mic, Upload } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ComponentRendererProps } from "./types";
 import type {
@@ -19,6 +19,11 @@ import type {
   LabelMapComponentSchema,
   HotspotSelectComponentSchema,
 } from "@/lib/activities/components";
+import {
+  coerceActivityAttachmentEntries,
+  isStoredActivityAttachment,
+  type ActivityAttachmentEntry,
+} from "@/lib/activities/uploads";
 import type { z } from "zod";
 
 type FileUploadSpec = z.infer<typeof FileUploadComponentSchema>;
@@ -29,41 +34,232 @@ type TeacherCheckoffSpec = z.infer<typeof TeacherCheckoffComponentSchema>;
 type LabelMapSpec = z.infer<typeof LabelMapComponentSchema>;
 type HotspotSelectSpec = z.infer<typeof HotspotSelectComponentSchema>;
 
+function buildFileEntryId(file: File) {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+
+  return `${file.name}-${file.lastModified}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function createEvidenceFileEntry(file: File): ActivityAttachmentEntry {
+  return {
+    id: buildFileEntryId(file),
+    name: file.name,
+    sizeBytes: Number.isFinite(file.size) ? file.size : undefined,
+    mimeType: file.type || undefined,
+    lastModified: Number.isFinite(file.lastModified) ? file.lastModified : undefined,
+  };
+}
+
+function formatFileSize(sizeBytes?: number) {
+  if (typeof sizeBytes !== "number" || Number.isNaN(sizeBytes) || sizeBytes <= 0) {
+    return null;
+  }
+
+  if (sizeBytes < 1024) {
+    return `${sizeBytes} B`;
+  }
+
+  if (sizeBytes < 1024 * 1024) {
+    return `${(sizeBytes / 1024).toFixed(1)} KB`;
+  }
+
+  return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function attachmentKey(entry: ActivityAttachmentEntry) {
+  if (entry.storagePath) {
+    return `stored::${entry.storagePath}`;
+  }
+
+  return [
+    entry.name.trim().toLowerCase(),
+    entry.sizeBytes ?? "na",
+    entry.lastModified ?? "na",
+    entry.mimeType?.trim().toLowerCase() ?? "na",
+  ].join("::");
+}
+
+function dedupeEntries(entries: ActivityAttachmentEntry[]) {
+  const seen = new Set<string>();
+  const deduped: ActivityAttachmentEntry[] = [];
+
+  for (const entry of entries) {
+    const key = attachmentKey(entry);
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    deduped.push(entry);
+  }
+
+  return deduped;
+}
+
+function buildMetadataLabel(entry: ActivityAttachmentEntry) {
+  return [
+    formatFileSize(entry.sizeBytes),
+    entry.mimeType,
+    isStoredActivityAttachment(entry) ? "Saved to lesson evidence" : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+function filterSelectableFiles(
+  files: File[],
+  existing: ActivityAttachmentEntry[],
+  maxCount: number,
+) {
+  const seen = new Set(existing.map((entry) => attachmentKey(entry)));
+  const selected: File[] = [];
+
+  for (const file of files) {
+    const key = attachmentKey(createEvidenceFileEntry(file));
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    selected.push(file);
+
+    if (selected.length >= maxCount) {
+      break;
+    }
+  }
+
+  return selected;
+}
+
 // ---------------------------------------------------------------------------
-// File upload (metadata capture — actual file upload is out of scope here)
+// File upload
 // ---------------------------------------------------------------------------
 
 export function FileUploadComponent({
   spec,
   value,
   onChange,
+  onRequestAssetUpload,
+  onRequestAssetDelete,
   disabled,
 }: ComponentRendererProps<FileUploadSpec>) {
-  type FileValue = { fileNames: string[]; note: string };
+  type FileValue = { files: ActivityAttachmentEntry[]; note: string };
   const current: FileValue =
     value && typeof value === "object" && !Array.isArray(value)
-      ? (value as FileValue)
-      : { fileNames: [], note: "" };
+      ? {
+          files: coerceActivityAttachmentEntries(value, "files", "file"),
+          note: typeof (value as Record<string, unknown>).note === "string"
+            ? ((value as Record<string, unknown>).note as string)
+            : "",
+        }
+      : { files: [], note: "" };
+  const currentRef = React.useRef(current);
+  const [uploadState, setUploadState] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    currentRef.current = current;
+  }, [current]);
 
   function setNote(note: string) {
     onChange(spec.id, { ...current, note });
   }
 
-  function handleFileInput(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? []).map((f) => f.name);
-    onChange(spec.id, { ...current, fileNames: [...current.fileNames, ...files] });
+  async function uploadFiles(selectedFiles: File[]) {
+    if (selectedFiles.length === 0) {
+      return;
+    }
+
+    setError(null);
+
+    if (!onRequestAssetUpload) {
+      const files = selectedFiles.map(createEvidenceFileEntry);
+      const nextFiles = dedupeEntries([...currentRef.current.files, ...files]).slice(
+        0,
+        spec.maxFiles ?? 3,
+      );
+      onChange(spec.id, { ...currentRef.current, files: nextFiles });
+      return;
+    }
+
+    setUploadState(
+      selectedFiles.length === 1
+        ? `Uploading ${selectedFiles[0]?.name}…`
+        : `Uploading ${selectedFiles.length} files…`,
+    );
+
+    const uploaded: ActivityAttachmentEntry[] = [];
+    try {
+      for (const file of selectedFiles) {
+        uploaded.push(await onRequestAssetUpload(spec.id, "file_upload", "file", file));
+      }
+
+      const nextFiles = dedupeEntries([...currentRef.current.files, ...uploaded]).slice(
+        0,
+        spec.maxFiles ?? 3,
+      );
+      onChange(spec.id, { ...currentRef.current, files: nextFiles });
+    } catch (uploadError) {
+      for (const entry of uploaded) {
+        if (!isStoredActivityAttachment(entry) || !onRequestAssetDelete) {
+          continue;
+        }
+
+        try {
+          await onRequestAssetDelete(spec.id, "file_upload", "file", entry);
+        } catch {
+          // Best-effort cleanup for partially uploaded batches.
+        }
+      }
+      setError(uploadError instanceof Error ? uploadError.message : "Could not upload the file.");
+    } finally {
+      setUploadState(null);
+    }
   }
 
-  function removeFile(name: string) {
+  function handleFileInput(e: React.ChangeEvent<HTMLInputElement>) {
+    const maxFiles = spec.maxFiles ?? 3;
+    const availableSlots = Math.max(0, maxFiles - currentRef.current.files.length);
+    const selectedFiles = filterSelectableFiles(
+      Array.from(e.target.files ?? []),
+      currentRef.current.files,
+      availableSlots,
+    );
+
+    void uploadFiles(selectedFiles);
+    e.target.value = "";
+  }
+
+  async function removeFile(file: ActivityAttachmentEntry) {
+    setError(null);
+
+    if (isStoredActivityAttachment(file) && onRequestAssetDelete) {
+      setUploadState(`Removing ${file.name}…`);
+      try {
+        await onRequestAssetDelete(spec.id, "file_upload", "file", file);
+      } catch (deleteError) {
+        setError(
+          deleteError instanceof Error ? deleteError.message : "Could not remove the uploaded file.",
+        );
+        setUploadState(null);
+        return;
+      }
+      setUploadState(null);
+    }
+
     onChange(spec.id, {
-      ...current,
-      fileNames: current.fileNames.filter((f) => f !== name),
+      ...currentRef.current,
+      files: currentRef.current.files.filter((entry) => entry.id !== file.id),
     });
   }
 
   return (
     <div className="flex flex-col gap-3">
       <p className="text-sm font-medium leading-relaxed">{spec.prompt}</p>
+      <p className="text-xs text-muted-foreground">
+        Attach up to {spec.maxFiles ?? 3} file{(spec.maxFiles ?? 3) === 1 ? "" : "s"} for this activity attempt.
+      </p>
 
       <label
         className={cn(
@@ -81,24 +277,44 @@ export function FileUploadComponent({
           type="file"
           multiple={(spec.maxFiles ?? 1) > 1}
           accept={spec.accept?.join(",")}
-          disabled={disabled}
+          disabled={disabled || uploadState !== null}
           className="sr-only"
           onChange={handleFileInput}
         />
       </label>
 
-      {current.fileNames.length > 0 && (
+      {uploadState ? (
+        <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" />
+          <span>{uploadState}</span>
+        </div>
+      ) : null}
+
+      {error ? (
+        <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50/70 px-3 py-2 text-sm text-red-800">
+          <AlertCircle className="mt-0.5 size-4 shrink-0" />
+          <span>{error}</span>
+        </div>
+      ) : null}
+
+      {current.files.length > 0 && (
         <div className="flex flex-col gap-1">
-          {current.fileNames.map((name) => (
+          {current.files.map((file) => (
             <div
-              key={name}
+              key={file.id}
               className="flex items-center gap-2 rounded-lg border border-border/60 bg-card/70 px-3 py-2 text-sm"
             >
-              <span className="flex-1 truncate">{name}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-medium">{file.name}</span>
+                {buildMetadataLabel(file) ? (
+                  <span className="block text-xs text-muted-foreground">{buildMetadataLabel(file)}</span>
+                ) : null}
+              </span>
               {!disabled && (
                 <button
                   type="button"
-                  onClick={() => removeFile(name)}
+                  onClick={() => void removeFile(file)}
+                  disabled={uploadState !== null}
                   className="text-muted-foreground hover:text-foreground text-xs"
                 >
                   ✕
@@ -134,17 +350,172 @@ export function ImageCaptureComponent({
   spec,
   value,
   onChange,
+  onRequestAssetUpload,
+  onRequestAssetDelete,
   disabled,
 }: ComponentRendererProps<ImageCaptureSpec>) {
-  type ImageValue = { fileNames: string[]; note?: string };
+  type ImageValue = { images: ActivityAttachmentEntry[] };
   const current: ImageValue =
     value && typeof value === "object" && !Array.isArray(value)
-      ? (value as ImageValue)
-      : { fileNames: [] };
+      ? { images: coerceActivityAttachmentEntries(value, "images", "image") }
+      : { images: [] };
+  const currentRef = React.useRef(current);
+  const previewUrlsRef = React.useRef<Record<string, string>>({});
+  const [previewUrls, setPreviewUrls] = React.useState<Record<string, string>>({});
+  const [uploadState, setUploadState] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    currentRef.current = current;
+  }, [current]);
+
+  React.useEffect(() => {
+    return () => {
+      Object.values(previewUrlsRef.current).forEach((url) => URL.revokeObjectURL(url));
+      previewUrlsRef.current = {};
+    };
+  }, []);
+
+  React.useEffect(() => {
+    const nextIds = new Set(current.images.map((image) => image.id));
+    const removedIds = Object.keys(previewUrlsRef.current).filter((imageId) => !nextIds.has(imageId));
+    if (removedIds.length === 0) {
+      return;
+    }
+
+    for (const imageId of removedIds) {
+      const previewUrl = previewUrlsRef.current[imageId];
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+      delete previewUrlsRef.current[imageId];
+    }
+
+    setPreviewUrls((currentPreviewUrls) => {
+      const next = { ...currentPreviewUrls };
+      for (const imageId of removedIds) {
+        delete next[imageId];
+      }
+      return next;
+    });
+  }, [current.images]);
+
+  async function uploadImages(selectedFiles: File[]) {
+    if (selectedFiles.length === 0) {
+      return;
+    }
+
+    setError(null);
+
+    if (!onRequestAssetUpload) {
+      const nextPreviewUrls: Record<string, string> = {};
+      const images = selectedFiles.map((file) => {
+        const entry = createEvidenceFileEntry(file);
+        const previewUrl = URL.createObjectURL(file);
+        previewUrlsRef.current[entry.id] = previewUrl;
+        nextPreviewUrls[entry.id] = previewUrl;
+        return entry;
+      });
+
+      const nextImages = dedupeEntries([...currentRef.current.images, ...images]).slice(
+        0,
+        spec.maxImages ?? 3,
+      );
+      setPreviewUrls((currentPreviewUrls) => ({
+        ...currentPreviewUrls,
+        ...nextPreviewUrls,
+      }));
+      onChange(spec.id, { images: nextImages });
+      return;
+    }
+
+    setUploadState(
+      selectedFiles.length === 1
+        ? `Uploading ${selectedFiles[0]?.name}…`
+        : `Uploading ${selectedFiles.length} photos…`,
+    );
+
+    const uploaded: ActivityAttachmentEntry[] = [];
+    const nextPreviewUrls: Record<string, string> = {};
+
+    try {
+      for (const file of selectedFiles) {
+        const asset = await onRequestAssetUpload(spec.id, "image_capture", "image", file);
+        const previewUrl = URL.createObjectURL(file);
+        previewUrlsRef.current[asset.id] = previewUrl;
+        nextPreviewUrls[asset.id] = previewUrl;
+        uploaded.push(asset);
+      }
+
+      const nextImages = dedupeEntries([...currentRef.current.images, ...uploaded]).slice(
+        0,
+        spec.maxImages ?? 3,
+      );
+      setPreviewUrls((currentPreviewUrls) => ({
+        ...currentPreviewUrls,
+        ...nextPreviewUrls,
+      }));
+      onChange(spec.id, { images: nextImages });
+    } catch (uploadError) {
+      Object.values(nextPreviewUrls).forEach((previewUrl) => URL.revokeObjectURL(previewUrl));
+      for (const entry of uploaded) {
+        if (!isStoredActivityAttachment(entry) || !onRequestAssetDelete) {
+          continue;
+        }
+
+        try {
+          await onRequestAssetDelete(spec.id, "image_capture", "image", entry);
+        } catch {
+          // Best-effort cleanup for partially uploaded batches.
+        }
+      }
+      setError(uploadError instanceof Error ? uploadError.message : "Could not upload the photo.");
+    } finally {
+      setUploadState(null);
+    }
+  }
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? []).map((f) => f.name);
-    onChange(spec.id, { ...current, fileNames: [...current.fileNames, ...files] });
+    const maxImages = spec.maxImages ?? 3;
+    const availableSlots = Math.max(0, maxImages - currentRef.current.images.length);
+    const selectedFiles = filterSelectableFiles(
+      Array.from(e.target.files ?? []),
+      currentRef.current.images,
+      availableSlots,
+    );
+
+    void uploadImages(selectedFiles);
+    e.target.value = "";
+  }
+
+  async function removeImage(image: ActivityAttachmentEntry) {
+    const previewUrl = previewUrlsRef.current[image.id];
+    setError(null);
+
+    if (isStoredActivityAttachment(image) && onRequestAssetDelete) {
+      setUploadState(`Removing ${image.name}…`);
+      try {
+        await onRequestAssetDelete(spec.id, "image_capture", "image", image);
+      } catch (deleteError) {
+        setError(deleteError instanceof Error ? deleteError.message : "Could not remove the photo.");
+        setUploadState(null);
+        return;
+      }
+      setUploadState(null);
+    }
+
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+      delete previewUrlsRef.current[image.id];
+      setPreviewUrls((currentPreviewUrls) => {
+        const { [image.id]: _removed, ...rest } = currentPreviewUrls;
+        return rest;
+      });
+    }
+
+    onChange(spec.id, {
+      images: currentRef.current.images.filter((entry) => entry.id !== image.id),
+    });
   }
 
   return (
@@ -153,6 +524,9 @@ export function ImageCaptureComponent({
       {spec.instructions && (
         <p className="text-xs text-muted-foreground">{spec.instructions}</p>
       )}
+      <p className="text-xs text-muted-foreground">
+        Capture up to {spec.maxImages ?? 3} photo{(spec.maxImages ?? 3) === 1 ? "" : "s"} for this activity attempt.
+      </p>
 
       <label
         className={cn(
@@ -169,16 +543,68 @@ export function ImageCaptureComponent({
           accept="image/*"
           capture="environment"
           multiple={(spec.maxImages ?? 1) > 1}
-          disabled={disabled}
+          disabled={disabled || uploadState !== null}
           className="sr-only"
           onChange={handleFile}
         />
       </label>
 
-      {current.fileNames.length > 0 && (
-        <p className="text-xs text-muted-foreground">
-          {current.fileNames.length} image(s) captured: {current.fileNames.join(", ")}
-        </p>
+      {uploadState ? (
+        <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" />
+          <span>{uploadState}</span>
+        </div>
+      ) : null}
+
+      {error ? (
+        <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50/70 px-3 py-2 text-sm text-red-800">
+          <AlertCircle className="mt-0.5 size-4 shrink-0" />
+          <span>{error}</span>
+        </div>
+      ) : null}
+
+      {current.images.length > 0 && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {current.images.map((image) => (
+            <div
+              key={image.id}
+              className="overflow-hidden rounded-lg border border-border/60 bg-card/70"
+            >
+              <div className="aspect-[4/3] bg-muted/40">
+                {previewUrls[image.id] ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={previewUrls[image.id]}
+                    alt={image.name}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-full items-center justify-center px-4 text-center text-xs text-muted-foreground">
+                    Preview available on this device for newly captured photos.
+                  </div>
+                )}
+              </div>
+              <div className="flex items-start gap-2 px-3 py-2 text-sm">
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-medium">{image.name}</span>
+                  {buildMetadataLabel(image) ? (
+                    <span className="block text-xs text-muted-foreground">{buildMetadataLabel(image)}</span>
+                  ) : null}
+                </span>
+                {!disabled ? (
+                  <button
+                    type="button"
+                    onClick={() => void removeImage(image)}
+                    disabled={uploadState !== null}
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    Remove
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );

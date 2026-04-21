@@ -426,6 +426,8 @@ export async function generateLessonDraftActivityAction(
   activityState?: DailyWorkspaceActivityState;
   error?: string;
 }> {
+  const routeFingerprint = input.routeFingerprint ?? buildTodaySlotRouteFingerprint(input.slotId);
+
   try {
     const session = await requireAppSession();
     await generateTodayActivity({
@@ -442,14 +444,33 @@ export async function generateLessonDraftActivityAction(
       learnerId: session.activeLearner.id,
       date: input.date,
       sourceId: input.sourceId,
-      routeFingerprint: input.routeFingerprint ?? buildTodaySlotRouteFingerprint(input.slotId),
+      routeFingerprint,
       lessonSessionId: input.lessonSessionId,
     });
 
     return { ok: true, build: status.activityBuild, activityState: status.activityState };
   } catch (err) {
     console.error("[generateLessonDraftActivityAction]", err);
-    return { ok: false, error: err instanceof Error ? err.message : "Generation failed" };
+    try {
+      const session = await requireAppSession();
+      const status = await getTodayBuildStatus({
+        organizationId: session.organization.id,
+        learnerId: session.activeLearner.id,
+        date: input.date,
+        sourceId: input.sourceId,
+        routeFingerprint,
+        lessonSessionId: input.lessonSessionId,
+      });
+
+      return {
+        ok: false,
+        build: status.activityBuild,
+        activityState: status.activityState,
+        error: err instanceof Error ? err.message : "Generation failed",
+      };
+    } catch {
+      return { ok: false, error: err instanceof Error ? err.message : "Generation failed" };
+    }
   }
 }
 

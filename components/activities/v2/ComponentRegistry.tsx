@@ -132,6 +132,8 @@ export interface RenderComponentProps {
   feedback?: ComponentRendererProps<ComponentSpec>["feedback"];
   onRequestFeedback?: ComponentRendererProps<ComponentSpec>["onRequestFeedback"];
   onRequestTransition?: ComponentRendererProps<ComponentSpec>["onRequestTransition"];
+  onRequestAssetUpload?: ComponentRendererProps<ComponentSpec>["onRequestAssetUpload"];
+  onRequestAssetDelete?: ComponentRendererProps<ComponentSpec>["onRequestAssetDelete"];
   disabled?: boolean;
   hintStrategy?: "on_request" | "always" | "after_wrong_attempt";
 }
@@ -143,6 +145,8 @@ export function renderComponent({
   feedback,
   onRequestFeedback,
   onRequestTransition,
+  onRequestAssetUpload,
+  onRequestAssetDelete,
   disabled,
   hintStrategy,
 }: RenderComponentProps): React.ReactElement {
@@ -162,6 +166,8 @@ export function renderComponent({
     feedback,
     onRequestFeedback,
     onRequestTransition,
+    onRequestAssetUpload,
+    onRequestAssetDelete,
     disabled,
     hintStrategy,
   }) ?? (

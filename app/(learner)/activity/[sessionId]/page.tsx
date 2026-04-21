@@ -12,6 +12,11 @@ import { ActivityRenderer } from "@/components/activities/ActivityRenderer";
 import { ActivityStudioPanel } from "@/components/activities/ActivityStudioPanel";
 import { Button } from "@/components/ui/button";
 import { ActivityComponentFeedbackSchema, type ActivityComponentFeedback } from "@/lib/activities/feedback";
+import type {
+  ActivityAssetComponentType,
+  ActivityAssetKind,
+  StoredActivityAttachment,
+} from "@/lib/activities/uploads";
 import type { ActivityAttempt, ActivitySession, AttemptAnswer } from "@/lib/activities/types";
 import { WidgetTransitionArtifactSchema, type WidgetLearnerAction } from "@/lib/activities/widget-transition";
 import type { InteractiveWidgetPayload } from "@/lib/activities/widgets";
@@ -116,6 +121,70 @@ export default function ActivitySessionPage({ params }: Props) {
       setError(err instanceof Error ? err.message : "Submission failed");
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function handleComponentAssetUpload(
+    componentId: string,
+    componentType: ActivityAssetComponentType,
+    kind: ActivityAssetKind,
+    file: File,
+  ): Promise<StoredActivityAttachment> {
+    if (!attempt) {
+      throw new Error("Activity attempt not ready.");
+    }
+
+    const formData = new FormData();
+    formData.set("componentId", componentId);
+    formData.set("componentType", componentType);
+    formData.set("kind", kind);
+    formData.set("file", file);
+
+    const response = await fetch(`/api/activities/attempts/${attempt.id}/assets`, {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null);
+      throw new Error(
+        payload && typeof payload.error === "string"
+          ? payload.error
+          : "Upload failed.",
+      );
+    }
+
+    return response.json();
+  }
+
+  async function handleComponentAssetDelete(
+    componentId: string,
+    componentType: ActivityAssetComponentType,
+    kind: ActivityAssetKind,
+    asset: StoredActivityAttachment,
+  ): Promise<void> {
+    if (!attempt) {
+      throw new Error("Activity attempt not ready.");
+    }
+
+    const response = await fetch(`/api/activities/attempts/${attempt.id}/assets`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        componentId,
+        componentType,
+        kind,
+        asset,
+      }),
+    });
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null);
+      throw new Error(
+        payload && typeof payload.error === "string"
+          ? payload.error
+          : "Could not remove the uploaded file.",
+      );
     }
   }
 
@@ -249,12 +318,14 @@ export default function ActivitySessionPage({ params }: Props) {
           definition={session.definition}
           attempt={attempt}
           estimatedMinutes={session.estimatedMinutes}
-          onAnswerChange={handleAnswerChange}
-          onComponentFeedbackRequest={handleComponentFeedback}
-          onComponentTransitionRequest={handleComponentTransition}
-          onSubmit={handleSubmit}
-          submitting={submitting}
-          submitted={submitted}
+              onAnswerChange={handleAnswerChange}
+              onComponentFeedbackRequest={handleComponentFeedback}
+              onComponentTransitionRequest={handleComponentTransition}
+              onComponentAssetUploadRequest={handleComponentAssetUpload}
+              onComponentAssetDeleteRequest={handleComponentAssetDelete}
+              onSubmit={handleSubmit}
+              submitting={submitting}
+              submitted={submitted}
         />
 
         <ActivityStudioPanel

@@ -73,6 +73,12 @@ export function LessonDraftActivityControl({
       setPendingTrigger(null);
 
       if (!result.ok) {
+        if (result.build || result.activityState) {
+          onActivityPatch({
+            activityBuild: result.build ?? buildState ?? null,
+            activityState: result.activityState ?? activityState,
+          });
+        }
         if (autoBuildLockKey) {
           releaseAutoBuildLock("today-activity-auto", autoBuildLockKey);
         }
@@ -112,6 +118,7 @@ export function LessonDraftActivityControl({
     !isBuildingActivity &&
     (buildFailed || localStatus === null || localStatus === "no_activity" || localStatus === "stale");
   const openSessionId = localSessionId ?? activityState?.sessionId ?? sessionId;
+  const failureMessage = error ?? buildState?.error ?? null;
   const actionLabel = isPending
     ? buildFailed
       ? "Retrying…"
@@ -163,6 +170,19 @@ export function LessonDraftActivityControl({
         </div>
       ) : null}
 
+      {failureMessage && !isBuildingActivity ? (
+        <div className="flex items-start gap-2 rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />
+          <div className="space-y-1">
+            <p className="font-medium text-foreground">Activity build needs attention</p>
+            <p className="text-xs text-muted-foreground">{failureMessage}</p>
+            <p className="text-xs text-muted-foreground">
+              You can keep teaching from the lesson draft while you retry the activity build.
+            </p>
+          </div>
+        </div>
+      ) : null}
+
       <div className="grid gap-2 sm:flex sm:flex-wrap sm:items-center">
         {openSessionId && hasActivity ? (
           <Link
@@ -192,13 +212,6 @@ export function LessonDraftActivityControl({
             {actionLabel}
           </Button>
         ) : null}
-
-        {buildFailed && !error ? (
-          <p className="text-xs text-destructive">
-            {buildState?.error ?? "Activity generation did not finish. Retry to build it again."}
-          </p>
-        ) : null}
-        {error ? <p className="text-xs text-destructive">{error}</p> : null}
       </div>
     </div>
   );
