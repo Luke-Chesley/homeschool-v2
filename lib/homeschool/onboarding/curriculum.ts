@@ -1,7 +1,10 @@
 import "@/lib/server-only";
 
 import type { CurriculumSourceModel } from "@/lib/curriculum/types";
-import { importStructuredCurriculumDocument } from "@/lib/curriculum/service";
+import {
+  applyCurriculumArtifactToCurriculumSource,
+  importStructuredCurriculumDocument,
+} from "@/lib/curriculum/service";
 import type { ImportedCurriculumDocument } from "@/lib/curriculum/local-json-import";
 import {
   generateCurriculumLaunchPlan,
@@ -277,6 +280,89 @@ export async function createCurriculumFromSourceEntry(params: {
 
   return {
     curriculum: imported.curriculum,
+    artifact: generation.artifact,
+    lineage: generation.lineage,
+    launchPlan: planningArtifacts.launchPlan,
+    skillCount: imported.skillCount,
+  };
+}
+
+export async function applyCurriculumSourceEntryToExistingSource(params: {
+  sourceId: string;
+  organizationId: string;
+  learnerId?: string | null;
+  learnerName: string;
+  titleCandidate?: string | null;
+  requestedRoute: "single_lesson" | "weekly_plan" | "outline" | "topic" | "manual_shell";
+  routedRoute: "single_lesson" | "weekly_plan" | "outline" | "topic" | "manual_shell";
+  sourceKind:
+    | "bounded_material"
+    | "timeboxed_plan"
+    | "structured_sequence"
+    | "comprehensive_source"
+    | "topic_seed"
+    | "shell_request"
+    | "ambiguous";
+  entryStrategy:
+    | "use_as_is"
+    | "explicit_range"
+    | "sequential_start"
+    | "section_start"
+    | "timebox_start"
+    | "scaffold_only";
+  entryLabel?: string | null;
+  continuationMode: "none" | "sequential" | "timebox" | "manual_review";
+  deliveryPattern: "task_first" | "skill_first" | "concept_first" | "timeboxed" | "mixed";
+  recommendedHorizon: "single_day" | "few_days" | "one_week" | "two_weeks" | "starter_module";
+  sourceText: string;
+  sourcePackages?: IntakeSourcePackageContext[];
+  sourceFiles?: LearningCoreInputFile[];
+  detectedChunks?: string[];
+  assumptions?: string[];
+  surface?: string;
+  workflowMode?: string | null;
+}) {
+  const generation = await executeCurriculumGenerate({
+    input: {
+      learnerName: params.learnerName,
+      titleCandidate: params.titleCandidate ?? null,
+      requestMode: "source_entry",
+      requestedRoute: params.requestedRoute,
+      routedRoute: params.routedRoute,
+      sourceKind: params.sourceKind,
+      entryStrategy: params.entryStrategy,
+      entryLabel: params.entryLabel ?? null,
+      continuationMode: params.continuationMode,
+      deliveryPattern: params.deliveryPattern,
+      recommendedHorizon: params.recommendedHorizon,
+      sourceText: params.sourceText,
+      sourcePackages: params.sourcePackages ?? [],
+      sourceFiles: params.sourceFiles ?? [],
+      detectedChunks: params.detectedChunks ?? [],
+      assumptions: params.assumptions ?? [],
+    },
+    surface: params.surface ?? "curriculum",
+    organizationId: params.organizationId,
+    learnerId: params.learnerId ?? null,
+    workflowMode: params.workflowMode ?? null,
+  });
+
+  const imported = await applyCurriculumArtifactToCurriculumSource({
+    sourceId: params.sourceId,
+    householdId: params.organizationId,
+    artifact: generation.artifact,
+  });
+
+  const planningArtifacts = await generatePostImportPlanningArtifacts({
+    organizationId: params.organizationId,
+    learnerId: params.learnerId ?? null,
+    learnerName: params.learnerName,
+    curriculumSourceId: imported.sourceId,
+    chosenHorizon: params.recommendedHorizon,
+  });
+
+  return {
+    curriculum: imported,
     artifact: generation.artifact,
     lineage: generation.lineage,
     launchPlan: planningArtifacts.launchPlan,

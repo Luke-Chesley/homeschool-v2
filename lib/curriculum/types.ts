@@ -199,6 +199,11 @@ export const CurriculumSourceSchema = z.object({
   importVersion: z.number().int().positive().default(1),
   /** Pacing contract from curriculum generation. Use this as the session budget source. */
   pacing: CurriculumSourcePacingSchema.optional(),
+  intakeSummary: z.string().optional(),
+  teachingApproach: z.string().optional(),
+  successSignals: z.array(z.string()).optional(),
+  parentNotes: z.array(z.string()).optional(),
+  rationale: z.array(z.string()).optional(),
   intake: CurriculumSourceIntakeSchema.optional(),
   sourceModel: CurriculumSourceModelSchema.optional(),
   launchPlan: CurriculumLaunchPlanSchema.optional(),

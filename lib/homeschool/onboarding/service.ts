@@ -5,7 +5,7 @@ import { z } from "zod";
 
 import { homeschoolTemplate } from "@/config/templates/homeschool";
 import { ensureComplianceProgramForLearner } from "@/lib/compliance/service";
-import { setLiveCurriculumSource } from "@/lib/curriculum/service";
+import { createCurriculumSource, setLiveCurriculumSource } from "@/lib/curriculum/service";
 import { getDb } from "@/lib/db/server";
 import {
   curriculumSources,
@@ -31,6 +31,7 @@ import {
   type OnboardingMilestone,
 } from "@/lib/homeschool/onboarding/activation-contracts";
 import {
+  applyCurriculumSourceEntryToExistingSource,
   buildPersistedSourceModel,
   createCurriculumFromConversationIntake,
   createCurriculumFromSourceEntry,
@@ -47,7 +48,11 @@ import {
   getNormalizedIntakeSourcePackages,
   toIntakeSourcePackageContext,
 } from "@/lib/homeschool/intake/service";
-import type { IntakeSourcePackageModality } from "@/lib/homeschool/intake/types";
+import type {
+  IntakeSourcePackageContext,
+  IntakeSourcePackageModality,
+  LearningCoreInputFile,
+} from "@/lib/homeschool/intake/types";
 import { executeSourceInterpret } from "@/lib/learning-core/source-interpret";
 import { trackProductEvent } from "@/lib/platform/observability";
 
@@ -57,6 +62,7 @@ import {
 import type {
   FastPathIntakeRoute,
   HomeschoolFastPathOnboardingInput,
+  HomeschoolFastPathPreview,
   HomeschoolOnboardingInput,
   HomeschoolOnboardingStatus,
 } from "@/lib/homeschool/onboarding/types";
@@ -202,6 +208,15 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+function optionalNonEmptyString(value: string | null | undefined) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 function splitDisplayName(displayName: string) {
   const parts = displayName.trim().split(/\s+/).filter(Boolean);
   const [firstName = displayName.trim(), ...rest] = parts;
@@ -336,9 +351,27 @@ export async function getHomeschoolOnboardingStatus(organizationId: string) {
   return { isComplete, completedAt, milestones, currentMilestone } satisfies HomeschoolOnboardingStatus;
 }
 
-export async function createHomeschoolCurriculumFromIntake(
+type StartedHomeschoolCurriculumIntakeGeneration = {
+  sourceId: string;
+  sourceTitle: string;
+  redirectTo: string;
+  backgroundTask: {
+    sourceId: string;
+    organizationId: string;
+    learnerId: string;
+    learnerName: string;
+    curriculumMode: HomeschoolCurriculumIntakePayload["curriculumMode"];
+    normalizedSubjects: string[];
+    preview: HomeschoolFastPathPreview;
+    sourceText: string;
+    sourcePackages: IntakeSourcePackageContext[];
+    sourceFiles: LearningCoreInputFile[];
+  };
+};
+
+export async function startHomeschoolCurriculumIntakeGeneration(
   rawInput: z.infer<typeof HomeschoolCurriculumIntakeSchema>,
-) {
+): Promise<StartedHomeschoolCurriculumIntakeGeneration> {
   const input = HomeschoolCurriculumIntakeSchema.parse(rawInput);
   const normalizedSubjects = normalizeSubjects(input.subjects);
   const learner = {
@@ -350,65 +383,281 @@ export async function createHomeschoolCurriculumFromIntake(
     status: "active" as const,
   };
 
-  const curriculumInput: HomeschoolOnboardingInput = {
-    organizationId: input.organizationId,
-    householdName: "Homeschool",
-    preferredSchoolDays: [...homeschoolTemplate.defaults.schoolDays],
-    dailyTimeBudgetMinutes: homeschoolTemplate.defaults.dailyTimeBudgetMinutes,
-    subjects: normalizedSubjects,
-    learners: [
-      {
-        displayName: input.learnerName,
-      },
-    ],
-    curriculumMode: input.curriculumMode,
-    curriculumTitle: input.curriculumTitle,
-    curriculumSummary: input.curriculumSummary,
-    curriculumText: input.curriculumText,
+  const resolvedSource = await resolveFastPathSource({
+    sourceInput: input.curriculumText,
     sourcePackageIds: input.sourcePackageIds,
-    schoolYearLabel: input.schoolYearLabel,
-    teachingStyle: input.teachingStyle,
-    curriculumSourceMetadata:
-      input.sourcePackageIds.length > 0
-        ? {
-            createdFrom: "curriculum_add_flow",
-            sourcePackageIds: input.sourcePackageIds,
-          }
-        : undefined,
+  });
+  const sourceFiles = await createLearningCoreInputFilesFromSourcePackages(
+    resolvedSource.sourcePackages,
+  );
+  const requestedRoute = requestedRouteForCurriculumMode(input.curriculumMode);
+  const sourceInterpretResult = await executeSourceInterpret({
+    input: {
+      learnerName: learner.displayName,
+      requestedRoute,
+      inputModalities: resolvedSource.sourceModalities,
+      rawText: resolvedSource.rawSourceInput ?? resolvedSource.sourceInput,
+      extractedText: resolvedSource.sourceInput,
+      extractedStructure:
+        resolvedSource.sourcePackageContexts.length > 0
+          ? {
+              sourceCount: resolvedSource.sourcePackageContexts.length,
+              packages: resolvedSource.sourcePackageContexts,
+              detectedChunks: resolvedSource.sourcePackageContexts.flatMap(
+                (sourcePackage) => sourcePackage.detectedChunks,
+              ),
+            }
+          : {
+              detectedChunks: extractDetectedChunks(resolvedSource.sourceInput),
+            },
+      assetRefs: resolvedSource.assetIds,
+      sourcePackages: resolvedSource.sourcePackageContexts,
+      sourceFiles,
+      titleCandidate: input.curriculumTitle,
+    },
+    surface: "curriculum",
+    organizationId: input.organizationId,
+    learnerId: learner.id,
+    workflowMode: "curriculum_creation",
+  });
+  const preview = buildFastPathPreview({
+    learnerName: learner.displayName,
+    intakeRoute: requestedRoute,
+    intakeRouteExplicit: true,
+    sourceInput: resolvedSource.sourceInput,
+    sourcePackages: resolvedSource.sourcePackageContexts,
+    interpretation: sourceInterpretResult.artifact,
+  });
+  const intakeMetadata = {
+    route: requestedRoute,
+    requestedRoute,
+    routeVersion: 1 as const,
+    rawText: resolvedSource.sourceInput,
+    assetIds: resolvedSource.assetIds,
+    learnerId: learner.id,
+    sourcePackageIds: resolvedSource.sourcePackageIds,
+    sourcePackages: resolvedSource.sourcePackageContexts,
+    sourceModalities: resolvedSource.sourceModalities,
+    sourcePackageId: resolvedSource.sourcePackage?.id ?? null,
+    sourceModality: resolvedSource.sourcePackage?.modality ?? "text",
+    createdFrom: "curriculum_add_flow" as const,
   };
 
-  const curriculum = await initializeCurriculum(curriculumInput, {
-    id: learner.id,
-    organizationId: learner.organizationId,
-    firstName: learner.firstName,
-    lastName: learner.lastName,
-    displayName: learner.displayName,
-    timezone: "America/Los_Angeles",
-    status: learner.status,
-    dateOfBirth: null,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    metadata: {},
+  await trackProductEvent({
+    name: ACTIVATION_EVENT_NAMES.sourceInterpreted,
+    organizationId: input.organizationId,
+    learnerId: learner.id,
+    metadata: {
+      requestedRoute,
+      sourceKind: sourceInterpretResult.artifact.sourceKind,
+      entryStrategy: sourceInterpretResult.artifact.entryStrategy,
+      entryLabel: sourceInterpretResult.artifact.entryLabel ?? null,
+      continuationMode: sourceInterpretResult.artifact.continuationMode,
+      confidence: sourceInterpretResult.artifact.confidence,
+      recommendedHorizon: sourceInterpretResult.artifact.recommendedHorizon,
+      needsConfirmation: sourceInterpretResult.artifact.needsConfirmation,
+    },
   });
 
-  const sourceId = curriculum.curriculum.id;
-  await setLiveCurriculumSource(input.organizationId, sourceId);
-  await recordHomeschoolAuditEvent({
-    organizationId: input.organizationId,
-    learnerId: input.learnerId,
-    entityType: "curriculum",
-    entityId: sourceId,
-    eventType: "curriculum.created",
-    summary: `Created curriculum "${input.curriculumTitle}" via ${input.curriculumMode}.`,
-    metadata: {
-      curriculumMode: input.curriculumMode,
+  const placeholderSource = await createCurriculumSource(
+    {
+      householdId: input.organizationId,
+      title: preview.title,
+      description: input.curriculumSummary || preview.scopeSummary || undefined,
+      kind: "ai_draft",
+      academicYear: input.schoolYearLabel,
       subjects: normalizedSubjects,
+      gradeLevels: [],
+      pacing: undefined,
+      intake: intakeMetadata,
+      sourceModel: buildPersistedSourceModel({
+        requestedRoute,
+        routedRoute: preview.intakeRoute,
+        confidence: sourceInterpretResult.artifact.confidence,
+        sourceKind: sourceInterpretResult.artifact.sourceKind,
+        entryStrategy: sourceInterpretResult.artifact.entryStrategy,
+        entryLabel: sourceInterpretResult.artifact.entryLabel ?? null,
+        continuationMode: sourceInterpretResult.artifact.continuationMode,
+        deliveryPattern: sourceInterpretResult.artifact.deliveryPattern,
+        recommendedHorizon: sourceInterpretResult.artifact.recommendedHorizon,
+        assumptions: sourceInterpretResult.artifact.assumptions,
+        detectedChunks: sourceInterpretResult.artifact.detectedChunks,
+        followUpQuestion: sourceInterpretResult.artifact.followUpQuestion ?? null,
+        needsConfirmation: sourceInterpretResult.artifact.needsConfirmation,
+        sourcePackages: resolvedSource.sourcePackageContexts,
+        sourcePackageIds: resolvedSource.sourcePackageIds,
+        sourcePackageId: resolvedSource.sourcePackage?.id ?? null,
+        sourceModalities: resolvedSource.sourceModalities,
+        sourceModality: resolvedSource.sourcePackage?.modality ?? "text",
+        lineage: sourceInterpretResult.lineage,
+      }),
+      launchPlan: {
+        chosenHorizon: preview.launchPlan.chosenHorizon,
+        scopeSummary: preview.launchPlan.scopeSummary ?? preview.scopeSummary,
+        initialSliceUsed: preview.launchPlan.initialSliceUsed,
+        initialSliceLabel: preview.launchPlan.initialSliceLabel ?? null,
+        openingUnitRefs: preview.launchPlan.openingUnitRefs ?? [],
+        openingSkillNodeIds: preview.launchPlan.openingSkillNodeIds ?? [],
+      },
+      curriculumLineage: {
+        requestMode: "source_entry",
+        sourceInterpret: sourceInterpretResult.lineage,
+        curriculumGenerate: null,
+      },
+    },
+    {
+      status: "draft",
+      metadata: {
+        generationState: {
+          state: "pending",
+          startedAt: new Date().toISOString(),
+        },
+      },
+    },
+  );
+
+  await trackProductEvent({
+    name: ACTIVATION_EVENT_NAMES.generationStarted,
+    organizationId: input.organizationId,
+    learnerId: learner.id,
+    metadata: {
+      sourceId: placeholderSource.id,
+      requestedRoute,
+      routedRoute: preview.intakeRoute,
+      sourceKind: preview.sourceKind,
+      chosenHorizon: preview.chosenHorizon,
+      curriculumMode: input.curriculumMode,
     },
   });
 
   return {
-    sourceId,
+    sourceId: placeholderSource.id,
+    sourceTitle: placeholderSource.title,
+    redirectTo: `/curriculum?pendingSourceId=${placeholderSource.id}`,
+    backgroundTask: {
+      sourceId: placeholderSource.id,
+      organizationId: input.organizationId,
+      learnerId: learner.id,
+      learnerName: learner.displayName,
+      curriculumMode: input.curriculumMode,
+      normalizedSubjects,
+      preview,
+      sourceText: resolvedSource.sourceInput,
+      sourcePackages: resolvedSource.sourcePackageContexts,
+      sourceFiles,
+    },
   };
+}
+
+export async function finishHomeschoolCurriculumIntakeGeneration(
+  task: StartedHomeschoolCurriculumIntakeGeneration["backgroundTask"],
+) {
+  try {
+    const generation = await applyCurriculumSourceEntryToExistingSource({
+      sourceId: task.sourceId,
+      organizationId: task.organizationId,
+      learnerId: task.learnerId,
+      learnerName: task.learnerName,
+      titleCandidate: task.preview.title,
+      requestedRoute: task.preview.requestedRoute,
+      routedRoute: task.preview.intakeRoute,
+      sourceKind: task.preview.sourceKind,
+      entryStrategy: task.preview.entryStrategy,
+      entryLabel: task.preview.entryLabel ?? null,
+      continuationMode: task.preview.continuationMode,
+      deliveryPattern: task.preview.deliveryPattern,
+      recommendedHorizon: task.preview.chosenHorizon,
+      sourceText: task.sourceText,
+      sourcePackages: task.sourcePackages,
+      sourceFiles: task.sourceFiles,
+      detectedChunks: task.preview.detectedChunks,
+      assumptions: task.preview.assumptions,
+      surface: "curriculum",
+      workflowMode: "curriculum_creation",
+    });
+
+    const existingSource = await getDb().query.curriculumSources.findFirst({
+      where: eq(curriculumSources.id, task.sourceId),
+    });
+    if (existingSource) {
+      const existingMetadata = asRecord(existingSource.metadata);
+      const existingLineage = asRecord(existingMetadata.curriculumLineage);
+      await getDb()
+        .update(curriculumSources)
+        .set({
+          metadata: {
+            ...existingMetadata,
+            curriculumLineage: {
+              ...existingLineage,
+              requestMode: "source_entry",
+              curriculumGenerate: generation.lineage,
+            },
+            generationState: {
+              state: "completed",
+              completedAt: new Date().toISOString(),
+            },
+          },
+          updatedAt: new Date(),
+        })
+        .where(eq(curriculumSources.id, task.sourceId));
+    }
+
+    await setLiveCurriculumSource(task.organizationId, task.sourceId);
+    await recordHomeschoolAuditEvent({
+      organizationId: task.organizationId,
+      learnerId: task.learnerId,
+      entityType: "curriculum",
+      entityId: task.sourceId,
+      eventType: "curriculum.created",
+      summary: `Created curriculum "${task.preview.title}" via ${task.curriculumMode}.`,
+      metadata: {
+        curriculumMode: task.curriculumMode,
+        subjects: task.normalizedSubjects,
+      },
+    });
+    await trackProductEvent({
+      name: ACTIVATION_EVENT_NAMES.generationCompleted,
+      organizationId: task.organizationId,
+      learnerId: task.learnerId,
+      metadata: {
+        sourceId: task.sourceId,
+        curriculumMode: task.curriculumMode,
+      },
+    });
+    await trackProductEvent({
+      name: ACTIVATION_EVENT_NAMES.curriculumSourceAdded,
+      organizationId: task.organizationId,
+      learnerId: task.learnerId,
+      metadata: {
+        sourceId: task.sourceId,
+        kind: "ai_draft",
+        intakeMode: task.curriculumMode,
+      },
+    });
+  } catch (error) {
+    const existingSource = await getDb().query.curriculumSources.findFirst({
+      where: eq(curriculumSources.id, task.sourceId),
+    });
+    if (existingSource) {
+      const existingMetadata = asRecord(existingSource.metadata);
+      await getDb()
+        .update(curriculumSources)
+        .set({
+          status: "failed_import",
+          metadata: {
+            ...existingMetadata,
+            generationState: {
+              state: "failed",
+              failedAt: new Date().toISOString(),
+              errorMessage: error instanceof Error ? error.message : "Curriculum generation failed.",
+            },
+          },
+          updatedAt: new Date(),
+        })
+        .where(eq(curriculumSources.id, task.sourceId));
+    }
+    throw error;
+  }
 }
 
 async function persistHomeschoolSetupBase(input: HomeschoolOnboardingPayload) {
@@ -428,6 +677,9 @@ async function persistHomeschoolSetupBase(input: HomeschoolOnboardingPayload) {
 
   const existingMetadata = asRecord(organization.metadata);
   const homeschoolMetadata = asRecord(existingMetadata.homeschool);
+  const schoolYearLabel = optionalNonEmptyString(input.schoolYearLabel);
+  const termStartDate = optionalNonEmptyString(input.termStartDate);
+  const termEndDate = optionalNonEmptyString(input.termEndDate);
 
   await db
     .update(organizations)
@@ -446,9 +698,9 @@ async function persistHomeschoolSetupBase(input: HomeschoolOnboardingPayload) {
             completedAt: null,
             milestones: ["fast_path_started", "household_defaults_completed"],
             currentMilestone: "household_defaults_completed",
-            schoolYearLabel: input.schoolYearLabel ?? null,
-            termStartDate: input.termStartDate ?? null,
-            termEndDate: input.termEndDate ?? null,
+            schoolYearLabel,
+            termStartDate,
+            termEndDate,
             subjects: normalizeSubjects(input.subjects),
             teachingStyle: input.teachingStyle ?? null,
           },
@@ -485,9 +737,9 @@ async function persistHomeschoolSetupBase(input: HomeschoolOnboardingPayload) {
   }
 
   const createdLearners = await upsertLearnersForOnboarding(input.organizationId, input.learners, {
-    schoolYearLabel: input.schoolYearLabel ?? null,
-    startDate: input.termStartDate ?? null,
-    endDate: input.termEndDate ?? null,
+    schoolYearLabel,
+    startDate: termStartDate,
+    endDate: termEndDate,
   });
   const primaryLearner = createdLearners[0];
 

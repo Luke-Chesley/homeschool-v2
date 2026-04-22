@@ -17,7 +17,7 @@ import type {
   ActivityAssetKind,
   StoredActivityAttachment,
 } from "@/lib/activities/uploads";
-import type { ActivityAttempt, ActivitySession, AttemptAnswer } from "@/lib/activities/types";
+import type { ActivityAttempt, ActivitySession, ActivitySubmitResponse, AttemptAnswer } from "@/lib/activities/types";
 import { WidgetTransitionArtifactSchema, type WidgetLearnerAction } from "@/lib/activities/widget-transition";
 import type { InteractiveWidgetPayload } from "@/lib/activities/widgets";
 
@@ -79,7 +79,9 @@ export default function ActivitySessionPage({ params }: Props) {
         const attemptData: ActivityAttempt = await attemptRes.json();
         setAttempt(attemptData);
 
-        if (attemptData.status === "submitted") setSubmitted(true);
+        if (attemptData.status === "submitted" || attemptData.status === "graded") {
+          setSubmitted(true);
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load activity");
       } finally {
@@ -116,7 +118,9 @@ export default function ActivitySessionPage({ params }: Props) {
         method: "POST",
       });
       if (!res.ok) throw new Error("Submit failed");
-      setSubmitted(true);
+      const payload: ActivitySubmitResponse = await res.json();
+      setAttempt(payload.attempt);
+      setSubmitted(payload.attempt.status === "submitted" || payload.attempt.status === "graded");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Submission failed");
     } finally {

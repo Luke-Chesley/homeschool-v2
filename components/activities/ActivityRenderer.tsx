@@ -98,6 +98,7 @@ export function ActivityRenderer({
       <ActivitySpecRenderer
         spec={spec}
         initialEvidence={initialEvidence}
+        initialFeedbackByComponent={attempt?.componentFeedback}
         estimatedMinutes={estimatedMinutes}
         onEvidenceChange={(evidence) => {
           // Serialize evidence as answers array for backward-compat autosave

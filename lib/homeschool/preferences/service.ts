@@ -14,6 +14,15 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+function optionalNonEmptyString(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 export type HomeschoolHouseholdPreferences = {
   householdName: string;
   schoolYearLabel: string | null;
@@ -53,12 +62,9 @@ export async function getHomeschoolHouseholdPreferences(organizationId: string):
 
   return {
     householdName: organization?.name ?? "Homeschool",
-    schoolYearLabel:
-      typeof onboarding.schoolYearLabel === "string" ? onboarding.schoolYearLabel : null,
-    termStartDate:
-      typeof onboarding.termStartDate === "string" ? onboarding.termStartDate : null,
-    termEndDate:
-      typeof onboarding.termEndDate === "string" ? onboarding.termEndDate : null,
+    schoolYearLabel: optionalNonEmptyString(onboarding.schoolYearLabel),
+    termStartDate: optionalNonEmptyString(onboarding.termStartDate),
+    termEndDate: optionalNonEmptyString(onboarding.termEndDate),
     preferredSchoolDays: Array.isArray(scheduler.preferredSchoolDays)
       ? scheduler.preferredSchoolDays.filter((value): value is number => Number.isInteger(value))
       : [...homeschoolTemplate.defaults.schoolDays],
@@ -70,13 +76,9 @@ export async function getHomeschoolHouseholdPreferences(organizationId: string):
       ? onboarding.subjects.filter((value): value is string => typeof value === "string")
       : [],
     standardsPreference:
-      typeof reportDefaults.standardsPreference === "string"
-        ? reportDefaults.standardsPreference
-        : typeof settingsMetadata.standardsPreference === "string"
-          ? settingsMetadata.standardsPreference
-          : null,
-    teachingStyle:
-      typeof onboarding.teachingStyle === "string" ? onboarding.teachingStyle : null,
+      optionalNonEmptyString(reportDefaults.standardsPreference) ??
+      optionalNonEmptyString(settingsMetadata.standardsPreference),
+    teachingStyle: optionalNonEmptyString(onboarding.teachingStyle),
   };
 }
 

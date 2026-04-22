@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   CurriculumGenerateInputSchema,
+  CurriculumRevisionInputSchema,
   CurriculumGenerateSourceEntryInputSchema,
 } from "@/lib/learning-core/curriculum";
 
@@ -86,4 +87,51 @@ test("CurriculumGenerateSourceEntryInputSchema requires non-empty sourceText", (
   });
 
   assert.equal(parsed.success, false);
+});
+
+test("CurriculumRevisionInputSchema accepts a full curriculum artifact snapshot", () => {
+  const parsed = CurriculumRevisionInputSchema.parse({
+    learnerName: "Maya",
+    currentCurriculum: {
+      source: {
+        title: "Fractions",
+        description: "An introductory fractions curriculum.",
+        subjects: ["Mathematics"],
+        gradeLevels: ["Elementary"],
+        summary: "A teachable fractions sequence.",
+        teachingApproach: "Use visual models and guided practice.",
+        successSignals: ["Can compare halves and quarters."],
+        parentNotes: [],
+        rationale: ["Keep the structure teachable."],
+      },
+      intakeSummary: "Parent wants a bounded fractions start.",
+      pacing: {
+        coverageStrategy: "Move through one unit in order.",
+        coverageNotes: [],
+      },
+      document: {
+        Math: {
+          Fractions: {
+            "Core concepts": ["Identify fractions", "Compare fractions"],
+          },
+        },
+      },
+      units: [
+        {
+          unitRef: "unit-fractions",
+          title: "Fractions foundations",
+          description: "Learn what fractions mean.",
+          skillRefs: [
+            "skill:math/fractions/core-concepts/identify-fractions",
+            "skill:math/fractions/core-concepts/compare-fractions",
+          ],
+        },
+      ],
+    },
+    currentRequest: "Rename the first unit to Fraction Basics",
+    messages: [{ role: "user", content: "Rename the first unit to Fraction Basics" }],
+  });
+
+  assert.equal(parsed.learnerName, "Maya");
+  assert.equal(parsed.currentCurriculum?.units.length, 1);
 });

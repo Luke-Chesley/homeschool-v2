@@ -4,9 +4,10 @@ import type { ActivityComponentFeedback, RequestActivityComponentFeedback } from
 import type { RequestActivityComponentTransition } from "./widget-transition";
 import { getAttemptStore } from "./attempt-store";
 import { collectUploadedActivityAssets } from "./uploads";
-import type { ActivityAttempt, ActivityOutcome, ActivitySession, AttemptAnswer } from "./types";
+import type { ActivityAttempt, ActivityOutcome, ActivitySession, ActivitySubmitResponse, AttemptAnswer } from "./types";
 import { parseActivityDefinition } from "./types";
 import { parseActivitySpec, isActivitySpec, ActivitySpecSchema } from "./spec";
+import { isInteractiveComponentSpec, type ComponentSpec } from "./components";
 import { ensurePublishedActivitiesForLearner } from "./assignment-service";
 import { requestLearningCoreActivityFeedback } from "@/lib/learning-core/activity-feedback";
 import { requestLearningCoreWidgetTransition } from "@/lib/learning-core/widget-transition";
@@ -18,6 +19,7 @@ import {
 import { createRepositories } from "@/lib/db";
 import { LOCAL_DEMO_LEARNER_ID, ensureLocalDemoData } from "@/lib/db/fixtures/local-demo-persistence";
 import { getDb } from "@/lib/db/server";
+import { InteractiveWidgetPayloadSchema } from "./widgets";
 
 function getActivitiesRepo() {
   return createRepositories(getDb()).activities;
@@ -241,6 +243,194 @@ function buildRecommendationSummary(params: {
   }
 }
 
+const SUBMIT_FEEDBACK_COMPONENT_TYPES = new Set<ComponentSpec["type"]>([
+  "short_answer",
+  "text_response",
+  "rich_text_response",
+  "single_select",
+  "multi_select",
+  "ordered_sequence",
+  "matching_pairs",
+  "categorization",
+  "sort_into_groups",
+  "label_map",
+  "hotspot_select",
+  "build_steps",
+  "drag_arrange",
+  "compare_and_explain",
+  "choose_next_step",
+  "construction_space",
+  "interactive_widget",
+]);
+
+function shouldEvaluateFeedbackOnSubmit(session: ActivitySession) {
+  if (!isActivitySpec(session.definition)) {
+    return false;
+  }
+
+  const spec = parseActivitySpec(session.definition);
+  if (!spec) {
+    return false;
+  }
+
+  return spec.evidenceSchema.autoScorable || spec.scoringModel.mode === "correctness_based";
+}
+
+function hasMeaningfulLearnerResponse(value: unknown) {
+  if (value == null) {
+    return false;
+  }
+
+  if (typeof value === "string") {
+    return value.trim().length > 0;
+  }
+
+  if (Array.isArray(value)) {
+    return value.length > 0;
+  }
+
+  if (typeof value === "object") {
+    return Object.keys(value as Record<string, unknown>).length > 0;
+  }
+
+  return true;
+}
+
+function shouldEvaluateComponentOnSubmit(component: ComponentSpec) {
+  return isInteractiveComponentSpec(component) && SUBMIT_FEEDBACK_COMPONENT_TYPES.has(component.type);
+}
+
+function resolveWidgetForFeedback(component: ComponentSpec, learnerResponse: unknown) {
+  if (component.type !== "interactive_widget") {
+    return undefined;
+  }
+
+  if (learnerResponse && typeof learnerResponse === "object" && !Array.isArray(learnerResponse)) {
+    const parsed = InteractiveWidgetPayloadSchema.safeParse(
+      (learnerResponse as Record<string, unknown>).canonicalWidget,
+    );
+    if (parsed.success) {
+      return parsed.data;
+    }
+  }
+
+  return component.widget;
+}
+
+function answerScoreFromFeedback(feedback: ActivityComponentFeedback) {
+  if (typeof feedback.scoring?.score === "number") {
+    return feedback.scoring.score;
+  }
+
+  if (feedback.status === "correct") {
+    return 1;
+  }
+
+  if (feedback.status === "incorrect") {
+    return 0;
+  }
+
+  return undefined;
+}
+
+function answerCorrectnessFromFeedback(feedback: ActivityComponentFeedback) {
+  if (feedback.status === "correct") {
+    return true;
+  }
+
+  if (feedback.status === "incorrect") {
+    return false;
+  }
+
+  return undefined;
+}
+
+async function evaluateAttemptFeedbackForSubmit(
+  attempt: ActivityAttempt,
+  session: ActivitySession,
+): Promise<ActivityAttempt> {
+  if (!shouldEvaluateFeedbackOnSubmit(session)) {
+    return attempt;
+  }
+
+  const spec = parseActivitySpec(session.definition);
+  if (!spec) {
+    return attempt;
+  }
+
+  const evidence = isRecord(attempt.uiState)
+    ? attempt.uiState
+    : Object.fromEntries(attempt.answers.map((answer) => [answer.questionId, answer.value]));
+  const answersById = new Map(attempt.answers.map((answer) => [answer.questionId, answer]));
+  const nextComponentFeedback: Record<string, ActivityComponentFeedback> = {
+    ...(attempt.componentFeedback ?? {}),
+  };
+
+  const componentsToEvaluate = spec.components.filter(
+    (component) =>
+      shouldEvaluateComponentOnSubmit(component) &&
+      hasMeaningfulLearnerResponse(evidence[component.id]),
+  );
+
+  if (componentsToEvaluate.length === 0) {
+    return attempt;
+  }
+
+  let didPersistAnyFeedback = false;
+
+  for (const component of componentsToEvaluate) {
+    const learnerResponse = evidence[component.id];
+    try {
+      const feedback = await requestLearningCoreActivityFeedback({
+        activityId: session.activityId,
+        activitySpec: spec,
+        componentId: component.id,
+        componentType: component.type,
+        widget: resolveWidgetForFeedback(component, learnerResponse),
+        learnerResponse,
+        learnerId: attempt.learnerId,
+        lessonSessionId: session.lessonId ?? session.id,
+        attemptId: attempt.id,
+      });
+
+      nextComponentFeedback[component.id] = feedback;
+      const existingAnswer = answersById.get(component.id);
+      answersById.set(component.id, {
+        questionId: component.id,
+        value: learnerResponse,
+        timeMs: existingAnswer?.timeMs,
+        correct: answerCorrectnessFromFeedback(feedback),
+        score: answerScoreFromFeedback(feedback),
+      });
+      didPersistAnyFeedback = true;
+    } catch (error) {
+      console.error("[submitAttempt] Component feedback request failed", {
+        attemptId: attempt.id,
+        sessionId: session.id,
+        componentId: component.id,
+        componentType: component.type,
+        error,
+      });
+    }
+  }
+
+  if (!didPersistAnyFeedback) {
+    return attempt;
+  }
+
+  const nextAnswers = [
+    ...attempt.answers.map((answer) => answersById.get(answer.questionId) ?? answer),
+    ...Array.from(answersById.values()).filter(
+      (answer) => !attempt.answers.some((existing) => existing.questionId === answer.questionId),
+    ),
+  ];
+
+  return getAttemptStore().save(attempt.id, nextAnswers, {
+    uiState: attempt.uiState,
+    componentFeedback: nextComponentFeedback,
+  });
+}
+
 async function ensureAssignedActivities(learnerId: string) {
   await ensureLocalDemoData();
 
@@ -396,7 +586,7 @@ export async function autosave(
   answers: AttemptAnswer[],
   uiState?: Record<string, unknown>,
 ): Promise<ActivityAttempt> {
-  return getAttemptStore().save(attemptId, answers, uiState);
+  return getAttemptStore().save(attemptId, answers, { uiState });
 }
 
 export async function requestActivityComponentFeedback(
@@ -485,10 +675,26 @@ export async function requestActivityComponentTransition(
   });
 }
 
-export async function submitAttempt(attemptId: string): Promise<ActivityOutcome> {
+export async function submitAttempt(attemptId: string): Promise<ActivitySubmitResponse> {
+  const attempt = await getAttemptStore().get(attemptId);
+  if (!attempt) {
+    throw new Error(`Attempt not found: ${attemptId}`);
+  }
+
+  const session = await getSession(attempt.sessionId);
+  if (!session) {
+    throw new Error(`Session not found for attempt: ${attemptId}`);
+  }
+
+  const preparedAttempt = await evaluateAttemptFeedbackForSubmit(attempt, session);
   const outcome = await getAttemptStore().submit(attemptId);
   await reportOutcome(outcome);
-  return outcome;
+  const submittedAttempt = (await getAttemptStore().get(attemptId)) ?? preparedAttempt;
+
+  return {
+    attempt: submittedAttempt,
+    outcome,
+  };
 }
 
 async function reportOutcome(outcome: ActivityOutcome): Promise<void> {

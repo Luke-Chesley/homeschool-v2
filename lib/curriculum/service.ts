@@ -20,11 +20,16 @@ import {
   canonicalizeCurriculumArtifact,
   type CanonicalCurriculumUnit,
 } from "./canonical-artifact";
+import {
+  buildLegacyCurriculumItemMetadataRepairs,
+  deriveLegacyLessonRef,
+  deriveLegacyUnitRef,
+  resolveLegacyLessonType,
+} from "./item-metadata";
 import { loadLocalCurriculumJson, type ImportedCurriculumDocument } from "./local-json-import";
 import { normalizeCurriculumDocument } from "./normalization";
 import {
   CurriculumLaunchPlanSchema,
-  CurriculumLessonTypeSchema,
   CurriculumSourceIntakeSchema,
   CurriculumSourceModelSchema,
   JsonRecordSchema,
@@ -79,35 +84,53 @@ function extractSourcePacing(
   return { sessionMinutes, sessionsPerWeek, totalWeeks, totalSessions };
 }
 
+function extractStringList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+    : [];
+}
+
 function extractSourceIntake(metadata: Record<string, unknown>): CurriculumSourceIntake | undefined {
   const parsed = CurriculumSourceIntakeSchema.safeParse(metadata.intake);
   return parsed.success ? parsed.data : undefined;
 }
 
-function requireUnitRef(itemId: string, metadata: Record<string, unknown>): string {
+function resolveUnitRef(params: {
+  itemId: string;
+  title: string;
+  position: number;
+  metadata: Record<string, unknown>;
+}): string {
+  const { metadata } = params;
   if (typeof metadata.unitRef === "string" && metadata.unitRef.length > 0) {
     return metadata.unitRef;
   }
 
-  throw new Error(`Curriculum unit ${itemId} is missing canonical unitRef.`);
+  return deriveLegacyUnitRef({
+    title: params.title || params.itemId,
+    position: params.position,
+  });
 }
 
-function requireLessonMetadata(
-  itemId: string,
-  metadata: Record<string, unknown>,
-): { unitRef: string; lessonRef: string; lessonType: CurriculumLessonType } {
+function resolveLessonMetadata(params: {
+  itemId: string;
+  title: string;
+  position: number;
+  metadata: Record<string, unknown>;
+  fallbackUnitRef: string;
+}): { unitRef: string; lessonRef: string; lessonType: CurriculumLessonType } {
+  const { metadata } = params;
   const unitRef = typeof metadata.unitRef === "string" && metadata.unitRef.length > 0
     ? metadata.unitRef
-    : null;
+    : params.fallbackUnitRef;
   const lessonRef = typeof metadata.lessonRef === "string" && metadata.lessonRef.length > 0
     ? metadata.lessonRef
-    : null;
-  const parsedLessonType = CurriculumLessonTypeSchema.safeParse(metadata.lessonType);
-  const lessonType = parsedLessonType.success ? parsedLessonType.data : null;
-
-  if (!unitRef || !lessonRef || !lessonType) {
-    throw new Error(`Curriculum lesson ${itemId} is missing canonical lesson metadata.`);
-  }
+    : deriveLegacyLessonRef({
+        title: params.title || params.itemId,
+        position: params.position,
+        unitRef,
+      });
+  const lessonType = resolveLegacyLessonType(metadata.lessonType);
 
   return { unitRef, lessonRef, lessonType };
 }
@@ -120,6 +143,34 @@ function extractSourceModel(metadata: Record<string, unknown>) {
 function extractLaunchPlan(metadata: Record<string, unknown>) {
   const parsed = CurriculumLaunchPlanSchema.safeParse(metadata.launchPlan);
   return parsed.success ? parsed.data : undefined;
+}
+
+async function repairLegacyCurriculumItemMetadata(
+  items: Array<typeof curriculumItems.$inferSelect>,
+) {
+  const repairs = buildLegacyCurriculumItemMetadataRepairs(items);
+  if (repairs.length === 0) {
+    return items;
+  }
+
+  const metadataById = new Map(repairs.map((repair) => [repair.id, repair.metadata]));
+
+  await Promise.all(
+    repairs.map((repair) =>
+      getDb()
+        .update(curriculumItems)
+        .set({
+          metadata: repair.metadata,
+          updatedAt: new Date(),
+        })
+        .where(eq(curriculumItems.id, repair.id)),
+    ),
+  );
+
+  return items.map((item) => ({
+    ...item,
+    metadata: metadataById.get(item.id) ?? item.metadata,
+  }));
 }
 
 function extractCurriculumLineage(metadata: Record<string, unknown>) {
@@ -160,6 +211,17 @@ function mapSource(record: {
       "not_applicable",
     importVersion: record.importVersion,
     pacing: extractSourcePacing(record.metadata),
+    intakeSummary:
+      typeof record.metadata.intakeSummary === "string"
+        ? record.metadata.intakeSummary
+        : undefined,
+    teachingApproach:
+      typeof record.metadata.teachingApproach === "string"
+        ? record.metadata.teachingApproach
+        : undefined,
+    successSignals: extractStringList(record.metadata.successSignals),
+    parentNotes: extractStringList(record.metadata.parentNotes),
+    rationale: extractStringList(record.metadata.rationale),
     intake: extractSourceIntake(record.metadata),
     sourceModel: extractSourceModel(record.metadata),
     launchPlan: extractLaunchPlan(record.metadata),
@@ -269,8 +331,28 @@ export interface CreatedCurriculumArtifactImportResult {
   estimatedSessionCount: number;
 }
 
+type PersistableCurriculumSourceInput = Pick<
+  CreateCurriculumSourceInput,
+  "householdId" | "title" | "description" | "kind" | "academicYear" | "subjects" | "gradeLevels" | "storagePath"
+> &
+  Partial<
+    Pick<
+      CreateCurriculumSourceInput,
+      | "pacing"
+      | "intakeSummary"
+      | "teachingApproach"
+      | "successSignals"
+      | "parentNotes"
+      | "rationale"
+      | "intake"
+      | "sourceModel"
+      | "launchPlan"
+      | "curriculumLineage"
+    >
+  >;
+
 async function createSourceRecord(
-  input: CreateCurriculumSourceInput,
+  input: PersistableCurriculumSourceInput,
   options?: { status?: CurriculumSource["status"]; metadata?: Record<string, unknown> },
 ) {
   const [source] = await getDb()
@@ -652,8 +734,21 @@ export async function getCurriculumSource(id: string, householdId?: string) {
   return source ? mapSource(source) : null;
 }
 
-export async function createCurriculumSource(input: CreateCurriculumSourceInput) {
-  const source = await createSourceRecord(input);
+export async function createCurriculumSource(
+  input: PersistableCurriculumSourceInput,
+  options?: { status?: CurriculumSource["status"]; metadata?: Record<string, unknown> },
+) {
+  const source = await createSourceRecord(input, {
+    status: options?.status,
+    metadata: {
+      ...(input.pacing ? { pacing: input.pacing } : {}),
+      ...(input.intake ? { intake: input.intake } : {}),
+      ...(input.sourceModel ? { sourceModel: input.sourceModel } : {}),
+      ...(input.launchPlan ? { launchPlan: input.launchPlan } : {}),
+      ...(input.curriculumLineage ? { curriculumLineage: input.curriculumLineage } : {}),
+      ...(options?.metadata ?? {}),
+    },
+  });
   const mapped = mapSource(source);
   if (mapped.kind === "upload" && mapped.storagePath) {
     await triggerIndexing(source.id);
@@ -929,8 +1024,9 @@ export async function listCurriculumUnits(sourceId: string): Promise<CurriculumU
     where: (table, { eq }) => eq(table.sourceId, sourceId),
     orderBy: (table, { asc }) => [asc(table.position), asc(table.createdAt)],
   });
+  const normalizedItems = await repairLegacyCurriculumItemMetadata(items);
 
-  return items
+  return normalizedItems
     .filter((item) => item.itemType === "unit")
     .map((item) => ({
       id: item.id,
@@ -947,7 +1043,12 @@ export async function listCurriculumUnits(sourceId: string): Promise<CurriculumU
       skillRefs: Array.isArray(item.metadata.skillRefs)
         ? item.metadata.skillRefs.filter((value): value is string => typeof value === "string")
         : [],
-      unitRef: requireUnitRef(item.id, item.metadata),
+      unitRef: resolveUnitRef({
+        itemId: item.id,
+        title: item.title,
+        position: item.position,
+        metadata: item.metadata,
+      }),
       createdAt: item.createdAt.toISOString(),
       updatedAt: item.updatedAt.toISOString(),
     }));
@@ -990,7 +1091,12 @@ export async function createCurriculumUnit(input: CreateCurriculumUnitInput): Pr
     skillRefs: Array.isArray(unit.metadata.skillRefs)
       ? unit.metadata.skillRefs.filter((value): value is string => typeof value === "string")
       : [],
-    unitRef: requireUnitRef(unit.id, unit.metadata),
+    unitRef: resolveUnitRef({
+      itemId: unit.id,
+      title: unit.title,
+      position: unit.position,
+      metadata: unit.metadata,
+    }),
     createdAt: unit.createdAt.toISOString(),
     updatedAt: unit.updatedAt.toISOString(),
   };
@@ -1015,7 +1121,13 @@ export async function updateCurriculumUnit(
         ...(existing.metadata ?? {}),
         estimatedWeeks: patch.estimatedWeeks ?? existing.metadata.estimatedWeeks ?? null,
         estimatedSessions: patch.estimatedSessions ?? existing.metadata.estimatedSessions ?? null,
-        unitRef: patch.unitRef ?? existing.metadata.unitRef ?? null,
+        unitRef:
+          patch.unitRef
+          ?? existing.metadata.unitRef
+          ?? deriveLegacyUnitRef({
+            title: patch.title ?? existing.title,
+            position: patch.sequence ?? existing.position,
+          }),
         skillRefs: patch.skillRefs ?? existing.metadata.skillRefs ?? [],
       },
       updatedAt: new Date(),
@@ -1038,7 +1150,12 @@ export async function updateCurriculumUnit(
     skillRefs: Array.isArray(unit.metadata.skillRefs)
       ? unit.metadata.skillRefs.filter((value): value is string => typeof value === "string")
       : [],
-    unitRef: requireUnitRef(unit.id, unit.metadata),
+    unitRef: resolveUnitRef({
+      itemId: unit.id,
+      title: unit.title,
+      position: unit.position,
+      metadata: unit.metadata,
+    }),
     createdAt: unit.createdAt.toISOString(),
     updatedAt: unit.updatedAt.toISOString(),
   };
@@ -1058,11 +1175,24 @@ export async function listCurriculumLessons(unitId: string): Promise<CurriculumL
     where: (table, { eq }) => eq(table.sourceId, unit.sourceId),
     orderBy: (table, { asc }) => [asc(table.position), asc(table.createdAt)],
   });
+  const normalizedItems = await repairLegacyCurriculumItemMetadata(items);
+  const fallbackUnitRef = resolveUnitRef({
+    itemId: unit.id,
+    title: unit.title,
+    position: unit.position,
+    metadata: unit.metadata,
+  });
 
-  return items
+  return normalizedItems
     .filter((item) => item.itemType === "lesson" && item.parentItemId === unitId)
     .map((item) => {
-      const { unitRef, lessonRef, lessonType } = requireLessonMetadata(item.id, item.metadata);
+      const { unitRef, lessonRef, lessonType } = resolveLessonMetadata({
+        itemId: item.id,
+        title: item.title,
+        position: item.position,
+        metadata: item.metadata,
+        fallbackUnitRef,
+      });
 
       return {
         id: item.id,
@@ -1109,7 +1239,12 @@ export async function createCurriculumLesson(input: CreateCurriculumLessonInput)
         objectives: input.objectives ?? [],
         unitRef:
           input.unitRef
-          ?? (typeof unit.metadata.unitRef === "string" ? unit.metadata.unitRef : null),
+          ?? resolveUnitRef({
+            itemId: unit.id,
+            title: unit.title,
+            position: unit.position,
+            metadata: unit.metadata,
+          }),
         lessonRef: input.lessonRef,
         lessonType: input.lessonType,
         linkedSkillRefs: input.linkedSkillRefs ?? [],
@@ -1117,7 +1252,18 @@ export async function createCurriculumLesson(input: CreateCurriculumLessonInput)
     })
     .returning();
 
-  const { unitRef, lessonRef, lessonType } = requireLessonMetadata(lesson.id, lesson.metadata);
+  const { unitRef, lessonRef, lessonType } = resolveLessonMetadata({
+    itemId: lesson.id,
+    title: lesson.title,
+    position: lesson.position,
+    metadata: lesson.metadata,
+    fallbackUnitRef: resolveUnitRef({
+      itemId: unit.id,
+      title: unit.title,
+      position: unit.position,
+      metadata: unit.metadata,
+    }),
+  });
 
   return {
     id: lesson.id,
@@ -1152,6 +1298,20 @@ export async function updateCurriculumLesson(
     where: (table, { eq }) => eq(table.id, id),
   });
   if (!existing) throw new Error(`CurriculumLesson not found: ${id}`);
+  const parentUnit = existing.parentItemId
+    ? await getDb().query.curriculumItems.findFirst({
+        where: (table, { eq }) => eq(table.id, existing.parentItemId!),
+      })
+    : null;
+  const fallbackUnitRef = patch.unitRef
+    ?? (parentUnit
+      ? resolveUnitRef({
+          itemId: parentUnit.id,
+          title: parentUnit.title,
+          position: parentUnit.position,
+          metadata: parentUnit.metadata,
+        })
+      : "unit:legacy");
 
   const [lesson] = await getDb()
     .update(curriculumItems)
@@ -1165,9 +1325,16 @@ export async function updateCurriculumLesson(
         ...(existing.metadata ?? {}),
         materials: patch.materials ?? (existing.metadata.materials as string[] | undefined) ?? [],
         objectives: patch.objectives ?? (existing.metadata.objectives as string[] | undefined) ?? [],
-        unitRef: patch.unitRef ?? existing.metadata.unitRef ?? null,
-        lessonRef: patch.lessonRef ?? existing.metadata.lessonRef ?? null,
-        lessonType: patch.lessonType ?? existing.metadata.lessonType ?? "task",
+        unitRef: patch.unitRef ?? existing.metadata.unitRef ?? fallbackUnitRef,
+        lessonRef:
+          patch.lessonRef
+          ?? existing.metadata.lessonRef
+          ?? deriveLegacyLessonRef({
+            title: patch.title ?? existing.title,
+            position: patch.sequence ?? existing.position,
+            unitRef: fallbackUnitRef,
+          }),
+        lessonType: patch.lessonType ?? resolveLegacyLessonType(existing.metadata.lessonType),
         linkedSkillRefs:
           patch.linkedSkillRefs
           ?? (existing.metadata.linkedSkillRefs as string[] | undefined)
@@ -1178,7 +1345,13 @@ export async function updateCurriculumLesson(
     .where(eq(curriculumItems.id, id))
     .returning();
 
-  const { unitRef, lessonRef, lessonType } = requireLessonMetadata(lesson.id, lesson.metadata);
+  const { unitRef, lessonRef, lessonType } = resolveLessonMetadata({
+    itemId: lesson.id,
+    title: lesson.title,
+    position: lesson.position,
+    metadata: lesson.metadata,
+    fallbackUnitRef,
+  });
 
   return {
     id: lesson.id,

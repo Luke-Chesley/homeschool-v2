@@ -103,7 +103,7 @@ export function ActivityShell({
                 onClick={onSubmit}
                 disabled={submitting || submitDisabled}
               >
-                {submitting ? "Submitting…" : "Submit"}
+                {submitting ? "Submitting…" : "Submit and view feedback"}
               </Button>
             ) : null}
           </div>

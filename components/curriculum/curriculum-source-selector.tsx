@@ -46,6 +46,16 @@ export function CurriculumSourceSelector({
                       Live
                     </span>
                   ) : null}
+                  {source.status === "draft" ? (
+                    <span className="rounded-full border border-border/70 bg-background px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                      Generating
+                    </span>
+                  ) : null}
+                  {source.status === "failed_import" ? (
+                    <span className="rounded-full border border-destructive/20 bg-destructive/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-destructive">
+                      Needs attention
+                    </span>
+                  ) : null}
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {source.kind.replace("_", " ")} · v{source.importVersion}

@@ -3,15 +3,19 @@ import "@/lib/server-only";
 import type { AppLearner } from "@/lib/users/service";
 import {
   CurriculumAiChatTurnSchema,
+  CurriculumAiGeneratedArtifactSchema,
   CurriculumAiFailureResultSchema,
   CurriculumAiRevisionResultSchema,
   type CurriculumAiChatMessage,
   type CurriculumAiChatTurn,
+  type CurriculumAiDocumentNode,
   type CurriculumAiFailureResult,
+  type CurriculumAiGeneratedArtifact,
   type CurriculumAiLaunchPlan,
   type CurriculumAiProgression,
   type CurriculumAiRevisionResult,
 } from "@/lib/curriculum/ai-draft";
+import type { CurriculumTreeNode } from "@/lib/curriculum/types";
 import {
   executeCurriculumIntake,
   executeCurriculumRevision,
@@ -74,6 +78,44 @@ function readString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 
+function readStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+    : [];
+}
+
+function buildRevisionCoverageStrategy(sourceTitle: string, unitCount: number) {
+  const unitLabel = unitCount === 1 ? "unit" : "units";
+  return `Continue the existing ${sourceTitle} sequence across ${unitCount} ${unitLabel}, adjusting only where the revision request changes scope or emphasis.`;
+}
+
+function buildRevisionCurriculumDocumentNode(node: CurriculumTreeNode): CurriculumAiDocumentNode {
+  const children = [...node.children]
+    .filter((child) => child.isActive)
+    .sort((left, right) => left.sequenceIndex - right.sequenceIndex);
+
+  if (children.length === 0) {
+    return [];
+  }
+
+  if (children.every((child) => child.normalizedType === "skill")) {
+    return children.map((child) => child.title);
+  }
+
+  return Object.fromEntries(
+    children.map((child) => [child.title, buildRevisionCurriculumDocumentNode(child)]),
+  );
+}
+
+function buildRevisionCurriculumDocument(rootNodes: CurriculumTreeNode[]) {
+  return Object.fromEntries(
+    [...rootNodes]
+      .filter((node) => node.isActive)
+      .sort((left, right) => left.sequenceIndex - right.sequenceIndex)
+      .map((node) => [node.title, buildRevisionCurriculumDocumentNode(node)]),
+  );
+}
+
 export async function continueCurriculumAiDraftConversation(params: {
   learner: AppLearner;
   messages: CurriculumAiChatMessage[];
@@ -118,6 +160,7 @@ deps?: {
         currentCurriculum: snapshot,
         currentRequest: latestUserMessage?.content ?? null,
         messages: params.messages,
+        correctionNotes: [],
       },
       organizationId: params.householdId,
       learnerId: params.learner.id,
@@ -172,6 +215,7 @@ export async function buildCurriculumRevisionPromptPreview(params: {
       currentCurriculum: snapshot,
       currentRequest: latestUserMessage?.content ?? null,
       messages: params.messages,
+      correctionNotes: [],
     },
     organizationId: params.householdId,
     learnerId: params.learner.id,
@@ -316,30 +360,58 @@ export async function persistCurriculumLaunchPlan(params: {
   });
 }
 
-async function buildCurriculumRevisionSnapshot(sourceId: string, householdId: string) {
+async function buildCurriculumRevisionSnapshot(
+  sourceId: string,
+  householdId: string,
+): Promise<CurriculumAiGeneratedArtifact> {
   const basis = await buildProgressionGenerationBasis({ sourceId, householdId });
+  const description =
+    readString(basis.source.description) ?? `Current curriculum for ${basis.source.title}.`;
+  const teachingApproach =
+    readString(basis.source.teachingApproach)
+    ?? `Keep the ${basis.source.title} work practical, teachable, and aligned to the existing curriculum structure.`;
+  const successSignals =
+    readStringArray(basis.source.successSignals).length > 0
+      ? readStringArray(basis.source.successSignals)
+      : [`Learner makes visible progress through ${basis.source.title} with clear mastery checks.`];
+  const rationale =
+    readStringArray(basis.source.rationale).length > 0
+      ? readStringArray(basis.source.rationale)
+      : ["Preserve the durable curriculum structure while applying the requested revision."];
+  const document = buildRevisionCurriculumDocument(basis.tree.rootNodes);
 
-  return {
+  return CurriculumAiGeneratedArtifactSchema.parse({
     source: {
       title: basis.source.title,
-      description: basis.source.description ?? "",
+      description,
       subjects: basis.source.subjects,
       gradeLevels: basis.source.gradeLevels,
-      teachingApproach: "",
-      successSignals: [],
-      parentNotes: [],
-      rationale: [],
+      academicYear: basis.source.academicYear ?? undefined,
+      summary: description,
+      teachingApproach,
+      successSignals,
+      parentNotes: readStringArray(basis.source.parentNotes),
+      rationale,
     },
-    intakeSummary: "",
-    pacing: basis.source.pacing ?? {},
-    document: {},
+    intakeSummary:
+      readString(basis.source.intakeSummary)
+      ?? `Continue revising the existing ${basis.source.title} curriculum without rebuilding it from scratch.`,
+    pacing: {
+      totalWeeks: basis.source.pacing?.totalWeeks,
+      sessionsPerWeek: basis.source.pacing?.sessionsPerWeek,
+      sessionMinutes: basis.source.pacing?.sessionMinutes,
+      totalSessions: basis.source.pacing?.totalSessions,
+      coverageStrategy: buildRevisionCoverageStrategy(basis.source.title, basis.units.length),
+      coverageNotes: [],
+    },
+    document,
     units: basis.units.map((unit) => ({
       unitRef: unit.unitRef,
       title: unit.title,
-      description: unit.description ?? "",
+      description: readString(unit.description) ?? `Work through ${unit.title}.`,
       estimatedWeeks: unit.estimatedWeeks,
       estimatedSessions: unit.estimatedSessions,
       skillRefs: unit.skillRefs,
     })),
-  };
+  });
 }

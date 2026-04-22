@@ -200,31 +200,6 @@ export function HomeschoolCurriculumIntakeForm(props: {
     }
   }
 
-  async function waitForJob(jobId: string) {
-    setJobStatus("Building the source...");
-
-    for (let attempt = 0; attempt < 60; attempt += 1) {
-      const response = await fetch(`/api/ai/jobs/${jobId}`, { cache: "no-store" });
-      const payload = await response.json().catch(() => null);
-
-      if (!response.ok) {
-        throw new Error(payload?.error ?? "Could not load job status.");
-      }
-
-      if (payload?.status === "completed") {
-        return payload;
-      }
-
-      if (payload?.status === "failed") {
-        throw new Error(payload?.errorMessage ?? "Could not finish building this source.");
-      }
-
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-    }
-
-    throw new Error("Building this source took too long. Please try again.");
-  }
-
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -235,6 +210,7 @@ export function HomeschoolCurriculumIntakeForm(props: {
 
     setSubmitting(true);
     setError(null);
+    setJobStatus("Interpreting the source and naming the curriculum...");
 
     let preparedPackage: NormalizedIntakeSourcePackage | null = sourcePackage;
 
@@ -274,19 +250,7 @@ export function HomeschoolCurriculumIntakeForm(props: {
       return;
     }
 
-    if (payload?.mode === "queued" && payload?.jobId) {
-      try {
-        const result = await waitForJob(payload.jobId);
-        router.push(result?.output?.redirectTo ?? "/curriculum");
-      } catch (jobError) {
-        setError(jobError instanceof Error ? jobError.message : "Could not finish adding this source.");
-        setSubmitting(false);
-        setJobStatus(null);
-        return;
-      }
-    } else {
-      router.push(`/curriculum/${payload.sourceId}`);
-    }
+    router.push(payload?.redirectTo ?? "/curriculum");
 
     router.refresh();
     setJobStatus(null);
@@ -439,7 +403,7 @@ export function HomeschoolCurriculumIntakeForm(props: {
 
       <div className="flex justify-end">
         <Button type="submit" disabled={submitting || preparingSource || !canSubmit}>
-          {submitting || preparingSource ? "Adding source..." : "Add source"}
+          {submitting || preparingSource ? "Preparing source..." : "Add source"}
         </Button>
       </div>
     </form>

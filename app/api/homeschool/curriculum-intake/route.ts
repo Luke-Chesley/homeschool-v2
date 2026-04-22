@@ -1,9 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 
 import { requireAppSession } from "@/lib/app-session/server";
 import {
-  createHomeschoolCurriculumFromIntake,
+  finishHomeschoolCurriculumIntakeGeneration,
   HomeschoolCurriculumIntakeSchema,
+  startHomeschoolCurriculumIntakeGeneration,
 } from "@/lib/homeschool/onboarding/service";
 
 export async function POST(req: NextRequest) {
@@ -26,8 +27,23 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const result = await createHomeschoolCurriculumFromIntake(parsed.data);
-    return NextResponse.json(result, { status: 201 });
+    const started = await startHomeschoolCurriculumIntakeGeneration(parsed.data);
+    after(async () => {
+      try {
+        await finishHomeschoolCurriculumIntakeGeneration(started.backgroundTask);
+      } catch (error) {
+        console.error("[api/homeschool/curriculum-intake POST after]", error);
+      }
+    });
+    return NextResponse.json(
+      {
+        mode: "queued",
+        sourceId: started.sourceId,
+        sourceTitle: started.sourceTitle,
+        redirectTo: started.redirectTo,
+      },
+      { status: 202 },
+    );
   } catch (error) {
     console.error("[api/homeschool/curriculum-intake POST]", error);
     return NextResponse.json(

@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { BookOpen, Sparkles } from "lucide-react";
 
+import { CurriculumGenerationNotice } from "@/components/curriculum/curriculum-generation-notice";
 import { CurriculumEmptyState } from "@/components/curriculum/curriculum-empty-state";
 import { CurriculumOverview } from "@/components/curriculum/curriculum-overview";
 import { buttonVariants } from "@/components/ui/button";
@@ -20,8 +21,17 @@ export const metadata = {
   title: "Curriculum",
 };
 
-export default async function CurriculumPage() {
-  const session = await requireAppSession();
+type CurriculumPageProps = {
+  searchParams?: Promise<{
+    pendingSourceId?: string | string[];
+  }>;
+};
+
+export default async function CurriculumPage({ searchParams }: CurriculumPageProps) {
+  const [session, resolvedParams] = await Promise.all([
+    requireAppSession(),
+    searchParams ?? Promise.resolve({ pendingSourceId: undefined }),
+  ]);
   const organizationId = session.organization.id;
   const [sources, activeSource] = await Promise.all([
     listCurriculumSources(organizationId),
@@ -37,7 +47,12 @@ export default async function CurriculumPage() {
   }
 
   const activeSourceId = activeSource?.id ?? sources[0].id;
-  const tree = await getCurriculumTree(activeSourceId, session.organization.id);
+  const pendingSourceId =
+    typeof resolvedParams.pendingSourceId === "string" ? resolvedParams.pendingSourceId : null;
+  const pendingSource =
+    pendingSourceId ? sources.find((source) => source.id === pendingSourceId) ?? null : null;
+  const focusedSourceId = pendingSource?.id ?? activeSourceId;
+  const tree = await getCurriculumTree(focusedSourceId, session.organization.id);
 
   async function activateSourceAction(formData: FormData) {
     "use server";
@@ -104,16 +119,39 @@ export default async function CurriculumPage() {
             <p className="section-meta">Current emphasis</p>
             <p className="text-lg font-semibold text-foreground">{tree.source.title}</p>
             <p className="text-sm leading-6 text-muted-foreground">
-              The live source should be the one you want shaping this week&apos;s plan and today&apos;s queue.
+              {pendingSource?.id === tree.source.id
+                ? pendingSource.status === "failed_import"
+                  ? "This source shell was saved, but curriculum generation failed. The current live curriculum has not been changed."
+                  : "This source is still generating. We will switch planning to it automatically once it is ready."
+                : "The live source should be the one you want shaping this week&apos;s plan and today&apos;s queue."}
             </p>
           </aside>
         </div>
       </header>
+      {pendingSource ? (
+        <CurriculumGenerationNotice
+          sourceId={pendingSource.id}
+          sourceTitle={pendingSource.title}
+          status={pendingSource.status}
+        />
+      ) : null}
       <CurriculumOverview
         sources={sources}
         activeSourceId={activeSourceId}
         onActivateSource={activateSourceAction}
         tree={tree}
+        focusMode={
+          pendingSource?.id === tree.source.id
+            ? pendingSource.status === "failed_import"
+              ? "failed"
+              : "pending"
+            : "live"
+        }
+        liveSourceTitle={
+          pendingSource?.id === tree.source.id
+            ? sources.find((source) => source.id === activeSourceId)?.title ?? null
+            : null
+        }
       />
     </main>
   );

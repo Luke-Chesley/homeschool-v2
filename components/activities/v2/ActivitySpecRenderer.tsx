@@ -41,6 +41,8 @@ export interface ActivitySpecRendererProps {
   spec: ActivitySpec;
   /** Pre-loaded evidence from a resumed attempt */
   initialEvidence?: ActivitySpecEvidence;
+  /** Persisted feedback from a submitted attempt */
+  initialFeedbackByComponent?: Record<string, ActivityComponentFeedback>;
   estimatedMinutes?: number;
   onEvidenceChange?: (evidence: ActivitySpecEvidence) => void;
   onComponentFeedbackRequest?: (
@@ -79,6 +81,7 @@ export interface ActivitySpecRendererProps {
 export function ActivitySpecRenderer({
   spec,
   initialEvidence = {},
+  initialFeedbackByComponent,
   estimatedMinutes,
   onEvidenceChange,
   onComponentFeedbackRequest,
@@ -90,7 +93,9 @@ export function ActivitySpecRenderer({
   submitted,
 }: ActivitySpecRendererProps) {
   const [evidence, setEvidence] = React.useState<ActivitySpecEvidence>(initialEvidence);
-  const [feedbackByComponent, setFeedbackByComponent] = React.useState<Record<string, ActivityComponentFeedback>>({});
+  const [feedbackByComponent, setFeedbackByComponent] = React.useState<Record<string, ActivityComponentFeedback>>(
+    () => initialFeedbackByComponent ?? {},
+  );
   const [widgetByComponent, setWidgetByComponent] = React.useState<Record<string, InteractiveWidgetPayload>>(
     () => buildInitialWidgetState(spec, initialEvidence),
   );
@@ -98,10 +103,18 @@ export function ActivitySpecRenderer({
 
   React.useEffect(() => {
     setEvidence(initialEvidence);
-    setFeedbackByComponent({});
+    setFeedbackByComponent(initialFeedbackByComponent ?? {});
     setWidgetByComponent(buildInitialWidgetState(spec, initialEvidence));
     setSubmitAttempted(false);
   }, [spec]);
+
+  React.useEffect(() => {
+    if (!initialFeedbackByComponent) {
+      return;
+    }
+
+    setFeedbackByComponent(initialFeedbackByComponent);
+  }, [initialFeedbackByComponent]);
 
   function handleComponentChange(componentId: string, value: unknown) {
     const next = { ...evidence, [componentId]: value };
@@ -345,7 +358,7 @@ export function ActivitySpecRenderer({
         {submitted ? (
           <div className="flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/7 px-4 py-3 text-sm text-foreground">
             <CheckCircle className="size-4 shrink-0 text-primary" />
-            Activity submitted.
+            Activity submitted. Feedback is shown below.
           </div>
         ) : null}
 
@@ -407,7 +420,7 @@ export function ActivitySpecRenderer({
               onClick={handleSubmitAttempt}
               className="min-h-11 w-full justify-center sm:min-h-8 sm:w-auto"
             >
-              {submitting ? "Submitting…" : canSubmit() ? "Submit" : "Review missing steps"}
+              {submitting ? "Submitting…" : canSubmit() ? "Submit and view feedback" : "Review missing steps"}
             </Button>
           </div>
         ) : null}

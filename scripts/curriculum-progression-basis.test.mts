@@ -205,3 +205,24 @@ test("createProgressionGenerationBasis builds exact canonical skillRef to nodeId
   assert.equal(basis.suggestedPhaseCountMin, 5);
   assert.equal(basis.suggestedPhaseCountMax, 8);
 });
+
+test("createProgressionGenerationBasis assigns all skills to a lone legacy unit when skillRefs are missing", () => {
+  const [legacyUnit] = makeUnits();
+  const basis = createProgressionGenerationBasis({
+    source: makeSource(),
+    tree: makeTree(),
+    units: [
+      {
+        ...legacyUnit,
+        skillRefs: [],
+      },
+    ],
+  });
+
+  assert.deepEqual(basis.unitAnchors[0].skillRefs, [
+    "skill:kitchen-work/readiness/foundations/knife-safety",
+    "skill:kitchen-work/readiness/foundations/make-snack",
+  ]);
+  assert.equal(basis.skillCatalog[0].unitRef, "unit:1:readiness");
+  assert.equal(basis.skillCatalog[1].unitRef, "unit:1:readiness");
+});

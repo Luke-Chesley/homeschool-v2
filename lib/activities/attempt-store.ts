@@ -7,6 +7,7 @@ import { ensureLocalDemoData } from "@/lib/db/fixtures/local-demo-persistence";
 import { getDb } from "@/lib/db/server";
 import { activityAttempts } from "@/lib/db/schema";
 import { LOCAL_DEMO_LEARNER_ID } from "@/lib/db/fixtures/local-demo-persistence";
+import { ActivityComponentFeedbackSchema, type ActivityComponentFeedback } from "./feedback";
 import type { ActivityAttempt, AttemptAnswer, ActivityOutcome, ActivitySession } from "./types";
 import { parseActivityDefinition } from "./types";
 import { isActivitySpec, parseActivitySpec } from "./spec";
@@ -22,7 +23,10 @@ export interface AttemptStore {
   save(
     attemptId: string,
     answers: AttemptAnswer[],
-    uiState?: Record<string, unknown>
+    options?: {
+      uiState?: Record<string, unknown>;
+      componentFeedback?: Record<string, ActivityComponentFeedback>;
+    }
   ): Promise<ActivityAttempt>;
   submit(attemptId: string): Promise<ActivityOutcome>;
   get(attemptId: string): Promise<ActivityAttempt | null>;
@@ -47,6 +51,26 @@ function getAttemptAnswers(record: PersistedAttemptRecord): AttemptAnswer[] {
   return Array.isArray(responses.answers) ? (responses.answers as AttemptAnswer[]) : [];
 }
 
+function getAttemptComponentFeedback(
+  record: PersistedAttemptRecord,
+): Record<string, ActivityComponentFeedback> | undefined {
+  const responses = record.responses;
+  if (!isRecord(responses) || !isRecord(responses.componentFeedback)) {
+    return undefined;
+  }
+
+  const parsedEntries = Object.entries(responses.componentFeedback).flatMap(([componentId, feedback]) => {
+    const parsed = ActivityComponentFeedbackSchema.safeParse(feedback);
+    return parsed.success ? [[componentId, parsed.data] as const] : [];
+  });
+
+  if (parsedEntries.length === 0) {
+    return undefined;
+  }
+
+  return Object.fromEntries(parsedEntries);
+}
+
 function getAttemptUiState(record: PersistedAttemptRecord): Record<string, unknown> | undefined {
   const responses = record.responses;
   if (!isRecord(responses) || !isRecord(responses.uiState)) {
@@ -54,6 +78,10 @@ function getAttemptUiState(record: PersistedAttemptRecord): Record<string, unkno
   }
 
   return responses.uiState;
+}
+
+function getAttemptResponses(record: PersistedAttemptRecord): Record<string, unknown> {
+  return isRecord(record.responses) ? { ...record.responses } : {};
 }
 
 function getAttemptSessionId(record: PersistedAttemptRecord): string {
@@ -180,10 +208,17 @@ function mapAttempt(record: PersistedAttemptRecord): ActivityAttempt {
     startedAt: toIsoString(record.startedAt, record.createdAt),
     submittedAt: typeof record.submittedAt === "string" ? record.submittedAt : undefined,
     uiState: getAttemptUiState(record),
+    componentFeedback: getAttemptComponentFeedback(record),
   };
 }
 
 function computeScore(answers: AttemptAnswer[]) {
+  const scoredAnswers = answers.filter((answer) => typeof answer.score === "number");
+  if (scoredAnswers.length > 0) {
+    const total = scoredAnswers.reduce((sum, answer) => sum + (answer.score ?? 0), 0);
+    return total / scoredAnswers.length;
+  }
+
   const gradedAnswers = answers.filter((answer) => answer.correct !== undefined);
   if (gradedAnswers.length === 0) {
     return undefined;
@@ -237,7 +272,10 @@ class DbAttemptStore implements AttemptStore {
   async save(
     attemptId: string,
     answers: AttemptAnswer[],
-    uiState?: Record<string, unknown>
+    options?: {
+      uiState?: Record<string, unknown>;
+      componentFeedback?: Record<string, ActivityComponentFeedback>;
+    }
   ): Promise<ActivityAttempt> {
     await ensureLocalDemoData();
     const existing = await getActivitiesRepo().findAttemptById(attemptId);
@@ -245,10 +283,14 @@ class DbAttemptStore implements AttemptStore {
       throw new Error(`Attempt not found: ${attemptId}`);
     }
 
+    const existingResponses = getAttemptResponses(existing);
     const updated = await getActivitiesRepo().updateAttempt(attemptId, {
       responses: {
+        ...existingResponses,
         answers,
-        uiState: uiState ?? getAttemptUiState(existing) ?? {},
+        uiState: options?.uiState ?? getAttemptUiState(existing) ?? {},
+        componentFeedback:
+          options?.componentFeedback ?? getAttemptComponentFeedback(existing) ?? {},
       },
     });
 

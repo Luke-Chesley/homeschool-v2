@@ -20,6 +20,8 @@
 
 import { z } from "zod";
 
+import { ActivityComponentFeedbackSchema } from "./feedback";
+
 // ---------------------------------------------------------------------------
 // Shared primitives
 // ---------------------------------------------------------------------------
@@ -380,6 +382,8 @@ export const AttemptAnswerSchema = z.object({
   value: z.unknown(),
   /** Set by the engine when answer is graded */
   correct: z.boolean().optional(),
+  /** Fractional score when the engine returns partial credit */
+  score: z.number().min(0).max(1).optional(),
   /** Time taken for this question (ms) */
   timeMs: z.number().optional(),
 });
@@ -399,6 +403,8 @@ export const ActivityAttemptSchema = z.object({
   submittedAt: z.string().datetime().optional(),
   /** Serialized UI state for resume (e.g. current card index) */
   uiState: z.record(z.string(), z.unknown()).optional(),
+  /** Persisted runtime feedback keyed by component ID */
+  componentFeedback: z.record(z.string(), ActivityComponentFeedbackSchema).optional(),
 });
 export type ActivityAttempt = z.infer<typeof ActivityAttemptSchema>;
 
@@ -420,3 +426,9 @@ export const ActivityOutcomeSchema = z.object({
   meta: z.record(z.string(), z.unknown()).optional(),
 });
 export type ActivityOutcome = z.infer<typeof ActivityOutcomeSchema>;
+
+export const ActivitySubmitResponseSchema = z.object({
+  attempt: ActivityAttemptSchema,
+  outcome: ActivityOutcomeSchema,
+});
+export type ActivitySubmitResponse = z.infer<typeof ActivitySubmitResponseSchema>;

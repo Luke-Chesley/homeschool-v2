@@ -7,8 +7,8 @@ export async function POST(
 ) {
   const { attemptId } = await params;
   try {
-    const outcome = await submitAttempt(attemptId);
-    return NextResponse.json(outcome);
+    const result = await submitAttempt(attemptId);
+    return NextResponse.json(result);
   } catch (err) {
     console.error("[api/activities/attempts/submit POST]", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

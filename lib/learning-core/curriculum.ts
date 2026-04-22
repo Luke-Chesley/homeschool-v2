@@ -96,6 +96,18 @@ export const CurriculumGenerateInputSchema = z.discriminatedUnion("requestMode",
 
 export type CurriculumGenerateInput = z.infer<typeof CurriculumGenerateInputSchema>;
 
+export const CurriculumRevisionInputSchema = z
+  .object({
+    learnerName: z.string().trim().min(1),
+    currentCurriculum: CurriculumAiGeneratedArtifactSchema.nullable().optional(),
+    currentRequest: z.string().trim().min(1).nullable().optional(),
+    messages: z.array(CurriculumAiChatMessageSchema).default([]),
+    correctionNotes: z.array(z.string().trim().min(1)).default([]),
+  })
+  .strict();
+
+export type CurriculumRevisionInput = z.infer<typeof CurriculumRevisionInputSchema>;
+
 const CurriculumIntakeInputSchema = z.object({
   learnerName: z.string().trim().min(1),
   messages: z.array(CurriculumAiChatMessageSchema).default([]),
@@ -157,14 +169,14 @@ export async function executeCurriculumGenerate(params: {
 }
 
 export async function previewCurriculumRevision(params: {
-  input: Record<string, unknown>;
+  input: CurriculumRevisionInput;
   organizationId?: string | null;
   learnerId?: string | null;
 }) {
   return previewLearningCoreOperation(
     "curriculum_revise",
     buildLearningCoreEnvelope({
-      input: params.input,
+      input: CurriculumRevisionInputSchema.parse(params.input),
       surface: "curriculum",
       organizationId: params.organizationId,
       learnerId: params.learnerId,
@@ -180,14 +192,14 @@ export async function previewCurriculumRevision(params: {
 }
 
 export async function executeCurriculumRevision(params: {
-  input: Record<string, unknown>;
+  input: CurriculumRevisionInput;
   organizationId?: string | null;
   learnerId?: string | null;
 }) {
   return executeLearningCoreOperation(
     "curriculum_revise",
     buildLearningCoreEnvelope({
-      input: params.input,
+      input: CurriculumRevisionInputSchema.parse(params.input),
       surface: "curriculum",
       organizationId: params.organizationId,
       learnerId: params.learnerId,

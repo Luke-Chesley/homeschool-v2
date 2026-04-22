@@ -413,6 +413,20 @@ export function createProgressionGenerationBasis(params: {
     walk(rootNode, []);
   }
 
+  if (
+    unitAnchors.length === 1
+    && unitAnchors[0].skillRefs.length === 0
+    && skillCatalog.every((item) => !item.unitRef)
+  ) {
+    const fallbackUnit = unitAnchors[0];
+    fallbackUnit.skillRefs = skillCatalog.map((item) => item.skillRef);
+    for (const item of skillCatalog) {
+      item.unitRef = fallbackUnit.unitRef;
+      item.unitTitle = fallbackUnit.title;
+      item.unitOrderIndex = fallbackUnit.orderIndex;
+    }
+  }
+
   if (skillCatalog.length === 0) {
     throw new Error(`Curriculum source ${params.source.id} has no resolved skills for progression generation.`);
   }

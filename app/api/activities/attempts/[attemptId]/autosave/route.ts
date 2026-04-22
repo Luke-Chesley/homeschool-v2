@@ -7,6 +7,7 @@ const AutosaveSchema = z.object({
     questionId: z.string(),
     value: z.unknown(),
     correct: z.boolean().optional(),
+    score: z.number().min(0).max(1).optional(),
     timeMs: z.number().optional(),
   })),
   uiState: z.record(z.string(), z.unknown()).optional(),

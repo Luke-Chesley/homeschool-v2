@@ -69,6 +69,24 @@ function safeText(value: unknown, fallback = "") {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : fallback;
 }
 
+function optionalNonEmptyString(value: string | null | undefined) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function optionalIsoDate(value: string | null | undefined) {
+  const normalized = optionalNonEmptyString(value);
+  if (!normalized) {
+    return null;
+  }
+
+  return /^\d{4}-\d{2}-\d{2}$/.test(normalized) ? normalized : null;
+}
+
 function asStringArray(value: unknown) {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
@@ -300,12 +318,15 @@ export async function ensureComplianceProgramForLearner(params: {
   }
 
   const defaults = getAcademicYearDefaults();
+  const schoolYearLabel = optionalNonEmptyString(params.schoolYearLabel) ?? defaults.schoolYearLabel;
+  const startDate = optionalIsoDate(params.startDate) ?? defaults.startDate;
+  const endDate = optionalIsoDate(params.endDate) ?? defaults.endDate;
   const program = await repos.compliance.createProgram({
     organizationId: params.organizationId,
     learnerId: params.learnerId,
-    schoolYearLabel: params.schoolYearLabel ?? defaults.schoolYearLabel,
-    startDate: params.startDate ?? defaults.startDate,
-    endDate: params.endDate ?? defaults.endDate,
+    schoolYearLabel,
+    startDate,
+    endDate,
     jurisdictionCode: params.jurisdictionCode ?? fallbackProfile.jurisdictionCode,
     pathwayCode: params.pathwayCode ?? fallbackProfile.pathwayCode,
     requirementProfileVersion: fallbackProfile.version,
