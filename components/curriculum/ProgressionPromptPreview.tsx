@@ -90,7 +90,7 @@ export function ProgressionPromptPreview({ sourceId }: ProgressionPromptPreviewP
       <StudioDrawer
         panelId={panelId}
         title="Progression prompt preview"
-        description="Exact system and user prompts sent for progression graph generation."
+        description="Exact system and user prompts sent for progression generation."
       >
         {state.status === "error" ? (
           <div className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">

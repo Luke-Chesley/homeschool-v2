@@ -1,34 +1,28 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useRef, useState, useTransition } from "react";
-import { AlertTriangle, CheckCircle2, Info, RefreshCw, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Info, Network, Waypoints } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { ProgressionPromptPreview } from "@/components/curriculum/ProgressionPromptPreview";
-import type { CurriculumSource } from "@/lib/curriculum/types";
+import type { CurriculumRoadmapModel } from "@/lib/curriculum/roadmap-model";
 import type {
+  ProgressionEdgeKind,
   ProgressionGraph,
   ProgressionGraphEdge,
   ProgressionGraphNode,
-  ProgressionEdgeKind,
 } from "@/lib/curriculum/progression-graph-model";
 import { cn } from "@/lib/utils";
 
-// ── Layout constants ──────────────────────────────────────────────────────────
-
-const NODE_W = 176;
-const NODE_H = 64;
-const COL_GAP = 80;
-const ROW_GAP = 10;
+const NODE_W = 188;
+const NODE_H = 72;
+const COL_GAP = 72;
+const ROW_GAP = 12;
 const PAD_X = 24;
-const PAD_Y = 32;
+const PAD_Y = 30;
 const DOMAIN_PAD = 8;
 const DOMAIN_LABEL_H = 20;
-
-// ── Types ─────────────────────────────────────────────────────────────────────
 
 interface NodePosition {
   id: string;
@@ -44,7 +38,6 @@ interface DomainBand {
   y: number;
   width: number;
   height: number;
-  colorClass: string;
 }
 
 interface LayoutResult {
@@ -54,7 +47,13 @@ interface LayoutResult {
   totalHeight: number;
 }
 
-// ── Domain colours ────────────────────────────────────────────────────────────
+interface CurriculumProgressionGraphProps {
+  graph: ProgressionGraph;
+  roadmap: CurriculumRoadmapModel;
+  selectedDomainId?: string | "all";
+  selectedSkillId?: string | null;
+  onSelectSkill?: (skillId: string) => void;
+}
 
 const DOMAIN_COLORS = [
   { bg: "rgba(251,191,36,0.08)", border: "rgba(251,191,36,0.3)", label: "#a16207" },
@@ -62,111 +61,106 @@ const DOMAIN_COLORS = [
   { bg: "rgba(34,197,94,0.08)", border: "rgba(34,197,94,0.22)", label: "#166534" },
   { bg: "rgba(168,85,247,0.08)", border: "rgba(168,85,247,0.22)", label: "#7e22ce" },
   { bg: "rgba(249,115,22,0.08)", border: "rgba(249,115,22,0.22)", label: "#c2410c" },
-  { bg: "rgba(236,72,153,0.08)", border: "rgba(236,72,153,0.2)", label: "#9d174d" },
 ];
 
 function domainColor(index: number) {
   return DOMAIN_COLORS[index % DOMAIN_COLORS.length];
 }
 
-// ── Edge styling ───────────────────────────────────────────────────────────────
-
-function edgeStyle(kind: ProgressionEdgeKind): {
-  stroke: string;
-  strokeWidth: number;
-  strokeDasharray?: string;
-  opacity: number;
-} {
+function edgeStyle(kind: ProgressionEdgeKind) {
   switch (kind) {
     case "hardPrerequisite":
-      return { stroke: "hsl(var(--foreground))", strokeWidth: 2, opacity: 0.7 };
+      return { stroke: "hsl(var(--foreground))", strokeWidth: 2, strokeDasharray: undefined, opacity: 0.72 };
     case "recommendedBefore":
-      return { stroke: "hsl(var(--primary))", strokeWidth: 1.5, strokeDasharray: "6 3", opacity: 0.6 };
+      return { stroke: "hsl(var(--primary))", strokeWidth: 1.5, strokeDasharray: "6 3", opacity: 0.62 };
     case "revisitAfter":
-      return { stroke: "hsl(var(--muted-foreground))", strokeWidth: 1.5, strokeDasharray: "3 4", opacity: 0.45 };
+      return { stroke: "hsl(var(--muted-foreground))", strokeWidth: 1.5, strokeDasharray: "3 4", opacity: 0.48 };
     case "coPractice":
-      return { stroke: "hsl(var(--primary))", strokeWidth: 1, strokeDasharray: "2 3", opacity: 0.4 };
+      return { stroke: "hsl(var(--primary))", strokeWidth: 1.2, strokeDasharray: "2 3", opacity: 0.42 };
     case "explicit":
-      return { stroke: "hsl(var(--primary))", strokeWidth: 1.5, opacity: 0.55 };
+      return { stroke: "hsl(var(--primary))", strokeWidth: 1.5, strokeDasharray: undefined, opacity: 0.55 };
     case "inferred":
     default:
-      return { stroke: "hsl(var(--muted-foreground))", strokeWidth: 1, strokeDasharray: "4 4", opacity: 0.25 };
+      return { stroke: "hsl(var(--muted-foreground))", strokeWidth: 1, strokeDasharray: "4 4", opacity: 0.28 };
   }
 }
 
-function edgeLegendLabel(kind: ProgressionEdgeKind): string {
+function edgeLegendLabel(kind: ProgressionEdgeKind) {
   switch (kind) {
-    case "hardPrerequisite": return "Hard prerequisite";
-    case "recommendedBefore": return "Recommended before";
-    case "revisitAfter": return "Revisit after";
-    case "coPractice": return "Co-practice";
-    case "explicit": return "Explicit";
-    case "inferred": return "Inferred sequence";
+    case "hardPrerequisite":
+      return "Hard prerequisite";
+    case "recommendedBefore":
+      return "Recommended before";
+    case "revisitAfter":
+      return "Revisit after";
+    case "coPractice":
+      return "Co-practice";
+    case "explicit":
+      return "Explicit";
+    case "inferred":
+    default:
+      return "Inferred";
   }
 }
 
-// ── Layout engine ─────────────────────────────────────────────────────────────
+function buildEdgePath(from: NodePosition, to: NodePosition) {
+  const startX = from.x + NODE_W;
+  const startY = from.y + NODE_H / 2;
+  const endX = to.x;
+  const endY = to.y + NODE_H / 2;
+  const ctrl = Math.max((endX - startX) * 0.45, 24);
+  return `M ${startX} ${startY} C ${startX + ctrl} ${startY}, ${endX - ctrl} ${endY}, ${endX} ${endY}`;
+}
 
 function computeLayout(graph: ProgressionGraph): LayoutResult {
   const nodePositions = new Map<string, NodePosition>();
   const domainBands: DomainBand[] = [];
-
-  // Index domain sequence for colours
-  const domainIndexMap = new Map<string, number>();
-  graph.groups.forEach((g, i) => domainIndexMap.set(g.domainId, i));
-
-  // Get node lookup
-  const nodeMap = new Map<string, ProgressionGraphNode>();
-  for (const n of graph.nodes) nodeMap.set(n.id, n);
+  const nodeMap = new Map(graph.nodes.map((node) => [node.id, node]));
+  const domainOrder = new Map<string, number>();
+  graph.groups.forEach((group, index) => domainOrder.set(group.domainId, index));
 
   let maxX = 0;
   let maxY = 0;
 
-  for (const col of graph.columns) {
-    const colX = PAD_X + col.index * (NODE_W + COL_GAP);
+  for (const column of graph.columns) {
+    const colX = PAD_X + column.index * (NODE_W + COL_GAP);
     let curY = PAD_Y;
 
-    // Group nodes in this column by domain (preserve sorted order from model)
-    const domainOrder: string[] = [];
     const byDomain = new Map<string, string[]>();
-    for (const id of col.nodeIds) {
-      const n = nodeMap.get(id);
-      if (!n) continue;
-      if (!byDomain.has(n.domainId)) {
-        domainOrder.push(n.domainId);
-        byDomain.set(n.domainId, []);
+    const domainIds: string[] = [];
+    for (const nodeId of column.nodeIds) {
+      const node = nodeMap.get(nodeId);
+      if (!node) continue;
+      if (!byDomain.has(node.domainId)) {
+        byDomain.set(node.domainId, []);
+        domainIds.push(node.domainId);
       }
-      byDomain.get(n.domainId)!.push(id);
+      byDomain.get(node.domainId)!.push(nodeId);
     }
 
-    for (const domainId of domainOrder) {
-      const domainNodeIds = byDomain.get(domainId) ?? [];
-      const groupStartY = curY;
-
-      // Add domain label height
+    for (const domainId of domainIds) {
+      const skillIds = byDomain.get(domainId) ?? [];
+      const startY = curY;
       curY += DOMAIN_LABEL_H + DOMAIN_PAD;
 
-      for (const id of domainNodeIds) {
-        nodePositions.set(id, { id, x: colX, y: curY });
+      for (const skillId of skillIds) {
+        nodePositions.set(skillId, { id: skillId, x: colX, y: curY });
         curY += NODE_H + ROW_GAP;
         maxX = Math.max(maxX, colX + NODE_W);
         maxY = Math.max(maxY, curY);
       }
 
-      const groupHeight = curY - groupStartY - ROW_GAP;
-      const colorIdx = domainIndexMap.get(domainId) ?? 0;
       domainBands.push({
         domainId,
-        domainTitle: graph.groups.find((g) => g.domainId === domainId)?.domainTitle ?? domainId,
-        colIndex: col.index,
+        domainTitle: graph.groups.find((group) => group.domainId === domainId)?.domainTitle ?? domainId,
+        colIndex: column.index,
         x: colX - DOMAIN_PAD,
-        y: groupStartY,
+        y: startY,
         width: NODE_W + DOMAIN_PAD * 2,
-        height: Math.max(groupHeight, NODE_H + DOMAIN_LABEL_H + DOMAIN_PAD * 2),
-        colorClass: colorIdx.toString(),
+        height: Math.max(curY - startY - ROW_GAP, NODE_H + DOMAIN_LABEL_H + DOMAIN_PAD * 2),
       });
 
-      curY += DOMAIN_PAD; // inter-domain gap
+      curY += DOMAIN_PAD;
     }
   }
 
@@ -178,328 +172,109 @@ function computeLayout(graph: ProgressionGraph): LayoutResult {
   };
 }
 
-// ── Edge path ─────────────────────────────────────────────────────────────────
+function projectGraphSubset(graph: ProgressionGraph, visibleIds: Set<string>): ProgressionGraph {
+  const originalNodes = graph.nodes.filter((node) => visibleIds.has(node.id));
+  const visibleColumns = graph.columns
+    .map((column) => ({
+      ...column,
+      nodeIds: column.nodeIds.filter((nodeId) => visibleIds.has(nodeId)),
+    }))
+    .filter((column) => column.nodeIds.length > 0);
 
-function buildEdgePath(
-  from: NodePosition,
-  to: NodePosition,
-): string {
-  const startX = from.x + NODE_W;
-  const startY = from.y + NODE_H / 2;
-  const endX = to.x;
-  const endY = to.y + NODE_H / 2;
-  const ctrl = Math.max((endX - startX) * 0.45, 24);
-  return `M ${startX} ${startY} C ${startX + ctrl} ${startY}, ${endX - ctrl} ${endY}, ${endX} ${endY}`;
+  const columnIndexMap = new Map<number, number>();
+  visibleColumns.forEach((column, index) => columnIndexMap.set(column.index, index));
+
+  const nodes = originalNodes.map((node) => ({
+    ...node,
+    columnIndex: columnIndexMap.get(node.columnIndex) ?? 0,
+  }));
+
+  const columns = visibleColumns.map((column, index) => ({
+    ...column,
+    index,
+  }));
+
+  const edges = graph.edges.filter((edge) => visibleIds.has(edge.fromId) && visibleIds.has(edge.toId));
+  const groups = [...new Map(
+    nodes.map((node) => [
+      node.domainId,
+      {
+        domainId: node.domainId,
+        domainTitle: node.domainTitle,
+        sequenceIndex: node.canonicalOrder,
+        nodeIds: nodes.filter((candidate) => candidate.domainId === node.domainId).map((candidate) => candidate.id),
+      },
+    ]),
+  ).values()];
+
+  return {
+    ...graph,
+    nodes,
+    edges,
+    columns,
+    groups,
+    hasAnyNodes: nodes.length > 0,
+  };
 }
 
-// ── Source bar ────────────────────────────────────────────────────────────────
+function buildAdjacency(edges: ProgressionGraphEdge[]) {
+  const adjacency = new Map<string, Set<string>>();
 
-function SourceBar({
-  sources,
-  selectedSourceId,
-}: {
-  sources: CurriculumSource[];
-  selectedSourceId: string;
-}) {
-  return (
-    <div className="flex flex-wrap gap-2">
-      {sources.map((source) => {
-        const selected = source.id === selectedSourceId;
-        return (
-          <Link
-            key={source.id}
-            href={`/curriculum/graph?sourceId=${source.id}`}
-            className={cn(
-              "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm transition-colors",
-              selected
-                ? "border-primary/40 bg-primary/10 text-foreground"
-                : "border-border/70 bg-background/75 text-muted-foreground hover:bg-muted/40 hover:text-foreground",
-            )}
-          >
-            <span className="font-medium">{source.title}</span>
-            <Badge variant="outline" className="text-[10px] uppercase tracking-[0.14em]">
-              v{source.importVersion}
-            </Badge>
-          </Link>
-        );
-      })}
-    </div>
-  );
+  for (const edge of edges) {
+    const fromList = adjacency.get(edge.fromId) ?? new Set<string>();
+    fromList.add(edge.toId);
+    adjacency.set(edge.fromId, fromList);
+
+    const toList = adjacency.get(edge.toId) ?? new Set<string>();
+    toList.add(edge.fromId);
+    adjacency.set(edge.toId, toList);
+  }
+
+  return adjacency;
 }
 
-// ── Diagnostics status bar ───────────────────────────────────────────────────
+function buildNeighborhoodIds(graph: ProgressionGraph, skillId: string, hops: 1 | 2) {
+  const adjacency = buildAdjacency(graph.edges);
+  const visited = new Set<string>([skillId]);
+  let frontier = new Set<string>([skillId]);
 
-function progressionStatusMessage(
-  status: string,
-  hasExplicitProgression: boolean,
-  lastFailureReason: string | null,
-  rawAttemptSummaries?: any[],
-): { label: string; detail: string | null; missingSkillCount?: number } {
-  // Extract missing skill count from last failed attempt if present.
-  let missingSkillCount: number | undefined;
-  if (rawAttemptSummaries && rawAttemptSummaries.length > 0) {
-    const lastAttempt = rawAttemptSummaries[rawAttemptSummaries.length - 1];
-    if (lastAttempt?.missingSkillRefs?.length > 0) {
-      missingSkillCount = lastAttempt.missingSkillRefs.length;
-    } else if (lastAttempt?.summary?.missingSkillRefs > 0) {
-      missingSkillCount = lastAttempt.summary.missingSkillRefs;
+  for (let depth = 0; depth < hops; depth += 1) {
+    const next = new Set<string>();
+    for (const current of frontier) {
+      const neighbors = adjacency.get(current) ?? new Set<string>();
+      for (const neighbor of neighbors) {
+        if (visited.has(neighbor)) continue;
+        visited.add(neighbor);
+        next.add(neighbor);
+      }
     }
+    frontier = next;
   }
 
-  switch (status) {
-    case "explicit_ready":
-      return { label: "Explicit progression ready", detail: null };
-    case "explicit_failed":
-      return {
-        label: "Progression generation failed — using inferred fallback.",
-        detail: lastFailureReason
-          ? `Last failure: ${lastFailureReason}`
-          : "Regenerate to retry.",
-        missingSkillCount,
-      };
-    case "fallback_only":
-      return {
-        label: "Progression was not accepted during generation. Using inferred fallback.",
-        detail: "Regenerate to retry.",
-        missingSkillCount,
-      };
-    case "stale":
-      return {
-        label: "Progression exists but is stale.",
-        detail: "Curriculum was updated since last progression generation. Regenerate to refresh.",
-      };
-    case "not_attempted":
-      return {
-        label: hasExplicitProgression ? "Explicit progression ready" : "Progression not yet generated.",
-        detail: hasExplicitProgression ? null : "Run regeneration to build an explicit progression.",
-      };
-    default:
-      return {
-        label: hasExplicitProgression
-          ? "Explicit progression ready"
-          : "Explicit progression unavailable. Using inferred fallback.",
-        detail: null,
-      };
-  }
+  return visited;
 }
 
-interface DiagnosticsBarProps {
-  graph: ProgressionGraph;
-  sourceId: string;
-  onRegenerate: () => void;
-  isRegenerating: boolean;
-  regenerateResult: { kind: string; reason?: string; phaseCount?: number } | null;
-  debugOpen: boolean;
-  setDebugOpen: (open: boolean) => void;
-  viewAttemptsOpen: boolean;
-  setViewAttemptsOpen: (open: boolean) => void;
+function inspectorControlClassName() {
+  return "h-10 w-full rounded-xl border border-border/70 bg-background/80 px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/70";
 }
 
-function DiagnosticsBar({
-  graph,
-  sourceId,
-  onRegenerate,
-  isRegenerating,
-  regenerateResult,
-  debugOpen,
-  setDebugOpen,
-  viewAttemptsOpen,
-  setViewAttemptsOpen,
-}: DiagnosticsBarProps) {
-  const { diagnostics } = graph;
-  const status = (diagnostics as any).progressionStatus ?? (diagnostics.hasExplicitProgression ? "explicit_ready" : "fallback_only");
-  const isExplicit = status === "explicit_ready";
-  const isStale = status === "stale";
-  const rawAttemptSummaries = (diagnostics as any).rawAttemptSummaries as any[] | undefined;
-
-  const { label, detail, missingSkillCount } = progressionStatusMessage(
-    status,
-    diagnostics.hasExplicitProgression,
-    (diagnostics as any).lastFailureReason ?? null,
-    rawAttemptSummaries,
-  );
-
+function EmptyInspectorState() {
   return (
-    <div className="space-y-2">
-      <div
-        className={cn(
-          "flex flex-wrap items-center gap-3 rounded-lg border px-4 py-2.5 text-sm",
-          isExplicit
-            ? "border-emerald-400/40 bg-emerald-50/60 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300"
-            : isStale
-              ? "border-blue-400/40 bg-blue-50/60 text-blue-800 dark:bg-blue-950/30 dark:text-blue-300"
-              : "border-amber-400/40 bg-amber-50/60 text-amber-800 dark:bg-amber-950/30 dark:text-amber-300",
-        )}
-      >
-        {isExplicit ? (
-          <CheckCircle2 className="size-4 shrink-0" />
-        ) : (
-          <AlertTriangle className="size-4 shrink-0" />
-        )}
-        <span className="font-medium">{label}</span>
-        <span className="text-xs opacity-70">
-          {diagnostics.phaseCount > 0 && `${diagnostics.phaseCount} phases · `}
-          {graph.edges.length} edges · {graph.nodes.length} skills
-          {missingSkillCount && missingSkillCount > 0 && (
-            <span className="ml-1 font-semibold text-red-600 opacity-100">
-              · {missingSkillCount} skill{missingSkillCount !== 1 ? "s" : ""} unassigned
-            </span>
-          )}
-          {diagnostics.droppedEdgeCount > 0 && ` · ${diagnostics.droppedEdgeCount} edges dropped`}
-          {(diagnostics as any).attemptCount > 0 && ` · ${(diagnostics as any).attemptCount} attempt${(diagnostics as any).attemptCount !== 1 ? "s" : ""}`}
-        </span>
-        <div className="ml-auto shrink-0 flex items-center gap-1">
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => setDebugOpen(!debugOpen)}
-            className="h-7 text-xs"
-          >
-            {debugOpen ? "Hide prompt" : "View prompt"}
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => setViewAttemptsOpen(!viewAttemptsOpen)}
-            className="h-7 text-xs"
-          >
-            {viewAttemptsOpen ? "Hide attempts" : `View attempts${rawAttemptSummaries?.length ? ` (${rawAttemptSummaries.length})` : ""}`}
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={onRegenerate}
-            disabled={isRegenerating}
-            className="h-7 gap-1.5 text-xs"
-          >
-            <RefreshCw className={cn("size-3", isRegenerating && "animate-spin")} />
-            {isRegenerating ? "Regenerating…" : "Regenerate"}
-          </Button>
+    <Card className="rounded-[1.5rem] border-dashed border-border/80">
+      <CardContent className="space-y-3 px-5 py-6">
+        <div className="flex items-center gap-2 text-foreground">
+          <Network className="size-4" />
+          <p className="text-sm font-semibold">Inspect dependencies locally</p>
         </div>
-      </div>
-
-      {detail && !regenerateResult && (
-        <p className="px-1 text-xs text-muted-foreground">{detail}</p>
-      )}
-
-      {regenerateResult && (
-        <div
-          className={cn(
-            "rounded-md border px-3 py-2 text-xs",
-            regenerateResult.kind === "success"
-              ? "border-emerald-400/40 bg-emerald-50/60 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300"
-              : "border-red-400/40 bg-red-50/60 text-red-800 dark:bg-red-950/30 dark:text-red-300",
-          )}
-        >
-          {regenerateResult.kind === "success"
-            ? `Progression regenerated — ${regenerateResult.phaseCount ?? 0} phases accepted. Reload the page to see the updated graph.`
-            : `Regeneration failed: ${regenerateResult.reason ?? "Unknown error."}`}
-        </div>
-      )}
-    </div>
+        <p className="text-sm leading-6 text-muted-foreground">
+          Choose a phase to see the relationships inside that slice, or pick a skill to inspect a one-hop or
+          two-hop neighborhood. The dependencies view is intentionally local so the graph never starts as a
+          full-curriculum tangle.
+        </p>
+      </CardContent>
+    </Card>
   );
 }
-
-// ── Node detail popover ───────────────────────────────────────────────────────
-
-interface NodeDetailProps {
-  node: ProgressionGraphNode;
-  inEdges: ProgressionGraphEdge[];
-  outEdges: ProgressionGraphEdge[];
-  graph: ProgressionGraph;
-  onClose: () => void;
-}
-
-function NodeDetail({ node, inEdges, outEdges, graph, onClose }: NodeDetailProps) {
-  const nodeMap = new Map(graph.nodes.map((n) => [n.id, n]));
-
-  return (
-    <div className="flex flex-col gap-3 rounded-[18px] border border-border/70 bg-card p-5 shadow-lg">
-      <div className="flex items-start justify-between gap-3">
-        <div className="space-y-1">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-            Skill
-          </p>
-          <p className="text-sm font-semibold leading-5 text-foreground">{node.title}</p>
-        </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="mt-0.5 rounded-md p-1 text-muted-foreground hover:bg-muted/40 hover:text-foreground"
-          aria-label="Close"
-        >
-          <X className="size-4" />
-        </button>
-      </div>
-
-      <div className="space-y-1 text-xs text-muted-foreground">
-        <div>
-          <span className="font-medium text-foreground/70">Domain:</span> {node.domainTitle}
-        </div>
-        {node.strandTitle && (
-          <div>
-            <span className="font-medium text-foreground/70">Strand:</span> {node.strandTitle}
-          </div>
-        )}
-        {node.goalGroupTitle && (
-          <div>
-            <span className="font-medium text-foreground/70">Goal group:</span> {node.goalGroupTitle}
-          </div>
-        )}
-        {node.phaseTitle && (
-          <div>
-            <span className="font-medium text-foreground/70">Phase:</span> {node.phaseTitle}
-          </div>
-        )}
-        {!node.isExplicitlyPhased && (
-          <div className="italic opacity-70">No explicit phase assigned</div>
-        )}
-      </div>
-
-      {outEdges.length > 0 && (
-        <div className="space-y-1">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-            Required before
-          </p>
-          {outEdges.map((e) => {
-            const target = nodeMap.get(e.toId);
-            return (
-              <div key={e.toId} className="flex items-center gap-2 text-xs">
-                <span className="inline-block size-1.5 rounded-full bg-foreground/40" />
-                <span className="text-foreground/80">{target?.title ?? e.toId}</span>
-                <Badge variant="outline" className="text-[9px] uppercase tracking-[0.12em]">
-                  {edgeLegendLabel(e.kind)}
-                </Badge>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {inEdges.length > 0 && (
-        <div className="space-y-1">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-            Requires
-          </p>
-          {inEdges.map((e) => {
-            const src = nodeMap.get(e.fromId);
-            return (
-              <div key={e.fromId} className="flex items-center gap-2 text-xs">
-                <span className="inline-block size-1.5 rounded-full bg-foreground/40" />
-                <span className="text-foreground/80">{src?.title ?? e.fromId}</span>
-                <Badge variant="outline" className="text-[9px] uppercase tracking-[0.12em]">
-                  {edgeLegendLabel(e.kind)}
-                </Badge>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Edge legend ───────────────────────────────────────────────────────────────
 
 function EdgeLegend({ kinds }: { kinds: ProgressionEdgeKind[] }) {
   if (kinds.length === 0) return null;
@@ -518,7 +293,7 @@ function EdgeLegend({ kinds }: { kinds: ProgressionEdgeKind[] }) {
                 stroke={style.stroke}
                 strokeWidth={style.strokeWidth}
                 strokeDasharray={style.strokeDasharray}
-                opacity={style.opacity * 1.4}
+                opacity={style.opacity * 1.3}
               />
             </svg>
             <span>{edgeLegendLabel(kind)}</span>
@@ -529,567 +304,292 @@ function EdgeLegend({ kinds }: { kinds: ProgressionEdgeKind[] }) {
   );
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
-
-interface CurriculumProgressionGraphProps {
-  sources: CurriculumSource[];
-  selectedSourceId: string;
-  graph: ProgressionGraph;
-  progressionDebug?: unknown;
-  regenerateAction?: (sourceId: string) => Promise<{ kind: string; reason?: string; phaseCount?: number; attemptCount?: number }>;
-}
-
-
-function StatusBadge({ value, okLabel = "ok" }: { value: string; okLabel?: string }) {
-  const isOk = value === "ok" || value === okLabel;
-  const isError = value === "error";
-  const isSkipped = value === "not_attempted";
-  return (
-    <span
-      className={cn(
-        "inline-block rounded px-1.5 py-0.5 text-[10px] font-medium",
-        isOk && "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
-        isError && "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300",
-        isSkipped && "bg-muted text-muted-foreground",
-      )}
-    >
-      {isSkipped ? "—" : value}
-    </span>
-  );
-}
-
-function AttemptCard({ attempt }: { attempt: any }) {
-  const [rawOpen, setRawOpen] = useState(false);
-  const [parsedOpen, setParsedOpen] = useState(false);
-
-  return (
-    <div className="text-xs space-y-2 p-3 border rounded bg-background">
-      {/* Header */}
-      <div className="flex justify-between font-medium border-b pb-1.5 mb-1">
-        <span className="text-sm">Attempt {attempt.attemptNumber}</span>
-        <span className={cn("text-sm font-semibold", attempt.accepted ? "text-emerald-600" : "text-red-600")}>
-          {attempt.accepted
-            ? attempt.repairAttempt?.accepted
-              ? "Accepted (after repair)"
-              : "Accepted"
-            : "Rejected"}
-        </span>
-      </div>
-
-      {/* Status grid */}
-      <div className="grid grid-cols-4 gap-x-3 gap-y-1 text-[11px]">
-        <div className="col-span-1 font-medium text-muted-foreground">Transport</div>
-        <div className="col-span-1"><StatusBadge value={attempt.transportStatus} okLabel="ok" /></div>
-        <div className="col-span-1 font-medium text-muted-foreground">Parse</div>
-        <div className="col-span-1">
-          <StatusBadge value={attempt.parseStatus} />
-          {attempt.parseFailureKind && (
-            <span className="ml-1 text-muted-foreground">({attempt.parseFailureKind})</span>
-          )}
-        </div>
-        <div className="col-span-1 font-medium text-muted-foreground">Schema</div>
-        <div className="col-span-1"><StatusBadge value={attempt.schemaStatus} /></div>
-        <div className="col-span-1 font-medium text-muted-foreground">Semantic</div>
-        <div className="col-span-1"><StatusBadge value={attempt.semanticStatus} /></div>
-      </div>
-
-      {/* Coverage summary */}
-      {attempt.summary && (
-        <div className="flex flex-wrap gap-3 text-[11px] text-muted-foreground pt-1 border-t">
-          <span>Phases: <strong className="text-foreground">{attempt.summary.phaseCount}</strong></span>
-          <span>Edges: <strong className="text-foreground">{attempt.summary.edgeCount}</strong></span>
-          {attempt.summary.missingSkillRefs > 0 && (
-            <span className="text-red-600 font-medium">
-              Missing skills: {attempt.summary.missingSkillRefs}
-            </span>
-          )}
-          {attempt.summary.duplicatePhaseAssignments > 0 && (
-            <span className="text-amber-600 font-medium">
-              Duplicates: {attempt.summary.duplicatePhaseAssignments}
-            </span>
-          )}
-          {attempt.summary.hardPrerequisiteCycle && (
-            <span className="text-red-600 font-medium">Cycle detected</span>
-          )}
-        </div>
-      )}
-
-      {/* Failure reason */}
-      {attempt.failureReason && (
-        <div className="text-red-600 text-[11px] break-words">
-          <strong>Failure:</strong> {attempt.failureReason}
-        </div>
-      )}
-
-      {/* Sanitization note */}
-      {attempt.sanitizationChanged && (
-        <div className="text-amber-600 text-[11px]">
-          Ref sanitization applied ({attempt.sanitizationResults?.filter((r: any) => r.changed).length} refs corrected)
-        </div>
-      )}
-
-      {/* Repair attempt status — shows explicit lifecycle, not just "succeeded" */}
-      {attempt.repairAttempt?.attempted && (
-        <div className="text-[11px] space-y-0.5 border-t pt-1">
-          <div className="font-medium text-muted-foreground">Repair pass:</div>
-          {attempt.repairAttempt.accepted ? (
-            <div className="text-emerald-600">Repair response received → parsed → schema OK → semantically valid → accepted</div>
-          ) : attempt.repairAttempt.repairedValidation ? (
-            <div className="text-amber-600">
-              Repair response received → parsed → schema OK → <strong>semantically invalid</strong>
-              {attempt.repairAttempt.repairedValidation.missingSkillRefs.length > 0 && (
-                <span> (still missing {attempt.repairAttempt.repairedValidation.missingSkillRefs.length} skills)</span>
-              )}
-            </div>
-          ) : (
-            <div className="text-red-600">
-              Repair failed — {attempt.repairAttempt.failureReason}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Missing skillRefs list */}
-      {attempt.missingSkillRefs && attempt.missingSkillRefs.length > 0 && (
-        <div className="text-[11px]">
-          <strong className="text-red-600">Missing skillRefs ({attempt.missingSkillRefs.length}):</strong>
-          <ul className="mt-1 space-y-0.5 text-muted-foreground font-mono">
-            {(attempt.missingSkillRefs as string[]).slice(0, 10).map((ref: string) => (
-              <li key={ref} className="truncate">{ref}</li>
-            ))}
-            {attempt.missingSkillRefs.length > 10 && (
-              <li className="text-muted-foreground">… and {attempt.missingSkillRefs.length - 10} more</li>
-            )}
-          </ul>
-        </div>
-      )}
-
-      {/* Validation issues */}
-      {attempt.validationIssues && attempt.validationIssues.length > 0 && (
-        <div className="text-[11px]">
-          <strong className="text-foreground/70">Validation issues:</strong>
-          <ul className="mt-1 space-y-0.5 text-muted-foreground">
-            {(attempt.validationIssues as any[]).slice(0, 8).map((issue: any, idx: number) => (
-              <li key={idx}>
-                <span className="font-mono text-red-600">{issue.code}</span>
-                {" — "}
-                <span className="break-words">{issue.message}</span>
-              </li>
-            ))}
-            {attempt.validationIssues.length > 8 && (
-              <li className="text-muted-foreground">… and {attempt.validationIssues.length - 8} more</li>
-            )}
-          </ul>
-        </div>
-      )}
-
-      {/* Raw response toggle */}
-      {attempt.rawResponse && (
-        <div className="text-[11px]">
-          <button
-            type="button"
-            onClick={() => setRawOpen((v) => !v)}
-            className="text-muted-foreground underline hover:text-foreground"
-          >
-            {rawOpen ? "Hide raw response" : "Show raw response"}
-          </button>
-          {rawOpen && (
-            <pre className="mt-2 max-h-64 overflow-auto rounded border bg-muted/30 p-2 font-mono text-[10px] whitespace-pre-wrap break-words">
-              {attempt.rawResponse}
-            </pre>
-          )}
-        </div>
-      )}
-
-      {/* Parsed JSON toggle */}
-      {attempt.parsedJson && (
-        <div className="text-[11px]">
-          <button
-            type="button"
-            onClick={() => setParsedOpen((v) => !v)}
-            className="text-muted-foreground underline hover:text-foreground"
-          >
-            {parsedOpen ? "Hide parsed JSON" : "Show parsed JSON"}
-          </button>
-          {parsedOpen && (
-            <pre className="mt-2 max-h-64 overflow-auto rounded border bg-muted/30 p-2 font-mono text-[10px] whitespace-pre-wrap break-words">
-              {JSON.stringify(attempt.parsedJson, null, 2)}
-            </pre>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ViewAttemptsPanel({ attempts }: { attempts: any[] }) {
-  if (!attempts || attempts.length === 0) {
-    return (
-      <div className="rounded-md border px-4 py-3 text-sm text-muted-foreground">
-        No attempt data stored. Regenerate to populate.
-      </div>
-    );
-  }
-  return (
-    <div className="rounded-md border p-4 space-y-3 bg-muted/10">
-      <h3 className="font-semibold text-sm">
-        Attempt diagnostics ({attempts.length} attempt{attempts.length !== 1 ? "s" : ""})
-      </h3>
-      <div className="space-y-3">
-        {attempts.map((attempt, i) => (
-          <AttemptCard key={i} attempt={attempt} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
 export function CurriculumProgressionGraph({
-  sources,
-  selectedSourceId,
   graph,
-  progressionDebug,
-  regenerateAction,
+  roadmap,
+  selectedDomainId = "all",
+  selectedSkillId = null,
+  onSelectSkill,
 }: CurriculumProgressionGraphProps) {
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const [debugOpen, setDebugOpen] = useState(false);
-  const [viewAttemptsOpen, setViewAttemptsOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [isPending, startTransition] = useTransition();
-  const [regenerateResult, setRegenerateResult] = useState<{ kind: string; reason?: string; phaseCount?: number } | null>(null);
+  const [focusMode, setFocusMode] = useState<"skill" | "phase">("skill");
+  const [focusSkillId, setFocusSkillId] = useState<string>("");
+  const [focusPhaseId, setFocusPhaseId] = useState<string>("");
+  const [hopDepth, setHopDepth] = useState<1 | 2>(1);
 
-  // Reset selection when source changes.
   useEffect(() => {
-    setSelectedNodeId(null);
-    setRegenerateResult(null);
-  }, [selectedSourceId]);
+    if (!selectedSkillId) return;
+    if (!roadmap.skillById[selectedSkillId]) return;
+    setFocusMode("skill");
+    setFocusSkillId(selectedSkillId);
+  }, [roadmap.skillById, selectedSkillId]);
 
-  function handleRegenerate() {
-    if (!regenerateAction) return;
-    setRegenerateResult(null);
-    startTransition(async () => {
-      const result = await regenerateAction(selectedSourceId);
-      setRegenerateResult(result);
-    });
-  }
+  const filteredSkillOptions = useMemo(
+    () =>
+      roadmap.skills.filter((skill) => selectedDomainId === "all" || skill.domainId === selectedDomainId),
+    [roadmap.skills, selectedDomainId],
+  );
 
-  const layout = computeLayout(graph);
-  const nodeMap = new Map(graph.nodes.map((n) => [n.id, n]));
-  const domainIndexMap = new Map(graph.groups.map((g, i) => [g.domainId, i]));
+  const phaseOptions = useMemo(
+    () =>
+      roadmap.phases.filter((phase) =>
+        phase.groups.some((group) =>
+          group.skillIds.some((skillId) => {
+            const skill = roadmap.skillById[skillId];
+            return selectedDomainId === "all" || skill?.domainId === selectedDomainId;
+          }),
+        ),
+      ),
+    [roadmap.phases, roadmap.skillById, selectedDomainId],
+  );
 
-  const selectedNode = selectedNodeId ? nodeMap.get(selectedNodeId) ?? null : null;
-  const inEdges = selectedNodeId
-    ? graph.edges.filter((e) => e.toId === selectedNodeId)
-    : [];
-  const outEdges = selectedNodeId
-    ? graph.edges.filter((e) => e.fromId === selectedNodeId)
-    : [];
+  const visibleIds = useMemo(() => {
+    if (focusMode === "skill") {
+      if (!focusSkillId) return null;
+      const neighborhood = buildNeighborhoodIds(graph, focusSkillId, hopDepth);
+      return new Set(
+        [...neighborhood].filter((skillId) => {
+          const skill = roadmap.skillById[skillId];
+          return selectedDomainId === "all" || skill?.domainId === selectedDomainId;
+        }),
+      );
+    }
 
-  const edgeKindsPresent = [...new Set(graph.edges.map((e) => e.kind))] as ProgressionEdgeKind[];
+    if (!focusPhaseId) return null;
+    const phaseSkillIds = roadmap.skills
+      .filter((skill) => skill.phaseId === focusPhaseId)
+      .filter((skill) => selectedDomainId === "all" || skill.domainId === selectedDomainId)
+      .map((skill) => skill.id);
+    return new Set(phaseSkillIds);
+  }, [focusMode, focusPhaseId, focusSkillId, graph, hopDepth, roadmap.skillById, roadmap.skills, selectedDomainId]);
 
-  if (!graph.hasAnyNodes) {
-    return (
-      <Card>
-        <CardContent className="py-10">
-          <p className="text-center text-sm text-muted-foreground">
-            No skills to graph for this curriculum source.
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
+  const subset = visibleIds && visibleIds.size > 0 ? projectGraphSubset(graph, visibleIds) : null;
+  const layout = subset ? computeLayout(subset) : null;
+  const nodeMap = subset ? new Map(subset.nodes.map((node) => [node.id, node])) : new Map<string, ProgressionGraphNode>();
+  const edgeKindsPresent = subset ? [...new Set(subset.edges.map((edge) => edge.kind))] as ProgressionEdgeKind[] : [];
+
+  const focusSummary =
+    focusMode === "skill"
+      ? focusSkillId
+        ? `${hopDepth}-hop neighborhood around ${roadmap.skillById[focusSkillId]?.title ?? "selected skill"}`
+        : null
+      : focusPhaseId
+        ? `Dependencies inside ${roadmap.phases.find((phase) => phase.id === focusPhaseId)?.title ?? "selected phase"}`
+        : null;
 
   return (
     <div className="space-y-4">
-      {/* Source selector */}
-      <div className="space-y-2">
-        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-          Curriculum source
-        </p>
-        <SourceBar sources={sources} selectedSourceId={selectedSourceId} />
-      </div>
+      <Card className="rounded-[1.5rem] border-border/70 bg-card/72">
+        <CardContent className="space-y-4 p-5">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="secondary">Dependencies</Badge>
+            <Badge variant="outline">
+              {selectedDomainId === "all"
+                ? "All domains"
+                : roadmap.filters.domains.find((domain) => domain.id === selectedDomainId)?.title ?? "Scoped domain"}
+            </Badge>
+          </div>
 
-      {/* Progression status */}
-      <DiagnosticsBar
-        graph={graph}
-        sourceId={selectedSourceId}
-        onRegenerate={handleRegenerate}
-        isRegenerating={isPending}
-        regenerateResult={regenerateResult}
-        debugOpen={debugOpen}
-        setDebugOpen={setDebugOpen}
-        viewAttemptsOpen={viewAttemptsOpen}
-        setViewAttemptsOpen={setViewAttemptsOpen}
-      />
+          <div className="grid gap-3 lg:grid-cols-[auto_auto_minmax(14rem,1fr)_minmax(14rem,1fr)]">
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant={focusMode === "skill" ? "default" : "outline"}
+                onClick={() => setFocusMode("skill")}
+              >
+                Skill neighborhood
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={focusMode === "phase" ? "default" : "outline"}
+                onClick={() => setFocusMode("phase")}
+              >
+                Whole phase
+              </Button>
+            </div>
 
-      {viewAttemptsOpen && (
-        <ViewAttemptsPanel attempts={(graph.diagnostics as any).rawAttemptSummaries ?? []} />
-      )}
+            {focusMode === "skill" ? (
+              <div className="flex gap-2">
+                <Button type="button" size="sm" variant={hopDepth === 1 ? "default" : "outline"} onClick={() => setHopDepth(1)}>
+                  1 hop
+                </Button>
+                <Button type="button" size="sm" variant={hopDepth === 2 ? "default" : "outline"} onClick={() => setHopDepth(2)}>
+                  2 hops
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 rounded-xl border border-border/70 bg-background/80 px-3 text-sm text-muted-foreground">
+                <Waypoints className="size-4" />
+                Show the full phase slice
+              </div>
+            )}
 
-      {/* Side-by-side: graph + detail panel */}
-      <div className={cn("flex gap-4", selectedNode ? "items-start" : "")}>
-        {/* Graph canvas */}
-        <div className="min-w-0 flex-1">
-          <Card className="overflow-hidden">
-            <CardContent className="p-0">
-              {/* Column headers */}
+            {focusMode === "skill" ? (
+              <label className="space-y-1">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  Skill
+                </span>
+                <select
+                  value={focusSkillId}
+                  onChange={(event) => setFocusSkillId(event.target.value)}
+                  className={inspectorControlClassName()}
+                >
+                  <option value="">Choose a skill</option>
+                  {filteredSkillOptions.map((skill) => (
+                    <option key={skill.id} value={skill.id}>
+                      {skill.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : (
+              <label className="space-y-1">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  Phase
+                </span>
+                <select
+                  value={focusPhaseId}
+                  onChange={(event) => setFocusPhaseId(event.target.value)}
+                  className={inspectorControlClassName()}
+                >
+                  <option value="">Choose a phase</option>
+                  {phaseOptions.map((phase) => (
+                    <option key={phase.id} value={phase.id}>
+                      {phase.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+
+            <div className="rounded-2xl border border-border/70 bg-background/80 px-4 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Inspector note</p>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                Click a node to open the shared skill detail drawer. This view stays intentionally scoped.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {!subset || !layout ? (
+        <EmptyInspectorState />
+      ) : (
+        <Card className="overflow-hidden rounded-[1.5rem] border-border/70">
+          <CardContent className="space-y-4 p-0">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 bg-muted/25 px-5 py-4">
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-foreground">{focusSummary}</p>
+                <p className="text-xs leading-5 text-muted-foreground">
+                  {subset.nodes.length} skills · {subset.edges.length} dependency links
+                </p>
+              </div>
+              {subset.edges.length === 0 ? (
+                <div className="flex items-center gap-2 rounded-full border border-border/70 bg-background/80 px-3 py-1.5 text-xs text-muted-foreground">
+                  <Info className="size-3.5" />
+                  No explicit dependency edges in this slice
+                </div>
+              ) : null}
+            </div>
+
+            <div className="overflow-x-auto px-4 pb-4">
               <div
-                className="flex border-b border-border/60 bg-muted/30"
+                className="relative rounded-[1.25rem] border border-border/70 bg-background/70"
                 style={{
-                  paddingLeft: PAD_X,
-                  paddingRight: PAD_X,
+                  width: Math.max(layout.totalWidth, 700),
+                  height: Math.max(layout.totalHeight, 340),
                 }}
               >
-                {graph.columns.map((col) => (
-                  <div
-                    key={col.index}
-                    className="flex shrink-0 items-center gap-2 py-3 pr-4"
-                    style={{ width: NODE_W + COL_GAP, minWidth: NODE_W + COL_GAP }}
-                  >
-                    <span className="text-xs font-semibold text-foreground/70">{col.title}</span>
-                    {col.isFallback && (
-                      <span title="Inferred order — no explicit phases">
-                        <Info className="size-3 text-muted-foreground" />
+                {layout.domainBands.map((band, index) => {
+                  const color = domainColor(index);
+                  return (
+                    <div
+                      key={`${band.domainId}-${band.colIndex}`}
+                      className="absolute rounded-xl"
+                      style={{
+                        left: band.x,
+                        top: band.y,
+                        width: band.width,
+                        height: band.height,
+                        backgroundColor: color.bg,
+                        border: `1px solid ${color.border}`,
+                      }}
+                    >
+                      <span
+                        className="block truncate px-2 pt-1 text-[10px] font-semibold uppercase tracking-[0.14em]"
+                        style={{ color: color.label }}
+                      >
+                        {band.domainTitle}
                       </span>
-                    )}
-                    <Badge variant="outline" className="ml-auto text-[9px] uppercase tracking-[0.1em]">
-                      {col.nodeIds.length}
-                    </Badge>
-                  </div>
-                ))}
-              </div>
+                    </div>
+                  );
+                })}
 
-              {/* Scrollable graph area */}
-              <div className="overflow-x-auto">
-                <div
-                  ref={containerRef}
-                  className="relative"
-                  style={{
-                    width: Math.max(layout.totalWidth, 600),
-                    height: Math.max(layout.totalHeight, 400),
-                  }}
+                <svg
+                  className="pointer-events-none absolute inset-0"
+                  width={layout.totalWidth}
+                  height={layout.totalHeight}
+                  aria-hidden="true"
                 >
-                  {/* Domain band backgrounds */}
-                  {layout.domainBands.map((band, i) => {
-                    const colIdx = domainIndexMap.get(band.domainId) ?? 0;
-                    const color = domainColor(colIdx);
+                  {subset.edges.map((edge) => {
+                    const from = layout.nodePositions.get(edge.fromId);
+                    const to = layout.nodePositions.get(edge.toId);
+                    if (!from || !to) return null;
+                    const style = edgeStyle(edge.kind);
                     return (
-                      <div
-                        key={`${band.domainId}-${band.colIndex}-${i}`}
-                        className="absolute rounded-lg"
-                        style={{
-                          left: band.x,
-                          top: band.y,
-                          width: band.width,
-                          height: band.height,
-                          backgroundColor: color.bg,
-                          border: `1px solid ${color.border}`,
-                        }}
-                      >
-                        <span
-                          className="block truncate px-2 pt-1 text-[10px] font-semibold uppercase tracking-[0.14em]"
-                          style={{ color: color.label }}
-                        >
-                          {band.domainTitle}
-                        </span>
-                      </div>
+                      <path
+                        key={`${edge.fromId}-${edge.toId}-${edge.kind}`}
+                        d={buildEdgePath(from, to)}
+                        fill="none"
+                        stroke={style.stroke}
+                        strokeWidth={style.strokeWidth}
+                        strokeDasharray={style.strokeDasharray}
+                        opacity={style.opacity}
+                        strokeLinecap="round"
+                      />
                     );
                   })}
+                </svg>
 
-                  {/* SVG edges */}
-                  <svg
-                    className="pointer-events-none absolute inset-0"
-                    width={layout.totalWidth}
-                    height={layout.totalHeight}
-                    aria-hidden="true"
-                  >
-                    <defs>
-                      <marker
-                        id="arrowhead"
-                        markerWidth="6"
-                        markerHeight="4"
-                        refX="5"
-                        refY="2"
-                        orient="auto"
-                      >
-                        <polygon
-                          points="0 0, 6 2, 0 4"
-                          fill="hsl(var(--muted-foreground))"
-                          opacity="0.5"
-                        />
-                      </marker>
-                    </defs>
-                    {graph.edges.map((edge) => {
-                      const fromPos = layout.nodePositions.get(edge.fromId);
-                      const toPos = layout.nodePositions.get(edge.toId);
-                      if (!fromPos || !toPos) return null;
-                      const style = edgeStyle(edge.kind);
-                      const isRelated =
-                        selectedNodeId &&
-                        (edge.fromId === selectedNodeId || edge.toId === selectedNodeId);
-                      const dimmed = selectedNodeId && !isRelated;
-                      return (
-                        <path
-                          key={`${edge.fromId}-${edge.toId}`}
-                          d={buildEdgePath(fromPos, toPos)}
-                          fill="none"
-                          stroke={style.stroke}
-                          strokeWidth={isRelated ? style.strokeWidth * 1.8 : style.strokeWidth}
-                          strokeDasharray={style.strokeDasharray}
-                          opacity={dimmed ? style.opacity * 0.3 : style.opacity * (isRelated ? 1.4 : 1)}
-                          strokeLinecap="round"
-                          markerEnd="url(#arrowhead)"
-                        />
-                      );
-                    })}
-                  </svg>
+                {subset.nodes.map((node) => {
+                  const position = layout.nodePositions.get(node.id);
+                  if (!position) return null;
 
-                  {/* Skill nodes */}
-                  {graph.nodes.map((node) => {
-                    const pos = layout.nodePositions.get(node.id);
-                    if (!pos) return null;
-                    const isSelected = node.id === selectedNodeId;
-                    const isRelated =
-                      selectedNodeId &&
-                      !isSelected &&
-                      graph.edges.some(
-                        (e) =>
-                          (e.fromId === selectedNodeId && e.toId === node.id) ||
-                          (e.toId === selectedNodeId && e.fromId === node.id),
-                      );
-                    const dimmed = selectedNodeId && !isSelected && !isRelated;
-
-                    return (
-                      <button
-                        key={node.id}
-                        type="button"
-                        onClick={() =>
-                          setSelectedNodeId(isSelected ? null : node.id)
+                  return (
+                    <button
+                      key={node.id}
+                      type="button"
+                      onClick={() => {
+                        if (focusMode === "skill") {
+                          setFocusSkillId(node.id);
                         }
-                        className={cn(
-                          "absolute flex flex-col justify-center gap-0.5 rounded-xl border px-3 py-2 text-left text-xs transition-all",
-                          "bg-card shadow-sm hover:shadow-md",
-                          isSelected
-                            ? "z-10 border-primary bg-primary/8 shadow-[0_0_0_2px_hsl(var(--primary)/0.25)]"
-                            : isRelated
-                              ? "border-primary/30 bg-primary/5"
-                              : "border-border/60 hover:border-border",
-                          dimmed && "opacity-30",
-                          !node.isExplicitlyPhased && "border-dashed",
-                        )}
-                        style={{
-                          left: pos.x,
-                          top: pos.y,
-                          width: NODE_W,
-                          height: NODE_H,
-                        }}
-                      >
-                        <p className="line-clamp-2 font-medium leading-4 text-foreground">
-                          {node.title}
-                        </p>
-                        {node.phaseTitle && (
-                          <p className="truncate text-[10px] text-muted-foreground">
-                            {node.phaseTitle}
-                          </p>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
+                        onSelectSkill?.(node.id);
+                      }}
+                      className="absolute flex flex-col justify-center gap-0.5 rounded-xl border border-border/70 bg-card px-3 py-2 text-left text-xs shadow-sm transition-[border-color,box-shadow,transform] duration-[var(--motion-base)] ease-[var(--ease-standard)] hover:-translate-y-px hover:border-border hover:shadow-[var(--shadow-soft)]"
+                      style={{
+                        left: position.x,
+                        top: position.y,
+                        width: NODE_W,
+                        height: NODE_H,
+                      }}
+                    >
+                      <p className="line-clamp-2 font-medium leading-4 text-foreground">{node.title}</p>
+                      <p className="truncate text-[10px] text-muted-foreground">{node.phaseTitle ?? node.domainTitle}</p>
+                    </button>
+                  );
+                })}
               </div>
-
-              {/* Edge legend */}
-              {edgeKindsPresent.length > 0 && (
-                <div className="border-t border-border/60 bg-muted/20 px-4 py-3">
-                  <EdgeLegend kinds={edgeKindsPresent} />
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Node detail panel */}
-        {selectedNode && (
-          <div className="w-72 shrink-0">
-            <NodeDetail
-              node={selectedNode}
-              inEdges={inEdges}
-              outEdges={outEdges}
-              graph={graph}
-              onClose={() => setSelectedNodeId(null)}
-            />
-          </div>
-        )}
-      </div>
-
-      {/* Mobile fallback */}
-      <div className="md:hidden">
-        <Card>
-          <CardContent className="py-6">
-            <p className="text-center text-sm text-muted-foreground">
-              The progression graph is designed for wider screens. Rotate your device or view on
-              desktop for the best experience.
-            </p>
-            <div className="mt-4 space-y-2">
-              {graph.columns.map((col) => (
-                <div key={col.index}>
-                  <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                    {col.title}
-                  </p>
-                  <div className="grid gap-1">
-                    {col.nodeIds.map((id) => {
-                      const n = nodeMap.get(id);
-                      if (!n) return null;
-                      return (
-                        <div
-                          key={id}
-                          className="rounded-lg border border-border/60 px-3 py-2 text-xs"
-                        >
-                          <p className="font-medium">{n.title}</p>
-                          <p className="text-muted-foreground">{n.domainTitle}</p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
             </div>
+
+            {edgeKindsPresent.length > 0 ? (
+              <div className="border-t border-border/60 bg-muted/20 px-5 py-4">
+                <EdgeLegend kinds={edgeKindsPresent} />
+              </div>
+            ) : null}
           </CardContent>
         </Card>
-      </div>
-
-      {/* Progression debug output */}
-      <div className="space-y-2">
-        <div className="flex items-center gap-3">
-          <ProgressionPromptPreview sourceId={selectedSourceId} />
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setDebugOpen((v) => !v)}
-            className="justify-between"
-          >
-            <span>{debugOpen ? "Hide output" : "View output"}</span>
-            <span className="ml-2 text-xs text-muted-foreground">debug</span>
-          </Button>
-        </div>
-
-        {debugOpen && progressionDebug != null ? (
-          <div className="rounded-lg border border-border/70 bg-background p-4">
-            <p className="text-sm font-medium text-foreground">Progression output</p>
-            <p className="text-xs leading-5 text-muted-foreground">
-              Raw progression data from DB — phases, prerequisites, and diagnostics.
-            </p>
-            <pre className="mt-3 max-h-[32rem] overflow-auto whitespace-pre-wrap rounded-lg border border-border/70 bg-muted/35 p-3 text-xs leading-6 text-foreground">
-              {JSON.stringify(progressionDebug, null, 2)}
-            </pre>
-          </div>
-        ) : null}
-
-        {debugOpen && progressionDebug == null ? (
-          <p className="px-1 text-xs text-muted-foreground">No progression data available for this source.</p>
-        ) : null}
-      </div>
+      )}
     </div>
   );
 }
