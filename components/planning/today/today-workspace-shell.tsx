@@ -346,7 +346,6 @@ export function TodayWorkspaceShell({
             <TodayLessonDraftCard
               workspace={workspace}
               draftState={draftState}
-              onEvaluationSaved={onEvaluationSaved}
             />
 
             <details className="rounded-[var(--radius)] border border-border/70 bg-card/70">

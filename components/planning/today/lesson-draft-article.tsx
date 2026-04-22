@@ -7,32 +7,19 @@ import {
 import { Card } from "@/components/ui/card";
 import { MarkdownContent } from "@/components/ui/markdown-content";
 import type { DailyWorkspace } from "@/lib/planning/types";
-import { saveTodayPlanItemEvaluationAction } from "@/app/(parent)/today/actions";
-
-import { LessonDraftOutcomeControl } from "./evaluation-control";
 import type { DraftState } from "./types";
 
 export function TodayLessonDraftArticle({
   workspace,
   draftState,
-  onEvaluationSaved,
 }: {
   workspace: DailyWorkspace;
   draftState: DraftState & { kind: string };
-  onEvaluationSaved: (result: Awaited<ReturnType<typeof saveTodayPlanItemEvaluationAction>>) => void;
 }) {
   const draftContent =
     draftState.kind === "structured" ? (
       <LessonDraftRenderer
         draft={draftState.draft}
-        renderBlockFooter={(_block, index) => (
-          <LessonDraftOutcomeControl
-            item={workspace.leadItem}
-            date={workspace.date}
-            onEvaluationSaved={onEvaluationSaved}
-            key={`${workspace.leadItem.id}-${index}`}
-          />
-        )}
       />
     ) : draftState.kind === "markdown" ? (
       <div className="space-y-4">

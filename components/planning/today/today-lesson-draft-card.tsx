@@ -3,7 +3,6 @@
 import dynamic from "next/dynamic";
 
 import { Card } from "@/components/ui/card";
-import type { TodayPlanItemEvaluationResult } from "@/app/(parent)/today/actions";
 import type { DailyWorkspace } from "@/lib/planning/types";
 
 import type { DraftState } from "./types";
@@ -29,17 +28,14 @@ const DeferredTodayLessonDraftArticle = dynamic(
 export function TodayLessonDraftCard({
   workspace,
   draftState,
-  onEvaluationSaved,
 }: {
   workspace: DailyWorkspace;
   draftState: DraftState & { kind: string };
-  onEvaluationSaved: (result: TodayPlanItemEvaluationResult) => void;
 }) {
   return (
     <DeferredTodayLessonDraftArticle
       workspace={workspace}
       draftState={draftState}
-      onEvaluationSaved={onEvaluationSaved}
     />
   );
 }
