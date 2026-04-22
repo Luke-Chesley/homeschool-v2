@@ -1,13 +1,12 @@
 "use client";
 
 import * as React from "react";
+import { FileText, Upload, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import type {
-  NormalizedIntakeSourcePackage,
-} from "@/lib/homeschool/intake/types";
+import type { NormalizedIntakeSourcePackage } from "@/lib/homeschool/intake/types";
 import {
   COMMON_SOURCE_UPLOAD_ACCEPT,
   resolveUploadModality,
@@ -20,7 +19,7 @@ const MAX_VERCEL_MULTIPART_UPLOAD_BYTES = 4 * 1024 * 1024;
 
 function summarizePackageStatus(pkg: NormalizedIntakeSourcePackage) {
   if (pkg.assetCount > 0) {
-    return "Uploaded source is stored and ready to send to the model.";
+    return "Uploaded source is stored and ready for interpretation.";
   }
   return "Source package is ready.";
 }
@@ -47,20 +46,48 @@ function sanitizeUploadFileName(fileName: string) {
   );
 }
 
+function deriveTitleFromFileName(fileName: string) {
+  return fileName.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim();
+}
+
+function deriveTitleFromText(sourceText: string) {
+  const firstLine = sourceText
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find(Boolean);
+
+  return firstLine ? firstLine.slice(0, 80) : null;
+}
+
+function buildSelectedSourceCopy(params: {
+  hasText: boolean;
+  hasUpload: boolean;
+  sourcePackage: NormalizedIntakeSourcePackage | null;
+}) {
+  if (params.hasText && params.hasUpload) {
+    return "We’ll use the pasted text together with the selected file.";
+  }
+  if (params.hasUpload) {
+    return params.sourcePackage
+      ? "We’ll use the prepared upload."
+      : "We’ll use the selected upload.";
+  }
+  if (params.hasText) {
+    return "We’ll use the pasted text.";
+  }
+  return "Paste text, choose a file, or do both.";
+}
+
 export function HomeschoolCurriculumIntakeForm(props: {
   organizationId?: string | null;
   activeLearnerId?: string | null;
-  defaultSchoolYearLabel?: string | null;
   activeLearnerName: string;
 }) {
   const router = useRouter();
   const uploadInputRef = React.useRef<HTMLInputElement | null>(null);
-  const [curriculumMode, setCurriculumMode] = React.useState<"manual_shell" | "paste_outline" | "ai_decompose">("manual_shell");
-  const [sourceInputMode, setSourceInputMode] = React.useState<"text" | "upload">("text");
-  const [curriculumTitle, setCurriculumTitle] = React.useState(`${props.activeLearnerName}'s Learning Plan`);
+  const defaultTitle = `${props.activeLearnerName}'s Learning Plan`;
+
   const [curriculumSummary, setCurriculumSummary] = React.useState("");
-  const [schoolYearLabel, setSchoolYearLabel] = React.useState(props.defaultSchoolYearLabel ?? "");
-  const [subjects, setSubjects] = React.useState("Math, Language Arts, Science, History");
   const [teachingStyle, setTeachingStyle] = React.useState("");
   const [curriculumText, setCurriculumText] = React.useState("");
   const [uploadedFile, setUploadedFile] = React.useState<File | null>(null);
@@ -70,18 +97,25 @@ export function HomeschoolCurriculumIntakeForm(props: {
   const [jobStatus, setJobStatus] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
-  const usesUploadedSource = curriculumMode === "ai_decompose" && sourceInputMode === "upload";
+  const hasTextSource = curriculumText.trim().length > 0;
+  const hasUploadSource = uploadedFile !== null;
+  const canSubmit = hasTextSource || hasUploadSource || sourcePackage !== null;
 
   function markSourcePackageStale() {
     setSourcePackage(null);
   }
 
+  function clearUploadedFile() {
+    setUploadedFile(null);
+    setSourcePackage(null);
+    if (uploadInputRef.current) {
+      uploadInputRef.current.value = "";
+    }
+  }
+
   function handleUploadSelection(file: File | null) {
     setUploadedFile(file);
-    if (file) {
-      setSourceInputMode("upload");
-    }
-    markSourcePackageStale();
+    setSourcePackage(null);
   }
 
   async function createSourcePackage() {
@@ -138,7 +172,7 @@ export function HomeschoolCurriculumIntakeForm(props: {
 
       if (uploadedFile.size > MAX_VERCEL_MULTIPART_UPLOAD_BYTES) {
         throw new Error(
-          "This file is too large for the hosted fallback upload. Add it from Curriculum with an active learner selected, or keep the file under 4 MB.",
+          "This file is too large for the hosted fallback upload. Keep the file under 4 MB or add it with an active learner selected.",
         );
       }
 
@@ -193,14 +227,20 @@ export function HomeschoolCurriculumIntakeForm(props: {
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (!canSubmit) {
+      setError("Paste source material, upload a file, or do both.");
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
 
-    let preparedPackage: NormalizedIntakeSourcePackage | null = null;
+    let preparedPackage: NormalizedIntakeSourcePackage | null = sourcePackage;
 
     try {
-      if (usesUploadedSource) {
-        preparedPackage = sourcePackage ?? (await createSourcePackage());
+      if (uploadedFile && !preparedPackage) {
+        preparedPackage = await createSourcePackage();
       }
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : "Could not prepare that source.");
@@ -208,20 +248,21 @@ export function HomeschoolCurriculumIntakeForm(props: {
       return;
     }
 
+    const curriculumTitle =
+      (uploadedFile ? deriveTitleFromFileName(uploadedFile.name) : null) ??
+      deriveTitleFromText(curriculumText) ??
+      defaultTitle;
+
     const response = await fetch("/api/homeschool/curriculum-intake", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        schoolYearLabel,
-        subjects: subjects
-          .split(",")
-          .map((value) => value.trim())
-          .filter(Boolean),
+        subjects: ["Integrated Studies"],
         teachingStyle,
-        curriculumMode,
+        curriculumMode: "ai_decompose",
         curriculumTitle,
         curriculumSummary,
-        curriculumText: usesUploadedSource ? undefined : curriculumText,
+        curriculumText: hasTextSource ? curriculumText.trim() : undefined,
         sourcePackageIds: preparedPackage ? [preparedPackage.id] : undefined,
       }),
     });
@@ -246,6 +287,7 @@ export function HomeschoolCurriculumIntakeForm(props: {
     } else {
       router.push(`/curriculum/${payload.sourceId}`);
     }
+
     router.refresh();
     setJobStatus(null);
     setSubmitting(false);
@@ -253,102 +295,116 @@ export function HomeschoolCurriculumIntakeForm(props: {
 
   return (
     <form className="grid gap-6" onSubmit={handleSubmit}>
-      <Card>
+      <Card className="quiet-panel border-border/60 bg-card/78 shadow-none">
         <CardHeader>
           <CardTitle>Add a curriculum source</CardTitle>
           <CardDescription>
-            Start with a topic, paste an outline, or build from source material you already have.
+            Paste or upload what you already have. We&apos;ll interpret the source and turn it into a
+            live curriculum for {props.activeLearnerName}.
           </CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-4">
-          <fieldset className="grid gap-2">
-            <legend className="text-sm font-medium">How do you want to start?</legend>
-            <div className="flex flex-wrap gap-2">
-              {[
-                { value: "manual_shell", label: "Start from a topic" },
-                { value: "paste_outline", label: "Paste outline" },
-                { value: "ai_decompose", label: "Build from source" },
-              ].map((option) => {
-                const active = curriculumMode === option.value;
-                const inputId = `curriculum-intake-mode-${option.value}`;
-                return (
-                  <label
-                    key={option.value}
-                    htmlFor={inputId}
-                    onClick={() => {
-                      setCurriculumMode(option.value as typeof curriculumMode);
-                      if (option.value !== "ai_decompose") {
-                        setSourceInputMode("text");
-                      }
-                    }}
-                    className={`cursor-pointer rounded-full border px-3 py-1.5 text-sm transition-colors ${
-                      active
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "border-border bg-background text-muted-foreground"
-                    }`}
-                  >
-                    <input
-                      id={inputId}
-                      type="radio"
-                      name="curriculumMode"
-                      value={option.value}
-                      checked={active}
-                      onChange={() => {
-                        setCurriculumMode(option.value as typeof curriculumMode);
-                        if (option.value !== "ai_decompose") {
-                          setSourceInputMode("text");
-                        }
-                      }}
-                      className="sr-only"
-                    />
-                    {option.label}
-                  </label>
-                );
-              })}
-            </div>
-          </fieldset>
+        <CardContent className="grid gap-5">
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(280px,0.75fr)]">
+            <div className="grid gap-3">
+              <div className="inline-flex w-fit items-center gap-2 rounded-full border border-border/60 bg-background/80 px-3 py-1 text-xs text-muted-foreground">
+                <FileText className="size-3.5" />
+                Paste whatever you have.
+              </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <label className="grid gap-1.5 text-sm font-medium">
-              Source title
+              <label className="grid gap-1.5 text-sm font-medium">
+                Source material
+                <textarea
+                  value={curriculumText}
+                  onChange={(event) => setCurriculumText(event.target.value)}
+                  rows={10}
+                  placeholder="Paste a lesson, chapter, outline, schedule, topic notes, or any other source text."
+                  className="min-h-52 rounded-xl border border-input bg-background px-3 py-3 font-normal"
+                />
+                <span className="text-xs font-normal text-muted-foreground">
+                  A lesson, outline, workbook page, copied chapter, or rough notes all work.
+                </span>
+              </label>
+
+              <div className="rounded-xl border border-border/60 bg-background/75 px-4 py-3 text-xs text-muted-foreground">
+                <p>We&apos;ll run source interpretation first.</p>
+                <p>Then we&apos;ll build the curriculum structure from that result.</p>
+              </div>
+            </div>
+
+            <div className="grid gap-3">
               <input
-                value={curriculumTitle}
-                onChange={(event) => setCurriculumTitle(event.target.value)}
-                className="rounded-xl border border-input bg-background px-3 py-2 font-normal"
+                ref={uploadInputRef}
+                type="file"
+                accept={COMMON_SOURCE_UPLOAD_ACCEPT}
+                onChange={(event) => handleUploadSelection(event.target.files?.[0] ?? null)}
+                className="hidden"
               />
-            </label>
-            <label className="grid gap-1.5 text-sm font-medium">
-              School year
-              <input
-                value={schoolYearLabel}
-                onChange={(event) => setSchoolYearLabel(event.target.value)}
-                placeholder="2026-2027"
-                className="rounded-xl border border-input bg-background px-3 py-2 font-normal"
-              />
-            </label>
+
+              <button
+                type="button"
+                onClick={() => uploadInputRef.current?.click()}
+                className="grid gap-2 rounded-xl border border-border bg-background px-4 py-4 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+                  <Upload className="size-4" />
+                  Upload source file
+                </span>
+                <span className="text-sm text-muted-foreground">PDFs, images, or documents</span>
+              </button>
+
+              {uploadedFile ? (
+                <div className="rounded-xl border border-border/60 bg-background/72 p-4 text-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-medium text-foreground">{uploadedFile.name}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {uploadedFile.type || "Selected file"} · {formatFileSize(uploadedFile.size)}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={clearUploadedFile}
+                      className="size-8 shrink-0"
+                      aria-label="Remove selected file"
+                    >
+                      <X className="size-4" />
+                    </Button>
+                  </div>
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    This upload stays ready if interpretation fails, so you can retry directly.
+                  </p>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-dashed border-border/70 bg-background/60 px-4 py-5 text-sm text-muted-foreground">
+                  No file selected yet.
+                </div>
+              )}
+
+              <div className="rounded-xl border border-border/60 bg-muted/35 px-4 py-3 text-xs text-muted-foreground">
+                {buildSelectedSourceCopy({
+                  hasText: hasTextSource,
+                  hasUpload: hasUploadSource,
+                  sourcePackage,
+                })}
+              </div>
+            </div>
           </div>
 
           <label className="grid gap-1.5 text-sm font-medium">
-            Subjects
-            <input
-              value={subjects}
-              onChange={(event) => setSubjects(event.target.value)}
-              className="rounded-xl border border-input bg-background px-3 py-2 font-normal"
-            />
-          </label>
-
-          <label className="grid gap-1.5 text-sm font-medium">
             Notes
-            <input
+            <textarea
               value={curriculumSummary}
               onChange={(event) => {
                 setCurriculumSummary(event.target.value);
-                if (usesUploadedSource) {
+                if (uploadedFile) {
                   markSourcePackageStale();
                 }
               }}
-              placeholder="What this source is meant to cover"
-              className="rounded-xl border border-input bg-background px-3 py-2 font-normal"
+              rows={3}
+              placeholder="What should this source cover, or what context should we keep in mind?"
+              className="min-h-28 rounded-xl border border-input bg-background px-3 py-2.5 font-normal"
             />
           </label>
 
@@ -358,108 +414,17 @@ export function HomeschoolCurriculumIntakeForm(props: {
               value={teachingStyle}
               onChange={(event) => setTeachingStyle(event.target.value)}
               placeholder="Structured, project-based, gentle..."
-              className="rounded-xl border border-input bg-background px-3 py-2 font-normal"
+              className="min-h-11 rounded-xl border border-input bg-background px-3 py-2.5 font-normal"
             />
           </label>
 
-          {curriculumMode === "ai_decompose" ? (
-            <fieldset className="grid gap-2">
-              <legend className="text-sm font-medium">How should we send the source?</legend>
-              <div className="flex flex-wrap gap-2">
-                {[
-                  { value: "text", label: "Paste text" },
-                  { value: "upload", label: "Upload file" },
-                ].map((option) => {
-                  const active = sourceInputMode === option.value;
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      onClick={() => {
-                        setSourceInputMode(option.value as typeof sourceInputMode);
-                        markSourcePackageStale();
-                      }}
-                      className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
-                        active
-                          ? "border-primary bg-primary/10 text-primary"
-                          : "border-border bg-background text-muted-foreground"
-                      }`}
-                    >
-                      {option.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </fieldset>
-          ) : null}
-
-          {curriculumMode !== "manual_shell" && !usesUploadedSource ? (
-            <label className="grid gap-1.5 text-sm font-medium">
-              {curriculumMode === "ai_decompose" ? "Source material" : "Outline"}
-              <textarea
-                value={curriculumText}
-                onChange={(event) => {
-                  setCurriculumText(event.target.value);
-                  if (curriculumMode === "ai_decompose") {
-                    setSourcePackage(null);
-                  }
-                }}
-                rows={12}
-                placeholder={
-                  curriculumMode === "ai_decompose"
-                    ? "Paste a chapter, lesson notes, table of contents, or plan text from what you already have."
-                    : "# Unit 1\n- Lesson 1\n- Lesson 2"
-                }
-                className="rounded-2xl border border-input bg-background px-3 py-3 font-normal"
-              />
-            </label>
-          ) : null}
-
-          {usesUploadedSource ? (
-            <div className="grid gap-3 rounded-2xl border border-dashed border-border bg-muted/20 p-4">
-              <input
-                ref={uploadInputRef}
-                type="file"
-                accept={COMMON_SOURCE_UPLOAD_ACCEPT}
-                className="hidden"
-                onChange={(event) => handleUploadSelection(event.target.files?.[0] ?? null)}
-              />
-              <div className="flex flex-wrap items-center gap-3">
-                <Button type="button" variant="outline" onClick={() => uploadInputRef.current?.click()}>
-                  {uploadedFile ? "Replace file" : "Choose file"}
-                </Button>
-                {uploadedFile ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={() => {
-                      handleUploadSelection(null);
-                      if (uploadInputRef.current) {
-                        uploadInputRef.current.value = "";
-                      }
-                    }}
-                  >
-                    Clear
-                  </Button>
-                ) : null}
-              </div>
-
-              {uploadedFile ? (
-                <div className="rounded-xl border border-border/70 bg-background/80 px-3 py-3 text-sm">
-                  <p className="font-medium text-foreground">{uploadedFile.name}</p>
-                  <p className="text-muted-foreground">
-                    {uploadedFile.type || "Selected file"} · {formatFileSize(uploadedFile.size)}
-                  </p>
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  Upload a PDF or supported document and it will be sent to the model directly.
-                </p>
-              )}
-
-              {sourcePackage ? (
-                <p className="text-sm text-muted-foreground">{summarizePackageStatus(sourcePackage)}</p>
-              ) : null}
+          {sourcePackage ? (
+            <div className="rounded-xl border border-border/60 bg-background/70 p-4 text-sm">
+              <p className="font-medium">Prepared source package</p>
+              <p className="mt-1 text-muted-foreground">{sourcePackage.summary}</p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {summarizePackageStatus(sourcePackage)}
+              </p>
             </div>
           ) : null}
         </CardContent>
@@ -473,7 +438,7 @@ export function HomeschoolCurriculumIntakeForm(props: {
       ) : null}
 
       <div className="flex justify-end">
-        <Button type="submit" disabled={submitting || preparingSource || (usesUploadedSource && !uploadedFile)}>
+        <Button type="submit" disabled={submitting || preparingSource || !canSubmit}>
           {submitting || preparingSource ? "Adding source..." : "Add source"}
         </Button>
       </div>

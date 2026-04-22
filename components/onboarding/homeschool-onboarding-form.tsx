@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
 import { AlertCircle, Camera, CheckCircle2, Loader2, Type, Upload, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -213,7 +212,6 @@ export function HomeschoolOnboardingForm(props: {
   organizationName: string;
   defaultLearnerName?: string | null;
 }) {
-  const router = useRouter();
   const uploadInputRef = React.useRef<HTMLInputElement | null>(null);
   const cameraInputRef = React.useRef<HTMLInputElement | null>(null);
   const [step, setStep] = React.useState(1);
@@ -419,8 +417,7 @@ export function HomeschoolOnboardingForm(props: {
       }
 
       persistOnboardingLaunchSummary(payload?.launchSummary ?? null);
-      router.push(payload?.redirectTo ?? "/today");
-      router.refresh();
+      window.location.assign(typeof payload?.redirectTo === "string" ? payload.redirectTo : "/today");
     } catch (nextError) {
       const message =
         nextError instanceof Error ? nextError.message : "Could not finish onboarding.";

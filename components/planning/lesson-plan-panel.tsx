@@ -180,6 +180,8 @@ export function LessonPlanPanel({
     !hasDraft &&
     (buildState?.status === "generating" ||
       (state.status === "loading" && activeTrigger !== null && activeTrigger !== "manual"));
+  const isManualBuildInProgress = state.status === "loading" && activeTrigger === "manual";
+  const showBuildProgressMessage = isQueuedBuild || isGeneratingBuild || isManualBuildInProgress;
   const showAutoBuildState = isQueuedBuild || isGeneratingBuild;
   const showFailedBuildState = !hasDraft && buildState?.status === "failed";
   const buildErrorMessage =
@@ -194,6 +196,14 @@ export function LessonPlanPanel({
       : null;
   const resolvedLessonLabel =
     slotLabel ?? (slotPosition ? `Lesson ${slotPosition}` : "Lesson");
+  const buildProgressTitle = isQueuedBuild
+    ? "Preparing your first lesson draft…"
+    : isManualBuildInProgress && hasDraft
+      ? "Updating today’s lesson draft…"
+      : "Building today’s lesson draft…";
+  const buildProgressDetail = isManualBuildInProgress && hasDraft
+    ? "Stay on Today while we refresh the draft in place using the saved route and lesson context."
+    : "Stay on this page. We’re using the saved route and intake context to build the first teachable day automatically.";
   const lessonContextCopy =
     daySkillCount && daySkillCount > routeItemCount
       ? daySlotCount && daySlotCount > 1 && slotPosition
@@ -205,8 +215,24 @@ export function LessonPlanPanel({
     trigger: "onboarding_auto" | "today_resume" | "manual",
     autoBuildKey?: string | null,
   ) {
+    const startedAt = new Date().toISOString();
+
     setActiveTrigger(trigger);
     setState({ status: "loading" });
+    onLessonPatch?.({
+      lessonBuild: {
+        status: "generating",
+        trigger,
+        sourceId: sourceId ?? buildState?.sourceId ?? "",
+        routeFingerprint,
+        queuedAt: buildState?.queuedAt ?? startedAt,
+        startedAt,
+        completedAt: undefined,
+        failedAt: undefined,
+        updatedAt: startedAt,
+        error: null,
+      },
+    });
 
     try {
       const response = await fetch("/api/ai/lesson-plan", {
@@ -252,6 +278,21 @@ export function LessonPlanPanel({
         releaseAutoBuildLock("today-lesson-auto", autoBuildKey);
       }
 
+      const failedAt = new Date().toISOString();
+      onLessonPatch?.({
+        lessonBuild: {
+          status: "failed",
+          trigger,
+          sourceId: sourceId ?? buildState?.sourceId ?? "",
+          routeFingerprint,
+          queuedAt: buildState?.queuedAt,
+          startedAt: buildState?.startedAt ?? startedAt,
+          completedAt: undefined,
+          failedAt,
+          updatedAt: failedAt,
+          error: error instanceof Error ? error.message : "Lesson plan generation failed.",
+        },
+      });
       setState({
         status: "error",
         message: error instanceof Error ? error.message : "Lesson plan generation failed.",
@@ -484,6 +525,18 @@ export function LessonPlanPanel({
             </div>
           ) : null}
 
+          {showBuildProgressMessage ? (
+            <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 text-sm text-foreground">
+              <div className="flex items-start gap-3">
+                <Loader2 className="mt-0.5 size-4 animate-spin text-primary" />
+                <div className="space-y-1">
+                  <p className="font-medium">{buildProgressTitle}</p>
+                  <p className="text-muted-foreground">{buildProgressDetail}</p>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
           {showDraftOutput && draftState?.kind === "structured" ? (
             <div className="rounded-lg border border-border/70 bg-background/72 p-4">
               <LessonDraftRenderer draft={draftState.draft} mode="compact" />
@@ -494,30 +547,6 @@ export function LessonPlanPanel({
               <div className="mt-4">
                 <MarkdownContent content={draftState.markdown} />
               </div>
-            </div>
-          ) : showDraftOutput && showAutoBuildState ? (
-            <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 text-sm text-foreground">
-              <div className="flex items-start gap-3">
-                <Loader2 className="mt-0.5 size-4 animate-spin text-primary" />
-                <div className="space-y-1">
-                  <p className="font-medium">
-                    {isQueuedBuild
-                      ? "Preparing your first lesson draft…"
-                      : "Building today’s lesson draft…"}
-                  </p>
-                  <p className="text-muted-foreground">
-                    Stay on this page. We&apos;re using the saved route and intake context to build
-                    the first teachable day automatically.
-                  </p>
-                </div>
-              </div>
-            </div>
-          ) : showDraftOutput && showFailedBuildState ? (
-            <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-4 text-sm text-destructive">
-              <p className="font-medium">The first lesson draft did not finish.</p>
-              <p className="mt-1">
-                Retry the build here. The bounded route is still saved and ready to use.
-              </p>
             </div>
           ) : null}
 

@@ -26,6 +26,7 @@ import type { TodayWorkspaceSlotSummary } from "@/lib/planning/today-workspace-p
 import { cn } from "@/lib/utils";
 
 import { TodayLessonDraftCard } from "./today-lesson-draft-card";
+import { OnboardingLaunchFlash } from "./onboarding-launch-flash";
 import {
   TodayLessonPlanSection,
   TodayRouteItemsSection,
@@ -105,15 +106,20 @@ export function TodayWorkspaceShell({
   const queueSummaryLabel = activeSlotSummary?.slotTitle
     ? `${activeSlotSummary.slotTitle} queue and actions`
     : "Active lesson queue and actions";
-  const readinessLabel = fullWorkspace.lessonDraft
-    ? "Lesson draft ready to review."
-    : fullWorkspace.lessonBuild?.status === "generating" ||
-        fullWorkspace.lessonBuild?.status === "queued"
-      ? "Lesson draft is building now."
+  const lessonBuildActive =
+    workspace.lessonBuild?.status === "generating" || workspace.lessonBuild?.status === "queued";
+  const readinessLabel = lessonBuildActive
+    ? workspace.lessonDraft
+      ? "Lesson draft is updating now."
+      : "Lesson draft is building now."
+    : workspace.lessonDraft
+      ? "Lesson draft ready to review."
       : "Generate the lesson draft to start the day.";
-  const nextStepLabel = fullWorkspace.lessonDraft
-    ? "Review the draft, then run the queue in order."
-    : "Generate the lesson draft so the day becomes teachable.";
+  const nextStepLabel = lessonBuildActive
+    ? "Stay on Today while we finish the draft in place."
+    : workspace.lessonDraft
+      ? "Review the draft, then run the queue in order."
+      : "Generate the lesson draft so the day becomes teachable.";
   const totalMinutes = daySummary.totalMinutes
     ? `${daySummary.totalMinutes} min`
     : `${fullWorkspace.items.reduce((sum, item) => sum + item.estimatedMinutes, 0)} min`;
@@ -180,6 +186,11 @@ export function TodayWorkspaceShell({
 
   return (
     <div className="space-y-6">
+      <OnboardingLaunchFlash
+        lessonBuild={workspace.lessonBuild}
+        activityBuild={workspace.activityBuild}
+        hasDraft={Boolean(workspace.lessonDraft)}
+      />
       {slotSummaries.length > 1 || sourceId ? (
         <section className="space-y-4 border-b border-border/70 pb-5">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">

@@ -8,12 +8,10 @@ import { ArrowLeft, Sparkles } from "lucide-react";
 import { AiDraftConversation } from "@/components/curriculum/AiDraftConversation";
 import { HomeschoolCurriculumIntakeForm } from "@/components/curriculum/homeschool-curriculum-intake-form";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export function NewCurriculumClientPage({
   activeLearner,
   organizationId,
-  defaultSchoolYearLabel,
   initialEntry,
 }: {
   activeLearner: {
@@ -22,7 +20,6 @@ export function NewCurriculumClientPage({
     firstName: string;
   };
   organizationId: string;
-  defaultSchoolYearLabel?: string | null;
   initialEntry?: "source" | "conversation";
 }) {
   const router = useRouter();
@@ -42,8 +39,8 @@ export function NewCurriculumClientPage({
               Add a source
             </h1>
             <p className="max-w-3xl text-sm text-muted-foreground sm:text-base">
-              Start from material you already have, or talk through the plan live before you
-              generate anything for {activeLearner.firstName}.
+              Paste or upload source material, or talk through the plan live before you generate
+              anything for {activeLearner.firstName}.
             </p>
           </div>
         </div>
@@ -54,7 +51,7 @@ export function NewCurriculumClientPage({
           variant={entry === "source" ? "default" : "outline"}
           onClick={() => setEntry("source")}
         >
-          Source intake
+          Use source material
         </Button>
         <Button
           variant={entry === "conversation" ? "default" : "outline"}
@@ -67,19 +64,11 @@ export function NewCurriculumClientPage({
       </div>
 
       {entry === "source" ? (
-        <Card className="overflow-hidden border-border/70 bg-card/90 shadow-sm">
-          <CardHeader className="border-b border-border/60 bg-muted/20">
-            <CardTitle>Choose an entry point</CardTitle>
-          </CardHeader>
-          <CardContent className="p-4 sm:p-6">
-            <HomeschoolCurriculumIntakeForm
-              organizationId={organizationId}
-              activeLearnerId={activeLearner.id}
-              activeLearnerName={activeLearner.displayName}
-              defaultSchoolYearLabel={defaultSchoolYearLabel}
-            />
-          </CardContent>
-        </Card>
+        <HomeschoolCurriculumIntakeForm
+          organizationId={organizationId}
+          activeLearnerId={activeLearner.id}
+          activeLearnerName={activeLearner.displayName}
+        />
       ) : (
         <AiDraftConversation
           activeLearner={activeLearner}
