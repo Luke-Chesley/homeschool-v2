@@ -202,6 +202,10 @@
     @apply font-serif text-[clamp(2.35rem,4vw,4.35rem)] leading-[0.98] tracking-[-0.035em];
   }
 
+  .page-title-compact {
+    @apply font-serif text-[clamp(2.15rem,3.2vw,3.35rem)] leading-[0.99] tracking-[-0.03em];
+  }
+
   .page-subtitle {
     @apply max-w-3xl text-sm leading-7 text-muted-foreground sm:text-[15px];
   }

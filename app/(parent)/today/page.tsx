@@ -100,9 +100,9 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
         date={workspace.date}
         onboardingStartedAt={trackerBaseline.onboardingStartedAt}
       />
-      <header className="space-y-3 border-b border-border/70 pb-5">
+      <header className="space-y-2.5 border-b border-border/70 pb-4">
         <p className="section-meta">{formatLongDate(workspace.date)}</p>
-        <h1 className="page-title">Today</h1>
+        <h1 className="page-title-compact">Today</h1>
         <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
           <span>{formatCount(daySummary.skillCount, "skill")}</span>
           <span>{formatCount(daySummary.lessonSlotCount, "lesson slot")}</span>

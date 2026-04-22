@@ -135,7 +135,7 @@ export function GlobalPageTabs() {
                     className={cn(
                       "inline-flex shrink-0 items-center rounded-full px-3 py-1.5 text-sm transition-colors",
                       active
-                        ? "bg-background text-foreground shadow-[var(--shadow-soft)]"
+                        ? "bg-background font-semibold text-foreground shadow-[var(--shadow-soft)]"
                         : "text-muted-foreground hover:text-foreground",
                     )}
                   >
