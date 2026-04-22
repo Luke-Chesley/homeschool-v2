@@ -24,12 +24,6 @@ import {
   type LandingFeature,
 } from "./landing-interactive";
 
-const proofStrip = [
-  "Built for real daily teaching",
-  "Curriculum, planning, tracking, and Assistant in one place",
-  "Works from chapter, PDF, photo, outline, or topic",
-] as const;
-
 const whatItIsCards = [
   {
     title: "Today starts with the teachable queue",
@@ -287,14 +281,6 @@ export function LandingPage() {
                 description="This walkthrough follows the actual product sequence from source intake to curriculum structure, Today, Planning, Tracking, and Assistant."
                 bullets={[...demoStoryboard]}
               />
-            </div>
-
-            <div className="flex flex-wrap gap-2.5">
-              {proofStrip.map((item) => (
-                <Badge key={item} variant="outline" className="bg-card/72 text-muted-foreground">
-                  {item}
-                </Badge>
-              ))}
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
