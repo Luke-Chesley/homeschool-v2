@@ -6,6 +6,7 @@ import {
   CopilotChatArtifactSchema,
   CopilotStreamEventSchema,
 } from "../lib/ai/types.ts";
+import { getRenderableCopilotContent } from "../lib/ai/copilot-message-content.ts";
 
 test("copilot chat artifact accepts the bounded action registry", () => {
   const artifact = CopilotChatArtifactSchema.parse({
@@ -91,4 +92,39 @@ test("copilot stream events require persisted action lifecycle fields", () => {
 
   assert.equal(parsed.type, "actions");
   assert.equal(parsed.actions[0]?.status, "pending");
+});
+
+test("copilot message content unwraps serialized artifact json", () => {
+  const rendered = getRenderableCopilotContent(
+    JSON.stringify({
+      answer: "I can help with:\n\n- Move one item\n- Draft today's lesson",
+      actions: [],
+    }),
+  );
+
+  assert.equal(rendered, "I can help with:\n\n- Move one item\n- Draft today's lesson");
+});
+
+test("copilot message content drops trailing serialized artifact duplication", () => {
+  const rendered = getRenderableCopilotContent(`I can help with a few things:
+
+- Move one item
+- Draft today's lesson
+
+{"answer":"Use the markdown copy only.","actions":[]}`);
+
+  assert.equal(
+    rendered,
+    "I can help with a few things:\n\n- Move one item\n- Draft today's lesson",
+  );
+});
+
+test("copilot message content hides an incomplete trailing serialized artifact while streaming", () => {
+  const rendered = getRenderableCopilotContent(`I can help with a few things:
+
+- Move one item
+
+{"answer":"I can help`);
+
+  assert.equal(rendered, "I can help with a few things:\n\n- Move one item");
 });

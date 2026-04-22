@@ -1,6 +1,8 @@
 import * as React from "react";
 import { Bot, UserRound } from "lucide-react";
 
+import { MarkdownContent } from "@/components/ui/markdown-content";
+import { getRenderableCopilotContent } from "@/lib/ai/copilot-message-content";
 import { cn } from "@/lib/utils";
 import type { ChatMessage as ChatMessageType } from "@/lib/ai/types";
 
@@ -11,6 +13,9 @@ interface Props {
 export function ChatMessage({ message }: Props) {
   const isUser = message.role === "user";
   const isAssistant = message.role === "assistant";
+  const renderableContent = isAssistant
+    ? getRenderableCopilotContent(message.content)
+    : message.content;
   const createdAtLabel = message.createdAt
     ? new Date(message.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
     : "Now";
@@ -45,11 +50,17 @@ export function ChatMessage({ message }: Props) {
             "rounded-[1.4rem] border px-4 py-3.5 text-sm leading-7 break-words shadow-[var(--shadow-soft)]",
             isUser
               ? "border-primary/18 bg-primary/10 text-foreground"
-              : "border-border/70 bg-[var(--glass-panel)] text-foreground",
-            isAssistant && "whitespace-pre-wrap"
+              : "border-border/70 bg-[var(--glass-panel)] text-foreground"
           )}
         >
-          {message.content}
+          {isAssistant ? (
+            <MarkdownContent
+              content={renderableContent}
+              className="[&_ol]:mt-3 [&_p]:leading-7 [&_pre]:max-w-full [&_ul]:mt-3"
+            />
+          ) : (
+            <div className="whitespace-pre-wrap">{renderableContent}</div>
+          )}
         </div>
       </div>
     </div>
