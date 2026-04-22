@@ -48,7 +48,7 @@ export function ChatInput({ onSend, disabled, placeholder }: Props) {
         value={value}
         onChange={handleInput}
         onKeyDown={handleKeyDown}
-        placeholder={placeholder ?? "Ask Copilot what to do next."}
+        placeholder={placeholder ?? "Ask about today, this week, or what to do next."}
         disabled={disabled}
         rows={1}
         className={cn(

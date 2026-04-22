@@ -46,7 +46,7 @@ export async function loadAuthorizedCopilotAction(body: unknown) {
     return {
       ok: false as const,
       status: 404,
-      error: "Copilot session not found.",
+      error: "Assistant session not found.",
     };
   }
 
@@ -55,7 +55,7 @@ export async function loadAuthorizedCopilotAction(body: unknown) {
     return {
       ok: false as const,
       status: 404,
-      error: "Copilot action not found.",
+      error: "Assistant action not found.",
     };
   }
 
@@ -64,7 +64,7 @@ export async function loadAuthorizedCopilotAction(body: unknown) {
     return {
       ok: false as const,
       status: 409,
-      error: "Copilot action uses an unsupported or stale shape.",
+      error: "Assistant action uses an unsupported or stale shape.",
       issues: action.error.flatten(),
     };
   }
@@ -96,7 +96,7 @@ async function applyPlanningMoveAction(session: Awaited<ReturnType<typeof requir
   });
 
   const affectedPaths = dedupePaths([
-    "/copilot",
+    "/assistant",
     "/planning",
     "/today",
     action.payload.currentDate ? `/planning/day/${action.payload.currentDate}` : null,
@@ -149,7 +149,7 @@ async function applyGenerateTodayLessonAction(
   });
 
   const affectedPaths = dedupePaths([
-    "/copilot",
+    "/assistant",
     "/today",
     "/planning",
     `/planning/day/${action.payload.date}`,
@@ -194,7 +194,7 @@ async function applyTrackingRecordNoteAction(
     },
   });
 
-  const affectedPaths = ["/copilot", "/tracking"];
+  const affectedPaths = ["/assistant", "/tracking"];
   revalidateCopilotPaths(affectedPaths);
 
   return {

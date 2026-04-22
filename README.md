@@ -47,7 +47,7 @@ Conversation-only intake still uses `curriculum_generate`, but skips `source_int
 | `/planning` | `app/(parent)/planning/page.tsx`, `app/(parent)/planning/day/[date]/page.tsx`, `lib/planning/service.ts`, `lib/planning/weekly-route-service.ts`, `lib/planning/route-schedule-refresh.ts`, `lib/learning-core/session.ts` |
 | `/curriculum` | `app/(parent)/curriculum/page.tsx`, `app/(parent)/curriculum/[sourceId]/page.tsx`, `components/curriculum/`, `lib/curriculum/service.ts`, `lib/curriculum/progression-regeneration.ts`, `lib/learning-core/curriculum.ts` |
 | `/tracking` | `app/(parent)/tracking/page.tsx`, `app/(parent)/tracking/actions.ts`, `components/tracking/`, `lib/tracking/`, `lib/compliance/`, `lib/homeschool/attendance/` |
-| `/copilot` | `app/(parent)/copilot/page.tsx`, `components/copilot/`, `app/api/ai/chat/route.ts`, `lib/learning-core/copilot.ts`, `lib/planning/copilot-snapshot.ts`, `lib/ai/copilot-store.ts` |
+| `/assistant` | `app/(parent)/assistant/page.tsx`, `components/copilot/`, `app/api/ai/chat/route.ts`, `lib/learning-core/copilot.ts`, `lib/planning/copilot-snapshot.ts`, `lib/ai/copilot-store.ts` |
 | `/activity/[sessionId]` | `app/(learner)/activity/[sessionId]/page.tsx`, `components/activities/`, `lib/activities/`, `app/api/activities/attempts/[attemptId]/feedback/route.ts`, `lib/learning-core/activity-feedback.ts`, `lib/learning-core/widget-transition.ts` |
 | `/users` | `app/users/page.tsx`, `components/users/`, `lib/users/` |
 | `/auth/login` | `app/auth/login/page.tsx`, `components/auth/AuthCredentialsForm.tsx`, `lib/auth/browser.ts`, `middleware.ts` |
@@ -63,8 +63,8 @@ Conversation-only intake still uses `curriculum_generate`, but skips `source_int
   `app/(parent)/curriculum/page.tsx`, `lib/curriculum/service.ts`, `lib/curriculum/progression-regeneration.ts`, `lib/learning-core/curriculum.ts`
 - Today workspace and lesson/activity generation:
   `app/(parent)/today/page.tsx`, `app/(parent)/today/actions.ts`, `lib/planning/today-service.ts`, `lib/planning/today-lesson-generation.ts`, `lib/planning/today-activity-generation.ts`
-- Copilot:
-  `app/(parent)/copilot/page.tsx`, `app/api/ai/chat/route.ts`, `lib/learning-core/copilot.ts`, `lib/planning/copilot-snapshot.ts`, `lib/ai/copilot-store.ts`
+- Assistant:
+  `app/(parent)/assistant/page.tsx`, `app/api/ai/chat/route.ts`, `lib/learning-core/copilot.ts`, `lib/planning/copilot-snapshot.ts`, `lib/ai/copilot-store.ts`
 - App session and auth bootstrap:
   `app/api/app-session/route.ts`, `lib/app-session/`, `lib/auth/`, `middleware.ts`, `app/auth/`
 - Database shape and repositories:
@@ -77,7 +77,7 @@ The boundary is strict:
 - `learning-core` owns extracted operations, prompts, prompt previews, providers, models, lineage, and traces.
 - `homeschool-v2` sends typed request envelopes, persists returned artifacts, and renders the prompt preview returned by `learning-core`.
 - Curriculum creation is no longer an app-owned prompt flow. The current path is `source_interpret` plus `curriculum_generate`, followed by app-owned import and planning handoff.
-- Copilot is a product surface, but meaningful state mutation must still go through explicit app-side handlers. Do not treat freeform chat text as permission to mutate planning, curriculum, or tracking state.
+- Assistant is a product surface, but meaningful state mutation must still go through explicit app-side handlers. Do not treat freeform chat text as permission to mutate planning, curriculum, or tracking state.
 
 If you are tracing an AI flow in this repo:
 
@@ -86,7 +86,7 @@ If you are tracing an AI flow in this repo:
 - `app/api/homeschool/onboarding/route.ts`
   Onboarding request entrypoint for source-first curriculum creation.
 - `app/api/ai/chat/route.ts`
-  Copilot request entrypoint. Sends structured chat context to `learning-core`.
+  Assistant request entrypoint. Sends structured chat context to `learning-core`.
 - `app/api/ai/lesson-plan/route.ts`
   Session-generation entrypoint for planning and Today lesson work.
 - `app/api/curriculum/*`

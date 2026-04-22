@@ -16,7 +16,7 @@ const kindConfig: Record<
 > = {
   manual: { label: "Manual", Icon: BookOpen },
   upload: { label: "Upload", Icon: Upload },
-  ai_draft: { label: "AI Draft", Icon: Sparkles },
+  ai_draft: { label: "Draft", Icon: Sparkles },
   external: { label: "External", Icon: Globe },
 };
 

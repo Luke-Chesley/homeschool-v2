@@ -46,9 +46,9 @@ export const parentPrimaryNav: ParentNavItem[] = [
     icon: ChartColumnIncreasing,
   },
   {
-    label: "Copilot",
-    href: "/copilot",
-    matchPrefix: "/copilot",
+    label: "Assistant",
+    href: "/assistant",
+    matchPrefix: "/assistant",
     description: "Ask for the next move with current day and week context attached.",
     icon: Bot,
   },

@@ -7,13 +7,20 @@ import { useEffect, useState } from "react";
 
 import { StudioToggle } from "@/components/studio/StudioToggle";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { ActiveLearnerSwitcher } from "@/components/users/active-learner-switcher";
 import { cn } from "@/lib/utils";
 
 const publicTabs = [
   { href: "/", label: "Home", matchPrefix: "/" },
   { href: "/auth/login", label: "Sign in", matchPrefix: "/auth" },
+] as const;
+
+const landingTabs = [
+  { href: "#product", label: "Product" },
+  { href: "#how-it-works", label: "How it works" },
+  { href: "#demo", label: "Demo" },
+  { href: "#faq", label: "FAQ" },
 ] as const;
 
 const workspaceTabs = [
@@ -27,7 +34,7 @@ const workspaceLabels: Array<{ match: string; label: string }> = [
   { match: "/planning", label: "Planning" },
   { match: "/curriculum", label: "Curriculum" },
   { match: "/tracking", label: "Tracking" },
-  { match: "/copilot", label: "Copilot" },
+  { match: "/assistant", label: "Assistant" },
   { match: "/account", label: "Account" },
   { match: "/users", label: "Learners" },
   { match: "/onboarding", label: "Setup" },
@@ -57,12 +64,13 @@ type WorkspaceSnapshot = {
 export function GlobalPageTabs() {
   const pathname = usePathname();
   const isLearnerRoute = pathname.startsWith("/learner") || pathname.startsWith("/activity");
+  const isLandingRoute = pathname === "/";
   const inWorkspace =
     pathname.startsWith("/today") ||
     pathname.startsWith("/planning") ||
     pathname.startsWith("/curriculum") ||
     pathname.startsWith("/tracking") ||
-    pathname.startsWith("/copilot") ||
+    pathname.startsWith("/assistant") ||
     pathname.startsWith("/account") ||
     pathname.startsWith("/learner") ||
     pathname.startsWith("/activity") ||
@@ -144,6 +152,18 @@ export function GlobalPageTabs() {
                 );
               })}
             </nav>
+          ) : isLandingRoute ? (
+            <nav className="hidden min-w-0 items-center gap-6 overflow-x-auto md:flex" aria-label="Landing sections">
+              {landingTabs.map((tab) => (
+                <Link
+                  key={tab.href}
+                  href={tab.href}
+                  className="inline-flex shrink-0 items-center text-sm text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  {tab.label}
+                </Link>
+              ))}
+            </nav>
           ) : (
             <nav className="flex min-w-0 items-center gap-6 overflow-x-auto" aria-label="Global sections">
               {publicTabs.map((tab) => {
@@ -212,6 +232,19 @@ export function GlobalPageTabs() {
                 </Button>
               </form>
             </>
+          ) : isLandingRoute ? (
+            <div className="flex items-center gap-2">
+              <Link
+                href="/auth/login"
+                className="hidden text-sm text-muted-foreground transition-colors hover:text-foreground md:inline-flex"
+              >
+                Sign in
+              </Link>
+              <Link href="/auth/sign-up" className={cn(buttonVariants({ size: "sm" }), "hidden md:inline-flex")}>
+                Create account
+              </Link>
+              <ThemeToggle compact />
+            </div>
           ) : (
             <div className="flex items-center gap-2">
               <ThemeToggle compact />

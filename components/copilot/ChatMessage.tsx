@@ -42,7 +42,7 @@ export function ChatMessage({ message }: Props) {
 
       <div className={cn("max-w-[88%] min-w-0 space-y-2", isUser && "items-end text-right")}>
         <div className={cn("flex items-center gap-2 text-xs uppercase tracking-[0.14em] text-muted-foreground", isUser && "justify-end")}>
-          <span className="font-semibold text-foreground/85">{isUser ? "Parent" : "Copilot"}</span>
+          <span className="font-semibold text-foreground/85">{isUser ? "Parent" : "Assistant"}</span>
           <span>{createdAtLabel}</span>
         </div>
         <div

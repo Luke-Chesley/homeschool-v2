@@ -56,7 +56,7 @@ export default async function CurriculumManagePage({
     revalidatePath("/planning/month");
     revalidatePath("/today");
     revalidatePath("/tracking");
-    revalidatePath("/copilot");
+    revalidatePath("/assistant");
 
     if (!deleted) {
       redirect("/curriculum/manage?error=not-found");

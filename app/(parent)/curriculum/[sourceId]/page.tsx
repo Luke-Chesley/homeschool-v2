@@ -98,7 +98,7 @@ export default async function CurriculumSourcePage({ params }: Props) {
             <div className="rounded-2xl border border-dashed border-border/70 py-12 text-center">
               <p className="text-sm text-muted-foreground">
                 {source.kind === "ai_draft"
-                  ? "This AI draft saved the planning brief, but it has not been expanded into normalized curriculum nodes yet."
+                  ? "This draft saved the planning brief, but it has not been expanded into normalized curriculum nodes yet."
                   : "No normalized curriculum nodes yet."}
               </p>
             </div>

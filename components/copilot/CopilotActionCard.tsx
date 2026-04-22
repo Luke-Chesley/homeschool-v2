@@ -81,7 +81,7 @@ export function CopilotActionCard({ action, onApply, onDismiss }: Props) {
           ) : null}
           {action.requiresApproval ? (
             <p className="mt-2 text-xs font-medium text-foreground/80">
-              Parent approval required before Copilot can apply this change.
+              Parent approval required before Assistant can apply this change.
             </p>
           ) : null}
           {action.result?.message ? (
