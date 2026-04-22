@@ -331,9 +331,11 @@ export function createProgressionGenerationBasis(params: {
   source: CurriculumSource;
   tree: CurriculumTree;
   units: CurriculumUnit[];
+}, options?: {
+  allowUnitless?: boolean;
 }): ProgressionGenerationBasis {
   const units = [...params.units].sort((left, right) => left.sequence - right.sequence);
-  if (units.length === 0) {
+  if (!options?.allowUnitless && units.length === 0) {
     throw new Error(`Curriculum source ${params.source.id} has no persisted units.`);
   }
 

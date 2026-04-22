@@ -62,16 +62,17 @@ export function CurriculumOverview({
                     {tree.source.title}
                   </h2>
                   <p className="mt-2 text-sm leading-7 text-muted-foreground">
-                    Browse the structure here, then open the visual map when you want a clearer view of branch relationships and flow.
+                    Browse the source structure here, then open the curriculum roadmap when you want the teaching
+                    sequence, work chunks, and pacing context in one place.
                   </p>
                 </div>
               </div>
 
               <div className="context-rail space-y-3">
                 <div className="space-y-1">
-                  <p className="text-sm font-semibold text-foreground">Visual map</p>
+                  <p className="text-sm font-semibold text-foreground">Curriculum roadmap</p>
                   <p className="text-sm leading-6 text-muted-foreground">
-                    Open the connected map when you want hierarchy and branch flow in one glance.
+                    Open the roadmap when you want the teaching journey first, the structure second, and dependencies on drill-in.
                   </p>
                 </div>
                 <Link
@@ -79,7 +80,7 @@ export function CurriculumOverview({
                   className={cn(buttonVariants({ size: "sm" }), "w-full justify-center lg:w-auto")}
                 >
                   <Map className="size-4" />
-                  Open visual map
+                  Open roadmap
                   <ArrowRight className="size-4" />
                 </Link>
               </div>
