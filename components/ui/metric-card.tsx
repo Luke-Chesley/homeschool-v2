@@ -7,7 +7,7 @@ export function MetricCard({
   label,
   value,
   hint,
-  icon: Icon,
+  icon: _icon,
   className,
   tone = "default",
 }: {
@@ -28,22 +28,13 @@ export function MetricCard({
         className,
       )}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-            {label}
-          </p>
-          <p className="font-serif text-[1.85rem] leading-none tracking-[-0.03em] text-foreground">
-            {value}
-          </p>
-        </div>
-        {Icon ? (
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-border/70 bg-background/78 text-muted-foreground">
-            <Icon className="size-4.5" />
-          </div>
-        ) : null}
-      </div>
-      {hint ? <p className="mt-3 text-sm leading-6 text-muted-foreground">{hint}</p> : null}
+      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+        {label}
+      </p>
+      <p className="mt-3 max-w-[11ch] text-balance font-serif text-[clamp(1.9rem,2.5vw,2.6rem)] leading-[0.96] tracking-[-0.04em] text-foreground">
+        {value}
+      </p>
+      {hint ? <p className="mt-4 max-w-[24ch] text-sm leading-7 text-muted-foreground">{hint}</p> : null}
     </Card>
   );
 }

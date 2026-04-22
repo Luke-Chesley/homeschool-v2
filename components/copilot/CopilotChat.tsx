@@ -74,7 +74,7 @@ export function CopilotChat({ sessionId: initialSessionId, initialMessages = [],
     optimisticStatus: CopilotAction["status"],
   ) {
     if (!sessionId) {
-      throw new Error("Start a Copilot conversation before applying actions.");
+      throw new Error("Start an Assistant conversation before applying actions.");
     }
 
     const previousStatus = action.status;
@@ -126,7 +126,7 @@ export function CopilotChat({ sessionId: initialSessionId, initialMessages = [],
           "error" in payload &&
           typeof payload.error === "string"
             ? payload.error
-            : "Copilot action failed.";
+            : "Assistant action failed.";
 
         if (!parsedAction?.success) {
           setActions((prev) =>

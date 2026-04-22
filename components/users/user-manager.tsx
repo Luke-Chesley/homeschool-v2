@@ -107,7 +107,7 @@ export function UserManager({
           </p>
           <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
             Selecting a learner changes the active child inside this household. Today, Curriculum,
-            Tracking, and Copilot all follow that selection.
+            Tracking, and Assistant all follow that selection.
           </p>
         </div>
       </section>
@@ -199,7 +199,7 @@ export function UserManager({
           <div className="rounded-xl border border-border/60 bg-background/72 px-4 py-3">
             <p className="text-sm font-medium text-foreground">What changes when you switch</p>
             <p className="mt-1 text-sm leading-6 text-muted-foreground">
-              Today, learner activities, and Copilot context follow the active learner automatically.
+              Today, learner activities, and Assistant context follow the active learner automatically.
             </p>
           </div>
         </section>

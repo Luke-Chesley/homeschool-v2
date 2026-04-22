@@ -57,11 +57,11 @@ export function ParentSidebar({
           Today
         </Link>
         <Link
-          href="/copilot"
+          href="/assistant"
           onClick={onNavigate}
           className={cn(buttonVariants({ variant: "outline", size: "sm" }), "w-full justify-start")}
         >
-          Copilot
+          Assistant
         </Link>
       </div>
     </div>

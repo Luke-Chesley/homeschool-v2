@@ -119,7 +119,7 @@ export function CurriculumRefinementWidget({
                 <div className="flex items-center gap-2">
                   <Badge className="gap-1 rounded-full">
                     <Sparkles className="size-3" />
-                    Curriculum refine
+                    Refine curriculum
                   </Badge>
                   {response?.kind === "applied" ? (
                     <Badge variant="outline" className="rounded-full">
@@ -241,7 +241,7 @@ export function CurriculumRefinementWidget({
       <div className="quiet-panel flex items-center gap-3 rounded-full px-3 py-2 shadow-[0_14px_40px_-24px_rgba(15,23,42,0.55)]">
         <div className="hidden sm:block">
           <p className="text-xs font-medium text-foreground">Refine this source</p>
-          <p className="text-[11px] text-muted-foreground">Quiet AI edits without leaving the page</p>
+          <p className="text-[11px] text-muted-foreground">Quiet edits without leaving the page</p>
         </div>
         <Button
           type="button"
@@ -250,7 +250,7 @@ export function CurriculumRefinementWidget({
           onClick={() => setOpen((value) => !value)}
         >
           <Wand2 className="size-4" />
-          Customize
+          Refine
         </Button>
       </div>
     </div>

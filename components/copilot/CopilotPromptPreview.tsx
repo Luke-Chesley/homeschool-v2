@@ -46,8 +46,8 @@ export function CopilotPromptPreview({ promptPreview }: CopilotPromptPreviewProp
 
       <StudioDrawer
         panelId={COPILOT_PROMPT_PANEL_ID}
-        title="Copilot prompt preview"
-        description="Exact request envelope and effective prompts returned by learning-core for the current copilot context."
+        title="Assistant prompt preview"
+        description="Exact request envelope and effective prompts returned by learning-core for the current assistant context."
       >
         <LearningCorePromptPreviewCard preview={promptPreview} />
       </StudioDrawer>

@@ -7,7 +7,7 @@ const routes = [
   "/today",
   "/curriculum",
   "/tracking",
-  "/copilot",
+  "/assistant",
 ];
 const viewports = [
   { width: 1440, height: 900 },

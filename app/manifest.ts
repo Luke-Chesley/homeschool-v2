@@ -4,7 +4,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Homeschool V2",
     short_name: "Homeschool",
-    description: "Phone-ready homeschool planning, AI intake, Today generation, and learner activities.",
+    description: "Phone-ready homeschool planning, source intake, Today generation, and learner activities.",
     start_url: "/open",
     display: "standalone",
     background_color: "#f9f5ee",

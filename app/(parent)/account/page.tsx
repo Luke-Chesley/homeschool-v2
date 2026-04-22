@@ -69,7 +69,7 @@ export default async function AccountPage() {
                   <p className="text-sm font-medium text-foreground">Learner roster</p>
                   <p className="mt-1 text-sm leading-6 text-muted-foreground">
                     One learner stays active at a time so Today, Planning, Curriculum, Tracking,
-                    and Copilot stay focused.
+                    and Assistant stay focused.
                   </p>
                 </div>
                 <span className="rounded-full border border-border/70 bg-background px-3 py-1 text-xs text-muted-foreground">
@@ -111,7 +111,7 @@ export default async function AccountPage() {
               <p className="text-sm font-medium text-foreground">Workspace context</p>
               <p className="mt-1 text-sm leading-6 text-muted-foreground">
                 Use the learner switcher to keep the household focused on the right child before you
-                open Today, Planning, Curriculum, Tracking, or Copilot.
+                open Today, Planning, Curriculum, Tracking, or Assistant.
               </p>
               <div className="mt-4">
                 <ActiveLearnerSwitcher
