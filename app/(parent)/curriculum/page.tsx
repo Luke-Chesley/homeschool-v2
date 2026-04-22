@@ -72,7 +72,7 @@ export default async function CurriculumPage({ searchParams }: CurriculumPagePro
     revalidatePath("/planning/month");
     revalidatePath("/today");
     revalidatePath("/tracking");
-    revalidatePath("/copilot");
+    revalidatePath("/assistant");
 
     redirect("/curriculum");
   }

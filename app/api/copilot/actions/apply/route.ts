@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
 
       return NextResponse.json({ ok: true, action: updatedAction });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Could not apply the Copilot action.";
+      const message = error instanceof Error ? error.message : "Could not apply the Assistant action.";
       const failedAction = await loaded.store.updateActionStatus(
         loaded.request.sessionId,
         loaded.request.actionId,

@@ -159,7 +159,7 @@ export function AiDraftConversation({
           <div className="flex flex-wrap items-center gap-2">
             <Badge className="gap-1 rounded-full">
               <Sparkles className="size-3" />
-              AI curriculum builder
+              Curriculum draft
             </Badge>
             <Badge variant="outline" className="rounded-full">
               Planning for {activeLearner.displayName}
@@ -177,14 +177,14 @@ export function AiDraftConversation({
                 Shape the curriculum through live intake
               </p>
               <p className="max-w-3xl text-sm text-muted-foreground sm:text-base">
-                The AI should understand the learner, surface the real teaching goals, and then
+                This conversation should understand the learner, surface the real teaching goals, and then
                 build a usable domain, strand, goal-group, skill, unit, and lesson structure from
                 that conversation.
               </p>
             </div>
 
             <div className="rounded-2xl border border-primary/15 bg-background/75 p-4 text-sm text-muted-foreground">
-              Expect a back-and-forth, not a static wizard. The assistant should sharpen the scope,
+              Expect a back-and-forth, not a static wizard. Use it to sharpen the scope,
               pacing, and progression before you generate anything.
             </div>
           </div>
@@ -198,7 +198,7 @@ export function AiDraftConversation({
               <div className="flex flex-col gap-1">
                 <p className="text-sm font-medium">Conversation</p>
                 <p className="text-sm text-muted-foreground">
-                  Answer naturally. The AI should keep adapting the next question to what you have
+                  Answer naturally. The next question should adapt to what you have
                   already said.
                 </p>
               </div>
@@ -244,7 +244,7 @@ export function AiDraftConversation({
               <ChatInput
                 onSend={handleSend}
                 disabled={loadingInitial || sending || creating}
-                placeholder="Describe the curriculum you want to build, what matters, or what the AI should clarify next…"
+                placeholder="Describe the curriculum you want to build, what matters, or what should be clarified next…"
               />
             </div>
           </CardContent>
@@ -259,7 +259,7 @@ export function AiDraftConversation({
                 </p>
                 <p className="text-sm text-muted-foreground">
                   {state?.summary ??
-                    "The AI is gathering enough context to structure a real curriculum."}
+                    "The draft is gathering enough context to structure a real curriculum."}
                 </p>
               </div>
 
@@ -344,7 +344,7 @@ function ConversationBubble({
           isUser ? "bg-primary/15 text-primary" : "bg-secondary/35 text-secondary-foreground",
         )}
       >
-        {isUser ? "You" : "AI"}
+        {isUser ? "You" : "Guide"}
       </div>
       <div
         className={cn(
