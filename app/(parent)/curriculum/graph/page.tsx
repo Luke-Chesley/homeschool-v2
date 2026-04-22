@@ -140,7 +140,7 @@ export default async function CurriculumGraphPage({ searchParams }: CurriculumGr
   );
 
   return (
-    <main className="mx-auto flex w-full max-w-[1700px] flex-col gap-6 px-6 py-8 sm:px-8">
+    <main className="mx-auto flex w-full max-w-[1560px] flex-col gap-6 px-6 py-8 sm:px-8">
       <header className="space-y-3">
         <Link href="/curriculum" className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "w-fit px-3")}>
           <ArrowLeft className="size-4" />
