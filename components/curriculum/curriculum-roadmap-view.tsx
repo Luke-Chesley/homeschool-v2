@@ -45,6 +45,17 @@ function dependencyPhrases(skill: RoadmapSkill) {
   return phrases;
 }
 
+function dependencySummaryLine(skill: RoadmapSkill) {
+  const phrases = dependencyPhrases(skill);
+  return phrases.length > 0 ? phrases.join(" · ") : "No explicit dependency links recorded for this skill.";
+}
+
+function workStackLabel(phase: RoadmapPhase) {
+  const count = phase.groups.length;
+  const noun = phase.groupingStrategy === "unit" ? "unit stack" : "domain stack";
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
 function filterPhases(roadmap: CurriculumRoadmapModel, visibleSkillIds: Set<string>) {
   return roadmap.phases
     .map((phase) => {
@@ -83,27 +94,33 @@ function SkillRow({
   highlighted: boolean;
   onSelect: () => void;
 }) {
-  const dependencyLabels = dependencyPhrases(skill);
-
   return (
     <button
       type="button"
       onClick={onSelect}
       className={cn(
-        "flex w-full flex-col gap-3 rounded-2xl border border-border/70 bg-background/85 px-4 py-3 text-left transition-[border-color,background-color,box-shadow,transform] duration-[var(--motion-base)] ease-[var(--ease-standard)]",
+        "flex w-full flex-col gap-3 rounded-[1.35rem] border border-border/70 bg-background/88 px-4 py-4 text-left transition-[border-color,background-color,box-shadow,transform] duration-[var(--motion-base)] ease-[var(--ease-standard)]",
         "hover:-translate-y-px hover:border-border hover:bg-background hover:shadow-[var(--shadow-soft)]",
         highlighted && "border-primary/40 bg-primary/6 shadow-[var(--shadow-active)]",
       )}
     >
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-foreground">{skill.title}</p>
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">{skill.breadcrumb}</p>
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
+        <div className="min-w-0 space-y-2">
+          <div className="space-y-1.5">
+            <p className="text-[0.97rem] font-semibold leading-7 text-foreground">{skill.title}</p>
+            <p className="text-xs leading-5 text-muted-foreground">{skill.breadcrumb}</p>
+          </div>
+          <p className="text-xs leading-5 text-muted-foreground">{dependencySummaryLine(skill)}</p>
         </div>
-        <div className="flex flex-wrap justify-end gap-2">
+        <div className="flex flex-wrap gap-2 xl:justify-end">
           {skill.instructionalRole ? <Badge variant="secondary">{roleLabel(skill.instructionalRole)}</Badge> : null}
           {skill.unitTitle ? <Badge variant="outline">{skill.unitTitle}</Badge> : null}
           {skill.launchSlice.included ? <Badge variant="outline">Opening slice</Badge> : null}
+          {skill.lessonCount > 0 ? (
+            <Badge variant="outline">
+              {skill.lessonCount} lesson{skill.lessonCount === 1 ? "" : "s"}
+            </Badge>
+          ) : null}
         </div>
       </div>
 
@@ -126,25 +143,68 @@ function SkillRow({
             Application
           </Badge>
         ) : null}
-        {skill.lessonCount > 0 ? (
-          <Badge variant="outline">
-            {skill.lessonCount} lesson{skill.lessonCount === 1 ? "" : "s"}
-          </Badge>
-        ) : null}
       </div>
-
-      {dependencyLabels.length > 0 ? (
-        <div className="flex flex-wrap gap-2">
-          {dependencyLabels.map((label) => (
-            <Badge key={label} variant="outline" className="text-[11px] text-muted-foreground">
-              {label}
-            </Badge>
-          ))}
-        </div>
-      ) : (
-        <p className="text-xs text-muted-foreground">No explicit dependency links recorded for this skill.</p>
-      )}
     </button>
+  );
+}
+
+function GroupCard({
+  group,
+  phase,
+  roadmap,
+  highlightedSkillId,
+  onSelectSkill,
+}: {
+  group: RoadmapPhase["groups"][number];
+  phase: RoadmapPhase;
+  roadmap: CurriculumRoadmapModel;
+  highlightedSkillId?: string | null;
+  onSelectSkill: (skillId: string) => void;
+}) {
+  return (
+    <Card className="overflow-hidden rounded-[1.55rem] border-border/70 bg-background/90">
+      <div className="grid gap-0 xl:grid-cols-[minmax(0,18rem)_minmax(0,1fr)]">
+        <div className="space-y-4 border-b border-border/60 bg-muted/18 px-5 py-5 xl:border-b-0 xl:border-r">
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="outline">{group.type === "unit" ? "Unit" : "Domain"}</Badge>
+              {group.tags.map((tag) => (
+                <Badge key={tag} variant="outline" className="text-[11px] text-muted-foreground">
+                  {tag}
+                </Badge>
+              ))}
+            </div>
+            <p className="text-lg font-semibold text-foreground">{group.title}</p>
+            <p className="text-sm leading-6 text-muted-foreground">{group.subtitle}</p>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Badge variant="secondary">
+              {group.skillIds.length} skill{group.skillIds.length === 1 ? "" : "s"}
+            </Badge>
+            <Badge variant="outline">
+              {group.lessonCount} lesson{group.lessonCount === 1 ? "" : "s"}
+            </Badge>
+            <Badge variant="outline">{phase.groupingStrategy === "unit" ? "Anchored in sequence" : "Domain-aligned"}</Badge>
+          </div>
+        </div>
+
+        <div className="space-y-3 px-5 py-5">
+          {group.skillIds.map((skillId) => {
+            const skill = roadmap.skillById[skillId];
+            if (!skill) return null;
+            return (
+              <SkillRow
+                key={skill.id}
+                skill={skill}
+                highlighted={highlightedSkillId === skill.id}
+                onSelect={() => onSelectSkill(skill.id)}
+              />
+            );
+          })}
+        </div>
+      </div>
+    </Card>
   );
 }
 
@@ -170,28 +230,33 @@ export function CurriculumRoadmapView({
   return (
     <div className="space-y-6">
       {phases.map((phase) => (
-        <section key={phase.id} className="space-y-4 rounded-[1.75rem] border border-border/70 bg-card/72 p-5 sm:p-6">
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,0.78fr)]">
-            <div className="space-y-3">
+        <section key={phase.id} className="overflow-hidden rounded-[1.9rem] border border-border/70 bg-card/72">
+          <div className="grid gap-0 xl:grid-cols-[minmax(0,1.15fr)_minmax(21rem,24rem)]">
+            <div className="space-y-5 px-5 py-6 sm:px-6 sm:py-7 xl:border-r xl:border-border/60">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant={phase.isFallback ? "outline" : "secondary"}>
                   {phase.isFallback ? "Fallback" : `Phase ${phase.position + 1}`}
                 </Badge>
                 <Badge variant="outline">{phase.groupingStrategy === "unit" ? "Unit-led" : "Domain-led"}</Badge>
               </div>
-              <div className="space-y-2">
-                <h2 className="font-serif text-[1.8rem] leading-tight tracking-[-0.03em] text-foreground">
+
+              <div className="space-y-3">
+                <h2 className="font-serif text-[1.9rem] leading-tight tracking-[-0.03em] text-foreground">
                   {phase.title}
                 </h2>
                 {phase.description ? (
-                  <p className="max-w-3xl text-sm leading-7 text-muted-foreground">{phase.description}</p>
+                  <p className="max-w-2xl text-[0.98rem] leading-8 text-muted-foreground">{phase.description}</p>
                 ) : null}
-                <p className="text-sm leading-6 text-muted-foreground">{phase.natureLabel}</p>
+              </div>
+
+              <div className="rounded-[1.4rem] border border-border/60 bg-background/76 px-4 py-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Phase framing</p>
+                <p className="mt-2 text-sm leading-7 text-muted-foreground">{phase.natureLabel}</p>
               </div>
             </div>
 
-            <div className="grid gap-2 sm:grid-cols-2">
-              <div className="rounded-2xl border border-border/70 bg-background/80 px-4 py-3">
+            <div className="grid gap-3 bg-muted/18 px-5 py-6 sm:grid-cols-3 sm:px-6 xl:grid-cols-1 xl:px-5">
+              <div className="rounded-2xl border border-border/70 bg-background/84 px-4 py-4">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Coverage</p>
                 <p className="mt-2 text-sm font-semibold text-foreground">
                   {phase.skillCount} skills · {phase.domainCount} domains
@@ -200,7 +265,18 @@ export function CurriculumRoadmapView({
                   {phase.unitCount} units · {phase.lessonCount} lessons
                 </p>
               </div>
-              <div className="rounded-2xl border border-border/70 bg-background/80 px-4 py-3">
+
+              <div className="rounded-2xl border border-border/70 bg-background/84 px-4 py-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Work stacks</p>
+                <p className="mt-2 text-sm font-semibold text-foreground">{workStackLabel(phase)}</p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  {phase.groupingStrategy === "unit"
+                    ? "Grouped around the clearest unit anchors in this phase."
+                    : "Grouped by domain when unit anchors are weaker or fragmented."}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-border/70 bg-background/84 px-4 py-4">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Pacing hint</p>
                 <p className="mt-2 text-sm font-semibold text-foreground">{phase.pacingHint ?? "Use the skill density as the cue."}</p>
                 <p className="mt-1 text-xs leading-5 text-muted-foreground">
@@ -210,40 +286,19 @@ export function CurriculumRoadmapView({
             </div>
           </div>
 
-          <div className="grid gap-4 xl:grid-cols-2">
+          <div className="border-t border-border/60 px-5 py-5 sm:px-6 sm:py-6">
+            <div className="space-y-4">
             {phase.groups.map((group) => (
-              <Card key={group.id} className="rounded-[1.5rem] border-border/70 bg-background/88 p-4">
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-base font-semibold text-foreground">{group.title}</p>
-                      <Badge variant="outline">{group.type === "unit" ? "Unit" : "Domain"}</Badge>
-                      {group.tags.map((tag) => (
-                        <Badge key={tag} variant="outline" className="text-[11px] text-muted-foreground">
-                          {tag}
-                        </Badge>
-                      ))}
-                    </div>
-                    <p className="text-sm leading-6 text-muted-foreground">{group.subtitle}</p>
-                  </div>
-
-                  <div className="space-y-3">
-                    {group.skillIds.map((skillId) => {
-                      const skill = roadmap.skillById[skillId];
-                      if (!skill) return null;
-                      return (
-                        <SkillRow
-                          key={skill.id}
-                          skill={skill}
-                          highlighted={highlightedSkillId === skill.id}
-                          onSelect={() => onSelectSkill(skill.id)}
-                        />
-                      );
-                    })}
-                  </div>
-                </div>
-              </Card>
+              <GroupCard
+                key={group.id}
+                group={group}
+                phase={phase}
+                roadmap={roadmap}
+                highlightedSkillId={highlightedSkillId}
+                onSelectSkill={onSelectSkill}
+              />
             ))}
+            </div>
           </div>
         </section>
       ))}
