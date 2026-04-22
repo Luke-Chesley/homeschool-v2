@@ -199,7 +199,7 @@ export function LessonPlanPanel({
       ? daySlotCount && daySlotCount > 1 && slotPosition
         ? `${resolvedLessonLabel} is ${slotPosition} of ${daySlotCount} scheduled lessons and covers ${routeItemCount} of ${daySkillCount} skills planned for today.`
         : `${resolvedLessonLabel} covers ${routeItemCount} of ${daySkillCount} skills planned for today.`
-      : "Keep the mechanics here. The draft itself stays front and center.";
+      : "Use these controls to manage the lesson and learner activity.";
 
   async function requestDraft(
     trigger: "onboarding_auto" | "today_resume" | "manual",
@@ -475,22 +475,6 @@ export function LessonPlanPanel({
                   />
                 </div>
               </div>
-
-              <details className="rounded-lg border border-border/70 bg-background/72 px-4 py-3">
-                <summary className="cursor-pointer text-sm font-medium text-foreground">
-                  Context
-                </summary>
-                <div className="mt-3 space-y-3 text-sm text-muted-foreground">
-                  <div>
-                    <span className="font-medium text-foreground">Route:</span>{" "}
-                    {routeItemTitles.length > 0 ? routeItemTitles.join(" · ") : "No route items"}
-                  </div>
-                  <div>
-                    <span className="font-medium text-foreground">Targets:</span>{" "}
-                    {objectives.length > 0 ? objectives.join(" · ") : "None"}
-                  </div>
-                </div>
-              </details>
             </>
           ) : null}
 

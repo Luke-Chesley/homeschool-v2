@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyStatePanel } from "@/components/ui/empty-state-panel";
 import { requireAppSession } from "@/lib/app-session/server";
 import { getLiveCurriculumSource } from "@/lib/curriculum/service";
+import { getDateInTimezone } from "@/lib/date";
 import { buildHomeschoolPlannerSummary } from "@/lib/homeschool/planner";
 import { getOrCreateWeeklyRouteBoardForLearner } from "@/lib/planning/weekly-route-service";
 import { buttonVariants } from "@/components/ui/button";
@@ -63,6 +64,7 @@ interface PlanningPageProps {
 export default async function PlanningPage({ searchParams }: PlanningPageProps) {
   const [session, params] = await Promise.all([requireAppSession(), searchParams]);
   const liveSource = await getLiveCurriculumSource(session.organization.id);
+  const localToday = getDateInTimezone(session.organization.timezone);
 
   if (!liveSource) {
     return (
@@ -108,7 +110,7 @@ export default async function PlanningPage({ searchParams }: PlanningPageProps) 
   const { weekStartDate, board } = await getOrCreateWeeklyRouteBoardForLearner({
     learnerId: session.activeLearner.id,
     sourceId: liveSource.id,
-    weekStartDate: params.weekStartDate,
+    weekStartDate: params.weekStartDate ?? localToday,
   });
   const plannerSummary = buildHomeschoolPlannerSummary(board);
   const weekViewHref = `/planning${params.weekStartDate ? `?weekStartDate=${encodeURIComponent(params.weekStartDate)}` : ""}`;
@@ -144,6 +146,7 @@ export default async function PlanningPage({ searchParams }: PlanningPageProps) 
 
       <div className="grid gap-4">
         <WeeklyRouteBoard
+          key={weekStartDate}
           initialBoard={board}
           weekStartDate={weekStartDate}
           navigation={{

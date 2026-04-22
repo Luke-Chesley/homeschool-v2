@@ -291,13 +291,15 @@ export function buildScheduleRefreshProjection(params: {
         }
       }
 
-      return {
-        ...item,
-        nextWeeklyRouteId: chosenSlot?.weeklyRouteId ?? item.weeklyRouteId,
-        nextScheduledDate: chosenSlot?.scheduledDate ?? item.scheduledDate,
-        nextScheduledSlotIndex: chosenSlot?.scheduledSlotIndex ?? item.scheduledSlotIndex,
-        nextState: item.state,
-      };
+      if (chosenSlot || FIXED_STATES.has(item.state)) {
+        return {
+          ...item,
+          nextWeeklyRouteId: chosenSlot?.weeklyRouteId ?? item.weeklyRouteId,
+          nextScheduledDate: chosenSlot?.scheduledDate ?? item.scheduledDate,
+          nextScheduledSlotIndex: chosenSlot?.scheduledSlotIndex ?? item.scheduledSlotIndex,
+          nextState: item.state,
+        };
+      }
     }
 
     while (

@@ -22,7 +22,7 @@ export function ParentSidebar({
           <div className="space-y-1">
             <p className="text-sm font-semibold text-foreground">{organizationName}</p>
             <p className="text-sm leading-6 text-muted-foreground">
-              Keep the day, week, and record trail close together.
+              Today, Planning, and Tracking stay together here.
             </p>
           </div>
           <span className="rounded-full border border-border/70 bg-background/78 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
@@ -39,9 +39,6 @@ export function ParentSidebar({
           <div className="mt-3 flex flex-wrap gap-2">
             <span className="rounded-full border border-border/70 bg-card/76 px-2.5 py-1 text-[11px] text-muted-foreground">
               Today ready
-            </span>
-            <span className="rounded-full border border-border/70 bg-card/76 px-2.5 py-1 text-[11px] text-muted-foreground">
-              One calm workspace
             </span>
           </div>
         </div>

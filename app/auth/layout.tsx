@@ -9,7 +9,7 @@ const authHighlights = [
   },
   {
     title: "Today first",
-    body: "Land in the daily workspace with clear next steps instead of a maze of setup screens.",
+    body: "Open the daily workspace with clear next steps after setup.",
   },
   {
     title: "Planning and tracking stay connected",
@@ -25,10 +25,10 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
           <Badge variant="glass" className="w-fit">Homeschool V2</Badge>
           <div className="space-y-3">
             <h1 className="font-serif text-[clamp(2.5rem,5vw,4.5rem)] leading-[0.96] tracking-[-0.04em]">
-              Open the homeschool workspace without the setup friction.
+              Sign in and open the homeschool workspace.
             </h1>
             <p className="max-w-2xl text-base leading-8 text-muted-foreground">
-              Sign in, finish the household setup, and land in a workspace that is ready to plan, teach, and record.
+              Sign in, finish the household setup, and go straight to planning, teaching, and tracking.
             </p>
           </div>
 

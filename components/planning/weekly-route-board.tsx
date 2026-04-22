@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   closestCorners,
   DndContext,
@@ -112,6 +112,13 @@ function createColumns(items: WeeklyRouteBoardItem[], weekDates: string[]) {
   }
 
   return columns;
+}
+
+function normalizeColumns(columns: ColumnsState, weekDates: string[]) {
+  return {
+    ...createColumns([], weekDates),
+    ...columns,
+  };
 }
 
 function findColumnForId(id: string, columns: ColumnsState) {
@@ -382,9 +389,12 @@ function RouteColumn({
 }
 
 export function WeeklyRouteBoard({ initialBoard, weekStartDate, navigation }: WeeklyRouteBoardProps) {
-  const weekDates = getWeekdayDates(weekStartDate);
-  const columnOrder = ["unassigned", ...weekDates];
-  const initialColumns = createColumns(initialBoard.items, weekDates);
+  const weekDates = useMemo(() => getWeekdayDates(weekStartDate), [weekStartDate]);
+  const columnOrder = useMemo(() => ["unassigned", ...weekDates], [weekDates]);
+  const initialColumns = useMemo(
+    () => createColumns(initialBoard.items, weekDates),
+    [initialBoard, weekDates],
+  );
   const [board, setBoard] = useState(initialBoard);
   const [columns, setColumns] = useState<ColumnsState>(initialColumns);
   const [activeItemId, setActiveItemId] = useState<string | null>(null);
@@ -407,6 +417,7 @@ export function WeeklyRouteBoard({ initialBoard, weekStartDate, navigation }: We
     (item) =>
       item.manualOverrideKind !== "none" || item.currentPosition !== item.recommendedPosition,
   );
+  const visibleColumns = normalizeColumns(columns, weekDates);
 
   const resetFromServerBoard = (nextBoard: WeeklyRouteBoard) => {
     const nextColumns = createColumns(nextBoard.items, weekDates);
@@ -414,6 +425,15 @@ export function WeeklyRouteBoard({ initialBoard, weekStartDate, navigation }: We
     columnsRef.current = nextColumns;
     setColumns(nextColumns);
   };
+
+  useEffect(() => {
+    setBoard(initialBoard);
+    columnsRef.current = initialColumns;
+    setColumns(initialColumns);
+    setActiveItemId(null);
+    setError(null);
+    setIsSaving(false);
+  }, [initialBoard, initialColumns]);
 
   const persistState = async (itemId: string, nextState: WeeklyRouteBoardItem["state"]) => {
     const item = board.items.find((entry) => entry.id === itemId);
@@ -777,7 +797,7 @@ export function WeeklyRouteBoard({ initialBoard, weekStartDate, navigation }: We
             className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]"
           >
             {columnOrder.map((columnId) => {
-              const items = columns[columnId]
+              const items = visibleColumns[columnId]
                 .map((itemId) => itemsById.get(itemId))
                 .filter((item): item is WeeklyRouteBoardItem => item != null);
 

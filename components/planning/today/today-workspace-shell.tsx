@@ -236,17 +236,6 @@ export function TodayWorkspaceShell({
                   </span>
                 </div>
               </div>
-              <div className="flex flex-wrap items-center gap-2 text-sm">
-                <span className="rounded-full border border-primary/20 bg-primary/6 px-3 py-1.5 font-medium text-foreground">
-                  {readinessLabel}
-                </span>
-                <span className="rounded-full border border-border/70 bg-background/72 px-3 py-1.5 text-muted-foreground">
-                  {fullWorkspace.learner.name}
-                </span>
-                <span className="max-w-full truncate rounded-full border border-border/70 bg-background/72 px-3 py-1.5 text-muted-foreground sm:max-w-[28rem]">
-                  {fullWorkspace.leadItem.sourceLabel}
-                </span>
-              </div>
               <div className="space-y-1">
                 <p className="text-sm font-medium text-foreground">
                   {headerView === "flow" ? "Today’s lesson flow" : "Today’s skills"}
@@ -255,7 +244,7 @@ export function TodayWorkspaceShell({
                   {headerView === "flow"
                     ? "Keep the active lesson in focus. Switch slots only when you need the next same-day lesson."
                     : "Review every scheduled skill for today without opening the full planning view."}{" "}
-                  <span className="text-foreground/90">{nextStepLabel}</span>
+                  <span className="text-foreground/90">{readinessLabel} {nextStepLabel}</span>
                 </p>
               </div>
             </div>

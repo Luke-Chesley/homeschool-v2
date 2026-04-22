@@ -32,7 +32,7 @@ export function CurriculumEmptyState() {
           </Link>
         </div>
         <p className="text-sm text-muted-foreground">
-          Bring what you already have, then shape it into a clear day and a sane week.
+          Start with the source you already have, then build the plan from there.
         </p>
       </CardContent>
     </Card>

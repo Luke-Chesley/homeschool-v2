@@ -43,11 +43,6 @@ export function TodayLessonDraftArticle({
 
   return (
     <section className="space-y-4">
-      <div className="border-b border-border/70 pb-4">
-        <p className="text-sm text-muted-foreground">{workspace.leadItem.sourceLabel}</p>
-        <h2 className="font-serif text-3xl">Lesson draft</h2>
-      </div>
-
       <details className="group rounded-[var(--radius)] border border-border/70 bg-card md:hidden">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-foreground">
           <span>Open full lesson draft</span>

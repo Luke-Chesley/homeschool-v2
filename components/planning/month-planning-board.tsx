@@ -16,7 +16,7 @@ import {
 } from "@dnd-kit/core";
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ArrowRight, ChevronDown, GripVertical } from "lucide-react";
+import { ArrowRight, GripVertical } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
@@ -54,6 +54,19 @@ function getStateLabel(state: WeeklyRouteBoardItem["state"]) {
 
 function getSkillContextLabel(item: WeeklyRouteBoardItem) {
   return item.skillPath.split(/[·/]/)[0]?.trim() || item.skillPath;
+}
+
+function getStateDotClass(state: WeeklyRouteBoardItem["state"]) {
+  if (state === "done") return "bg-primary";
+  if (state === "in_progress") return "bg-amber-500";
+  if (state === "removed") return "bg-muted-foreground/55";
+  return "bg-emerald-600";
+}
+
+function formatCellMonthLabel(date: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+  }).format(new Date(`${date}T12:00:00.000Z`));
 }
 
 function createColumns(month: MonthlyPlan): ColumnsState {
@@ -100,6 +113,17 @@ function createColumnMeta(month: MonthlyPlan) {
   return meta;
 }
 
+function findInitialSelectedDate(month: MonthlyPlan) {
+  const allDays = month.weeks.flatMap((week) => week.days);
+
+  return (
+    allDays.find((day) => day.inMonth && day.isDroppable && day.items.length > 0)?.date ??
+    allDays.find((day) => day.inMonth && day.isDroppable)?.date ??
+    allDays.find((day) => day.isDroppable)?.date ??
+    null
+  );
+}
+
 function findColumnForId(id: string, columns: ColumnsState) {
   if (Object.hasOwn(columns, id)) {
     return id;
@@ -111,14 +135,16 @@ function findColumnForId(id: string, columns: ColumnsState) {
 function SortableMonthItem({
   item,
   isSaving,
+  onSelect,
 }: {
   item: WeeklyRouteBoardItem;
   isSaving: boolean;
+  onSelect?: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.id,
   });
-  const [expanded, setExpanded] = useState(false);
+  const minutesLabel = item.estimatedMinutes && item.estimatedMinutes > 0 ? `${item.estimatedMinutes} min` : null;
 
   return (
     <div
@@ -128,101 +154,55 @@ function SortableMonthItem({
         transition,
       }}
       className={cn(
-        "relative rounded-xl border border-border/75 bg-card/95 px-2.5 py-2.5 shadow-sm",
-        expanded && "z-20",
+        "flex items-start gap-2 rounded-xl border border-border/75 bg-card/95 px-2.5 py-2.5 shadow-sm transition-colors",
         isDragging && "opacity-70 shadow-md",
       )}
     >
-      <div className="space-y-2">
-        <div className="flex items-start gap-1.5">
-          <div className="min-w-0 flex-1 space-y-1.5">
-            <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
-              <Badge
-                variant="secondary"
-                className="max-w-[calc(100%-2.5rem)] rounded-full px-1.5 py-0.5 truncate whitespace-nowrap"
-                title={getSkillContextLabel(item)}
-              >
-                {getSkillContextLabel(item)}
-              </Badge>
-            </div>
-            <p
-              className={cn(
-                "text-xs font-medium leading-5 text-foreground",
-                expanded ? "line-clamp-none" : "line-clamp-2",
-              )}
+      <button
+        type="button"
+        onClick={onSelect}
+        className="flex min-w-0 flex-1 items-start gap-2 text-left"
+      >
+        <span className={cn("mt-1 size-2 shrink-0 rounded-full", getStateDotClass(item.state))} />
+        <div className="min-w-0 space-y-1.5">
+          <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
+            <Badge
+              variant="secondary"
+              className="max-w-[9rem] rounded-full px-1.5 py-0.5 truncate whitespace-nowrap"
+              title={getSkillContextLabel(item)}
             >
-              {item.skillTitle}
-            </p>
-            <div className="flex flex-wrap gap-1">
-              <Badge variant="outline" className="rounded-full px-1.5 py-0 text-[10px]">
-                {getStateLabel(item.state)}
-              </Badge>
-              {item.manualOverrideKind !== "none" ? (
-                <Badge variant="secondary" className="rounded-full px-1.5 py-0 text-[10px]">
-                  {item.manualOverrideKind.replace("_", " ")}
-                </Badge>
-              ) : null}
-            </div>
+              {getSkillContextLabel(item)}
+            </Badge>
+            {minutesLabel ? <span>{minutesLabel}</span> : null}
           </div>
-          <div className="flex shrink-0 items-center gap-1">
-            <button
-              type="button"
-              aria-expanded={expanded}
-              aria-controls={`month-item-details-${item.id}`}
-              aria-label={expanded ? `Collapse details for ${item.skillTitle}` : `Expand details for ${item.skillTitle}`}
-              className="inline-flex size-7 items-center justify-center rounded-md border border-border/70 text-muted-foreground transition-colors hover:text-foreground"
-              onClick={() => setExpanded((current) => !current)}
-            >
-              <ChevronDown className={cn("size-3 transition-transform", expanded && "rotate-180")} />
-            </button>
-            <button
-              type="button"
-              aria-label={`Drag ${item.skillTitle}`}
-              disabled={isSaving}
-              className="shrink-0 rounded-md border border-border/70 p-1 text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed"
-              {...attributes}
-              {...listeners}
-            >
-              <GripVertical className="size-3.5" />
-            </button>
+          <p className="line-clamp-2 text-xs font-medium leading-5 text-foreground">
+            {item.skillTitle}
+          </p>
+          <div className="flex flex-wrap gap-1">
+            <Badge variant="outline" className="rounded-full px-1.5 py-0 text-[10px]">
+              {getStateLabel(item.state)}
+            </Badge>
+            {item.manualOverrideKind !== "none" ? (
+              <Badge variant="secondary" className="rounded-full px-1.5 py-0 text-[10px]">
+                {item.manualOverrideKind.replace("_", " ")}
+              </Badge>
+            ) : null}
+          </div>
+          <div className="text-[10px] text-muted-foreground truncate">
+            {item.skillPath}
           </div>
         </div>
-
-        {expanded ? (
-          <div
-            id={`month-item-details-${item.id}`}
-            className="absolute left-0 top-full z-30 mt-2 w-[min(18rem,calc(100vw-5rem))] space-y-3 rounded-xl border border-border/70 bg-card px-3 py-3 shadow-[var(--shadow-card)]"
-          >
-            <div className="space-y-1">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                Skill path
-              </p>
-              <p className="text-[11px] leading-5 break-words text-muted-foreground">{item.skillPath}</p>
-            </div>
-            <div className="flex flex-wrap gap-1">
-              <Badge variant="outline" className="rounded-full">
-                {getStateLabel(item.state)}
-              </Badge>
-              {item.manualOverrideKind !== "none" ? (
-                <Badge variant="secondary" className="rounded-full">
-                  {item.manualOverrideKind.replace("_", " ")}
-                </Badge>
-              ) : null}
-            </div>
-            <div className="space-y-1">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                Position
-              </p>
-              <p className="text-[11px] leading-5 text-muted-foreground">
-                Now {item.currentPosition + 1}
-                {item.recommendedPosition !== item.currentPosition
-                  ? ` · recommended ${item.recommendedPosition + 1}`
-                  : ""}
-              </p>
-            </div>
-          </div>
-        ) : null}
-      </div>
+      </button>
+      <button
+        type="button"
+        aria-label={`Drag ${item.skillTitle}`}
+        disabled={isSaving}
+        className="shrink-0 rounded-md border border-border/70 p-1 text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed"
+        {...attributes}
+        {...listeners}
+      >
+        <GripVertical className="size-3.5" />
+      </button>
     </div>
   );
 }
@@ -231,10 +211,14 @@ function DayCell({
   day,
   items,
   isSaving,
+  selected,
+  onSelect,
 }: {
   day: MonthlyPlanDay;
   items: WeeklyRouteBoardItem[];
   isSaving: boolean;
+  selected: boolean;
+  onSelect: (date: string) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({
     id: day.date,
@@ -244,30 +228,33 @@ function DayCell({
   return (
     <div
       className={cn(
-        "flex min-h-36 min-w-0 flex-col rounded-[1.4rem] border p-3 transition-colors",
+        "flex min-h-40 min-w-0 flex-col rounded-[1.4rem] border p-3 transition-colors",
         day.inMonth ? "border-border/75 bg-card/82" : "border-border/55 bg-background/55",
         day.isWeekend && "bg-background/40",
         day.isDroppable && isOver && "border-primary/45 bg-primary/6",
+        selected && "border-primary/35 shadow-[var(--shadow-soft)]",
       )}
+      onClick={() => {
+        if (day.isDroppable) {
+          onSelect(day.date);
+        }
+      }}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p
             className={cn(
-              "text-[11px] font-semibold tracking-[0.16em] uppercase",
-              day.inMonth ? "text-muted-foreground" : "text-muted-foreground/75",
-            )}
-          >
-            {day.shortLabel}
-          </p>
-          <p
-            className={cn(
-              "mt-1 text-lg font-semibold",
+              "text-lg font-semibold",
               day.inMonth ? "text-foreground" : "text-muted-foreground",
             )}
           >
             {day.dayNumber}
           </p>
+          {!day.inMonth ? (
+            <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/75">
+              {formatCellMonthLabel(day.date)}
+            </p>
+          ) : null}
         </div>
         <div className="flex flex-col items-end gap-1">
           {items.length > 0 ? (
@@ -281,7 +268,7 @@ function DayCell({
         </div>
       </div>
 
-        <div ref={setNodeRef} className="mt-3 flex-1 space-y-2">
+      <div ref={setNodeRef} className="mt-3 flex-1 space-y-1.5">
         <SortableContext items={items.map((item) => item.id)} strategy={verticalListSortingStrategy}>
           {items.length === 0 ? (
             <div
@@ -297,11 +284,93 @@ function DayCell({
               {!day.inMonth ? "" : day.isWeekend ? "Weekend" : "Drop cards here"}
             </div>
           ) : (
-            items.map((item) => <SortableMonthItem key={item.id} item={item} isSaving={isSaving} />)
+            items.map((item) => (
+              <SortableMonthItem
+                key={item.id}
+                item={item}
+                isSaving={isSaving}
+                onSelect={() => onSelect(day.date)}
+              />
+            ))
           )}
         </SortableContext>
       </div>
     </div>
+  );
+}
+
+function SelectedDayPanel({
+  day,
+  items,
+}: {
+  day: MonthlyPlanDay;
+  items: WeeklyRouteBoardItem[];
+}) {
+  return (
+    <Card className="border-border/75 bg-card/90">
+      <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="space-y-1">
+          <CardDescription>Selected day</CardDescription>
+          <CardTitle>{day.label}</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            {items.length} item{items.length === 1 ? "" : "s"}
+            {day.scheduledMinutes > 0 ? ` · ${day.scheduledMinutes} min` : ""}
+          </p>
+        </div>
+        <Link
+          href={`/planning?weekStartDate=${day.weekStartDate}`}
+          className={cn(buttonVariants({ variant: "outline", size: "sm" }), "rounded-full")}
+        >
+          Open week
+          <ArrowRight className="size-4" />
+        </Link>
+      </CardHeader>
+      <CardContent>
+        {items.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-border/70 px-4 py-6 text-sm text-muted-foreground">
+            {day.isWeekend
+              ? "No weekday items are scheduled here."
+              : "Nothing is scheduled here yet. Drag an item onto this day to place it."}
+          </div>
+        ) : (
+          <div className="grid gap-3 lg:grid-cols-2">
+            {items.map((item) => (
+              <div
+                key={item.id}
+                className="rounded-[1.2rem] border border-border/70 bg-background/76 p-4"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="secondary" className="rounded-full">
+                    {getSkillContextLabel(item)}
+                  </Badge>
+                  <Badge variant="outline" className="rounded-full">
+                    {getStateLabel(item.state)}
+                  </Badge>
+                  {item.manualOverrideKind !== "none" ? (
+                    <Badge variant="secondary" className="rounded-full">
+                      {item.manualOverrideKind.replace("_", " ")}
+                    </Badge>
+                  ) : null}
+                </div>
+                <p className="mt-3 font-serif text-xl leading-tight text-foreground">
+                  {item.skillTitle}
+                </p>
+                <div className="mt-3 space-y-1 text-sm text-muted-foreground">
+                  <p className="break-words">{item.skillPath}</p>
+                  <p>
+                    Position {item.currentPosition + 1}
+                    {item.recommendedPosition !== item.currentPosition
+                      ? ` · recommended ${item.recommendedPosition + 1}`
+                      : ""}
+                  </p>
+                  {item.estimatedMinutes ? <p>{item.estimatedMinutes} min</p> : null}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -358,6 +427,7 @@ export function MonthPlanningBoard({ month }: MonthPlanningBoardProps) {
   const initialColumns = createColumns(month);
   const [columns, setColumns] = useState<ColumnsState>(initialColumns);
   const [activeItemId, setActiveItemId] = useState<string | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string | null>(() => findInitialSelectedDate(month));
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const columnsRef = useRef<ColumnsState>(initialColumns);
@@ -368,6 +438,7 @@ export function MonthPlanningBoard({ month }: MonthPlanningBoardProps) {
     columnsRef.current = nextColumns;
     setColumns(nextColumns);
     setActiveItemId(null);
+    setSelectedDate(findInitialSelectedDate(month));
     setError(null);
   }, [month]);
 
@@ -385,6 +456,11 @@ export function MonthPlanningBoard({ month }: MonthPlanningBoardProps) {
   ]);
   const itemsById = new Map(allItems.map((item) => [item.id, item]));
   const columnMeta = createColumnMeta(month);
+  const allDays = month.weeks.flatMap((week) => week.days);
+  const selectedDay =
+    allDays.find((day) => day.date === selectedDate) ??
+    allDays.find((day) => day.inMonth && day.isDroppable) ??
+    null;
   const hasScheduleChanges = allItems.some(
     (item) =>
       item.manualOverrideKind !== "none" || item.currentPosition !== item.recommendedPosition,
@@ -673,7 +749,16 @@ export function MonthPlanningBoard({ month }: MonthPlanningBoardProps) {
                           .map((itemId) => itemsById.get(itemId))
                           .filter((item): item is WeeklyRouteBoardItem => item != null);
 
-                        return <DayCell key={day.date} day={day} items={items} isSaving={isSaving} />;
+                        return (
+                          <DayCell
+                            key={day.date}
+                            day={day}
+                            items={items}
+                            isSaving={isSaving}
+                            selected={day.date === selectedDay?.date}
+                            onSelect={setSelectedDate}
+                          />
+                        );
                       })}
                     </div>
                   ))}
@@ -686,6 +771,14 @@ export function MonthPlanningBoard({ month }: MonthPlanningBoardProps) {
           </Card>
         </DndContext>
       </div>
+      {selectedDay ? (
+        <SelectedDayPanel
+          day={selectedDay}
+          items={(selectedDay.isDroppable ? columns[selectedDay.date] ?? [] : selectedDay.items.map((item) => item.id))
+            .map((itemId) => itemsById.get(itemId))
+            .filter((item): item is WeeklyRouteBoardItem => item != null)}
+        />
+      ) : null}
       {visibleBacklogWeeks.length > 0 ? (
         <Card className="border-border/75 bg-card/90">
           <CardHeader>

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyStatePanel } from "@/components/ui/empty-state-panel";
 import { requireAppSession } from "@/lib/app-session/server";
 import { getOrganizationTodayTrackerBaseline } from "@/lib/beta/service";
+import { getDateInTimezone } from "@/lib/date";
 import { getTodayWorkspaceViewForRender } from "@/lib/planning/today-service";
 import { buildTodayWorkspaceDaySummary } from "@/lib/planning/today-workspace-summary";
 
@@ -35,7 +36,7 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
   const resolvedSearchParams = await searchParams;
   const date =
     typeof resolvedSearchParams.date === "string" ? resolvedSearchParams.date : undefined;
-  const todayDate = date ?? new Date().toISOString().slice(0, 10);
+  const todayDate = date ?? getDateInTimezone(session.organization.timezone);
 
   const [trackerBaseline, workspaceResult] = await Promise.all([
     getOrganizationTodayTrackerBaseline(session.organization.id),
@@ -52,7 +53,7 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
       <PlanningShell>
         <EmptyStatePanel
           title="Build the first teachable day."
-          body="Add a curriculum source first so Today can turn it into a workable lesson, a clear queue, and a calmer week."
+          body="Add a curriculum source first so Today can build a lesson and queue for this learner."
           icon={BookOpen}
         >
           <div className="grid gap-3 md:grid-cols-3">
@@ -69,9 +70,9 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
               </p>
             </Link>
             <div className="quiet-panel-muted p-4 text-left">
-              <p className="text-sm font-semibold text-foreground">Stay lightweight</p>
+              <p className="text-sm font-semibold text-foreground">Start with one source</p>
               <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                Start with one learner, one source, and one good day.
+                Use one learner and one curriculum source to build the first day.
               </p>
             </div>
           </div>

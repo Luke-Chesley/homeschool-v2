@@ -31,6 +31,7 @@ type WeeklyRouteRecord = typeof weeklyRoutes.$inferSelect;
 type WeeklyRouteOverrideKind = WeeklyRouteItemRow["manualOverrideKind"];
 type WeeklyRouteBoardMaintenanceReason =
   | "missing_route"
+  | "overdue_carry_forward"
   | "empty_board"
   | "unscheduled_items"
   | "capacity_drift"
@@ -117,6 +118,173 @@ async function shouldRegenerateForPriorWeekOverlap(route: WeeklyRouteRecord, boa
   return board.items.some(
     (item) => item.state !== "removed" && priorPlannedSkillNodeIds.has(item.skillNodeId),
   );
+}
+
+async function findOverdueScheduledItemsBeforeWeek(params: {
+  learnerId: string;
+  sourceId: string;
+  weekStartDate: string;
+}) {
+  const db = getDb();
+  const priorRouteIds = await db
+    .select({ id: weeklyRoutes.id })
+    .from(weeklyRoutes)
+    .where(
+      and(
+        eq(weeklyRoutes.learnerId, params.learnerId),
+        eq(weeklyRoutes.sourceId, params.sourceId),
+        inArray(weeklyRoutes.status, ["draft", "active"]),
+        lt(weeklyRoutes.weekStartDate, params.weekStartDate),
+      ),
+    );
+
+  if (priorRouteIds.length === 0) {
+    return [];
+  }
+
+  return db.query.weeklyRouteItems.findMany({
+    where: and(
+      inArray(
+        weeklyRouteItems.weeklyRouteId,
+        priorRouteIds.map((route) => route.id),
+      ),
+      inArray(weeklyRouteItems.state, Array.from(ACTIVE_ROUTE_STATES)),
+      lt(weeklyRouteItems.scheduledDate, params.weekStartDate),
+    ),
+    orderBy: [
+      asc(weeklyRouteItems.scheduledDate),
+      asc(weeklyRouteItems.currentPosition),
+      asc(weeklyRouteItems.createdAt),
+    ],
+  });
+}
+
+async function repairOverdueCarryForwardForWeek(params: {
+  learnerId: string;
+  sourceId: string;
+  weekStartDate: string;
+  weeklyRouteId: string;
+}) {
+  const futureWeekStartDates = getForwardWeekStartDates(
+    params.weekStartDate,
+    WEEKLY_REFRESH_HORIZON_WEEKS,
+  ).slice(1);
+
+  const futureRouteDescriptors = await Promise.all(
+    futureWeekStartDates.map(async (weekStartDate) => {
+      const existing = await getWeeklyRouteBoard({
+        learnerId: params.learnerId,
+        sourceId: params.sourceId,
+        weekStartDate,
+      });
+
+      if (existing) {
+        return {
+          weekStartDate,
+          weeklyRouteId: existing.summary.weeklyRouteId,
+        };
+      }
+
+      const generated = await generateWeeklyRoute({
+        learnerId: params.learnerId,
+        sourceId: params.sourceId,
+        weekStartDate,
+      });
+
+      return {
+        weekStartDate,
+        weeklyRouteId: generated.summary.weeklyRouteId,
+      };
+    }),
+  );
+
+  const routeDescriptors = [
+    { weekStartDate: params.weekStartDate, weeklyRouteId: params.weeklyRouteId },
+    ...futureRouteDescriptors,
+  ];
+
+  const db = getDb();
+  const [overdueRows, futureRows, profile] = await Promise.all([
+    findOverdueScheduledItemsBeforeWeek({
+      learnerId: params.learnerId,
+      sourceId: params.sourceId,
+      weekStartDate: params.weekStartDate,
+    }),
+    db.query.weeklyRouteItems.findMany({
+      where: inArray(
+        weeklyRouteItems.weeklyRouteId,
+        routeDescriptors.map((descriptor) => descriptor.weeklyRouteId),
+      ),
+      orderBy: [asc(weeklyRouteItems.currentPosition), asc(weeklyRouteItems.createdAt)],
+    }),
+    db.query.learnerRouteProfiles.findFirst({
+      where: and(
+        eq(learnerRouteProfiles.learnerId, params.learnerId),
+        eq(learnerRouteProfiles.sourceId, params.sourceId),
+      ),
+    }),
+  ]);
+
+  if (overdueRows.length === 0) {
+    const board = await getWeeklyRouteBoardById({
+      learnerId: params.learnerId,
+      weeklyRouteId: params.weeklyRouteId,
+    });
+
+    if (!board) {
+      throw new Error("Failed to reload weekly route board after carry-forward repair.");
+    }
+
+    return board;
+  }
+
+  const rowsByRouteId = new Map<string, WeeklyRouteItemRow[]>();
+  for (const row of futureRows) {
+    const existing = rowsByRouteId.get(row.weeklyRouteId) ?? [];
+    existing.push(row);
+    rowsByRouteId.set(row.weeklyRouteId, existing);
+  }
+
+  const enabledDayOffsets = getEnabledPlanningDayOffsets(profile?.planningDays ?? null);
+  const targetItemsPerDay = getTargetItemsPerDay(profile);
+  const orderedRows = [
+    ...overdueRows,
+    ...routeDescriptors.flatMap((descriptor) => rowsByRouteId.get(descriptor.weeklyRouteId) ?? []),
+  ];
+  const days = routeDescriptors.flatMap((descriptor) =>
+    buildScheduleDaysForWeek({
+      weeklyRouteId: descriptor.weeklyRouteId,
+      weekStartDate: descriptor.weekStartDate,
+      targetItemsPerDay,
+      enabledDayOffsets,
+    }),
+  );
+  const slots = buildAdaptiveScheduleSlots({
+    items: orderedRows.map(toScheduleRefreshItem),
+    days,
+  });
+  const projections = buildScheduleRefreshProjection({
+    items: orderedRows.map(toScheduleRefreshItem),
+    slots,
+  });
+
+  await applyScheduleRefreshProjection({
+    learnerId: params.learnerId,
+    rows: orderedRows,
+    projections,
+    scope: "week",
+  });
+
+  const board = await getWeeklyRouteBoardById({
+    learnerId: params.learnerId,
+    weeklyRouteId: params.weeklyRouteId,
+  });
+
+  if (!board) {
+    throw new Error("Failed to reload weekly route board after carry-forward repair.");
+  }
+
+  return board;
 }
 
 function shouldRegenerateForCapacityDrift(params: {
@@ -428,6 +596,17 @@ export async function getOrCreateWeeklyRouteBoardForLearner(params: {
   const { weekStartDate, route, existing } = state;
 
   if (existing) {
+    if (state.maintenanceReason === "overdue_carry_forward") {
+      const repaired = await repairOverdueCarryForwardForWeek({
+        learnerId: params.learnerId,
+        sourceId: params.sourceId,
+        weekStartDate,
+        weeklyRouteId: existing.summary.weeklyRouteId,
+      });
+
+      return { weekStartDate, board: repaired };
+    }
+
     if (state.maintenanceReason === "empty_board") {
       const activated = await ensureDefaultBranchActivations({
         learnerId: params.learnerId,
@@ -532,6 +711,15 @@ async function inspectWeeklyRouteBoardMaintenanceState(params: {
   let maintenanceReason: WeeklyRouteBoardMaintenanceReason;
   if (!existing) {
     maintenanceReason = "missing_route";
+  } else if (
+    existing.items.length === 0 &&
+    (await findOverdueScheduledItemsBeforeWeek({
+      learnerId: params.learnerId,
+      sourceId: params.sourceId,
+      weekStartDate,
+    })).length > 0
+  ) {
+    maintenanceReason = "overdue_carry_forward";
   } else if (existing.items.length === 0) {
     maintenanceReason = "empty_board";
   } else if (existing.items.some((item) => item.state !== "removed" && item.scheduledDate == null)) {

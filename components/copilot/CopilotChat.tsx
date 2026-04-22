@@ -280,40 +280,24 @@ export function CopilotChat({ sessionId: initialSessionId, initialMessages = [],
     <div className={cn("flex min-w-0 flex-col h-full", className)}>
       <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-5 py-5 sm:px-6">
         {messages.length === 0 && (
-          <div className="flex h-full flex-col justify-center gap-6">
-            <div className="glass-panel max-w-3xl space-y-4">
-              <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/76 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                <Bot className="size-3.5" />
-                Copilot ready
-              </div>
-              <div className="space-y-2">
-                <p className="font-serif text-3xl text-foreground sm:text-[2.4rem]">Ask for the next move.</p>
-                <p className="max-w-2xl text-sm leading-7 text-muted-foreground">
-                  Keep requests grounded in the learner, today&apos;s plan, or the current week. Copilot works
-                  best when the question is specific enough to turn into a real next action.
-                </p>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div className="rounded-2xl border border-border/70 bg-background/72 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Learner</p>
-                  <p className="mt-2 text-sm font-medium text-foreground">{context?.learnerName ?? "Not attached"}</p>
+          <div className="flex h-full flex-col gap-5 pt-2">
+            <div className="glass-panel max-w-3xl space-y-3 p-5 sm:p-6">
+              <div className="flex items-start gap-3">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl border border-border/70 bg-background/76 text-foreground shadow-[var(--shadow-soft)]">
+                  <Bot className="size-4" />
                 </div>
-                <div className="rounded-2xl border border-border/70 bg-background/72 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Today</p>
-                  <p className="mt-2 text-sm font-medium text-foreground">
-                    {context?.dailyWorkspaceSnapshot ? "Attached to this chat" : "No day context yet"}
+                <div className="space-y-2">
+                  <p className="font-serif text-3xl text-foreground sm:text-[2.4rem]">
+                    Ask for the next move.
                   </p>
-                </div>
-                <div className="rounded-2xl border border-border/70 bg-background/72 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Week</p>
-                  <p className="mt-2 text-sm font-medium text-foreground">
-                    {context?.weeklyPlanningSnapshot ? "Attached to this chat" : "No week context yet"}
+                  <p className="max-w-2xl text-sm leading-7 text-muted-foreground">
+                    Ask one concrete question about today or this week, then apply the suggestion directly from the chat.
                   </p>
                 </div>
               </div>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-3 px-1">
               <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                 <Sparkles className="size-3.5" />
                 Suggested prompts

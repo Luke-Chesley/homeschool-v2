@@ -19,7 +19,7 @@ const proofSteps = [
   },
   {
     title: "Keep the week and records nearby",
-    body: "Adjust the sane week when life changes and keep records of what actually happened in one place.",
+    body: "Adjust the week when life changes and keep records of what actually happened in one place.",
   },
 ] as const;
 
@@ -60,7 +60,7 @@ export default async function HomePage() {
             </h1>
             <p className="max-w-3xl text-base leading-8 text-muted-foreground sm:text-lg">
               Paste a chapter, upload a plan, or snap a photo. Build today first, keep the week nearby,
-              and record what actually happened in one calm workspace.
+              and record what actually happened in one place.
             </p>
           </div>
 
@@ -75,7 +75,7 @@ export default async function HomePage() {
 
           <div className="metric-grid">
             <MetricCard label="Start from today" value="1 clear day" hint="Open the next teachable day instead of rebuilding everything from scratch." icon={BookOpen} />
-            <MetricCard label="Keep the week nearby" value="1 sane week" hint="Shift the plan when life changes without losing the overall route." icon={CalendarRange} tone="secondary" />
+            <MetricCard label="Keep the week nearby" value="This week" hint="Shift the plan when life changes without losing the overall route." icon={CalendarRange} tone="secondary" />
             <MetricCard label="Record what happened" value="1 living record" hint="Tracking stays tied to real work so reports do not become a second project." icon={NotebookPen} />
           </div>
         </div>
@@ -84,7 +84,7 @@ export default async function HomePage() {
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="section-meta">What the workspace does</p>
-              <h2 className="mt-2 font-serif text-3xl tracking-[-0.03em] text-foreground">Clear day. Sane week. Solid record.</h2>
+              <h2 className="mt-2 font-serif text-3xl tracking-[-0.03em] text-foreground">Day, week, and record in one place.</h2>
             </div>
             <div className="hidden rounded-2xl border border-border/70 bg-background/75 p-3 text-muted-foreground shadow-[var(--shadow-soft)] sm:block">
               <CheckCircle2 className="size-5" />

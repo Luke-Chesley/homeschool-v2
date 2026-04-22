@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireAppSession } from "@/lib/app-session/server";
 import { getLiveCurriculumSource } from "@/lib/curriculum/service";
+import { getDateInTimezone } from "@/lib/date";
 import { getMonthlyPlanningView } from "@/lib/planning/month-service";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -45,6 +46,7 @@ export default async function PlanningMonthPage({ searchParams }: PlanningMonthP
   const session = await requireAppSession();
   const params = await searchParams;
   const liveSource = await getLiveCurriculumSource(session.organization.id);
+  const localToday = getDateInTimezone(session.organization.timezone);
 
   if (!liveSource) {
     return (
@@ -70,7 +72,7 @@ export default async function PlanningMonthPage({ searchParams }: PlanningMonthP
     parseDateValue(params.month) ??
     parseDateValue(params.focusDate) ??
     parseDateValue(params.day) ??
-    new Date().toISOString().slice(0, 10);
+    localToday;
 
   const month = await getMonthlyPlanningView({
     learnerId: session.activeLearner.id,
