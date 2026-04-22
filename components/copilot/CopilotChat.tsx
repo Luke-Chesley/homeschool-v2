@@ -11,7 +11,9 @@ import * as React from "react";
 
 import { Bot, Sparkles } from "lucide-react";
 
+import { MarkdownContent } from "@/components/ui/markdown-content";
 import { PromptChip } from "@/components/ui/prompt-chip";
+import { getRenderableCopilotContent } from "@/lib/ai/copilot-message-content";
 import { cn } from "@/lib/utils";
 import { ChatMessage } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
@@ -55,6 +57,10 @@ export function CopilotChat({ sessionId: initialSessionId, initialMessages = [],
   const [actions, setActions] = React.useState<CopilotAction[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const renderableStreamingContent = React.useMemo(
+    () => (streamingContent === null ? null : getRenderableCopilotContent(streamingContent)),
+    [streamingContent],
+  );
 
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
 
@@ -322,9 +328,14 @@ export function CopilotChat({ sessionId: initialSessionId, initialMessages = [],
             <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl border border-border/70 bg-[var(--glass-panel)] text-foreground shadow-[var(--shadow-soft)]">
               <Bot className="size-4" />
             </div>
-            <div className="max-w-[88%] rounded-[1.4rem] border border-border/70 bg-[var(--glass-panel)] px-4 py-3.5 text-sm leading-7 break-words whitespace-pre-wrap shadow-[var(--shadow-soft)]">
-              {streamingContent}
-              <span className="inline-block w-1.5 h-4 bg-primary/60 ml-0.5 animate-pulse" />
+            <div className="max-w-[88%] rounded-[1.4rem] border border-border/70 bg-[var(--glass-panel)] px-4 py-3.5 text-sm leading-7 break-words shadow-[var(--shadow-soft)]">
+              {renderableStreamingContent ? (
+                <MarkdownContent
+                  content={renderableStreamingContent}
+                  className="[&_ol]:mt-3 [&_p]:leading-7 [&_pre]:max-w-full [&_ul]:mt-3"
+                />
+              ) : null}
+              <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-primary/60" />
             </div>
           </div>
         )}
