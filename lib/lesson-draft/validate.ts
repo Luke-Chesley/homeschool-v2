@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { LESSON_BLOCK_TYPES } from "./types.ts";
+import { isAllowedLessonVisualAidUrl } from "./visual-aids.ts";
 import type { StructuredLessonDraft, LessonBlock } from "./types.ts";
 
 // ---------------------------------------------------------------------------
@@ -24,7 +25,21 @@ export const LessonBlockSchema = z.object({
   learner_action: z.string().min(1).max(MAX_ACTION_STRING),
   check_for: z.string().max(MAX_SHORT_STRING).optional(),
   materials_needed: z.array(z.string().max(MAX_SHORT_STRING)).optional(),
+  visual_aid_ids: z.array(z.string().min(1).max(80)).max(3).optional(),
   optional: z.boolean().optional(),
+});
+
+export const LessonVisualAidSchema = z.object({
+  id: z.string().min(1).max(80),
+  title: z.string().min(1).max(MAX_BLOCK_TITLE),
+  kind: z.enum(["reference_image", "diagram", "chart", "map", "source_image"]),
+  url: z.string().url().refine(isAllowedLessonVisualAidUrl, {
+    message: "Visual aid URL host is not allowed.",
+  }),
+  alt: z.string().min(1).max(MAX_SHORT_STRING),
+  caption: z.string().max(MAX_SHORT_STRING).optional(),
+  usage_note: z.string().max(MAX_SHORT_STRING).optional(),
+  source_name: z.string().max(80).optional(),
 });
 
 // ---------------------------------------------------------------------------
@@ -49,6 +64,7 @@ export const StructuredLessonDraftSchema = z
     success_criteria: z.array(z.string().min(1).max(MAX_SHORT_STRING)).min(1).max(6),
     total_minutes: z.number().int().positive(),
     blocks: z.array(LessonBlockSchema).min(1),
+    visual_aids: z.array(LessonVisualAidSchema).max(3).optional(),
     materials: z.array(z.string().max(MAX_SHORT_STRING)),
     teacher_notes: z.array(z.string().max(MAX_SHORT_STRING)),
     adaptations: z.array(LessonAdaptationSchema),
@@ -120,6 +136,19 @@ export const StructuredLessonDraftSchema = z
           "Lesson must include at least one visible check: a check_for_understanding block, a reflection block, or a check_for field on any block.",
         path: ["blocks"],
       });
+    }
+
+    const visualAidIds = new Set((draft.visual_aids ?? []).map((visualAid) => visualAid.id));
+    for (const [blockIndex, block] of draft.blocks.entries()) {
+      for (const visualAidId of block.visual_aid_ids ?? []) {
+        if (!visualAidIds.has(visualAidId)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Unknown visual aid id "${visualAidId}".`,
+            path: ["blocks", blockIndex, "visual_aid_ids"],
+          });
+        }
+      }
     }
   });
 

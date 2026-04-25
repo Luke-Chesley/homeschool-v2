@@ -4,6 +4,7 @@ import { getCurriculumSource } from "@/lib/curriculum/service";
 import { getRepositories } from "@/lib/db";
 import { executeSessionGenerate, previewSessionGenerate } from "@/lib/learning-core/session";
 import type { StructuredLessonDraft } from "@/lib/lesson-draft/types";
+import { extractAllowedLessonVisualAidUrls } from "@/lib/lesson-draft/visual-aids";
 import { ACTIVATION_EVENT_NAMES } from "@/lib/homeschool/onboarding/activation-contracts";
 import { trackProductEvent } from "@/lib/platform/observability";
 import type { DailyWorkspaceLessonBuildTrigger } from "@/lib/planning/types";
@@ -36,6 +37,43 @@ function resolveCurriculumLaunchMetadata(source: CurriculumSourceResult) {
     launchPlan: launchPlan as ResolvedLaunchPlan | null,
     curriculumLineage,
   };
+}
+
+type ResolvedIntake = ReturnType<typeof resolveCurriculumLaunchMetadata>["intake"];
+
+function buildVisualAidCandidates(params: {
+  slot: TodayWorkspaceResult["workspace"]["slots"][number];
+  sourceModel: ResolvedSourceModel | null;
+  intake: ResolvedIntake;
+}) {
+  const textSources = [
+    params.slot.title,
+    ...params.slot.items.flatMap((item) => [
+      item.title,
+      item.objective,
+      item.note ?? "",
+      ...item.materials,
+      ...item.copilotPrompts,
+    ]),
+    ...(params.sourceModel?.sourcePackages ?? []).flatMap((sourcePackage) => [
+      sourcePackage.title,
+      sourcePackage.summary,
+      ...sourcePackage.detectedChunks,
+    ]),
+    ...(params.intake?.sourcePackages ?? []).flatMap((sourcePackage) => [
+      sourcePackage.title,
+      sourcePackage.summary,
+      ...sourcePackage.detectedChunks,
+    ]),
+  ];
+
+  const urls = [...new Set(textSources.flatMap((text) => extractAllowedLessonVisualAidUrls(text)))];
+  return urls.slice(0, 6).map((url, index) => ({
+    id: `visual-${index + 1}`,
+    title: `Visual reference ${index + 1}`,
+    url,
+    sourceName: new URL(url).hostname,
+  }));
 }
 
 function buildTodayLessonGenerationSummary(params: {
@@ -126,6 +164,7 @@ async function buildTodayLessonGenerationContext(params: {
   const source = await getCurriculumSource(workspaceResult.sourceId, params.organizationId);
   const { intake, sourceModel, launchPlan, curriculumLineage } =
     resolveCurriculumLaunchMetadata(source);
+  const visualAidCandidates = buildVisualAidCandidates({ slot, sourceModel, intake });
   const { workspace, planningContext, sessionTiming, sourceId, sourceTitle } = workspaceResult;
   const routeFingerprint = slot.routeFingerprint;
   const regenerationNote = await getSavedTodayLessonRegenerationNote({
@@ -168,6 +207,7 @@ async function buildTodayLessonGenerationContext(params: {
       weeklyPlanningSnapshot: planningContext?.weeklyPlanningSnapshot,
       feedbackNotes: lessonOutcomeFeedback.feedbackNotes,
       recentOutcomes: lessonOutcomeFeedback.recentOutcomes,
+      visualAidCandidates,
       onboardingIntake: intake || sourceModel || launchPlan
         ? {
             requestedRoute: sourceModel?.requestedRoute ?? intake?.requestedRoute ?? null,

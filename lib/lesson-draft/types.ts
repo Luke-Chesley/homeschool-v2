@@ -29,6 +29,24 @@ export const LESSON_BLOCK_TYPES = [
 
 export type LessonBlockType = (typeof LESSON_BLOCK_TYPES)[number];
 
+export type LessonVisualAidKind =
+  | "reference_image"
+  | "diagram"
+  | "chart"
+  | "map"
+  | "source_image";
+
+export interface LessonVisualAid {
+  id: string;
+  title: string;
+  kind: LessonVisualAidKind;
+  url: string;
+  alt: string;
+  caption?: string;
+  usage_note?: string;
+  source_name?: string;
+}
+
 // ---------------------------------------------------------------------------
 // Shared block shape
 // ---------------------------------------------------------------------------
@@ -49,6 +67,8 @@ export interface LessonBlock {
   check_for?: string;
   /** Materials specific to this block */
   materials_needed?: string[];
+  /** Optional references to top-level visual aids shown inside this block */
+  visual_aid_ids?: string[];
   /** True if block can be dropped when time is tight */
   optional?: boolean;
 }
@@ -117,6 +137,8 @@ export interface StructuredLessonDraft {
   total_minutes: number;
   /** Ordered sequence of lesson blocks */
   blocks: LessonBlock[];
+  /** Optional real-URL visual aids available to selected lesson blocks */
+  visual_aids?: LessonVisualAid[];
   /** All materials needed for the lesson */
   materials: string[];
   /** Short bullet notes for the teacher during live instruction */

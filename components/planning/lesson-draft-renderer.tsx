@@ -7,6 +7,7 @@ import type {
   LessonAdaptation,
   LessonBlock,
   LessonBlockType,
+  LessonVisualAid,
   StructuredLessonDraft,
 } from "@/lib/lesson-draft/types";
 import { Badge } from "@/components/ui/badge";
@@ -74,6 +75,7 @@ function getBlockAccent(type: LessonBlockType): string {
 // ---------------------------------------------------------------------------
 
 function LessonHeader({ draft }: { draft: StructuredLessonDraft }) {
+  const visualAidCount = draft.visual_aids?.length ?? 0;
   return (
     <div className="space-y-3 border-b border-border/70 pb-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -82,6 +84,9 @@ function LessonHeader({ draft }: { draft: StructuredLessonDraft }) {
           <Badge variant="outline">{draft.lesson_shape.replace("_", " ")}</Badge>
         ) : null}
         <Badge variant="outline">{draft.blocks.length} blocks</Badge>
+        {visualAidCount > 0 ? (
+          <Badge variant="outline">{visualAidCount} visuals</Badge>
+        ) : null}
       </div>
       <h2 className="font-serif text-[1.75rem] leading-tight">{draft.title}</h2>
       <p className="max-w-3xl text-base leading-6 text-muted-foreground">{draft.lesson_focus}</p>
@@ -127,6 +132,7 @@ function BlockCard({
   showInlineHelp,
   lessonTitle,
   lessonFocus,
+  visualAids,
 }: {
   block: LessonBlock;
   index: number;
@@ -134,6 +140,7 @@ function BlockCard({
   showInlineHelp: boolean;
   lessonTitle: string;
   lessonFocus: string;
+  visualAids: LessonVisualAid[];
 }) {
   return (
     <div
@@ -162,6 +169,40 @@ function BlockCard({
           <p className="text-sm leading-6 text-muted-foreground">{block.purpose}</p>
         </div>
       </div>
+
+      {visualAids.length > 0 ? (
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          {visualAids.map((visualAid) => (
+            <figure
+              key={visualAid.id}
+              className="overflow-hidden rounded-lg border border-border/60 bg-muted/10"
+            >
+              <img
+                src={visualAid.url}
+                alt={visualAid.alt}
+                className="aspect-[4/3] w-full object-cover"
+                loading="lazy"
+              />
+              <figcaption className="space-y-1 border-t border-border/50 p-3">
+                <p className="text-sm font-medium leading-5 text-foreground">{visualAid.title}</p>
+                {visualAid.caption ? (
+                  <p className="text-xs leading-5 text-muted-foreground">{visualAid.caption}</p>
+                ) : null}
+                {visualAid.usage_note ? (
+                  <p className="text-xs leading-5 text-muted-foreground">
+                    Use: {visualAid.usage_note}
+                  </p>
+                ) : null}
+                {visualAid.source_name ? (
+                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                    {visualAid.source_name}
+                  </p>
+                ) : null}
+              </figcaption>
+            </figure>
+          ))}
+        </div>
+      ) : null}
 
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <div className="rounded-lg border border-border/50 bg-muted/12 p-3">
@@ -347,6 +388,7 @@ export function LessonDraftRenderer({
   renderBlockFooter,
 }: LessonDraftRendererProps) {
   const showInlineHelp = mode !== "compact";
+  const visualAidById = new Map((draft.visual_aids ?? []).map((visualAid) => [visualAid.id, visualAid]));
 
   return (
     <div className={cn("space-y-6", className)}>
@@ -371,6 +413,9 @@ export function LessonDraftRenderer({
               showInlineHelp={showInlineHelp}
               lessonTitle={draft.title}
               lessonFocus={draft.lesson_focus}
+              visualAids={(block.visual_aid_ids ?? [])
+                .map((visualAidId) => visualAidById.get(visualAidId))
+                .filter((visualAid): visualAid is LessonVisualAid => Boolean(visualAid))}
             />
           ))}
         </div>
