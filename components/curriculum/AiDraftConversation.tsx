@@ -20,12 +20,14 @@ interface Props {
     displayName: string;
     firstName: string;
   };
+  initialUserMessage?: string;
   onCreatedSourceId: (sourceId: string) => void;
   onCancel: () => void;
 }
 
 export function AiDraftConversation({
   activeLearner,
+  initialUserMessage,
   onCreatedSourceId,
   onCancel,
 }: Props) {
@@ -46,7 +48,13 @@ export function AiDraftConversation({
       return;
     }
     bootstrappedRef.current = true;
-    void requestAssistantTurn([]);
+    const initialMessages: CurriculumAiChatMessage[] = initialUserMessage?.trim()
+      ? [{ role: "user", content: initialUserMessage.trim() }]
+      : [];
+    if (initialMessages.length > 0) {
+      setMessages(initialMessages);
+    }
+    void requestAssistantTurn(initialMessages);
   }, []);
 
   React.useEffect(() => {

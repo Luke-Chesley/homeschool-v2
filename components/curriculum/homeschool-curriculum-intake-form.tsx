@@ -82,6 +82,7 @@ export function HomeschoolCurriculumIntakeForm(props: {
   organizationId?: string | null;
   activeLearnerId?: string | null;
   activeLearnerName: string;
+  initialCurriculumText?: string;
 }) {
   const router = useRouter();
   const uploadInputRef = React.useRef<HTMLInputElement | null>(null);
@@ -89,7 +90,7 @@ export function HomeschoolCurriculumIntakeForm(props: {
 
   const [curriculumSummary, setCurriculumSummary] = React.useState("");
   const [teachingStyle, setTeachingStyle] = React.useState("");
-  const [curriculumText, setCurriculumText] = React.useState("");
+  const [curriculumText, setCurriculumText] = React.useState(props.initialCurriculumText ?? "");
   const [uploadedFile, setUploadedFile] = React.useState<File | null>(null);
   const [sourcePackage, setSourcePackage] = React.useState<NormalizedIntakeSourcePackage | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
@@ -100,6 +101,13 @@ export function HomeschoolCurriculumIntakeForm(props: {
   const hasTextSource = curriculumText.trim().length > 0;
   const hasUploadSource = uploadedFile !== null;
   const canSubmit = hasTextSource || hasUploadSource || sourcePackage !== null;
+
+  React.useEffect(() => {
+    if (props.initialCurriculumText !== undefined) {
+      setCurriculumText(props.initialCurriculumText);
+      setSourcePackage(null);
+    }
+  }, [props.initialCurriculumText]);
 
   function markSourcePackageStale() {
     setSourcePackage(null);

@@ -10,8 +10,8 @@ type NewCurriculumPageProps = {
 export default async function NewCurriculumPage({ searchParams }: NewCurriculumPageProps) {
   const [session, params] = await Promise.all([requireAppSession(), searchParams]);
   const initialEntry =
-    typeof params.entry === "string" && params.entry === "conversation"
-      ? "conversation"
+    params.entry === "conversation" || params.entry === "idea"
+      ? params.entry
       : "source";
 
   return (

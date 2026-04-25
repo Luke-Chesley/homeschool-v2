@@ -3,6 +3,7 @@
 import * as React from "react";
 import { AlertCircle, Camera, CheckCircle2, Loader2, Type, Upload, X } from "lucide-react";
 
+import { CurriculumIdeaBuilder } from "@/components/curriculum/curriculum-idea-builder";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { persistOnboardingLaunchSummary } from "@/lib/homeschool/onboarding/launch-summary";
@@ -98,10 +99,6 @@ const continuationModeLabels: Record<HomeschoolFastPathPreview["continuationMode
 
 function routeLabel(value: FastPathIntakeRoute) {
   return intakeOptions.find((option) => option.value === value)?.label ?? value;
-}
-
-function sourceInputPlaceholder() {
-  return "Paste a lesson, weekly plan, outline, chapter pages, topic idea, or anything else you already have.";
 }
 
 function selectedSourceLabel(mode: IntakeSourcePackageModality, inputMode: "text" | "upload") {
@@ -219,7 +216,6 @@ export function HomeschoolOnboardingForm(props: {
   const [sourceMode, setSourceMode] = React.useState<IntakeSourcePackageModality>("text");
   const [sourceInputMode, setSourceInputMode] = React.useState<"text" | "upload">("text");
   const [sourceInput, setSourceInput] = React.useState("");
-  const [sourceNote, setSourceNote] = React.useState("");
   const [uploadedFile, setUploadedFile] = React.useState<File | null>(null);
   const [sourcePackage, setSourcePackage] = React.useState<NormalizedIntakeSourcePackage | null>(null);
   const [preview, setPreview] = React.useState<HomeschoolFastPathPreview | null>(null);
@@ -262,6 +258,13 @@ export function HomeschoolOnboardingForm(props: {
     markPackageStale();
   }
 
+  function handleUseIdea(idea: string) {
+    setSourceInput(idea);
+    setSourceInputMode("text");
+    setSourceMode("text");
+    markPackageStale();
+  }
+
   function handleUploadSelection(file: File | null, source: "camera" | "upload") {
     setUploadedFile(file);
     if (file) {
@@ -293,7 +296,6 @@ export function HomeschoolOnboardingForm(props: {
         body: JSON.stringify({
           modality: "text",
           text: sourceInput,
-          note: sourceNote.trim() || undefined,
         }),
       });
 
@@ -348,7 +350,7 @@ export function HomeschoolOnboardingForm(props: {
         byteSize: uploadedFile.size,
         storageBucket: storageBuckets.curriculum,
         storagePath,
-        note: sourceNote.trim() || undefined,
+        note: sourceInput.trim() || undefined,
       }),
     });
     const payload = await response.json().catch(() => null);
@@ -506,7 +508,7 @@ export function HomeschoolOnboardingForm(props: {
       {step === 2 ? (
         <Card className="quiet-panel border-border/60 bg-card/78 shadow-none">
           <CardHeader>
-            <CardTitle>Paste or upload anything you have</CardTitle>
+            <CardTitle>Build from an idea, paste, or upload</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-4">
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(280px,0.75fr)]">
@@ -516,20 +518,26 @@ export function HomeschoolOnboardingForm(props: {
                   Use whichever source is fastest.
                 </div>
 
+                <CurriculumIdeaBuilder
+                  title="Need a starting point?"
+                  description="Build one clear curriculum sentence, then use it as your source."
+                  primaryActionLabel="Use in source box"
+                  onUseIdea={handleUseIdea}
+                />
+
                 <label className="grid gap-1.5 text-sm font-medium">
-                  Paste anything you already have
+                  Paste or type anything you have
                   <textarea
                     value={sourceInput}
                     onChange={(event) => handleTextInputChange(event.target.value)}
-                    rows={10}
-                    placeholder={sourceInputPlaceholder()}
+                    rows={7}
+                    placeholder="Paste a lesson, topic idea, outline, rough notes, goals, or anything else we should use."
                     className="min-h-52 rounded-xl border border-input bg-background px-3 py-3 font-normal"
                   />
                   <span className="text-xs font-normal text-muted-foreground">
-                    A lesson, weekly plan, outline, topic, copied page, or rough notes all work.
+                    Use this by itself, or add context for an upload.
                   </span>
                 </label>
-
               </div>
 
               <div className="grid gap-3">
@@ -619,20 +627,6 @@ export function HomeschoolOnboardingForm(props: {
                 </div>
               </div>
             </div>
-
-            <label className="grid gap-1.5 text-sm font-medium">
-              Optional context
-              <textarea
-                value={sourceNote}
-                onChange={(event) => {
-                  setSourceNote(event.target.value);
-                  markPackageStale();
-                }}
-                rows={3}
-                placeholder="Optional: add any quick context we should keep in mind."
-                className="min-h-28 rounded-xl border border-input bg-background px-3 py-2 font-normal"
-              />
-            </label>
 
             {sourcePackage ? (
               <div className="rounded-xl border border-border/60 bg-background/70 p-4 text-sm">
