@@ -21,6 +21,8 @@ type BuilderState = Record<BuilderField, string> & {
   extraDetail: string;
 };
 
+type BuilderOptionPools = Record<BuilderField, CurriculumIdeaOption[]>;
+
 type CurriculumIdeaBuilderProps = {
   className?: string;
   title?: string;
@@ -40,6 +42,37 @@ const initialState: BuilderState = {
   constraint: "",
   extraDetail: "",
 };
+
+const baseOptionPools: BuilderOptionPools = {
+  domain: curriculumDomainOptions,
+  learner: curriculumLearnerOptions,
+  horizon: curriculumTimeHorizonOptions,
+  shape: curriculumShapeOptions,
+  pacing: curriculumPacingOptions,
+  constraint: curriculumConstraintOptions,
+};
+
+function shuffleOptions(options: CurriculumIdeaOption[]) {
+  const nextOptions = [...options];
+
+  for (let index = nextOptions.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [nextOptions[index], nextOptions[swapIndex]] = [nextOptions[swapIndex], nextOptions[index]];
+  }
+
+  return nextOptions;
+}
+
+function shuffleOptionPools(): BuilderOptionPools {
+  return {
+    domain: shuffleOptions(curriculumDomainOptions),
+    learner: shuffleOptions(curriculumLearnerOptions),
+    horizon: shuffleOptions(curriculumTimeHorizonOptions),
+    shape: shuffleOptions(curriculumShapeOptions),
+    pacing: shuffleOptions(curriculumPacingOptions),
+    constraint: shuffleOptions(curriculumConstraintOptions),
+  };
+}
 
 function buildIdeaText(state: BuilderState) {
   const learnerPhrase = state.learner.trim().replace(/^for\s+/i, "");
@@ -204,6 +237,11 @@ export function CurriculumIdeaBuilder({
   onStartConversation,
 }: CurriculumIdeaBuilderProps) {
   const [state, setState] = React.useState<BuilderState>(initialState);
+  const [optionPools, setOptionPools] = React.useState<BuilderOptionPools>(baseOptionPools);
+
+  React.useEffect(() => {
+    setOptionPools(shuffleOptionPools());
+  }, []);
 
   const generatedText = React.useMemo(() => buildIdeaText(state), [state]);
   const usableText = generatedText.trim();
@@ -256,7 +294,7 @@ export function CurriculumIdeaBuilder({
               label="Learner"
               value={state.learner}
               placeholder="learner type"
-              options={curriculumLearnerOptions}
+              options={optionPools.learner}
               onChange={(value) => setField("learner", value)}
               className="w-44 sm:w-52"
             />
@@ -264,7 +302,7 @@ export function CurriculumIdeaBuilder({
               label="Topic"
               value={state.domain}
               placeholder="topic"
-              options={curriculumDomainOptions}
+              options={optionPools.domain}
               onChange={(value) => setField("domain", value)}
               className="w-44 sm:w-52"
             />
@@ -272,7 +310,7 @@ export function CurriculumIdeaBuilder({
               label="Timeframe"
               value={state.horizon}
               placeholder="timeframe"
-              options={curriculumTimeHorizonOptions}
+              options={optionPools.horizon}
               onChange={(value) => setField("horizon", value)}
               className="w-40 sm:w-48"
             />
@@ -281,7 +319,7 @@ export function CurriculumIdeaBuilder({
               label="Other requirements"
               value={state.constraint}
               placeholder="other requirements"
-              options={curriculumConstraintOptions}
+              options={optionPools.constraint}
               onChange={(value) => setField("constraint", value)}
               className="w-64 sm:w-72"
             />
@@ -290,7 +328,7 @@ export function CurriculumIdeaBuilder({
               label="Pacing"
               value={state.pacing}
               placeholder="pacing"
-              options={curriculumPacingOptions}
+              options={optionPools.pacing}
               onChange={(value) => setField("pacing", value)}
               className="w-56 sm:w-64"
             />
@@ -299,7 +337,7 @@ export function CurriculumIdeaBuilder({
               label="Curriculum shape"
               value={state.shape}
               placeholder="curriculum shape"
-              options={curriculumShapeOptions}
+              options={optionPools.shape}
               onChange={(value) => setField("shape", value)}
               className="w-56 sm:w-64"
             />
