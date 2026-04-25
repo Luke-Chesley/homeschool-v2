@@ -117,12 +117,23 @@ export function resolveProgressionAgainstBasis(params: {
     nodeIds: phase.skillRefs.map(resolveSkillRef),
   }));
 
-  const resolvedPrerequisites = params.progression.edges.map((edge) => ({
-    sourceId: params.sourceId,
-    skillNodeId: resolveSkillRef(edge.toSkillRef),
-    prerequisiteSkillNodeId: resolveSkillRef(edge.fromSkillRef),
-    kind: edge.kind as PrerequisiteKind,
-  }));
+  const seenPrerequisitePairs = new Set<string>();
+  const resolvedPrerequisites = [];
+  for (const edge of params.progression.edges) {
+    const skillNodeId = resolveSkillRef(edge.toSkillRef);
+    const prerequisiteSkillNodeId = resolveSkillRef(edge.fromSkillRef);
+    const pairKey = `${skillNodeId}→${prerequisiteSkillNodeId}`;
+    if (seenPrerequisitePairs.has(pairKey)) {
+      continue;
+    }
+    seenPrerequisitePairs.add(pairKey);
+    resolvedPrerequisites.push({
+      sourceId: params.sourceId,
+      skillNodeId,
+      prerequisiteSkillNodeId,
+      kind: edge.kind as PrerequisiteKind,
+    });
+  }
 
   return {
     resolvedPhases,

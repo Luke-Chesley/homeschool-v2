@@ -191,7 +191,9 @@ export function validateGeneratedProgression(params: {
   const hardEdges: Array<{ from: string; to: string }> = [];
 
   for (const edge of progression.edges) {
-    const edgeKey = `${edge.fromSkillRef}→${edge.toSkillRef}::${edge.kind}`;
+    // Persistence stores one prerequisite row per ordered skill pair; edge kind is metadata.
+    // Treat same-pair/different-kind edges as duplicates before they reach the DB.
+    const edgeKey = `${edge.fromSkillRef}→${edge.toSkillRef}`;
     if (edgeKeys.has(edgeKey)) {
       duplicateEdgeCount += 1;
       droppedEdgeCount += 1;

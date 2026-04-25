@@ -137,3 +137,24 @@ test("validateGeneratedProgression passes a valid canonical progression", () => 
   assert.equal(result.stats.acceptedEdgeCount, 3);
   assert.equal(result.stats.exactCanonicalResolution, true);
 });
+
+test("validateGeneratedProgression fails duplicate edge pairs even when kind differs", () => {
+  const result = validateGeneratedProgression({
+    basis: makeBasis(),
+    progression: {
+      phases: [
+        { title: "Phase 1", description: "Start", skillRefs: ["skill:a"] },
+        { title: "Phase 2", description: "Continue", skillRefs: ["skill:b"] },
+        { title: "Phase 3", description: "Finish", skillRefs: ["skill:c"] },
+      ],
+      edges: [
+        { fromSkillRef: "skill:a", toSkillRef: "skill:b", kind: "hardPrerequisite" },
+        { fromSkillRef: "skill:a", toSkillRef: "skill:b", kind: "recommendedBefore" },
+      ],
+    },
+  });
+
+  assert.equal(result.fatalIssues.some((issue) => issue.code === "duplicate_edge"), true);
+  assert.equal(result.stats.acceptedEdgeCount, 1);
+  assert.equal(result.stats.duplicateEdgeCount, 1);
+});

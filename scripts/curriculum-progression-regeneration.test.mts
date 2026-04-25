@@ -66,6 +66,31 @@ test("resolveProgressionAgainstBasis resolves canonical skillRefs to persisted n
   });
 });
 
+test("resolveProgressionAgainstBasis dedupes prerequisite rows by persisted node pair", () => {
+  const result = resolveProgressionAgainstBasis({
+    sourceId: "source_1",
+    basis: makeBasis(),
+    progression: {
+      phases: [
+        { title: "Phase 1", description: "Start", skillRefs: ["skill:a"] },
+        { title: "Phase 2", description: "Continue", skillRefs: ["skill:b"] },
+      ],
+      edges: [
+        { fromSkillRef: "skill:a", toSkillRef: "skill:b", kind: "hardPrerequisite" },
+        { fromSkillRef: "skill:a", toSkillRef: "skill:b", kind: "recommendedBefore" },
+      ],
+    },
+  });
+
+  assert.equal(result.resolvedPrerequisites.length, 1);
+  assert.deepEqual(result.resolvedPrerequisites[0], {
+    sourceId: "source_1",
+    skillNodeId: "node_b",
+    prerequisiteSkillNodeId: "node_a",
+    kind: "hardPrerequisite",
+  });
+});
+
 test("resolveProgressionAgainstBasis throws when a canonical skillRef is unresolved", () => {
   assert.throws(
     () =>
