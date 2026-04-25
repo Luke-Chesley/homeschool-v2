@@ -8,14 +8,12 @@ import {
   CurriculumAiRevisionResultSchema,
   type CurriculumAiChatMessage,
   type CurriculumAiChatTurn,
-  type CurriculumAiDocumentNode,
   type CurriculumAiFailureResult,
   type CurriculumAiGeneratedArtifact,
   type CurriculumAiLaunchPlan,
   type CurriculumAiProgression,
   type CurriculumAiRevisionResult,
 } from "@/lib/curriculum/ai-draft";
-import type { CurriculumTreeNode } from "@/lib/curriculum/types";
 import {
   executeCurriculumIntake,
   executeCurriculumRevision,
@@ -89,31 +87,16 @@ function buildRevisionCoverageStrategy(sourceTitle: string, unitCount: number) {
   return `Continue the existing ${sourceTitle} sequence across ${unitCount} ${unitLabel}, adjusting only where the revision request changes scope or emphasis.`;
 }
 
-function buildRevisionCurriculumDocumentNode(node: CurriculumTreeNode): CurriculumAiDocumentNode {
-  const children = [...node.children]
-    .filter((child) => child.isActive)
-    .sort((left, right) => left.sequenceIndex - right.sequenceIndex);
-
-  if (children.length === 0) {
-    return [];
-  }
-
-  if (children.every((child) => child.normalizedType === "skill")) {
-    return children.map((child) => child.title);
-  }
-
-  return Object.fromEntries(
-    children.map((child) => [child.title, buildRevisionCurriculumDocumentNode(child)]),
-  );
-}
-
-function buildRevisionCurriculumDocument(rootNodes: CurriculumTreeNode[]) {
-  return Object.fromEntries(
-    [...rootNodes]
-      .filter((node) => node.isActive)
-      .sort((left, right) => left.sequenceIndex - right.sequenceIndex)
-      .map((node) => [node.title, buildRevisionCurriculumDocumentNode(node)]),
-  );
+function buildRevisionCurriculumSkills(
+  basis: ProgressionGenerationBasis,
+): CurriculumAiGeneratedArtifact["skills"] {
+  return basis.skillCatalog.map((skill, index) => ({
+    skillId: skill.skillRef || `skill-${index + 1}`,
+    domainTitle: readString(skill.domainTitle) ?? "General",
+    strandTitle: readString(skill.strandTitle) ?? "General",
+    goalGroupTitle: readString(skill.goalGroupTitle) ?? "Skills",
+    title: skill.title,
+  }));
 }
 
 export async function continueCurriculumAiDraftConversation(params: {
@@ -296,9 +279,10 @@ export async function generateCurriculumLaunchPlan(params: {
       },
       organizationId: params.householdId,
     });
+    const launchPlan = response.artifact;
 
     return {
-      launchPlan: response.artifact,
+      launchPlan,
       attemptCount: 1,
       attempts: [],
     };
@@ -327,6 +311,26 @@ export function resolveLaunchPlanOpeningSkillNodeIds(params: {
   return [...new Set(params.openingSkillRefs.map((skillRef) => params.basis.skillNodeIdByRef.get(skillRef)!))];
 }
 
+export function resolveLaunchPlanOpeningUnitRefs(params: {
+  basis: ProgressionGenerationBasis;
+  openingSkillRefs: string[];
+}) {
+  const selectedSkillRefs = new Set(params.openingSkillRefs);
+  const derivedUnitRefs = params.basis.unitAnchors
+    .filter((unitAnchor) => unitAnchor.skillRefs.some((skillRef) => selectedSkillRefs.has(skillRef)))
+    .map((unitAnchor) => unitAnchor.unitRef);
+
+  if (derivedUnitRefs.length > 0) {
+    return [...new Set(derivedUnitRefs)];
+  }
+
+  if (params.basis.unitAnchors.length === 1) {
+    return [params.basis.unitAnchors[0]!.unitRef];
+  }
+
+  return [];
+}
+
 export async function persistCurriculumLaunchPlan(params: {
   householdId: string;
   sourceId: string;
@@ -338,6 +342,10 @@ export async function persistCurriculumLaunchPlan(params: {
   });
 
   const openingSkillNodeIds = resolveLaunchPlanOpeningSkillNodeIds({
+    basis,
+    openingSkillRefs: params.launchPlan.openingSkillRefs,
+  });
+  const openingUnitRefs = resolveLaunchPlanOpeningUnitRefs({
     basis,
     openingSkillRefs: params.launchPlan.openingSkillRefs,
   });
@@ -354,7 +362,7 @@ export async function persistCurriculumLaunchPlan(params: {
       scopeSummary: params.launchPlan.scopeSummary,
       initialSliceUsed: params.launchPlan.initialSliceUsed,
       initialSliceLabel: params.launchPlan.initialSliceLabel ?? null,
-      openingUnitRefs: params.launchPlan.openingUnitRefs,
+      openingUnitRefs,
       openingSkillNodeIds: [...new Set(openingSkillNodeIds)],
     },
   });
@@ -378,8 +386,6 @@ async function buildCurriculumRevisionSnapshot(
     readStringArray(basis.source.rationale).length > 0
       ? readStringArray(basis.source.rationale)
       : ["Preserve the durable curriculum structure while applying the requested revision."];
-  const document = buildRevisionCurriculumDocument(basis.tree.rootNodes);
-
   return CurriculumAiGeneratedArtifactSchema.parse({
     source: {
       title: basis.source.title,
@@ -404,14 +410,14 @@ async function buildCurriculumRevisionSnapshot(
       coverageStrategy: buildRevisionCoverageStrategy(basis.source.title, basis.units.length),
       coverageNotes: [],
     },
-    document,
+    skills: buildRevisionCurriculumSkills(basis),
     units: basis.units.map((unit) => ({
       unitRef: unit.unitRef,
       title: unit.title,
       description: readString(unit.description) ?? `Work through ${unit.title}.`,
       estimatedWeeks: unit.estimatedWeeks,
       estimatedSessions: unit.estimatedSessions,
-      skillRefs: unit.skillRefs,
+      skillIds: unit.skillRefs,
     })),
   });
 }

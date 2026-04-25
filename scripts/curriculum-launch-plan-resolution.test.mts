@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { resolveLaunchPlanOpeningSkillNodeIds } from "../lib/curriculum/ai-draft-service.ts";
+import {
+  resolveLaunchPlanOpeningSkillNodeIds,
+  resolveLaunchPlanOpeningUnitRefs,
+} from "../lib/curriculum/ai-draft-service.ts";
 import type { ProgressionGenerationBasis } from "../lib/curriculum/progression-basis.ts";
 
 function makeBasis(): ProgressionGenerationBasis {
@@ -46,4 +49,19 @@ test("resolveLaunchPlanOpeningSkillNodeIds throws on unresolved openingSkillRef"
       }),
     /unresolved openingSkillRefs/,
   );
+});
+
+test("resolveLaunchPlanOpeningUnitRefs derives owning units from opening skills", () => {
+  const basis = makeBasis();
+  basis.unitAnchors = [
+    { unitRef: "unit:1", title: "Unit 1", description: "Start", orderIndex: 1, skillRefs: ["skill:a"] },
+    { unitRef: "unit:2", title: "Unit 2", description: "Continue", orderIndex: 2, skillRefs: ["skill:b"] },
+  ];
+
+  const openingUnitRefs = resolveLaunchPlanOpeningUnitRefs({
+    basis,
+    openingSkillRefs: ["skill:a"],
+  });
+
+  assert.deepEqual(openingUnitRefs, ["unit:1"]);
 });

@@ -53,6 +53,7 @@ import type {
   IntakeSourcePackageModality,
   LearningCoreInputFile,
 } from "@/lib/homeschool/intake/types";
+import { getDateInTimezone } from "@/lib/date";
 import { executeSourceInterpret } from "@/lib/learning-core/source-interpret";
 import { trackProductEvent } from "@/lib/platform/observability";
 
@@ -135,6 +136,7 @@ export type HomeschoolCurriculumIntakePayload = z.infer<typeof HomeschoolCurricu
 
 const FastPathIntakeRouteInputSchema = z.enum(FAST_PATH_INTAKE_ROUTES);
 const DEFAULT_FAST_PATH_INTAKE_ROUTE: FastPathIntakeRoute = "single_lesson";
+const DEFAULT_HOUSEHOLD_NAME = "Homeschool Household";
 
 function normalizeSourcePackageIds(input: {
   sourcePackageIds?: string[];
@@ -215,6 +217,35 @@ function optionalNonEmptyString(value: string | null | undefined) {
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function resolveHouseholdNameForPersistence(
+  inputHouseholdName: string,
+  existingOrganizationName: string | null | undefined,
+) {
+  const normalizedInput = optionalNonEmptyString(inputHouseholdName);
+  if (!normalizedInput) {
+    return optionalNonEmptyString(existingOrganizationName) ?? DEFAULT_HOUSEHOLD_NAME;
+  }
+
+  if (normalizedInput === DEFAULT_HOUSEHOLD_NAME) {
+    return optionalNonEmptyString(existingOrganizationName) ?? normalizedInput;
+  }
+
+  return normalizedInput;
+}
+
+async function resolveOrganizationTodayDate(organizationId: string) {
+  const organization = await getDb().query.organizations.findFirst({
+    where: eq(organizations.id, organizationId),
+    columns: {
+      timezone: true,
+    },
+  });
+
+  return organization?.timezone
+    ? getDateInTimezone(organization.timezone)
+    : new Date().toISOString().slice(0, 10);
 }
 
 function splitDisplayName(displayName: string) {
@@ -677,6 +708,7 @@ async function persistHomeschoolSetupBase(input: HomeschoolOnboardingPayload) {
 
   const existingMetadata = asRecord(organization.metadata);
   const homeschoolMetadata = asRecord(existingMetadata.homeschool);
+  const householdName = resolveHouseholdNameForPersistence(input.householdName, organization.name);
   const schoolYearLabel = optionalNonEmptyString(input.schoolYearLabel);
   const termStartDate = optionalNonEmptyString(input.termStartDate);
   const termEndDate = optionalNonEmptyString(input.termEndDate);
@@ -684,9 +716,9 @@ async function persistHomeschoolSetupBase(input: HomeschoolOnboardingPayload) {
   await db
     .update(organizations)
     .set({
-      name: input.householdName,
+      name: householdName,
       slug: organization.slug.startsWith("homeschool-")
-        ? `${slugify(input.householdName)}-${Date.now()}`
+        ? `${slugify(householdName)}-${Date.now()}`
         : organization.slug,
       metadata: {
         ...existingMetadata,
@@ -1229,7 +1261,7 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
   const sourceInput = resolvedSource.sourceInput;
   const setupInput: HomeschoolOnboardingPayload = {
     organizationId: input.organizationId,
-    householdName: "Homeschool Household",
+    householdName: DEFAULT_HOUSEHOLD_NAME,
     preferredSchoolDays: [...homeschoolTemplate.defaults.schoolDays],
     dailyTimeBudgetMinutes: homeschoolTemplate.defaults.dailyTimeBudgetMinutes,
     subjects: ["Integrated Studies"],
@@ -1307,7 +1339,7 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
     learnerId: primaryLearner.id,
     sourceId,
   });
-  const todayDate = new Date().toISOString().slice(0, 10);
+  const todayDate = await resolveOrganizationTodayDate(input.organizationId);
   const todayWorkspace = await getTodayWorkspace({
     organizationId: input.organizationId,
     learnerId: primaryLearner.id,
@@ -1440,7 +1472,7 @@ export async function completeHomeschoolOnboarding(rawInput: unknown) {
     sourceId,
   });
 
-  const todayDate = new Date().toISOString().slice(0, 10);
+  const todayDate = await resolveOrganizationTodayDate(input.organizationId);
   const todayWorkspace = await getTodayWorkspace({
     organizationId: input.organizationId,
     learnerId: primaryLearner.id,

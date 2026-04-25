@@ -11,6 +11,17 @@ export const metadata = {
   title: "Account",
 };
 
+function describeLearnerAvailability(status: string) {
+  switch (status) {
+    case "paused":
+      return "Paused";
+    case "archived":
+      return "Archived";
+    default:
+      return "Available in workspace";
+  }
+}
+
 function ActionLink({ href, label }: { href: string; label: string }) {
   return (
     <Link
@@ -93,11 +104,13 @@ export default async function AccountPage() {
                       <div className="flex items-center justify-between gap-3">
                         <div>
                           <p className="font-medium text-foreground">{learner.displayName}</p>
-                          <p className="mt-1 text-xs capitalize text-muted-foreground">{learner.status}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {describeLearnerAvailability(learner.status)}
+                          </p>
                         </div>
                         {active ? (
                           <span className="rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
-                            Active
+                            Current learner
                           </span>
                         ) : null}
                       </div>

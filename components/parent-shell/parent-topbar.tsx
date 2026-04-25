@@ -8,7 +8,6 @@ import { StudioToggle } from "@/components/studio/StudioToggle";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { ActiveLearnerSwitcher } from "@/components/users/active-learner-switcher";
-import { cn } from "@/lib/utils";
 
 type ParentTopbarProps = {
   activeLearnerId: string;
@@ -19,7 +18,8 @@ type ParentTopbarProps = {
     displayName: string;
     status: string;
   }>;
-  onOpenMenu: () => void;
+  mobileMenuOpen: boolean;
+  onToggleMenu: () => void;
 };
 
 export function ParentTopbar({
@@ -27,7 +27,8 @@ export function ParentTopbar({
   activeLearnerName,
   learnerLabel,
   learners,
-  onOpenMenu,
+  mobileMenuOpen,
+  onToggleMenu,
 }: ParentTopbarProps) {
   const pathname = usePathname();
   const hasMultipleLearners = learners.length > 1;
@@ -93,8 +94,10 @@ export function ParentTopbar({
             <Button
               variant="ghost"
               size="icon"
-              aria-label="Open navigation"
-              onClick={onOpenMenu}
+              aria-controls="parent-mobile-navigation"
+              aria-expanded={mobileMenuOpen}
+              aria-label={mobileMenuOpen ? "Close navigation" : "Open navigation"}
+              onClick={onToggleMenu}
             >
               <Menu className="size-4" />
             </Button>

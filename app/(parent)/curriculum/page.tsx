@@ -51,7 +51,8 @@ export default async function CurriculumPage({ searchParams }: CurriculumPagePro
     typeof resolvedParams.pendingSourceId === "string" ? resolvedParams.pendingSourceId : null;
   const pendingSource =
     pendingSourceId ? sources.find((source) => source.id === pendingSourceId) ?? null : null;
-  const focusedSourceId = pendingSource?.id ?? activeSourceId;
+  const pendingSourceIsGenerating = pendingSource?.status === "draft";
+  const focusedSourceId = pendingSourceIsGenerating ? pendingSource.id : activeSourceId;
   const tree = await getCurriculumTree(focusedSourceId, session.organization.id);
 
   async function activateSourceAction(formData: FormData) {
@@ -122,7 +123,9 @@ export default async function CurriculumPage({ searchParams }: CurriculumPagePro
               {pendingSource?.id === tree.source.id
                 ? pendingSource.status === "failed_import"
                   ? "This source shell was saved, but curriculum generation failed. The current live curriculum has not been changed."
-                  : "This source is still generating. We will switch planning to it automatically once it is ready."
+                  : pendingSource.status === "draft"
+                    ? "This source is still generating. We will switch planning to it automatically once it is ready."
+                    : "This source is ready and already shaping the live curriculum."
                 : "The live source should be the one you want shaping this week&apos;s plan and today&apos;s queue."}
             </p>
           </aside>
@@ -144,11 +147,13 @@ export default async function CurriculumPage({ searchParams }: CurriculumPagePro
           pendingSource?.id === tree.source.id
             ? pendingSource.status === "failed_import"
               ? "failed"
-              : "pending"
+              : pendingSource.status === "draft"
+                ? "pending"
+                : "live"
             : "live"
         }
         liveSourceTitle={
-          pendingSource?.id === tree.source.id
+          pendingSource?.id === tree.source.id && pendingSource.status === "draft"
             ? sources.find((source) => source.id === activeSourceId)?.title ?? null
             : null
         }

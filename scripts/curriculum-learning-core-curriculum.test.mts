@@ -109,22 +109,28 @@ test("CurriculumRevisionInputSchema accepts a full curriculum artifact snapshot"
         coverageStrategy: "Move through one unit in order.",
         coverageNotes: [],
       },
-      document: {
-        Math: {
-          Fractions: {
-            "Core concepts": ["Identify fractions", "Compare fractions"],
-          },
+      skills: [
+        {
+          skillId: "skill-1",
+          domainTitle: "Math",
+          strandTitle: "Fractions",
+          goalGroupTitle: "Core concepts",
+          title: "Identify fractions",
         },
-      },
+        {
+          skillId: "skill-2",
+          domainTitle: "Math",
+          strandTitle: "Fractions",
+          goalGroupTitle: "Core concepts",
+          title: "Compare fractions",
+        },
+      ],
       units: [
         {
           unitRef: "unit-fractions",
           title: "Fractions foundations",
           description: "Learn what fractions mean.",
-          skillRefs: [
-            "skill:math/fractions/core-concepts/identify-fractions",
-            "skill:math/fractions/core-concepts/compare-fractions",
-          ],
+          skillIds: ["skill-1", "skill-2"],
         },
       ],
     },

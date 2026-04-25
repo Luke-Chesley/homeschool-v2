@@ -1,4 +1,4 @@
-import type { CurriculumAiGeneratedArtifact } from "./ai-draft.ts";
+import type { CurriculumAiDocumentNode, CurriculumAiGeneratedArtifact } from "./ai-draft.ts";
 import { canonicalizeCurriculumArtifact } from "./canonical-artifact.ts";
 import type { CurriculumGranularityProfile, RequestedPacing } from "./granularity.ts";
 import {
@@ -59,7 +59,6 @@ export function assessCurriculumArtifactQuality(
   const canonicalArtifact = canonicalizeCurriculumArtifact(artifact);
   const skillLeaves = canonicalArtifact.skillCatalog.map((skill) => ({
     title: skill.title,
-    description: skill.description,
     path: skill.path,
     skillRef: skill.skillRef,
   }));
@@ -91,6 +90,7 @@ function describeNamingIssues(params: {
   context: CurriculumArtifactQualityContext;
 }) {
   const issues: CurriculumQualityIssue[] = [];
+  const canonicalArtifact = canonicalizeCurriculumArtifact(params.artifact);
   const topicText = params.context.topicText;
   const requestText = params.context.requestText ?? "";
 
@@ -108,14 +108,14 @@ function describeNamingIssues(params: {
   }
 
   issues.push(
-    ...collectDocumentNamingIssues(params.artifact.document, {
+    ...collectDocumentNamingIssues(canonicalArtifact.document, {
       topicText,
       requestText,
       skillMaxWords: params.context.granularity.maxSkillTitleWords,
     }),
   );
 
-  for (const [unitIndex, unit] of params.artifact.units.entries()) {
+  for (const [unitIndex, unit] of canonicalArtifact.units.entries()) {
     const unitIssue = assessLabelQuality({
       label: unit.title,
       path: ["units", String(unitIndex), "title"],
@@ -135,7 +135,7 @@ function describeNamingIssues(params: {
 }
 
 function collectDocumentNamingIssues(
-  node: CurriculumAiGeneratedArtifact["document"],
+  node: Record<string, CurriculumAiDocumentNode>,
   context: {
     topicText: string;
     requestText: string;
@@ -185,7 +185,7 @@ function collectDocumentNamingIssues(
     if (value && typeof value === "object") {
       issues.push(
         ...collectDocumentNamingIssues(
-          value as CurriculumAiGeneratedArtifact["document"],
+          value as Record<string, CurriculumAiDocumentNode>,
           context,
           [...path, title],
           depth + 1,
@@ -444,7 +444,7 @@ function describeLessonSkillAlignment(
 }
 
 function collectDocumentSkillLeaves(
-  node: CurriculumAiGeneratedArtifact["document"],
+  node: Record<string, CurriculumAiDocumentNode>,
   path: string[] = [],
 ): DocumentSkillLeaf[] {
   const leaves: DocumentSkillLeaf[] = [];
@@ -528,7 +528,8 @@ function collectLessons(artifact: CurriculumAiGeneratedArtifact): LessonEnvelope
 }
 
 function estimateTotalSessions(artifact: CurriculumAiGeneratedArtifact) {
-  const unitSessionTotal = artifact.units.reduce(
+  const canonicalArtifact = canonicalizeCurriculumArtifact(artifact);
+  const unitSessionTotal = canonicalArtifact.units.reduce(
     (total, unit) => total + (unit.estimatedSessions ?? 0),
     0,
   );
@@ -541,12 +542,14 @@ function estimateTotalSessions(artifact: CurriculumAiGeneratedArtifact) {
 }
 
 function buildArtifactText(artifact: CurriculumAiGeneratedArtifact) {
+  const canonicalArtifact = canonicalizeCurriculumArtifact(artifact);
   return JSON.stringify(
     {
       source: artifact.source,
       pacing: artifact.pacing,
-      document: artifact.document,
-      units: artifact.units,
+      skills: artifact.skills,
+      document: canonicalArtifact.document,
+      units: canonicalArtifact.units,
     },
   ).toLowerCase();
 }

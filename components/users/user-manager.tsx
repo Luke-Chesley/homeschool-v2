@@ -19,6 +19,17 @@ type UserManagerProps = {
   activeLearnerId: string | null;
 };
 
+function describeLearnerAvailability(status: string) {
+  switch (status) {
+    case "paused":
+      return "Paused";
+    case "archived":
+      return "Archived";
+    default:
+      return "Available in workspace";
+  }
+}
+
 export function UserManager({
   organization,
   learners: initialLearners,
@@ -146,18 +157,27 @@ export function UserManager({
                 >
                   <div className="space-y-1">
                     <p className="font-medium text-foreground">{learner.displayName}</p>
-                    <p className="text-xs capitalize text-muted-foreground">{learner.status}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {describeLearnerAvailability(learner.status)}
+                    </p>
                   </div>
-                  <span
-                    className={cn(
-                      "inline-flex size-8 items-center justify-center rounded-full border",
-                      active
-                        ? "border-primary/20 bg-primary/10 text-primary"
-                        : "border-border/70 text-muted-foreground",
-                    )}
-                  >
-                    {active ? <Check className="size-4" /> : null}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {active ? (
+                      <span className="rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+                        Current learner
+                      </span>
+                    ) : null}
+                    <span
+                      className={cn(
+                        "inline-flex size-8 items-center justify-center rounded-full border",
+                        active
+                          ? "border-primary/20 bg-primary/10 text-primary"
+                          : "border-border/70 text-muted-foreground",
+                      )}
+                    >
+                      {active ? <Check className="size-4" /> : null}
+                    </span>
+                  </div>
                 </button>
               );
             })}

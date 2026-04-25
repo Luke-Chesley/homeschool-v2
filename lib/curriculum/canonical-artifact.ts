@@ -1,10 +1,17 @@
-import type { CurriculumAiGeneratedArtifact } from "./ai-draft";
+import type {
+  CurriculumAiDocumentNode,
+  CurriculumAiGeneratedArtifact,
+  CurriculumAiSkill,
+} from "./ai-draft";
 
 export interface CanonicalSkillRefEntry {
+  skillId: string;
   skillRef: string;
   title: string;
+  domainTitle: string;
+  strandTitle: string;
+  goalGroupTitle: string;
   path: string[];
-  description?: string;
 }
 
 export interface CanonicalCurriculumUnit {
@@ -13,6 +20,7 @@ export interface CanonicalCurriculumUnit {
   estimatedWeeks?: number;
   estimatedSessions?: number;
   unitRef: string;
+  skillIds: string[];
   skillRefs: string[];
 }
 
@@ -20,7 +28,7 @@ export interface CanonicalCurriculumArtifact {
   source: CurriculumAiGeneratedArtifact["source"];
   intakeSummary: string;
   pacing: CurriculumAiGeneratedArtifact["pacing"];
-  document: CurriculumAiGeneratedArtifact["document"];
+  document: Record<string, CurriculumAiDocumentNode>;
   units: CanonicalCurriculumUnit[];
   skillCatalog: CanonicalSkillRefEntry[];
 }
@@ -38,40 +46,6 @@ function slugify(value: string) {
     .replace(/^-+|-+$/g, "") || "item";
 }
 
-function collectSkillCatalog(
-  node: CurriculumAiGeneratedArtifact["document"],
-  path: string[] = [],
-  skills: CanonicalSkillRefEntry[] = [],
-): CanonicalSkillRefEntry[] {
-  for (const [title, value] of Object.entries(node)) {
-    const nextPath = [...path, title];
-    if (typeof value === "string") {
-      skills.push({
-        skillRef: `skill:${nextPath.map(slugify).join("/")}`,
-        title,
-        path: nextPath,
-        description: value.trim() || undefined,
-      });
-      continue;
-    }
-
-    if (Array.isArray(value)) {
-      for (const item of value) {
-        skills.push({
-          skillRef: `skill:${[...nextPath, item].map(slugify).join("/")}`,
-          title: item,
-          path: [...nextPath, item],
-        });
-      }
-      continue;
-    }
-
-    collectSkillCatalog(value, nextPath, skills);
-  }
-
-  return skills;
-}
-
 function assertUniqueRefs(values: string[], label: string) {
   const seen = new Set<string>();
   for (const value of values) {
@@ -80,6 +54,58 @@ function assertUniqueRefs(values: string[], label: string) {
     }
     seen.add(value);
   }
+}
+
+function canonicalizeSkill(skill: CurriculumAiSkill, index: number): CanonicalSkillRefEntry {
+  const domainTitle = normalizeLabel(skill.domainTitle);
+  const strandTitle = normalizeLabel(skill.strandTitle);
+  const goalGroupTitle = normalizeLabel(skill.goalGroupTitle);
+  const title = normalizeLabel(skill.title);
+  const skillId = normalizeLabel(skill.skillId);
+
+  if (!domainTitle || !strandTitle || !goalGroupTitle || !title || !skillId) {
+    throw new Error(`Skill ${index + 1} is missing skillId, title, or hierarchy labels.`);
+  }
+
+  const path = [domainTitle, strandTitle, goalGroupTitle, title];
+  return {
+    skillId,
+    skillRef: `skill:${path.map(slugify).join("/")}`,
+    title,
+    domainTitle,
+    strandTitle,
+    goalGroupTitle,
+    path,
+  };
+}
+
+function buildDocument(skillCatalog: CanonicalSkillRefEntry[]): Record<string, CurriculumAiDocumentNode> {
+  const document: Record<string, CurriculumAiDocumentNode> = {};
+
+  for (const skill of skillCatalog) {
+    const domainNode = (document[skill.domainTitle] ??= {});
+    if (typeof domainNode !== "object" || Array.isArray(domainNode)) {
+      throw new Error(`Domain "${skill.domainTitle}" conflicts with another curriculum node shape.`);
+    }
+
+    const strandNode = ((domainNode as Record<string, CurriculumAiDocumentNode>)[skill.strandTitle] ??= {});
+    if (typeof strandNode !== "object" || Array.isArray(strandNode)) {
+      throw new Error(
+        `Strand "${skill.domainTitle} > ${skill.strandTitle}" conflicts with another curriculum node shape.`,
+      );
+    }
+
+    const goalGroupNode = ((strandNode as Record<string, CurriculumAiDocumentNode>)[skill.goalGroupTitle] ??= []);
+    if (!Array.isArray(goalGroupNode)) {
+      throw new Error(
+        `Goal group "${skill.domainTitle} > ${skill.strandTitle} > ${skill.goalGroupTitle}" conflicts with another curriculum node shape.`,
+      );
+    }
+
+    goalGroupNode.push(skill.title);
+  }
+
+  return document;
 }
 
 function canonicalizeUnit(params: {
@@ -91,22 +117,32 @@ function canonicalizeUnit(params: {
   const description =
     typeof params.rawUnit.description === "string" ? params.rawUnit.description.trim() : "";
   const unitRef = typeof params.rawUnit.unitRef === "string" ? params.rawUnit.unitRef.trim() : "";
-  const explicitSkillRefs = Array.isArray(params.rawUnit.skillRefs)
-    ? params.rawUnit.skillRefs.filter((value): value is string => typeof value === "string")
+  const explicitSkillIds = Array.isArray(params.rawUnit.skillIds)
+    ? params.rawUnit.skillIds.filter((value): value is string => typeof value === "string")
     : [];
 
   if (!title || !description || !unitRef) {
     throw new Error(`Unit ${params.unitIndex + 1} is missing title, description, or unitRef.`);
   }
-  if (explicitSkillRefs.length === 0) {
-    throw new Error(`Unit "${title}" must include at least one skillRef.`);
+  if (explicitSkillIds.length === 0) {
+    throw new Error(`Unit "${title}" must include at least one skillId.`);
   }
 
-  const missing = explicitSkillRefs.filter(
-    (skillRef) => !params.skillCatalog.some((entry) => entry.skillRef === skillRef),
-  );
-  if (missing.length > 0) {
-    throw new Error(`Unit "${title}" references unknown skill refs: ${missing.join(", ")}`);
+  const skillRefs: string[] = [];
+  const dedupedSkillIds: string[] = [];
+  const seenIds = new Set<string>();
+
+  for (const skillId of explicitSkillIds) {
+    if (seenIds.has(skillId)) {
+      continue;
+    }
+    const skill = params.skillCatalog.find((entry) => entry.skillId === skillId);
+    if (!skill) {
+      throw new Error(`Unit "${title}" references unknown skill ids: ${skillId}`);
+    }
+    seenIds.add(skillId);
+    dedupedSkillIds.push(skillId);
+    skillRefs.push(skill.skillRef);
   }
 
   return {
@@ -119,14 +155,16 @@ function canonicalizeUnit(params: {
       typeof params.rawUnit.estimatedSessions === "number"
         ? params.rawUnit.estimatedSessions
         : undefined,
-    skillRefs: [...new Set(explicitSkillRefs)],
+    skillIds: dedupedSkillIds,
+    skillRefs,
   };
 }
 
 export function canonicalizeCurriculumArtifact(
   artifact: CurriculumAiGeneratedArtifact,
 ): CanonicalCurriculumArtifact {
-  const skillCatalog = collectSkillCatalog(artifact.document);
+  const skillCatalog = artifact.skills.map((skill, index) => canonicalizeSkill(skill, index));
+  assertUniqueRefs(skillCatalog.map((entry) => entry.skillId), "skillId");
   assertUniqueRefs(skillCatalog.map((entry) => entry.skillRef), "skillRef");
 
   const units = artifact.units.map((unit, unitIndex) =>
@@ -136,14 +174,13 @@ export function canonicalizeCurriculumArtifact(
       unitIndex,
     }),
   );
-
   assertUniqueRefs(units.map((unit) => unit.unitRef), "unitRef");
 
   return {
     source: artifact.source,
     intakeSummary: artifact.intakeSummary,
     pacing: artifact.pacing,
-    document: artifact.document,
+    document: buildDocument(skillCatalog),
     units,
     skillCatalog,
   };

@@ -3,6 +3,53 @@ import assert from "node:assert/strict";
 
 import { CurriculumAiGeneratedArtifactSchema } from "@/lib/curriculum/ai-draft";
 
+function buildMinimalArtifact(overrides: Record<string, unknown> = {}) {
+  const { source: sourceOverrides, ...rootOverrides } = overrides;
+  return {
+    source: {
+      title: "Chess in a Month",
+      description: "A short beginner curriculum.",
+      subjects: ["Chess"],
+      gradeLevels: ["4th"],
+      summary: "Teach a beginner to play confident full games in one month.",
+      teachingApproach: "Short lessons, puzzles, guided play, and review.",
+      successSignals: ["Learner can finish a full game."],
+      parentNotes: ["Keep games short."],
+      rationale: ["A compact sequence is appropriate."],
+      ...(sourceOverrides as Record<string, unknown> | undefined),
+    },
+    intakeSummary: "A focused month-long chess curriculum.",
+    pacing: {
+      totalWeeks: 4,
+      sessionsPerWeek: 5,
+      sessionMinutes: 35,
+      totalSessions: 20,
+      coverageStrategy: "Spiral through core ideas with guided play and review.",
+      coverageNotes: ["Use puzzles and short games."],
+    },
+    skills: [
+      {
+        skillId: "skill-1",
+        domainTitle: "Chess",
+        strandTitle: "Fundamentals",
+        goalGroupTitle: "Board Skills",
+        title: "Name the pieces",
+      },
+    ],
+    units: [
+      {
+        unitRef: "unit-1",
+        title: "Unit 1",
+        description: "Start with movement and basic play.",
+        estimatedWeeks: 1,
+        estimatedSessions: 5,
+        skillIds: ["skill-1"],
+      },
+    ],
+    ...rootOverrides,
+  };
+}
+
 test("CurriculumAiGeneratedArtifactSchema truncates overflowing summary arrays", () => {
   const parsed = CurriculumAiGeneratedArtifactSchema.parse({
     source: {
@@ -25,13 +72,13 @@ test("CurriculumAiGeneratedArtifactSchema truncates overflowing summary arrays",
       coverageStrategy: "Spiral through core ideas with guided play and review.",
       coverageNotes: Array.from({ length: 10 }, (_, index) => `Coverage note ${index + 1}`),
     },
-    document: {
-      Chess: {
-        Fundamentals: {
-          "Board Skills": ["Board setup", "Piece movement"],
-        },
-      },
-    },
+    skills: Array.from({ length: 260 }, (_, index) => ({
+      skillId: `skill-${index + 1}`,
+      domainTitle: "Chess",
+      strandTitle: "Fundamentals",
+      goalGroupTitle: "Board Skills",
+      title: `Skill ${index + 1}`,
+    })),
     units: [
       {
         unitRef: "unit-1",
@@ -39,7 +86,7 @@ test("CurriculumAiGeneratedArtifactSchema truncates overflowing summary arrays",
         description: "Start with movement and basic play.",
         estimatedWeeks: 1,
         estimatedSessions: 5,
-        skillRefs: Array.from({ length: 10 }, (_, index) => `skill-${index + 1}`),
+        skillIds: Array.from({ length: 60 }, (_, index) => `skill-${index + 1}`),
       },
     ],
   });
@@ -51,13 +98,13 @@ test("CurriculumAiGeneratedArtifactSchema truncates overflowing summary arrays",
   assert.equal(parsed.source.parentNotes.length, 6);
   assert.equal(parsed.source.rationale.length, 6);
   assert.equal(parsed.pacing.coverageNotes.length, 8);
-  assert.equal(parsed.units[0]?.skillRefs.length, 8);
+  assert.equal(parsed.skills.length, 240);
+  assert.equal(parsed.units[0]?.skillIds.length, 48);
 });
 
-test("CurriculumAiGeneratedArtifactSchema accepts long progression refs so unresolved progression can fall back later", () => {
-  const longRef = "Virginia History / ".repeat(14);
-  const trimmedLongRef = longRef.trim();
-
+test("CurriculumAiGeneratedArtifactSchema trims surrounding whitespace from skill ids", () => {
+  const paddedSkillId = `  ${"virginia-history-".repeat(6)}  `;
+  const trimmedSkillId = paddedSkillId.trim();
   const parsed = CurriculumAiGeneratedArtifactSchema.parse({
     source: {
       title: "Virginia History in the 1800s",
@@ -79,13 +126,22 @@ test("CurriculumAiGeneratedArtifactSchema accepts long progression refs so unres
       coverageStrategy: "Chronological survey with recurring map and source analysis.",
       coverageNotes: ["Use biographies, maps, timelines, and short writing responses."],
     },
-    document: {
-      History: {
-        "Virginia in the 1800s": {
-          Foundations: ["Early 1800s life in Virginia", "Transportation and industry"],
-        },
+    skills: [
+      {
+        skillId: paddedSkillId,
+        domainTitle: "History",
+        strandTitle: "Virginia in the 1800s",
+        goalGroupTitle: "Foundations",
+        title: "Early 1800s life in Virginia",
       },
-    },
+      {
+        skillId: "skill-2",
+        domainTitle: "History",
+        strandTitle: "Virginia in the 1800s",
+        goalGroupTitle: "Foundations",
+        title: "Transportation and industry",
+      },
+    ],
     units: [
       {
         unitRef: "unit-1",
@@ -93,9 +149,22 @@ test("CurriculumAiGeneratedArtifactSchema accepts long progression refs so unres
         description: "Start with daily life and structural change in early 19th-century Virginia.",
         estimatedWeeks: 2,
         estimatedSessions: 8,
-        skillRefs: [longRef, `${longRef} / slavery and reform`],
+        skillIds: [paddedSkillId, "skill-2"],
       },
     ],
   });
-  assert.equal(parsed.units[0]?.skillRefs[0], trimmedLongRef);
+  assert.equal(parsed.skills[0]?.skillId, trimmedSkillId);
+  assert.equal(parsed.units[0]?.skillIds[0], trimmedSkillId);
+});
+
+test("CurriculumAiGeneratedArtifactSchema allows teaching approach up to 1000 characters", () => {
+  const parsed = CurriculumAiGeneratedArtifactSchema.parse(
+    buildMinimalArtifact({
+      source: {
+        teachingApproach: "A".repeat(1000),
+      },
+    }),
+  );
+
+  assert.equal(parsed.source.teachingApproach.length, 1000);
 });

@@ -5,6 +5,7 @@ import {
   applyCurriculumArtifactToCurriculumSource,
   importStructuredCurriculumDocument,
 } from "@/lib/curriculum/service";
+import { canonicalizeCurriculumArtifact } from "@/lib/curriculum/canonical-artifact";
 import type { ImportedCurriculumDocument } from "@/lib/curriculum/local-json-import";
 import {
   generateCurriculumLaunchPlan,
@@ -98,7 +99,7 @@ export function buildPersistedSourceModel(params: {
 }
 
 function countUnitSkillRefs(
-  units: NonNullable<ImportedCurriculumDocument["units"]> = [],
+  units: Array<{ skillRefs: string[] }> = [],
 ) {
   return new Set(units.flatMap((unit) => unit.skillRefs)).size;
 }
@@ -107,6 +108,7 @@ function toImportedCurriculumDocument(params: {
   artifact: LearningCoreCurriculumArtifact;
   metadata?: Record<string, unknown>;
 }): ImportedCurriculumDocument {
+  const canonicalArtifact = canonicalizeCurriculumArtifact(params.artifact);
   return {
     title: params.artifact.source.title,
     description: params.artifact.source.description,
@@ -114,8 +116,8 @@ function toImportedCurriculumDocument(params: {
     academicYear: params.artifact.source.academicYear,
     subjects: params.artifact.source.subjects,
     gradeLevels: params.artifact.source.gradeLevels,
-    document: params.artifact.document,
-    units: params.artifact.units,
+    document: canonicalArtifact.document,
+    units: canonicalArtifact.units,
     metadata: {
       intakeSummary: params.artifact.intakeSummary,
       teachingApproach: params.artifact.source.teachingApproach,
@@ -123,8 +125,8 @@ function toImportedCurriculumDocument(params: {
       parentNotes: params.artifact.source.parentNotes,
       rationale: params.artifact.source.rationale,
       pacing: params.artifact.pacing,
-      generatedUnitCount: params.artifact.units.length,
-      generatedSkillCount: countUnitSkillRefs(params.artifact.units),
+      generatedUnitCount: canonicalArtifact.units.length,
+      generatedSkillCount: canonicalArtifact.skillCatalog.length,
       ...params.metadata,
     },
   };
@@ -135,6 +137,7 @@ async function importLearningCoreCurriculumArtifact(params: {
   artifact: LearningCoreCurriculumArtifact;
   metadata?: Record<string, unknown>;
 }) {
+  const canonicalArtifact = canonicalizeCurriculumArtifact(params.artifact);
   const curriculum = await importStructuredCurriculumDocument({
     householdId: params.organizationId,
     imported: toImportedCurriculumDocument({
@@ -145,7 +148,7 @@ async function importLearningCoreCurriculumArtifact(params: {
 
   return {
     curriculum,
-    skillCount: countUnitSkillRefs(params.artifact.units),
+    skillCount: countUnitSkillRefs(canonicalArtifact.units),
   };
 }
 

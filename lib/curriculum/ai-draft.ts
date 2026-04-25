@@ -58,6 +58,17 @@ function truncatedArraySchema<TItem extends z.ZodTypeAny>(itemSchema: TItem, max
   );
 }
 
+function truncatedRequiredArraySchema<TItem extends z.ZodTypeAny>(
+  itemSchema: TItem,
+  max: number,
+  min = 1,
+) {
+  return z.preprocess(
+    (value) => (Array.isArray(value) ? value.slice(0, max) : value),
+    z.array(itemSchema).min(min).max(max),
+  );
+}
+
 export const CurriculumAiDraftSummarySchema = z.object({
   title: z.string().trim().min(1).max(160),
   description: z.string().trim().min(1).max(600),
@@ -65,7 +76,7 @@ export const CurriculumAiDraftSummarySchema = z.object({
   gradeLevels: truncatedArraySchema(z.string().trim().min(1).max(40), 4),
   academicYear: z.string().trim().min(1).max(80).optional(),
   summary: z.string().trim().min(1).max(1_200),
-  teachingApproach: z.string().trim().min(1).max(400),
+  teachingApproach: z.string().trim().min(1).max(1_000),
   successSignals: truncatedArraySchema(z.string().trim().min(1).max(220), 6),
   parentNotes: truncatedArraySchema(z.string().trim().min(1).max(260), 6),
   rationale: truncatedArraySchema(z.string().trim().min(1).max(260), 6),
@@ -94,13 +105,23 @@ export const CurriculumAiPacingSchema = z.object({
 
 export type CurriculumAiPacing = z.infer<typeof CurriculumAiPacingSchema>;
 
+export const CurriculumAiSkillSchema = z.object({
+  skillId: z.string().trim().min(1).max(120),
+  domainTitle: z.string().trim().min(1).max(180),
+  strandTitle: z.string().trim().min(1).max(180),
+  goalGroupTitle: z.string().trim().min(1).max(180),
+  title: z.string().trim().min(1).max(240),
+});
+
+export type CurriculumAiSkill = z.infer<typeof CurriculumAiSkillSchema>;
+
 export const CurriculumAiUnitSchema = z.object({
   unitRef: z.string().trim().min(1).max(180),
   title: z.string().trim().min(1).max(180),
   description: z.string().trim().min(1).max(700),
   estimatedWeeks: z.number().positive().max(52).optional(),
   estimatedSessions: z.number().int().positive().max(160).optional(),
-  skillRefs: truncatedArraySchema(z.string().trim().min(1).max(1_000), 48),
+  skillIds: truncatedRequiredArraySchema(z.string().trim().min(1).max(120), 48),
 });
 
 export type CurriculumAiUnit = z.infer<typeof CurriculumAiUnitSchema>;
@@ -142,7 +163,6 @@ export const CurriculumAiLaunchPlanSchema = z.object({
   scopeSummary: z.string().trim().min(1).max(1_200),
   initialSliceUsed: z.boolean(),
   initialSliceLabel: z.string().trim().min(1).max(240).nullable().optional(),
-  openingUnitRefs: z.array(z.string().trim().min(1).max(180)).default([]),
   openingSkillRefs: z.array(z.string().trim().min(1).max(1_000)).min(1),
 });
 
@@ -152,8 +172,8 @@ export const CurriculumAiGeneratedArtifactSchema = z.object({
   source: CurriculumAiDraftSummarySchema,
   intakeSummary: z.string().trim().min(1).max(1_500),
   pacing: CurriculumAiPacingSchema,
-  document: z.record(z.string().trim().min(1).max(180), CurriculumAiDocumentNodeSchema),
-  units: z.array(CurriculumAiUnitSchema).min(1).max(20),
+  skills: truncatedRequiredArraySchema(CurriculumAiSkillSchema, 240),
+  units: truncatedRequiredArraySchema(CurriculumAiUnitSchema, 20),
 });
 
 export type CurriculumAiGeneratedArtifact = z.infer<typeof CurriculumAiGeneratedArtifactSchema>;

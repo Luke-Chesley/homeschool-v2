@@ -64,12 +64,21 @@ export function buildFallbackCurriculumArtifact(params: {
   const sessionMinutes = params.requestedPacing.sessionMinutes ?? estimateLessonMinutes(params.capturedRequirements.timeframe);
   const unitSessionBudgets = allocateAcrossUnits(totalSessions, blueprints.length);
   const unitWeekBudgets = allocateAcrossUnits(totalWeeks, blueprints.length);
-  const document = buildFallbackDocument(title, blueprints);
+  const skills: CurriculumAiGeneratedArtifact["skills"] = [];
   const units = blueprints.map((strand, strandIndex) => {
     const unitRef = `unit:${strandIndex + 1}:${toRefSlug(strand.title)}`;
-    const skillRefs = strand.goalGroups.flatMap((goalGroup) =>
-      goalGroup.skills.map((skill) =>
-        `skill:${[title, strand.title, goalGroup.title, skill.title].map(toRefSlug).join("/")}`),
+    const skillIds = strand.goalGroups.flatMap((goalGroup) =>
+      goalGroup.skills.map((skill) => {
+        const skillId = `skill-${skills.length + 1}`;
+        skills.push({
+          skillId,
+          domainTitle: title,
+          strandTitle: strand.title,
+          goalGroupTitle: goalGroup.title,
+          title: skill.title,
+        });
+        return skillId;
+      }),
     );
 
     return {
@@ -77,8 +86,8 @@ export function buildFallbackCurriculumArtifact(params: {
       title: strand.title,
       description: buildUnitDescription(strand, topic, granularity),
       estimatedWeeks: unitWeekBudgets[strandIndex] ?? 1,
-      estimatedSessions: unitSessionBudgets[strandIndex] ?? skillRefs.length,
-      skillRefs,
+      estimatedSessions: unitSessionBudgets[strandIndex] ?? skillIds.length,
+      skillIds,
     };
   });
 
@@ -104,7 +113,7 @@ export function buildFallbackCurriculumArtifact(params: {
       coverageStrategy: buildCoverageStrategy(granularity, params.requestedPacing, topic),
       coverageNotes: buildCoverageNotes(topic, granularity),
     },
-    document,
+    skills,
     units,
   };
 }
@@ -428,22 +437,6 @@ function getGoalGroupLabels(topic: string, granularity: CurriculumGranularityPro
         "Application",
         "Wrap-up",
       ].map((label) => `${label} with ${topicTitle}`);
-}
-
-function buildFallbackDocument(title: string, strands: FallbackStrandBlueprint[]) {
-  return {
-    [title]: Object.fromEntries(
-      strands.map((strand) => [
-        strand.title,
-        Object.fromEntries(
-          strand.goalGroups.map((goalGroup) => [
-            goalGroup.title,
-            goalGroup.skills.map((skill) => skill.title),
-          ]),
-        ),
-      ]),
-    ),
-  };
 }
 
 function buildLessonDescription(

@@ -397,9 +397,9 @@ function buildCurriculumArtifactMetadata(artifact: CurriculumAiGeneratedArtifact
     rationale: artifact.source.rationale,
     pacing: artifact.pacing,
     skillCatalog: canonicalArtifact.skillCatalog,
-    generatedUnitCount: artifact.units.length,
+    generatedUnitCount: canonicalArtifact.units.length,
     generatedSkillCount: canonicalArtifact.skillCatalog.length,
-    generatedEstimatedSessionCount: countEstimatedSessions(artifact.units),
+    generatedEstimatedSessionCount: countEstimatedSessions(canonicalArtifact.units),
   };
 }
 
@@ -423,7 +423,7 @@ function toImportedCurriculumDocumentFromCurriculumArtifact(
     academicYear: artifact.source.academicYear,
     subjects: artifact.source.subjects,
     gradeLevels: artifact.source.gradeLevels,
-    document: artifact.document,
+    document: canonicalArtifact.document,
     units: canonicalArtifact.units,
     metadata: buildCurriculumArtifactMetadata(artifact),
   };
@@ -453,10 +453,19 @@ async function buildCreatedCurriculumArtifactImportResult(params: {
   };
 }
 
+type CurriculumOutlineUnitInput = {
+  unitRef: string;
+  title: string;
+  description: string;
+  estimatedWeeks?: number;
+  estimatedSessions?: number;
+  skillRefs?: string[];
+};
+
 async function replaceCurriculumOutline(
   tx: Pick<ReturnType<typeof getDb>, "delete" | "insert">,
   sourceId: string,
-  units: ImportedCanonicalCurriculumDocument["units"] = [],
+  units: CurriculumOutlineUnitInput[] = [],
 ) {
   await tx.delete(curriculumItems).where(eq(curriculumItems.sourceId, sourceId));
 
