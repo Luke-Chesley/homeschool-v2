@@ -56,15 +56,26 @@ function assertUniqueRefs(values: string[], label: string) {
   }
 }
 
-function canonicalizeSkill(skill: CurriculumAiSkill, index: number): CanonicalSkillRefEntry {
-  const domainTitle = normalizeLabel(skill.domainTitle);
-  const strandTitle = normalizeLabel(skill.strandTitle);
-  const goalGroupTitle = normalizeLabel(skill.goalGroupTitle);
+function optionalLabel(value: string | undefined) {
+  return typeof value === "string" && value.trim().length > 0 ? normalizeLabel(value) : null;
+}
+
+function canonicalizeSkill(params: {
+  skill: CurriculumAiSkill;
+  index: number;
+  sourceTitle: string;
+  primarySubject?: string;
+  owningUnitTitle?: string;
+}): CanonicalSkillRefEntry {
+  const { skill } = params;
+  const domainTitle = optionalLabel(skill.domainTitle) ?? normalizeLabel(params.primarySubject || params.sourceTitle || "Curriculum");
+  const strandTitle = optionalLabel(skill.strandTitle) ?? normalizeLabel(params.owningUnitTitle || "Core Sequence");
+  const goalGroupTitle = optionalLabel(skill.goalGroupTitle) ?? "Focus Skills";
   const title = normalizeLabel(skill.title);
   const skillId = normalizeLabel(skill.skillId);
 
   if (!domainTitle || !strandTitle || !goalGroupTitle || !title || !skillId) {
-    throw new Error(`Skill ${index + 1} is missing skillId, title, or hierarchy labels.`);
+    throw new Error(`Skill ${params.index + 1} is missing skillId or title.`);
   }
 
   const path = [domainTitle, strandTitle, goalGroupTitle, title];
@@ -163,7 +174,26 @@ function canonicalizeUnit(params: {
 export function canonicalizeCurriculumArtifact(
   artifact: CurriculumAiGeneratedArtifact,
 ): CanonicalCurriculumArtifact {
-  const skillCatalog = artifact.skills.map((skill, index) => canonicalizeSkill(skill, index));
+  const firstUnitTitleBySkillId = new Map<string, string>();
+  for (const unit of artifact.units) {
+    for (const skillId of unit.skillIds) {
+      if (!firstUnitTitleBySkillId.has(skillId)) {
+        firstUnitTitleBySkillId.set(skillId, unit.title);
+      }
+    }
+  }
+
+  const sourceTitle = artifact.source.title;
+  const primarySubject = artifact.source.subjects[0];
+  const skillCatalog = artifact.skills.map((skill, index) =>
+    canonicalizeSkill({
+      skill,
+      index,
+      sourceTitle,
+      primarySubject,
+      owningUnitTitle: firstUnitTitleBySkillId.get(skill.skillId),
+    }),
+  );
   assertUniqueRefs(skillCatalog.map((entry) => entry.skillId), "skillId");
   assertUniqueRefs(skillCatalog.map((entry) => entry.skillRef), "skillRef");
 

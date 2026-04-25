@@ -105,11 +105,21 @@ export const CurriculumAiPacingSchema = z.object({
 
 export type CurriculumAiPacing = z.infer<typeof CurriculumAiPacingSchema>;
 
+export const CurriculumAiScaleSchema = z.enum([
+  "micro",
+  "week",
+  "module",
+  "course",
+  "reference_source",
+]);
+
+export type CurriculumAiScale = z.infer<typeof CurriculumAiScaleSchema>;
+
 export const CurriculumAiSkillSchema = z.object({
   skillId: z.string().trim().min(1).max(120),
-  domainTitle: z.string().trim().min(1).max(180),
-  strandTitle: z.string().trim().min(1).max(180),
-  goalGroupTitle: z.string().trim().min(1).max(180),
+  domainTitle: z.string().trim().min(1).max(180).optional(),
+  strandTitle: z.string().trim().min(1).max(180).optional(),
+  goalGroupTitle: z.string().trim().min(1).max(180).optional(),
   title: z.string().trim().min(1).max(240),
 });
 
@@ -172,6 +182,7 @@ export const CurriculumAiGeneratedArtifactSchema = z.object({
   source: CurriculumAiDraftSummarySchema,
   intakeSummary: z.string().trim().min(1).max(1_500),
   pacing: CurriculumAiPacingSchema,
+  curriculumScale: CurriculumAiScaleSchema.optional(),
   skills: truncatedRequiredArraySchema(CurriculumAiSkillSchema, 240),
   units: truncatedRequiredArraySchema(CurriculumAiUnitSchema, 20),
 });

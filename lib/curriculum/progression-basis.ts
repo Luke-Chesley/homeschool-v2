@@ -269,14 +269,17 @@ export function deriveSuggestedPhaseCountRange(params: {
   const { totalSessions, skillCount } = params;
 
   if (typeof totalSessions === "number") {
-    if (totalSessions <= 8) return { min: 2, max: 4 };
+    if (totalSessions <= 2 || (totalSessions <= 8 && skillCount <= 2)) return { min: 1, max: 2 };
+    if (totalSessions <= 5) return { min: 1, max: 3 };
+    if (totalSessions <= 8) return { min: 1, max: 4 };
     if (totalSessions <= 16) return { min: 3, max: 5 };
     if (totalSessions <= 30) return { min: 4, max: 6 };
     if (totalSessions <= 60) return { min: 5, max: 8 };
     return { min: 6, max: 10 };
   }
 
-  if (skillCount <= 8) return { min: 2, max: 4 };
+  if (skillCount <= 3) return { min: 1, max: 2 };
+  if (skillCount <= 8) return { min: 1, max: 4 };
   if (skillCount <= 20) return { min: 3, max: 5 };
   if (skillCount <= 40) return { min: 4, max: 7 };
   return { min: 5, max: 9 };

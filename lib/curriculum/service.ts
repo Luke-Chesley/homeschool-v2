@@ -396,6 +396,7 @@ function buildCurriculumArtifactMetadata(artifact: CurriculumAiGeneratedArtifact
     parentNotes: artifact.source.parentNotes,
     rationale: artifact.source.rationale,
     pacing: artifact.pacing,
+    curriculumScale: artifact.curriculumScale ?? null,
     skillCatalog: canonicalArtifact.skillCatalog,
     generatedUnitCount: canonicalArtifact.units.length,
     generatedSkillCount: canonicalArtifact.skillCatalog.length,

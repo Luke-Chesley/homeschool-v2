@@ -125,6 +125,7 @@ function toImportedCurriculumDocument(params: {
       parentNotes: params.artifact.source.parentNotes,
       rationale: params.artifact.source.rationale,
       pacing: params.artifact.pacing,
+      curriculumScale: params.artifact.curriculumScale ?? null,
       generatedUnitCount: canonicalArtifact.units.length,
       generatedSkillCount: canonicalArtifact.skillCatalog.length,
       ...params.metadata,

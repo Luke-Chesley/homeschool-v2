@@ -179,7 +179,8 @@ test("inferInstructionalRole classifies safety, orientation, and application cue
 });
 
 test("deriveSuggestedPhaseCountRange uses session budget heuristics", () => {
-  assert.deepEqual(deriveSuggestedPhaseCountRange({ totalSessions: 6, skillCount: 20 }), { min: 2, max: 4 });
+  assert.deepEqual(deriveSuggestedPhaseCountRange({ totalSessions: 2, skillCount: 2 }), { min: 1, max: 2 });
+  assert.deepEqual(deriveSuggestedPhaseCountRange({ totalSessions: 6, skillCount: 20 }), { min: 1, max: 4 });
   assert.deepEqual(deriveSuggestedPhaseCountRange({ totalSessions: 24, skillCount: 20 }), { min: 4, max: 6 });
   assert.deepEqual(deriveSuggestedPhaseCountRange({ skillCount: 41 }), { min: 5, max: 9 });
 });

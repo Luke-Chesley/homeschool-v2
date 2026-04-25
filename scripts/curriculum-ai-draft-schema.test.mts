@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { CurriculumAiGeneratedArtifactSchema } from "@/lib/curriculum/ai-draft";
+import { canonicalizeCurriculumArtifact } from "@/lib/curriculum/canonical-artifact";
 
 function buildMinimalArtifact(overrides: Record<string, unknown> = {}) {
   const { source: sourceOverrides, ...rootOverrides } = overrides;
@@ -155,6 +156,58 @@ test("CurriculumAiGeneratedArtifactSchema trims surrounding whitespace from skil
   });
   assert.equal(parsed.skills[0]?.skillId, trimmedSkillId);
   assert.equal(parsed.units[0]?.skillIds[0], trimmedSkillId);
+});
+
+test("CurriculumAiGeneratedArtifactSchema accepts week-scale skills without hierarchy labels", () => {
+  const parsed = CurriculumAiGeneratedArtifactSchema.parse(
+    buildMinimalArtifact({
+      source: {
+        title: "Clouds This Week",
+        subjects: ["Weather"],
+        summary: "Observe and classify clouds during one week.",
+      },
+      intakeSummary: "A one-week cloud observation curriculum.",
+      pacing: {
+        totalWeeks: 1,
+        sessionsPerWeek: 4,
+        totalSessions: 4,
+        coverageStrategy: "Observe and classify common cloud types this week.",
+        coverageNotes: ["Keep observations concrete."],
+      },
+      curriculumScale: "week",
+      skills: [
+        {
+          skillId: "skill-1",
+          title: "Observe cloud shape and height",
+        },
+        {
+          skillId: "skill-2",
+          title: "Match cloud observations to likely weather",
+        },
+      ],
+      units: [
+        {
+          unitRef: "unit:1:clouds-week",
+          title: "Cloud observations",
+          description: "A compact week of cloud observation.",
+          estimatedWeeks: 1,
+          estimatedSessions: 4,
+          skillIds: ["skill-1", "skill-2"],
+        },
+      ],
+    }),
+  );
+
+  const canonical = canonicalizeCurriculumArtifact(parsed);
+
+  assert.equal(parsed.curriculumScale, "week");
+  assert.equal(canonical.skillCatalog[0]?.domainTitle, "Weather");
+  assert.equal(canonical.skillCatalog[0]?.strandTitle, "Cloud observations");
+  assert.equal(canonical.skillCatalog[0]?.goalGroupTitle, "Focus Skills");
+  assert.equal(
+    canonical.units[0]?.skillRefs[0],
+    "skill:weather/cloud-observations/focus-skills/observe-cloud-shape-and-height",
+  );
 });
 
 test("CurriculumAiGeneratedArtifactSchema allows teaching approach up to 1000 characters", () => {
