@@ -5,7 +5,7 @@ import { FileText, Upload, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { NormalizedIntakeSourcePackage } from "@/lib/homeschool/intake/types";
 import {
   COMMON_SOURCE_UPLOAD_ACCEPT,
@@ -65,15 +65,15 @@ function buildSelectedSourceCopy(params: {
   sourcePackage: NormalizedIntakeSourcePackage | null;
 }) {
   if (params.hasText && params.hasUpload) {
-    return "We’ll use the pasted text together with the selected file.";
+    return "Pasted text and selected file.";
   }
   if (params.hasUpload) {
     return params.sourcePackage
-      ? "We’ll use the prepared upload."
-      : "We’ll use the selected upload.";
+      ? "Prepared upload."
+      : "Selected upload.";
   }
   if (params.hasText) {
-    return "We’ll use the pasted text.";
+    return "Pasted text.";
   }
   return "Paste text, choose a file, or do both.";
 }
@@ -262,10 +262,6 @@ export function HomeschoolCurriculumIntakeForm(props: {
       <Card className="quiet-panel border-border/60 bg-card/78 shadow-none">
         <CardHeader>
           <CardTitle>Add a curriculum source</CardTitle>
-          <CardDescription>
-            Paste or upload what you already have. We&apos;ll interpret the source and turn it into a
-            live curriculum for {props.activeLearnerName}.
-          </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-5">
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(280px,0.75fr)]">
@@ -289,10 +285,6 @@ export function HomeschoolCurriculumIntakeForm(props: {
                 </span>
               </label>
 
-              <div className="rounded-xl border border-border/60 bg-background/75 px-4 py-3 text-xs text-muted-foreground">
-                <p>We&apos;ll run source interpretation first.</p>
-                <p>Then we&apos;ll build the curriculum structure from that result.</p>
-              </div>
             </div>
 
             <div className="grid gap-3">

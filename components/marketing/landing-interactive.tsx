@@ -210,7 +210,7 @@ export function DemoModal({
                   <div className="quiet-panel-muted p-4">
                     <p className="text-sm font-medium text-foreground">Follow the connected workflow</p>
                     <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                      The walkthrough stays grounded in the actual product surfaces: Curriculum, Today, Planning, Tracking, and Assistant.
+                      Curriculum, Today, Planning, Tracking, and Assistant stay connected.
                     </p>
                   </div>
                   <div className="quiet-panel-muted p-4">

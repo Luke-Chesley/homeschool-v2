@@ -110,16 +110,11 @@ export function TodayWorkspaceShell({
     workspace.lessonBuild?.status === "generating" || workspace.lessonBuild?.status === "queued";
   const readinessLabel = lessonBuildActive
     ? workspace.lessonDraft
-      ? "Lesson draft is updating now."
-      : "Lesson draft is building now."
+      ? "Updating."
+      : "Building."
     : workspace.lessonDraft
-      ? "Lesson draft ready to review."
-      : "Generate the lesson draft to start the day.";
-  const nextStepLabel = lessonBuildActive
-    ? "Stay on Today while we finish the draft in place."
-    : workspace.lessonDraft
-      ? "Review the draft, then run the queue in order."
-      : "Generate the lesson draft so the day becomes teachable.";
+      ? "Draft ready."
+      : "No draft yet.";
   const totalMinutes = daySummary.totalMinutes
     ? `${daySummary.totalMinutes} min`
     : `${fullWorkspace.items.reduce((sum, item) => sum + item.estimatedMinutes, 0)} min`;
@@ -247,17 +242,10 @@ export function TodayWorkspaceShell({
                   </span>
                 </div>
               </div>
-              <div className="space-y-1">
-                <p className="text-sm font-medium text-foreground">
-                  {headerView === "flow" ? "Today’s lesson flow" : "Today’s skills"}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  {headerView === "flow"
-                    ? "Keep the active lesson in focus. Switch slots only when you need the next same-day lesson."
-                    : "Review every scheduled skill for today without opening the full planning view."}{" "}
-                  <span className="text-foreground/90">{readinessLabel} {nextStepLabel}</span>
-                </p>
-              </div>
+              <p className="text-sm font-medium text-foreground">
+                {headerView === "flow" ? "Today’s lesson flow" : "Today’s skills"}
+                <span className="ml-2 text-muted-foreground">{readinessLabel}</span>
+              </p>
             </div>
             {sourceId ? (
               <button

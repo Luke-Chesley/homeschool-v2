@@ -66,9 +66,6 @@ export function CurriculumGenerationNotice(props: {
         <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-primary" />
         <div className="space-y-1">
           <p className="font-medium">Generating {props.sourceTitle}.</p>
-          <p className="text-muted-foreground">
-            The source has been saved and named. We&apos;re building the curriculum now and this page will refresh automatically.
-          </p>
         </div>
       </div>
     </Card>

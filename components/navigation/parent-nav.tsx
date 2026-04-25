@@ -44,9 +44,6 @@ export function ParentNav({ className, onNavigate }: ParentNavProps) {
             </div>
             <div className="min-w-0 flex-1">
               <span className="block min-w-0 text-[0.98rem] font-semibold">{item.label}</span>
-              <span className="mt-1 block min-w-0 text-sm leading-5 text-muted-foreground">
-                {item.description}
-              </span>
             </div>
           </>
         );

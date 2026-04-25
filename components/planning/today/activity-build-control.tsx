@@ -138,9 +138,6 @@ export function LessonDraftActivityControl({
           <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-primary" />
           <div className="space-y-1">
             <p className="font-medium text-foreground">Building activity…</p>
-            <p className="text-xs text-muted-foreground">
-              We&apos;re turning the lesson draft into a runnable activity automatically.
-            </p>
           </div>
         </div>
       ) : null}
@@ -150,9 +147,6 @@ export function LessonDraftActivityControl({
           <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-secondary-foreground" />
           <div className="space-y-1">
             <p className="font-medium text-foreground">Activity ready</p>
-            <p className="text-xs text-muted-foreground">
-              The learner-facing activity is ready to open from today.
-            </p>
           </div>
         </div>
       ) : null}
@@ -176,9 +170,6 @@ export function LessonDraftActivityControl({
           <div className="space-y-1">
             <p className="font-medium text-foreground">Activity build needs attention</p>
             <p className="text-xs text-muted-foreground">{failureMessage}</p>
-            <p className="text-xs text-muted-foreground">
-              You can keep teaching from the lesson draft while you retry the activity build.
-            </p>
           </div>
         </div>
       ) : null}
@@ -262,9 +253,6 @@ export function TodayLearnerActivityBridge({
             <h2 className="font-serif text-xl leading-tight tracking-tight sm:text-2xl">
               {workspace.leadItem.title}
             </h2>
-            <p className="text-sm text-muted-foreground">
-              Open the live activity or hand off the learner queue from the same place.
-            </p>
           </div>
         </div>
 

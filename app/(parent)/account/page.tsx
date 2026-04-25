@@ -55,9 +55,6 @@ export default async function AccountPage() {
         <section className="quiet-panel space-y-5 p-6">
           <div className="space-y-1">
             <h2 className="text-lg font-semibold text-foreground">Household profile</h2>
-            <p className="text-sm leading-6 text-muted-foreground">
-              Manage the household and learner context that the workspace uses.
-            </p>
           </div>
 
           <div className="grid gap-3 md:grid-cols-2">
@@ -78,10 +75,6 @@ export default async function AccountPage() {
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-medium text-foreground">Learner roster</p>
-                  <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                    One learner stays active at a time so Today, Planning, Curriculum, Tracking,
-                    and Assistant stay focused.
-                  </p>
                 </div>
                 <span className="rounded-full border border-border/70 bg-background px-3 py-1 text-xs text-muted-foreground">
                   {session.learners.length} learner{session.learners.length === 1 ? "" : "s"}
@@ -122,19 +115,12 @@ export default async function AccountPage() {
 
             <div className="rounded-xl border border-border/60 bg-background/75 p-4">
               <p className="text-sm font-medium text-foreground">Workspace context</p>
-              <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                Use the learner switcher to keep the household focused on the right child before you
-                open Today, Planning, Curriculum, Tracking, or Assistant.
-              </p>
               <div className="mt-4">
                 <ActiveLearnerSwitcher
                   learners={session.learners}
                   activeLearnerId={session.activeLearner?.id ?? null}
                 />
               </div>
-              <p className="mt-3 text-xs leading-5 text-muted-foreground">
-                Archived learners do not appear in the main workspace.
-              </p>
             </div>
           </div>
 

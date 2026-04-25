@@ -124,7 +124,7 @@ export default async function CurriculumPage({ searchParams }: CurriculumPagePro
                 ? pendingSource.status === "failed_import"
                   ? "This source shell was saved, but curriculum generation failed. The current live curriculum has not been changed."
                   : pendingSource.status === "draft"
-                    ? "This source is still generating. We will switch planning to it automatically once it is ready."
+                    ? "Generating curriculum."
                     : "This source is ready and already shaping the live curriculum."
                 : "The live source should be the one you want shaping this week&apos;s plan and today&apos;s queue."}
             </p>

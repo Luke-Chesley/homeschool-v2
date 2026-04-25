@@ -216,12 +216,6 @@ export function UserManager({
             </p>
           ) : null}
 
-          <div className="rounded-xl border border-border/60 bg-background/72 px-4 py-3">
-            <p className="text-sm font-medium text-foreground">What changes when you switch</p>
-            <p className="mt-1 text-sm leading-6 text-muted-foreground">
-              Today, learner activities, and Assistant context follow the active learner automatically.
-            </p>
-          </div>
         </section>
       </div>
     </div>

@@ -376,7 +376,7 @@ export function HomeschoolOnboardingForm(props: {
       setWorkingState(
         "generating_first_day",
         "Preparing your first day",
-        "Building Today now, then chaining lesson and activity generation automatically.",
+        "Building Today now.",
       );
 
       const response = await fetch("/api/homeschool/onboarding", {
@@ -507,10 +507,6 @@ export function HomeschoolOnboardingForm(props: {
         <Card className="quiet-panel border-border/60 bg-card/78 shadow-none">
           <CardHeader>
             <CardTitle>Paste or upload anything you have</CardTitle>
-            <CardDescription>
-              Share the quickest source and we&apos;ll build a practical first plan
-              automatically and open your first session right away.
-            </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(280px,0.75fr)]">
@@ -534,11 +530,6 @@ export function HomeschoolOnboardingForm(props: {
                   </span>
                 </label>
 
-                <div className="rounded-xl border border-border/60 bg-background/75 px-4 py-3 text-xs text-muted-foreground">
-                  <p>We&apos;ll turn your input into a practical first plan automatically.</p>
-                  <p>If it clearly supports multiple days, we&apos;ll set up the next lessons too.</p>
-                  <p>If you upload a larger source like a book or workbook, we&apos;ll start with a bounded first slice and keep the rest ready for later.</p>
-                </div>
               </div>
 
               <div className="grid gap-3">
@@ -672,20 +663,12 @@ export function HomeschoolOnboardingForm(props: {
         <Card className="quiet-panel border-border/60 bg-card/78 shadow-none">
           <CardHeader>
             <CardTitle>Quick preview before save</CardTitle>
-            <CardDescription>
-              Confidence is {preview.confidence}. This only appears when the source needs a quick confirmation before we open Today.
-            </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4 text-sm">
             {sourcePackage ? (
               <div className="rounded-xl border border-border/60 bg-background/70 p-4">
-                <p className="font-medium">Normalized source package</p>
+                <p className="font-medium">Source</p>
                 <p className="mt-1 text-muted-foreground">{sourcePackage.summary}</p>
-                <div className="mt-3 grid gap-1 text-xs text-muted-foreground">
-                  <p>Mode: {sourcePackage.modality}</p>
-                  <p>Assets: {sourcePackage.assetCount}</p>
-                  <p>Extraction: {sourcePackage.extractionStatus.replaceAll("_", " ")}</p>
-                </div>
                 <p className="mt-3 text-xs leading-5 text-muted-foreground">
                   {sourcePackage.normalizedText.slice(0, 280)}
                   {sourcePackage.normalizedText.length > 280 ? "…" : ""}
@@ -745,7 +728,7 @@ export function HomeschoolOnboardingForm(props: {
               {sourceKindLabels[preview.sourceKind]}
             </p>
             <p>
-              <span className="font-medium">We&apos;ll use it as:</span>{" "}
+              <span className="font-medium">Use as:</span>{" "}
               {routeLabel(preview.intakeRoute)}
             </p>
             {preview.followUpQuestion ? (

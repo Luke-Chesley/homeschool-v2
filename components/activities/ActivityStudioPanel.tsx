@@ -58,7 +58,6 @@ export function ActivityStudioPanel({
       <StudioDrawer
         panelId="learner-runtime-diagnostics"
         title="Learner runtime diagnostics"
-        description="Studio mode keeps the learner flow clean while still exposing the current session, attempt state, and recent runtime exchanges."
       >
         <div className="space-y-6">
           <StudioSection title="Status">

@@ -23,9 +23,6 @@ export default async function OnboardingPage() {
         <div className="space-y-3">
           <p className="section-meta">Fast onboarding</p>
           <h1 className="page-title">Reach Today first.</h1>
-          <p className="page-subtitle">
-            Add one learner and paste or upload anything you have. We&apos;ll create a focused first plan and keep the rest ready for later.
-          </p>
         </div>
 
         <Card className="quiet-panel">

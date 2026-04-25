@@ -80,20 +80,20 @@ function buildBannerCopy(params: {
       title: "The lesson draft is ready, but the learner activity did not finish.",
       detail:
         params.activityBuild.error ??
-        "You can keep teaching from the lesson draft while you retry the activity build.",
+        "Retry the activity build from Today.",
     };
   }
 
   if (params.summary && lessonBuildActive) {
     return {
-      title: "Today is ready. We’re building the first lesson now.",
+      title: "Building the first lesson",
       detail: params.summary.summaryText,
     };
   }
 
   if (params.summary && hasReadyLesson && activityBuildActive) {
     return {
-      title: "The first lesson is ready. We’re packaging the learner activity now.",
+      title: "Building the activity",
       detail: params.summary.summaryText,
     };
   }
@@ -108,16 +108,14 @@ function buildBannerCopy(params: {
   if (lessonBuildActive) {
     return {
       title: params.hasDraft ? "Updating today’s lesson draft" : "Building today’s lesson draft",
-      detail:
-        "Stay on Today while we use the saved route and context to finish the draft in place.",
+      detail: "This may take a moment.",
     };
   }
 
   if (activityBuildActive) {
     return {
-      title: "Turning the lesson into a learner activity",
-      detail:
-        "The lesson draft is ready. We’re generating the runnable learner activity now.",
+      title: "Building the activity",
+      detail: "This may take a moment.",
     };
   }
 

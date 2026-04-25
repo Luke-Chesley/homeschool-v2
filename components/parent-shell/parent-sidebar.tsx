@@ -21,9 +21,6 @@ export function ParentSidebar({
         <div className="flex items-start justify-between gap-3">
           <div className="space-y-1">
             <p className="text-sm font-semibold text-foreground">{organizationName}</p>
-            <p className="text-sm leading-6 text-muted-foreground">
-              Today, Planning, and Tracking stay together here.
-            </p>
           </div>
           <span className="rounded-full border border-border/70 bg-background/78 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
             Active
@@ -36,11 +33,6 @@ export function ParentSidebar({
           <p className="mt-2 truncate text-base font-semibold text-foreground" title={activeLearnerName}>
             {activeLearnerName}
           </p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <span className="rounded-full border border-border/70 bg-card/76 px-2.5 py-1 text-[11px] text-muted-foreground">
-              Today ready
-            </span>
-          </div>
         </div>
       </div>
 

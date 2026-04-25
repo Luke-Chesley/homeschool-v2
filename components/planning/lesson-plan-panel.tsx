@@ -203,13 +203,13 @@ export function LessonPlanPanel({
       : "Building today’s lesson draft…";
   const buildProgressDetail = isManualBuildInProgress && hasDraft
     ? "Stay on Today while we refresh the draft in place using the saved route and lesson context."
-    : "Stay on this page. We’re using the saved route and intake context to build the first teachable day automatically.";
+    : "Preparing the first lesson.";
   const lessonContextCopy =
     daySkillCount && daySkillCount > routeItemCount
       ? daySlotCount && daySlotCount > 1 && slotPosition
         ? `${resolvedLessonLabel} is ${slotPosition} of ${daySlotCount} scheduled lessons and covers ${routeItemCount} of ${daySkillCount} skills planned for today.`
         : `${resolvedLessonLabel} covers ${routeItemCount} of ${daySkillCount} skills planned for today.`
-      : "Use these controls to manage the lesson and learner activity.";
+      : null;
 
   async function requestDraft(
     trigger: "onboarding_auto" | "today_resume" | "manual",
@@ -446,9 +446,11 @@ export function LessonPlanPanel({
             </div>
             <div>
               <h2 className="font-serif text-2xl">Teach this lesson</h2>
-              <p className="mt-1 text-sm leading-7 text-muted-foreground">
-                {lessonContextCopy}
-              </p>
+              {lessonContextCopy ? (
+                <p className="mt-1 text-sm leading-7 text-muted-foreground">
+                  {lessonContextCopy}
+                </p>
+              ) : null}
             </div>
           </div>
 
@@ -497,12 +499,7 @@ export function LessonPlanPanel({
           {hasDraft ? (
             <>
               <div className="rounded-lg border border-border/70 bg-background/72 p-4">
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-foreground">Learner handoff</p>
-                  <p className="text-sm text-muted-foreground">
-                    Open or build the learner-facing activity without leaving today.
-                  </p>
-                </div>
+                <p className="text-sm font-medium text-foreground">Activity</p>
                 <div className="mt-3">
                   <LessonDraftActivityControl
                     date={date}
@@ -554,15 +551,12 @@ export function LessonPlanPanel({
             <>
               <details className="rounded-lg border border-border/70 bg-background/72 px-4 py-3">
                 <summary className="cursor-pointer text-sm font-medium text-foreground">
-                  More planning controls
+                  Planning controls
                 </summary>
                 <div className="mt-3 space-y-4">
                   <div className="space-y-3">
                     <div className="space-y-1">
                       <p className="text-sm font-medium text-foreground">Scope intent</p>
-                      <p className="text-sm text-muted-foreground">
-                        Record whether today should stay bounded or become the starting point for more route.
-                      </p>
                     </div>
                     <div className="grid gap-2 sm:flex sm:flex-wrap">
                       <button
@@ -605,9 +599,6 @@ export function LessonPlanPanel({
                   <div className="space-y-3">
                     <div className="space-y-1">
                       <p className="text-sm font-medium text-foreground">Route expansion</p>
-                      <p className="text-sm text-muted-foreground">
-                        Schedule more of the saved route without replacing today&apos;s lesson.
-                      </p>
                     </div>
                     <div className="grid gap-2 sm:flex sm:flex-wrap">
                       {(["tomorrow", "next_few_days", "current_week"] as const).map((scope) => (
@@ -651,7 +642,6 @@ export function LessonPlanPanel({
       <StudioDrawer
         panelId={LESSON_PLAN_PROMPT_PANEL_ID}
         title="Lesson prompt preview"
-        description="Studio mode keeps prompt and artifact diagnostics available without pushing them into the default lesson flow."
       >
         {promptDebugState.status === "error" ? (
           <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-4 text-sm text-destructive">

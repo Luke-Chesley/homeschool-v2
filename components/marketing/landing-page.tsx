@@ -278,7 +278,7 @@ export function LandingPage() {
               </Link>
               <DemoModal
                 title="From source material to the next teachable move"
-                description="This walkthrough follows the actual product sequence from source intake to curriculum structure, Today, Planning, Tracking, and Assistant."
+                description="Source intake, curriculum structure, Today, Planning, Tracking, and Assistant."
                 bullets={[...demoStoryboard]}
               />
             </div>
@@ -454,9 +454,6 @@ export function LandingPage() {
             <h2 className="font-serif text-[clamp(2.2rem,4vw,3.7rem)] leading-[0.97] tracking-[-0.045em] text-foreground">
               See the main screens and why each one matters.
             </h2>
-            <p className="text-sm leading-7 text-muted-foreground sm:text-base">
-              The homepage should make the product concrete, so this section names the actual surfaces: Today, Planning, Curriculum, Tracking, and Assistant.
-            </p>
           </div>
 
           <FeatureTourTabs features={featureTourItems} />
@@ -532,9 +529,6 @@ export function LandingPage() {
             <h2 className="font-serif text-[clamp(2.2rem,4vw,3.5rem)] leading-[0.97] tracking-[-0.045em] text-foreground">
               Honest proof, not made-up marketing stats.
             </h2>
-            <p className="text-sm leading-7 text-muted-foreground sm:text-base">
-              This homepage avoids fake logos, fake counts, and invented testimonials. The credibility comes from how the product is shaped and what it keeps connected.
-            </p>
           </div>
 
           <div className="grid gap-3">
@@ -546,12 +540,6 @@ export function LandingPage() {
                 </div>
               </Card>
             ))}
-            <Card variant="glass" className="p-5">
-              <p className="text-sm font-medium text-foreground">Structured to grow later</p>
-              <p className="mt-2 text-sm leading-7 text-muted-foreground">
-                This section is ready to accept real testimonials, case studies, or design-partner proof later without changing the rest of the homepage architecture.
-              </p>
-            </Card>
           </div>
         </section>
 
