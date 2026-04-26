@@ -184,6 +184,8 @@ export function LessonPlanPanel({
   const showBuildProgressMessage = isQueuedBuild || isGeneratingBuild || isManualBuildInProgress;
   const showAutoBuildState = isQueuedBuild || isGeneratingBuild;
   const showFailedBuildState = !hasDraft && buildState?.status === "failed";
+  const showCurrentSkillsDraftPrompt =
+    !hasDraft && !showAutoBuildState && !showFailedBuildState && routeItemCount > 0;
   const buildErrorMessage =
     state.status === "error"
       ? state.message
@@ -519,6 +521,15 @@ export function LessonPlanPanel({
           {buildErrorMessage ? (
             <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-4 text-sm text-destructive">
               {buildErrorMessage}
+            </div>
+          ) : null}
+
+          {showCurrentSkillsDraftPrompt ? (
+            <div className="rounded-lg border border-border/70 bg-background/72 p-4 text-sm">
+              <p className="font-medium text-foreground">Generate this lesson for the current skills</p>
+              <p className="mt-1 leading-6 text-muted-foreground">
+                The lesson plan should match the skills currently scheduled for this slot.
+              </p>
             </div>
           ) : null}
 

@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 import { LessonBlockHelp } from "@/components/planning/lesson-block-help";
 import type {
@@ -142,6 +142,8 @@ function BlockCard({
   lessonFocus: string;
   visualAids: LessonVisualAid[];
 }) {
+  const [expandedVisualAidId, setExpandedVisualAidId] = useState<string | null>(null);
+
   return (
     <div
       className={cn(
@@ -172,35 +174,55 @@ function BlockCard({
 
       {visualAids.length > 0 ? (
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          {visualAids.map((visualAid) => (
-            <figure
-              key={visualAid.id}
-              className="overflow-hidden rounded-lg border border-border/60 bg-muted/10"
-            >
-              <img
-                src={visualAid.url}
-                alt={visualAid.alt}
-                className="aspect-[4/3] w-full object-cover"
-                loading="lazy"
-              />
-              <figcaption className="space-y-1 border-t border-border/50 p-3">
-                <p className="text-sm font-medium leading-5 text-foreground">{visualAid.title}</p>
-                {visualAid.caption ? (
-                  <p className="text-xs leading-5 text-muted-foreground">{visualAid.caption}</p>
-                ) : null}
-                {visualAid.usage_note ? (
-                  <p className="text-xs leading-5 text-muted-foreground">
-                    Use: {visualAid.usage_note}
-                  </p>
-                ) : null}
-                {visualAid.source_name ? (
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                    {visualAid.source_name}
-                  </p>
-                ) : null}
-              </figcaption>
-            </figure>
-          ))}
+          {visualAids.map((visualAid) => {
+            const isExpanded = expandedVisualAidId === visualAid.id;
+            return (
+              <figure
+                key={visualAid.id}
+                className={cn(
+                  "overflow-hidden rounded-lg border border-border/60 bg-muted/10",
+                  isExpanded && "sm:col-span-2",
+                )}
+              >
+                <button
+                  type="button"
+                  className={cn(
+                    "block w-full bg-muted/20 text-left outline-none transition-colors hover:bg-muted/30 focus-visible:ring-2 focus-visible:ring-ring/80 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                    isExpanded ? "cursor-zoom-out" : "cursor-zoom-in",
+                  )}
+                  onClick={() => setExpandedVisualAidId(isExpanded ? null : visualAid.id)}
+                  aria-expanded={isExpanded}
+                  aria-label={`${isExpanded ? "Collapse" : "Expand"} image: ${visualAid.title}`}
+                >
+                  <img
+                    src={visualAid.url}
+                    alt={visualAid.alt}
+                    className={cn(
+                      "w-full object-contain transition-[max-height] duration-[var(--motion-base)] ease-[var(--ease-standard)]",
+                      isExpanded ? "max-h-[70vh]" : "aspect-[4/3]",
+                    )}
+                    loading="lazy"
+                  />
+                </button>
+                <figcaption className="space-y-1 border-t border-border/50 p-3">
+                  <p className="text-sm font-medium leading-5 text-foreground">{visualAid.title}</p>
+                  {visualAid.caption ? (
+                    <p className="text-xs leading-5 text-muted-foreground">{visualAid.caption}</p>
+                  ) : null}
+                  {visualAid.usage_note ? (
+                    <p className="text-xs leading-5 text-muted-foreground">
+                      Use: {visualAid.usage_note}
+                    </p>
+                  ) : null}
+                  {visualAid.source_name ? (
+                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                      {visualAid.source_name}
+                    </p>
+                  ) : null}
+                </figcaption>
+              </figure>
+            );
+          })}
         </div>
       ) : null}
 
@@ -240,6 +262,26 @@ function BlockCard({
       {footer ? <div className="mt-3 flex justify-end">{footer}</div> : null}
     </div>
   );
+}
+
+function takeFirstUseVisualAids(
+  visualAidIds: string[] | undefined,
+  visualAidById: Map<string, LessonVisualAid>,
+  renderedVisualAidIds: Set<string>,
+) {
+  return (visualAidIds ?? []).flatMap((visualAidId) => {
+    if (renderedVisualAidIds.has(visualAidId)) {
+      return [];
+    }
+
+    const visualAid = visualAidById.get(visualAidId);
+    if (!visualAid) {
+      return [];
+    }
+
+    renderedVisualAidIds.add(visualAidId);
+    return [visualAid];
+  });
 }
 
 function CollapsibleSection({
@@ -389,6 +431,7 @@ export function LessonDraftRenderer({
 }: LessonDraftRendererProps) {
   const showInlineHelp = mode !== "compact";
   const visualAidById = new Map((draft.visual_aids ?? []).map((visualAid) => [visualAid.id, visualAid]));
+  const renderedVisualAidIds = new Set<string>();
 
   return (
     <div className={cn("space-y-6", className)}>
@@ -413,14 +456,15 @@ export function LessonDraftRenderer({
               showInlineHelp={showInlineHelp}
               lessonTitle={draft.title}
               lessonFocus={draft.lesson_focus}
-              visualAids={(block.visual_aid_ids ?? [])
-                .map((visualAidId) => visualAidById.get(visualAidId))
-                .filter((visualAid): visualAid is LessonVisualAid => Boolean(visualAid))}
+              visualAids={takeFirstUseVisualAids(
+                block.visual_aid_ids,
+                visualAidById,
+                renderedVisualAidIds,
+              )}
             />
           ))}
         </div>
       </div>
-
     </div>
   );
 }

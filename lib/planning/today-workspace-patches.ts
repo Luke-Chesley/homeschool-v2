@@ -33,6 +33,38 @@ export interface TodayWorkspaceSlotSummary {
 
 type WorkspaceItem = DailyWorkspace["items"][number];
 type WorkspaceSlot = DailyWorkspace["slots"][number];
+type RouteScopedSlotValue =
+  | DailyWorkspaceLessonDraft
+  | DailyWorkspaceLessonBuild
+  | DailyWorkspaceActivityBuild
+  | null
+  | undefined;
+
+function resolveRouteScopedSlotValue<T extends RouteScopedSlotValue>(
+  value: T,
+  routeFingerprint: string,
+) {
+  if (value === undefined || value === null) {
+    return value;
+  }
+
+  return value.routeFingerprint === routeFingerprint ? value : undefined;
+}
+
+function buildRouteScopedSlotState(slot: WorkspaceSlot, slotState?: TodayWorkspaceSlotState) {
+  const lessonDraft = resolveRouteScopedSlotValue(slotState?.lessonDraft, slot.routeFingerprint);
+  const lessonBuild = resolveRouteScopedSlotValue(slotState?.lessonBuild, slot.routeFingerprint);
+  const activityBuild = resolveRouteScopedSlotValue(slotState?.activityBuild, slot.routeFingerprint);
+
+  return {
+    lessonDraft,
+    lessonBuild,
+    activityBuild,
+    activityState: activityBuild === undefined ? undefined : slotState?.activityState,
+    lessonRegenerationNote: slotState?.lessonRegenerationNote,
+    expansionIntent: slotState?.expansionIntent,
+  };
+}
 
 function rebuildWorkspace(
   workspace: DailyWorkspace,
@@ -146,11 +178,12 @@ export function resolveTodayWorkspaceSlotRouteFingerprint(
   preferredSlotId?: string | null,
   slotState?: TodayWorkspaceSlotState,
 ) {
+  const slot = getTodayWorkspaceSlot(workspace, preferredSlotId);
   return (
+    slot?.routeFingerprint ??
     slotState?.lessonBuild?.routeFingerprint ??
     slotState?.lessonDraft?.routeFingerprint ??
     slotState?.activityBuild?.routeFingerprint ??
-    getTodayWorkspaceSlot(workspace, preferredSlotId)?.routeFingerprint ??
     null
   );
 }
@@ -183,6 +216,7 @@ export function buildTodaySlotWorkspace(
   if (!slot) {
     return workspace;
   }
+  const scopedSlotState = buildRouteScopedSlotState(slot, slotState);
 
   return {
     ...workspace,
@@ -192,29 +226,29 @@ export function buildTodaySlotWorkspace(
     sessionTargets: slot.sessionTargets,
     artifactSlots: slot.artifactSlots,
     lessonDraft:
-      slotState?.lessonDraft === undefined
+      scopedSlotState.lessonDraft === undefined
         ? slot.lessonDraft
-        : slotState.lessonDraft,
+        : scopedSlotState.lessonDraft,
     lessonBuild:
-      slotState?.lessonBuild === undefined
+      scopedSlotState.lessonBuild === undefined
         ? slot.lessonBuild
-        : slotState.lessonBuild,
+        : scopedSlotState.lessonBuild,
     activityBuild:
-      slotState?.activityBuild === undefined
+      scopedSlotState.activityBuild === undefined
         ? slot.activityBuild
-        : slotState.activityBuild,
+        : scopedSlotState.activityBuild,
     activityState:
-      slotState?.activityState === undefined
+      scopedSlotState.activityState === undefined
         ? slot.activityState
-        : slotState.activityState,
+        : scopedSlotState.activityState,
     lessonRegenerationNote:
-      slotState?.lessonRegenerationNote === undefined
+      scopedSlotState.lessonRegenerationNote === undefined
         ? slot.lessonRegenerationNote
-        : slotState.lessonRegenerationNote,
+        : scopedSlotState.lessonRegenerationNote,
     expansionIntent:
-      slotState?.expansionIntent === undefined
+      scopedSlotState.expansionIntent === undefined
         ? slot.expansionIntent
-        : slotState.expansionIntent,
+        : scopedSlotState.expansionIntent,
   } satisfies DailyWorkspace;
 }
 
@@ -223,17 +257,17 @@ export function buildTodayWorkspaceSlotSummaries(
   slotStates: Record<string, TodayWorkspaceSlotState>,
 ) {
   return workspace.slots.map((slot) => {
-    const state = slotStates[slot.id];
+    const state = buildRouteScopedSlotState(slot, slotStates[slot.id]);
     const hasDraft =
-      state?.lessonDraft !== undefined
+      state.lessonDraft !== undefined
         ? Boolean(state.lessonDraft)
         : Boolean(slot.lessonDraft);
     const lessonBuildStatus =
-      state?.lessonBuild !== undefined
+      state.lessonBuild !== undefined
         ? state.lessonBuild?.status ?? null
         : slot.lessonBuild?.status ?? null;
     const activityStatus =
-      state?.activityState !== undefined
+      state.activityState !== undefined
         ? state.activityState?.status ?? null
         : slot.activityState?.status ?? null;
     const estimatedMinutes = slot.items.reduce((sum, item) => sum + item.estimatedMinutes, 0);

@@ -218,6 +218,13 @@ function isExpansionIntent(value: unknown): value is DailyWorkspaceExpansionInte
   return value === "keep_today" || value === "expand_from_here";
 }
 
+function hasMatchingRouteFingerprint(candidate: Record<string, unknown>, routeFingerprint: string) {
+  return (
+    typeof candidate.routeFingerprint !== "string" ||
+    candidate.routeFingerprint === routeFingerprint
+  );
+}
+
 async function withTodayTiming<T>(
   label: string,
   meta: Record<string, unknown>,
@@ -299,6 +306,9 @@ function readLessonDraftFromMetadata(
   if (!isRecord(candidate)) {
     return null;
   }
+  if (!hasMatchingRouteFingerprint(candidate, routeFingerprint)) {
+    return null;
+  }
 
   // New format: has a "structured" key with schema_version "1.0"
   const hasStructured =
@@ -355,6 +365,9 @@ function readLessonBuildFromMetadata(
   if (!isRecord(candidate) || !isLessonBuildStatus(candidate.status)) {
     return null;
   }
+  if (!hasMatchingRouteFingerprint(candidate, routeFingerprint)) {
+    return null;
+  }
 
   const updatedAt =
     typeof candidate.updatedAt === "string" ? candidate.updatedAt : new Date().toISOString();
@@ -402,6 +415,9 @@ function readActivityBuildFromMetadata(
 
   const candidate = sourceBuilds[routeFingerprint];
   if (!isRecord(candidate) || !isActivityBuildStatus(candidate.status)) {
+    return null;
+  }
+  if (!hasMatchingRouteFingerprint(candidate, routeFingerprint)) {
     return null;
   }
 
@@ -500,6 +516,9 @@ function readTodayWorkspaceFreshnessFromMetadata(
 
   const candidate = sourceFreshness[routeFingerprint];
   if (!isRecord(candidate)) {
+    return null;
+  }
+  if (!hasMatchingRouteFingerprint(candidate, routeFingerprint)) {
     return null;
   }
 
@@ -644,12 +663,27 @@ async function getOrCreateTodayWorkspaceDaySlot(params: {
   });
 
   if (existing) {
+    const currentMetadata = isRecord(existing.metadata) ? existing.metadata : {};
+    const currentRouteFingerprint =
+      typeof currentMetadata.routeFingerprint === "string" ? currentMetadata.routeFingerprint : null;
+    const nextRouteFingerprint = params.routeFingerprint ?? currentRouteFingerprint;
+    const routeFingerprintChanged =
+      typeof params.routeFingerprint === "string" &&
+      currentRouteFingerprint !== null &&
+      currentRouteFingerprint !== params.routeFingerprint;
     const nextMetadata = {
-      ...(isRecord(existing.metadata) ? existing.metadata : {}),
-      sourceId: params.sourceId ?? (isRecord(existing.metadata) ? existing.metadata.sourceId : null),
-      routeFingerprint:
-        params.routeFingerprint ??
-        (isRecord(existing.metadata) ? existing.metadata.routeFingerprint : null),
+      ...currentMetadata,
+      sourceId: params.sourceId ?? currentMetadata.sourceId ?? null,
+      routeFingerprint: nextRouteFingerprint,
+      ...(routeFingerprintChanged
+        ? {
+            lessonDraft: null,
+            lessonBuild: null,
+            activityBuild: null,
+            lessonRegenerationNote: null,
+            expansionIntent: null,
+          }
+        : null),
     };
     const needsUpdate =
       existing.title !== params.title ||

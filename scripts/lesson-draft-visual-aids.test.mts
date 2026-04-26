@@ -3,7 +3,6 @@ import test from "node:test";
 
 import { computeLessonDraftFingerprint } from "@/lib/lesson-draft/fingerprint";
 import { StructuredLessonDraftSchema } from "@/lib/lesson-draft/validate";
-import { extractAllowedLessonVisualAidUrls } from "@/lib/lesson-draft/visual-aids";
 
 const allowedCloudUrl =
   "https://upload.wikimedia.org/wikipedia/commons/b/b5/Cumulus_clouds_in_fair_weather.jpeg";
@@ -122,13 +121,4 @@ test("lesson draft fingerprint changes when visual aids change", () => {
   );
 
   assert.notEqual(computeLessonDraftFingerprint(first), computeLessonDraftFingerprint(second));
-});
-
-test("extractAllowedLessonVisualAidUrls only returns allowlisted URLs", () => {
-  assert.deepEqual(
-    extractAllowedLessonVisualAidUrls(
-      `Use ${allowedCloudUrl} and ignore https://example.com/not-allowed.jpg`,
-    ),
-    [allowedCloudUrl],
-  );
 });

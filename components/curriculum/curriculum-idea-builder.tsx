@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ArrowRight, ChevronDown, Lightbulb, Sparkles } from "lucide-react";
+import { ArrowRight, ChevronDown, Lightbulb, Loader2, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -13,6 +13,11 @@ import {
   curriculumTimeHorizonOptions,
   type CurriculumIdeaOption,
 } from "@/lib/curriculum/idea-builder-options";
+import {
+  getLocalTopicSuggestions,
+  hasStrongLocalTopicSuggestions,
+  normalizeTopicSuggestion,
+} from "@/lib/curriculum/topic-suggestion-engine";
 import { cn } from "@/lib/utils";
 
 type BuilderField = "domain" | "learner" | "horizon" | "shape" | "pacing" | "constraint";
@@ -114,6 +119,10 @@ function InlineBlank({
   value,
   placeholder,
   options,
+  filterOptions = true,
+  secondaryLabel,
+  secondaryOptions = [],
+  loadingSecondary = false,
   onChange,
   className,
 }: {
@@ -121,23 +130,38 @@ function InlineBlank({
   value: string;
   placeholder: string;
   options: CurriculumIdeaOption[];
+  filterOptions?: boolean;
+  secondaryLabel?: string;
+  secondaryOptions?: CurriculumIdeaOption[];
+  loadingSecondary?: boolean;
   onChange: (value: string) => void;
   className?: string;
 }) {
   const rootRef = React.useRef<HTMLSpanElement | null>(null);
   const inputRef = React.useRef<HTMLInputElement | null>(null);
   const [open, setOpen] = React.useState(false);
+  const [activeIndex, setActiveIndex] = React.useState(-1);
   const normalizedValue = value.trim().toLowerCase();
-  const visibleOptions = options
-    .filter((option) => {
+  const visibleOptions = (filterOptions
+    ? options.filter((option) => {
       if (!normalizedValue) return true;
       return (
         option.label.toLowerCase().includes(normalizedValue) ||
         option.value.toLowerCase().includes(normalizedValue)
       );
     })
-    .slice(0, 16);
-  const hasSuggestions = visibleOptions.length > 0;
+    : options
+  ).slice(0, 16);
+  const visibleSecondaryOptions = secondaryOptions.slice(0, 8);
+  const allVisibleOptions = [...visibleSecondaryOptions, ...visibleOptions];
+  const hasSuggestions = allVisibleOptions.length > 0;
+  const canOpen = options.length > 0 || secondaryOptions.length > 0 || loadingSecondary;
+
+  function chooseOption(option: CurriculumIdeaOption) {
+    onChange(option.value);
+    setOpen(false);
+    setActiveIndex(-1);
+  }
 
   React.useEffect(() => {
     function handlePointerDown(event: PointerEvent) {
@@ -149,6 +173,16 @@ function InlineBlank({
     document.addEventListener("pointerdown", handlePointerDown);
     return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, []);
+
+  React.useEffect(() => {
+    setActiveIndex(hasSuggestions ? 0 : -1);
+  }, [hasSuggestions, value, visibleOptions.length, visibleSecondaryOptions.length]);
+
+  React.useEffect(() => {
+    if (canOpen && document.activeElement === inputRef.current) {
+      setOpen(true);
+    }
+  }, [canOpen, loadingSecondary, secondaryOptions.length, visibleOptions.length]);
 
   return (
     <span ref={rootRef} className="relative inline-flex flex-col gap-1 align-middle">
@@ -162,13 +196,13 @@ function InlineBlank({
         <input
           ref={inputRef}
           aria-label={label}
-          role={options.length > 0 ? "combobox" : undefined}
-          aria-expanded={options.length > 0 ? open : undefined}
+          role={canOpen ? "combobox" : undefined}
+          aria-expanded={canOpen ? open : undefined}
           value={value}
-          onFocus={() => options.length > 0 && setOpen(true)}
+          onFocus={() => canOpen && setOpen(true)}
           onChange={(event) => {
             onChange(event.target.value);
-            if (options.length > 0) {
+            if (canOpen) {
               setOpen(true);
             }
           }}
@@ -176,13 +210,41 @@ function InlineBlank({
             if (event.key === "Escape") {
               setOpen(false);
               inputRef.current?.blur();
+              return;
+            }
+            if (event.key === "ArrowDown" && canOpen) {
+              event.preventDefault();
+              setOpen(true);
+              setActiveIndex((current) => {
+                if (!hasSuggestions) return -1;
+                return current < allVisibleOptions.length - 1 ? current + 1 : 0;
+              });
+              return;
+            }
+            if (event.key === "ArrowUp" && canOpen) {
+              event.preventDefault();
+              setOpen(true);
+              setActiveIndex((current) => {
+                if (!hasSuggestions) return -1;
+                return current > 0 ? current - 1 : allVisibleOptions.length - 1;
+              });
+              return;
+            }
+            if ((event.key === "Enter" || event.key === "Tab") && open && activeIndex >= 0) {
+              const selected = allVisibleOptions[activeIndex];
+              if (selected) {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                }
+                chooseOption(selected);
+              }
             }
           }}
           placeholder={placeholder}
           autoComplete="off"
           className="h-full min-w-0 flex-1 rounded-xl bg-transparent px-3 text-base font-medium text-foreground outline-none placeholder:text-muted-foreground/38"
         />
-        {options.length > 0 ? (
+        {canOpen ? (
           <button
             type="button"
             aria-label={`Show ${label} suggestions`}
@@ -199,28 +261,63 @@ function InlineBlank({
         ) : null}
       </span>
 
-      {open && options.length > 0 ? (
+      {open && canOpen ? (
         <span className="absolute left-0 top-full z-50 mt-2 grid max-h-80 min-w-full gap-1 overflow-y-auto rounded-2xl border border-border/80 bg-popover/95 p-1.5 text-sm shadow-[var(--shadow-active)] backdrop-blur">
           {hasSuggestions ? (
-            visibleOptions.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => {
-                  onChange(option.value);
-                  setOpen(false);
-                }}
-                className={cn(
-                  "w-full rounded-xl px-3 py-2 text-left font-medium leading-snug text-foreground transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none",
-                  option.value === value && "bg-primary/10 text-primary",
-                )}
-              >
-                {option.label}
-              </button>
-            ))
+            <>
+              {visibleSecondaryOptions.length > 0 ? (
+                <span className="px-3 pt-2 text-[0.68rem] font-semibold uppercase tracking-wide text-primary/85 dark:text-primary/90">
+                  {secondaryLabel ?? "More ideas"}
+                </span>
+              ) : null}
+              {visibleSecondaryOptions.map((option, index) => {
+                const absoluteIndex = index;
+                return (
+                  <button
+                    key={`secondary-${option.value}`}
+                    type="button"
+                    onMouseEnter={() => setActiveIndex(absoluteIndex)}
+                    onClick={() => chooseOption(option)}
+                    className={cn(
+                      "relative flex w-full items-center overflow-hidden rounded-xl border border-primary/35 bg-primary/12 px-3 py-2 text-left font-semibold leading-snug text-foreground shadow-sm transition-colors before:absolute before:inset-y-0 before:left-0 before:w-1 before:bg-primary/70 hover:border-primary/50 hover:bg-primary/18 focus-visible:border-primary/60 focus-visible:bg-primary/18 focus-visible:outline-none dark:border-primary/35 dark:bg-primary/18 dark:text-foreground dark:before:bg-primary/80 dark:hover:bg-primary/24 dark:focus-visible:bg-primary/24",
+                      option.value === value && "border-primary/70 bg-primary/20 text-foreground dark:border-primary/65 dark:bg-primary/26",
+                      activeIndex === absoluteIndex && "border-primary/70 bg-primary/20 dark:border-primary/65 dark:bg-primary/26",
+                    )}
+                  >
+                    <span className="ml-1">{option.label}</span>
+                  </button>
+                );
+              })}
+              {visibleSecondaryOptions.length > 0 && visibleOptions.length > 0 ? (
+                <span className="px-3 pt-2 text-[0.68rem] font-semibold uppercase tracking-wide text-muted-foreground/75">
+                  Suggestions
+                </span>
+              ) : null}
+              {visibleOptions.map((option, index) => (
+                <button
+                  key={`primary-${option.value}`}
+                  type="button"
+                  onMouseEnter={() => setActiveIndex(visibleSecondaryOptions.length + index)}
+                  onClick={() => chooseOption(option)}
+                  className={cn(
+                    "w-full rounded-xl px-3 py-2 text-left font-medium leading-snug text-foreground transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none",
+                    option.value === value && "bg-primary/10 text-primary",
+                    activeIndex === visibleSecondaryOptions.length + index && "bg-muted",
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </>
           ) : (
             <span className="px-3 py-2 text-muted-foreground">Type your own wording</span>
           )}
+          {loadingSecondary ? (
+            <span className="inline-flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
+              <Loader2 className="size-3.5 animate-spin" />
+              Looking for more topic ideas
+            </span>
+          ) : null}
         </span>
       ) : null}
     </span>
@@ -238,6 +335,9 @@ export function CurriculumIdeaBuilder({
 }: CurriculumIdeaBuilderProps) {
   const [state, setState] = React.useState<BuilderState>(initialState);
   const [optionPools, setOptionPools] = React.useState<BuilderOptionPools>(baseOptionPools);
+  const [aiTopicOptions, setAiTopicOptions] = React.useState<CurriculumIdeaOption[]>([]);
+  const [loadingAiTopics, setLoadingAiTopics] = React.useState(false);
+  const aiTopicCacheRef = React.useRef<Map<string, CurriculumIdeaOption[]>>(new Map());
 
   React.useEffect(() => {
     setOptionPools(shuffleOptionPools());
@@ -245,6 +345,87 @@ export function CurriculumIdeaBuilder({
 
   const generatedText = React.useMemo(() => buildIdeaText(state), [state]);
   const usableText = generatedText.trim();
+  const localTopicSuggestions = React.useMemo(
+    () => getLocalTopicSuggestions(state.domain, optionPools.domain, 14),
+    [optionPools.domain, state.domain],
+  );
+  const topicOptions = React.useMemo(
+    () => localTopicSuggestions.map(({ value, label }) => ({ value, label })),
+    [localTopicSuggestions],
+  );
+
+  React.useEffect(() => {
+    const query = normalizeTopicSuggestion(state.domain);
+    if (query.length < 3 || hasStrongLocalTopicSuggestions(query, localTopicSuggestions)) {
+      setAiTopicOptions([]);
+      setLoadingAiTopics(false);
+      return;
+    }
+
+    const cacheKey = [
+      query.toLowerCase(),
+      state.learner.trim().toLowerCase(),
+      state.horizon.trim().toLowerCase(),
+    ].join("|");
+    const cached = aiTopicCacheRef.current.get(cacheKey);
+    if (cached) {
+      setAiTopicOptions(cached);
+      setLoadingAiTopics(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => {
+      setLoadingAiTopics(true);
+      fetch("/api/curriculum/topic-suggestions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query,
+          learner: state.learner.trim() || null,
+          timeframe: state.horizon.trim() || null,
+          localSuggestions: localTopicSuggestions.slice(0, 8).map((suggestion) => suggestion.value),
+        }),
+        signal: controller.signal,
+      })
+        .then(async (response) => {
+          if (!response.ok) {
+            return [];
+          }
+          const payload = (await response.json().catch(() => null)) as {
+            suggestions?: unknown;
+          } | null;
+          if (!Array.isArray(payload?.suggestions)) {
+            return [];
+          }
+          return payload.suggestions
+            .map((suggestion) => normalizeTopicSuggestion(String(suggestion)))
+            .filter(Boolean)
+            .map((suggestion) => ({ value: suggestion, label: suggestion }));
+        })
+        .then((suggestions) => {
+          aiTopicCacheRef.current.set(cacheKey, suggestions);
+          setAiTopicOptions(suggestions);
+        })
+        .catch((error) => {
+          if (error instanceof DOMException && error.name === "AbortError") {
+            return;
+          }
+          setAiTopicOptions([]);
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) {
+            setLoadingAiTopics(false);
+          }
+        });
+    }, 2000);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeout);
+      setLoadingAiTopics(false);
+    };
+  }, [localTopicSuggestions, state.domain, state.horizon, state.learner]);
 
   function setField(field: BuilderField, value: string) {
     setState((current) => ({ ...current, [field]: value }));
@@ -302,7 +483,11 @@ export function CurriculumIdeaBuilder({
               label="Topic"
               value={state.domain}
               placeholder="topic"
-              options={optionPools.domain}
+              options={topicOptions}
+              filterOptions={false}
+              secondaryLabel="More ideas"
+              secondaryOptions={aiTopicOptions}
+              loadingSecondary={loadingAiTopics}
               onChange={(value) => setField("domain", value)}
               className="w-44 sm:w-52"
             />
