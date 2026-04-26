@@ -1335,11 +1335,12 @@ export async function runHomeschoolFastPathOnboarding(rawInput: HomeschoolFastPa
   });
   await setLiveCurriculumSource(input.organizationId, sourceId);
 
+  const todayDate = await resolveOrganizationTodayDate(input.organizationId);
   const { weekStartDate } = await getOrCreateWeeklyRouteBoardForLearner({
     learnerId: primaryLearner.id,
     sourceId,
+    weekStartDate: todayDate,
   });
-  const todayDate = await resolveOrganizationTodayDate(input.organizationId);
   const todayWorkspace = await getTodayWorkspace({
     organizationId: input.organizationId,
     learnerId: primaryLearner.id,
@@ -1467,12 +1468,13 @@ export async function completeHomeschoolOnboarding(rawInput: unknown) {
   const sourceId = curriculum.curriculum.id;
   await setLiveCurriculumSource(input.organizationId, sourceId);
 
+  const todayDate = await resolveOrganizationTodayDate(input.organizationId);
   const { weekStartDate } = await getOrCreateWeeklyRouteBoardForLearner({
     learnerId: primaryLearner.id,
     sourceId,
+    weekStartDate: todayDate,
   });
 
-  const todayDate = await resolveOrganizationTodayDate(input.organizationId);
   const todayWorkspace = await getTodayWorkspace({
     organizationId: input.organizationId,
     learnerId: primaryLearner.id,

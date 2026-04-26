@@ -62,6 +62,25 @@ function buildWeekdayDates(weekStartDate: string) {
   return Array.from({ length: WEEKDAY_COUNT }, (_, index) => addDays(weekStartDate, index));
 }
 
+export function resolveRouteCreationWeekStartDate(params: {
+  requestedDate?: string;
+  planningDays: unknown;
+}) {
+  const requestedWeekStartDate = toWeekStartDate(params.requestedDate);
+  if (!params.requestedDate || params.requestedDate === requestedWeekStartDate) {
+    return requestedWeekStartDate;
+  }
+
+  const enabledDayOffsets = getEnabledPlanningDayOffsets(params.planningDays);
+  const weekDates = buildWeekdayDates(requestedWeekStartDate);
+  const hasRemainingEnabledDay = enabledDayOffsets.some((offset) => {
+    const date = weekDates[offset];
+    return date != null && date >= params.requestedDate!;
+  });
+
+  return hasRemainingEnabledDay ? requestedWeekStartDate : addDays(requestedWeekStartDate, 7);
+}
+
 function getMonthWeekStartDates(anchorDate: string) {
   const parsed = parseDateOrThrow(anchorDate);
   const firstOfMonth = new Date(Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth(), 1));
@@ -663,6 +682,7 @@ export async function getOrCreateWeeklyRouteBoardForLearner(params: {
     learnerId: params.learnerId,
     sourceId: params.sourceId,
     weekStartDate,
+    scheduleStartDate: params.weekStartDate,
   });
 
   if (generated.items.length === 0) {
@@ -676,6 +696,7 @@ export async function getOrCreateWeeklyRouteBoardForLearner(params: {
         learnerId: params.learnerId,
         sourceId: params.sourceId,
         weekStartDate,
+        scheduleStartDate: params.weekStartDate,
       });
     }
   }
@@ -688,7 +709,16 @@ async function inspectWeeklyRouteBoardMaintenanceState(params: {
   sourceId: string;
   weekStartDate?: string;
 }) {
-  const weekStartDate = toWeekStartDate(params.weekStartDate);
+  const profile = await getDb().query.learnerRouteProfiles.findFirst({
+    where: and(
+      eq(learnerRouteProfiles.learnerId, params.learnerId),
+      eq(learnerRouteProfiles.sourceId, params.sourceId),
+    ),
+  });
+  const weekStartDate = resolveRouteCreationWeekStartDate({
+    requestedDate: params.weekStartDate,
+    planningDays: profile?.planningDays,
+  });
   const route = await getDb().query.weeklyRoutes.findFirst({
     where: and(
       eq(weeklyRoutes.learnerId, params.learnerId),
@@ -700,12 +730,6 @@ async function inspectWeeklyRouteBoardMaintenanceState(params: {
     learnerId: params.learnerId,
     sourceId: params.sourceId,
     weekStartDate,
-  });
-  const profile = await getDb().query.learnerRouteProfiles.findFirst({
-    where: and(
-      eq(learnerRouteProfiles.learnerId, params.learnerId),
-      eq(learnerRouteProfiles.sourceId, params.sourceId),
-    ),
   });
 
   let maintenanceReason: WeeklyRouteBoardMaintenanceReason;

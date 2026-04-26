@@ -104,6 +104,7 @@ function buildWeekDates(weekStartDate: string) {
 
 function buildSuggestedScheduledDates(params: {
   weekStartDate: string;
+  scheduleStartDate?: string;
   itemCount: number;
   targetItemsPerDay: number;
   enabledDayOffsets: number[];
@@ -111,7 +112,8 @@ function buildSuggestedScheduledDates(params: {
   const allDays = buildWeekDates(params.weekStartDate);
   const enabledDays = params.enabledDayOffsets
     .map((offset) => allDays[offset])
-    .filter((d): d is string => d != null);
+    .filter((date): date is string => date != null)
+    .filter((date) => !params.scheduleStartDate || date >= params.scheduleStartDate);
   const targetItemsPerDay = Math.max(1, params.targetItemsPerDay);
 
   return Array.from({ length: params.itemCount }, (_, index) => {
@@ -127,6 +129,7 @@ export interface SuggestedSchedulePlacement {
 
 export function buildSuggestedSchedulePlacements(params: {
   weekStartDate: string;
+  scheduleStartDate?: string;
   itemCount: number;
   targetItemsPerDay: number;
   enabledDayOffsets: number[];
@@ -1129,6 +1132,7 @@ async function persistGeneratedRoute(params: {
   learnerId: string;
   sourceId: string;
   weekStartDate: string;
+  scheduleStartDate?: string;
   orderedSkillNodeIds: string[];
   targetItemsPerDay: number;
   enabledDayOffsets: number[];
@@ -1136,6 +1140,7 @@ async function persistGeneratedRoute(params: {
 }) {
   const scheduledPlacements = buildSuggestedSchedulePlacements({
     weekStartDate: params.weekStartDate,
+    scheduleStartDate: params.scheduleStartDate,
     itemCount: params.orderedSkillNodeIds.length,
     targetItemsPerDay: params.targetItemsPerDay,
     enabledDayOffsets: params.enabledDayOffsets,
@@ -1222,8 +1227,13 @@ export async function generateWeeklyRoute(params: {
   learnerId: string;
   sourceId: string;
   weekStartDate?: string;
+  scheduleStartDate?: string;
 }): Promise<WeeklyRouteBoard> {
   const weekStartDate = toWeekStartDate(params.weekStartDate);
+  const scheduleStartDate =
+    params.scheduleStartDate && toWeekStartDate(params.scheduleStartDate) === weekStartDate
+      ? params.scheduleStartDate
+      : undefined;
   const [context, plannedSkillNodeIdsBeforeWeek] = await Promise.all([
     loadGenerationContext({
       learnerId: params.learnerId,
@@ -1243,6 +1253,7 @@ export async function generateWeeklyRoute(params: {
     learnerId: params.learnerId,
     sourceId: params.sourceId,
     weekStartDate,
+    scheduleStartDate,
     orderedSkillNodeIds: recommendation.orderedSkillNodeIds,
     targetItemsPerDay: recommendation.targetItemsPerDay,
     enabledDayOffsets: recommendation.enabledDayOffsets,

@@ -6,7 +6,10 @@ import {
   normalizeTargetItemsPerDay,
 } from "../lib/curriculum-routing/defaults.ts";
 import { buildSuggestedSchedulePlacements } from "../lib/curriculum-routing/service.ts";
-import { buildSuggestedWeeklyAssignments } from "../lib/planning/weekly-route-service.ts";
+import {
+  buildSuggestedWeeklyAssignments,
+  resolveRouteCreationWeekStartDate,
+} from "../lib/planning/weekly-route-service.ts";
 
 test("target item density defaults to one skill per day", () => {
   assert.equal(DEFAULT_TARGET_ITEMS_PER_DAY, 1);
@@ -41,6 +44,35 @@ test("buildSuggestedSchedulePlacements keeps repeated dates in lesson slot 1", (
     {
       scheduledDate: "2026-04-22",
       scheduledSlotIndex: 1,
+    },
+  ]);
+});
+
+test("buildSuggestedSchedulePlacements can start from a midweek anchor", () => {
+  const placements = buildSuggestedSchedulePlacements({
+    weekStartDate: "2026-04-20",
+    scheduleStartDate: "2026-04-22",
+    itemCount: 4,
+    targetItemsPerDay: 1,
+    enabledDayOffsets: [0, 1, 2, 3, 4],
+  });
+
+  assert.deepEqual(placements, [
+    {
+      scheduledDate: "2026-04-22",
+      scheduledSlotIndex: 1,
+    },
+    {
+      scheduledDate: "2026-04-23",
+      scheduledSlotIndex: 1,
+    },
+    {
+      scheduledDate: "2026-04-24",
+      scheduledSlotIndex: 1,
+    },
+    {
+      scheduledDate: null,
+      scheduledSlotIndex: null,
     },
   ]);
 });
@@ -126,4 +158,44 @@ test("buildSuggestedWeeklyAssignments treats duplicated slot-one rows as a full 
       scheduledSlotIndex: 1,
     },
   ]);
+});
+
+test("route creation from a weekend starts on the next enabled planning week", () => {
+  assert.equal(
+    resolveRouteCreationWeekStartDate({
+      requestedDate: "2026-04-25",
+      planningDays: null,
+    }),
+    "2026-04-27",
+  );
+});
+
+test("route creation keeps the current week when an enabled day remains", () => {
+  assert.equal(
+    resolveRouteCreationWeekStartDate({
+      requestedDate: "2026-04-24",
+      planningDays: null,
+    }),
+    "2026-04-20",
+  );
+});
+
+test("route creation respects explicit week-start navigation", () => {
+  assert.equal(
+    resolveRouteCreationWeekStartDate({
+      requestedDate: "2026-04-20",
+      planningDays: null,
+    }),
+    "2026-04-20",
+  );
+});
+
+test("route creation respects weekend planning days when enabled", () => {
+  assert.equal(
+    resolveRouteCreationWeekStartDate({
+      requestedDate: "2026-04-25",
+      planningDays: [false, false, false, false, false, true, true],
+    }),
+    "2026-04-20",
+  );
 });

@@ -2461,7 +2461,7 @@ const resolveTodayWorkspaceContext = cache(
               return getOrCreateWeeklyRouteBoardForLearner({
                 learnerId,
                 sourceId: selectedSource.id,
-                weekStartDate,
+                weekStartDate: date,
               });
             },
           ),
@@ -3547,7 +3547,7 @@ export async function startNextLessonToday(params: {
     : await getOrCreateWeeklyRouteBoardForLearner({
         learnerId: params.learnerId,
         sourceId: params.sourceId,
-        weekStartDate,
+        weekStartDate: params.date,
       });
 
   const todayItems = board.items
